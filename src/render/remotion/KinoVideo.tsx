@@ -54,7 +54,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               transition={s.transition as Transition | undefined}
             />
             {s.kicker ? (
-              <TweenOverlay keyframes={s.kickerKeyframes ?? []} fromSec={s.startSec}>
+              <TweenOverlay keyframes={s.kickerKeyframes ?? []}>
                 <Kicker text={s.kicker.text} color={s.kicker.color} fg={s.kicker.fg} t={theme} />
               </TweenOverlay>
             ) : null}
@@ -76,7 +76,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         const hero = !avatar && s.kind === "avatar";
         return (
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
-            <TweenOverlay keyframes={s.captionKeyframes ?? []} fromSec={s.startSec}>
+            <TweenOverlay keyframes={s.captionKeyframes ?? []}>
               {wordMode ? (
                 <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} />
               ) : hero ? (
