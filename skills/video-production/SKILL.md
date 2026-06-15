@@ -52,6 +52,8 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 - **Faceless backgrounds animate**: `kino backgrounds` lists each preset's params (colours/intensity) +
   actions (pulse). Tween them over time with `backgroundKeyframes` and fire `backgroundTriggers` at
   timestamps; sync to the VO using per-word times from `kino inspect`.
+- **Logo is configurable + tweenable** (`kino elements`): `logoSize` (small/medium/big/px),
+  `logoPosition` (top/bottom/left/right/center/{x,y}%), and `logoKeyframes` (x/y/scale/opacity over time).
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.

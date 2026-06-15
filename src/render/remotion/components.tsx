@@ -1,8 +1,9 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, OffthreadVideo, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme, BackgroundProps, WordTiming } from "../props";
+import type { Theme, BackgroundProps, WordTiming, BgKeyframe } from "../props";
 import type { Shot, Transition } from "../motion";
 import { activeWordIndex } from "../captions";
+import { paramsAt } from "../bgparams";
 import { CanvasBackground } from "./backgrounds/CanvasBackground";
 import { getPreset, type DrawFn } from "./backgrounds/presets";
 
@@ -148,16 +149,56 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
   return <GlowBg t={t} />;
 };
 
-// Brand mark for faceless talking beats — top-center, gentle fade/scale in.
-export const Logo: React.FC<{ src: string }> = ({ src }) => {
-  const f = useCurrentFrame();
-  const s = spring({ frame: f, fps: 30, config: { damping: 200 } });
+const numOf = (v: unknown, d: number) => (typeof v === "number" ? v : Number(v) || d);
+
+// Reusable overlay layer: positions children at (x%, y%) anchored at their centre, and tweens
+// x/y/scale/opacity from an agent keyframe track (absolute time = fromSec + local frame). With no
+// keyframes it does a gentle entrance (when defaultEntrance). Captions/kickers can adopt this too.
+export const AnimatedElement: React.FC<{
+  x: number;
+  y: number;
+  keyframes: BgKeyframe[];
+  fromSec: number;
+  defaultEntrance?: boolean;
+  children: React.ReactNode;
+}> = ({ x, y, keyframes, fromSec, defaultEntrance, children }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  let px = x;
+  let py = y;
+  let scale = 1;
+  let opacity = 1;
+  if (keyframes.length) {
+    const p = paramsAt({ x, y, scale: 1, opacity: 1 }, keyframes, fromSec + frame / fps);
+    px = numOf(p.x, x);
+    py = numOf(p.y, y);
+    scale = numOf(p.scale, 1);
+    opacity = numOf(p.opacity, 1);
+  } else if (defaultEntrance) {
+    const s = spring({ frame, fps, config: { damping: 200 } });
+    opacity = s;
+    scale = interpolate(s, [0, 1], [0.9, 1]);
+  }
   return (
-    <div style={{ position: "absolute", top: 150, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: s }}>
-      <Img src={src} style={{ width: 150, transform: `scale(${interpolate(s, [0, 1], [0.9, 1])})` }} />
+    <div style={{ position: "absolute", left: `${px}%`, top: `${py}%`, transform: `translate(-50%, -50%) scale(${scale})`, opacity }}>
+      {children}
     </div>
   );
 };
+
+// Brand mark for faceless talking beats — configurable size/position, agent-tweenable.
+export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number; keyframes: BgKeyframe[]; fromSec: number }> = ({
+  src,
+  sizePx,
+  x,
+  y,
+  keyframes,
+  fromSec,
+}) => (
+  <AnimatedElement x={x} y={y} keyframes={keyframes} fromSec={fromSec} defaultEntrance>
+    <Img src={src} style={{ width: sizePx }} />
+  </AnimatedElement>
+);
 
 // Word-synced caption: the spoken words, revealed + highlighted in time with the VO.
 // Typewriter reveal (pop/bounce) per word at its start; active word highlighted; emphasised

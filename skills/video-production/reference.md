@@ -4,6 +4,7 @@
 - `kino build <spec> [--mock] [--format 9:16,3:4] [--provider <p>] [--background <kind>] [--tag <label>]`
 - `kino inspect <spec> [--real]` — resolved plan as JSON: beats, timings, modes + per-segment **word timestamps**
 - `kino backgrounds` — list animated backgrounds + their agent-controllable params/actions
+- `kino elements` — list overlay elements (logo …) + their layout/tween controls
 - `kino still <spec> [--at <s,…> | --segment <n>] [--real] [--format]` — render one frame fast (no encode)
 - `kino storyboard <spec> [--real] [--format]` — one still per beat tiled into a labeled contact sheet
 - `kino frames <video> --at <s,…> [--montage] [--out <dir>]` — extract frames from a rendered video
@@ -39,7 +40,10 @@ disclosure, facelessDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
 defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}`.
 
 Faceless branding (optional):
-- `logo` — transparent brand mark (PNG); shown top-center on faceless talking beats.
+- `logo` — transparent brand mark (PNG); shown on faceless talking beats.
+- `logoSize` — `small` (100px) / `medium` (150) / `big` (220) / a number. `logoPosition` — `top` /
+  `bottom` / `left` / `right` / `center` / custom `{x,y}` (% of frame). Spec overrides brand; see `kino elements`.
+  Tween it over time with spec `logoKeyframes: [{ at, params: { x, y, scale, opacity }, ease? }]`.
 - `background` — faceless background engine (see below). Default: `image` if `facelessBackdrop`
   set, else `glow`. Override per-video with spec `background` or `--background <kind>`.
 - `facelessBackdrop` — image used when `background: "image"`.

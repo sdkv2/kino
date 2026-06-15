@@ -22,6 +22,8 @@ export const BrandSchema = z.object({
   disclosure: z.string(), // shown when an avatar is present
   facelessDisclosure: z.string().optional(), // shown when no avatar renders (falls back to disclosure)
   logo: z.string().optional(), // brand mark (transparent PNG) shown on faceless talking beats
+  logoSize: z.union([z.enum(["small", "medium", "big"]), z.number()]).optional(), // default logo size
+  logoPosition: z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]).optional(),
   facelessBackdrop: z.string().optional(), // background image for faceless beats (used when background="image")
   background: z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]).optional(), // faceless background engine
   backgroundComponent: z.string().optional(), // path to a custom canvas draw fn (used when background="custom")
