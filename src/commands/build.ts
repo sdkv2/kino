@@ -205,7 +205,8 @@ export async function prepare(
       asset: seg.kind === "app" ? seg.asset : undefined,
       caption: seg.caption,
       startSec: vo.timings[i].startSec,
-      endSec: vo.timings[i].endSec,
+      // hold visuals to the next beat's start so nothing blinks off during the inter-beat VO gap
+      endSec: i + 1 < spec.segments.length ? vo.timings[i + 1].startSec : vo.timings[i].endSec,
       captionMode,
       words: captionMode === "words" ? vo.words[i] : undefined,
       emphasis: captionMode === "words" ? seg.emphasis : undefined,
