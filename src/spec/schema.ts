@@ -31,7 +31,7 @@ const Segment = z.discriminatedUnion("kind", [
 ]);
 
 export const SpecSchema = z.object({
-  brand: z.string(),
+  brand: z.string().optional(), // falls back to the project's project.json brand
   title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
   format: z.array(z.enum(["9:16", "3:4"])).default(["9:16"]),
   voice: z.string().optional(),

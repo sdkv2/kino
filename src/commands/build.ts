@@ -2,6 +2,7 @@ import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync } from "
 import { tmpdir } from "node:os";
 import { dirname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
+import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, type Brand } from "../config/brand.js";
 import { SpecSchema, type Spec } from "../spec/schema.js";
@@ -29,15 +30,15 @@ function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider
   if (!img) {
     throw new Error(`Provider "${provider}" needs a portrait image — set brand.avatarImage (or spec.avatarLook) to an image path.`);
   }
-  const abs = isAbsolute(img) ? img : join(project.root, img);
+  const abs = isAbsolute(img) ? img : join(project.workspaceRoot, img);
   if (!existsSync(abs)) throw new Error(`Avatar image not found: ${abs}`);
   return abs;
 }
 
-// Resolve an optional brand asset (logo/backdrop) to an absolute path under the project root.
+// Resolve an optional brand asset (logo/backdrop) — brands are shared, so paths are workspace-relative.
 function resolveBrandFile(p: string | undefined, project: Project): string | null {
   if (!p) return null;
-  const abs = isAbsolute(p) ? p : join(project.root, p);
+  const abs = isAbsolute(p) ? p : join(project.workspaceRoot, p);
   if (!existsSync(abs)) throw new Error(`Brand asset not found: ${abs}`);
   return abs;
 }
@@ -66,12 +67,24 @@ export interface PrepareResult {
 // inspection commands (still/storyboard/inspect) so they share the exact pipeline.
 export async function prepare(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string },
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; project?: string },
 ): Promise<PrepareResult> {
-  const project = resolveProject();
-  loadEnv(project.root);
+  const project = resolveProject({ specPath, project: opts.project });
+  loadEnv(project.workspaceRoot);
   const spec = SpecSchema.parse(JSON.parse(readFileSync(specPath, "utf8")));
-  const brand = loadBrand(project.brandDir(spec.brand));
+
+  // A project.json assigns a brand + optional default overrides (layered under spec/CLI).
+  const pc = project.projectConfigPath ? loadProjectConfig(project.projectConfigPath) : undefined;
+  const brandName = spec.brand ?? pc?.brand;
+  if (!brandName) throw new Error("No brand: set spec.brand or a brand in the project's project.json");
+  const rawBrand = loadBrand(project.brandDir(brandName));
+  const brand: Brand = {
+    ...rawBrand,
+    defaultProvider: pc?.provider ?? rawBrand.defaultProvider,
+    background: pc?.background ?? rawBrand.background,
+    font: pc?.font ?? rawBrand.font,
+    captionMode: pc?.captionMode ?? rawBrand.captionMode,
+  };
   validateSpec(spec, brand, project);
   const provider = (opts.provider as Provider | undefined) ?? resolveProvider(spec, brand);
   const voiceId = resolveVoice(spec, brand);
@@ -221,7 +234,7 @@ export async function prepare(
 
 export async function build(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; tag?: string },
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; tag?: string; project?: string },
 ): Promise<string[]> {
   const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
   log.step("render");

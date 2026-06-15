@@ -17,6 +17,11 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
    (all beats in one contact sheet). Edit the spec, re-preview. These default to mock (zero spend).
 4. `kino build specs/foo.json` — real render → `out/<title>/`. (`kino frames <mp4> --at …` for post-build QA.)
 
+**Projects** keep campaigns tidy: `projects/<name>/{specs,assets,out}` + a `project.json` that assigns a
+shared brand and default overrides. Run any command on a spec inside a project (kino infers it from the
+path) or pass `--project <name>`. `kino projects --new <name> --brand <brand>` scaffolds one. The flat
+layout (no `project.json`) still works.
+
 ## Avatar provider (cost lever — pick deliberately)
 Set per spec with `"provider"`, or per brand with `defaultProvider`, or override with `--provider`:
 - **`none` (faceless)** — no avatar; app footage + VO + captions only. **$0 avatar cost**, and the

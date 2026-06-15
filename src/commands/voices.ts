@@ -3,7 +3,7 @@ import { loadEnv, requireKey } from "../config/env.js";
 import { listVoices } from "../vo/elevenlabs.js";
 
 export async function voices(opts: { gender?: string }): Promise<void> {
-  loadEnv(resolveProject().root);
+  loadEnv(resolveProject().workspaceRoot);
   const vs = await listVoices(requireKey("ELEVENLABS_API_KEY"));
   for (const v of vs) {
     if (!opts.gender || v.gender === opts.gender) {
