@@ -4,6 +4,7 @@ const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gol
 const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "static"]);
 const Transition = z.enum(["fade", "fly-left", "fly-up", "pop", "cut"]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
+const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
 
 const Segment = z.discriminatedUnion("kind", [
   z.object({
@@ -31,6 +32,8 @@ export const SpecSchema = z.object({
   voice: z.string().optional(),
   avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
   provider: Provider.optional(), // overrides brand.defaultProvider
+  background: Background.optional(), // overrides brand.background (faceless beats)
+  backgroundIntensity: z.number().optional(), // 0..1 motion strength override
   segments: z.array(Segment).min(1),
 });
 
