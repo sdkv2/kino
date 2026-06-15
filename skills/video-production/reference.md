@@ -72,6 +72,9 @@ fire one-shot actions at timestamps. Pair with `kino inspect` word times to sync
 ],
 "backgroundTriggers": [ { "at": 2.2, "action": "pulse" } ]
 ```
+Easing per keyframe (`ease`): `linear` (default), `easeInOut`, `overshoot`, `spring` — the last two
+exceed the target mid-way then settle (punchy landings). Applies to every keyframe track
+(background / logo / caption / kicker).
 
 Provider-specific:
 - `avatarImage` — portrait file (path under project root) used as the source for `hedra`/`replicate`.
