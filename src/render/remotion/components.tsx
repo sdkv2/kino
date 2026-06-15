@@ -1,6 +1,9 @@
 import React from "react";
 import { AbsoluteFill, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame } from "remotion";
 import type { Theme } from "../props";
+import type { Shot, Transition } from "../motion";
+
+const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
 export const Caption: React.FC<{ text: string; t: Theme }> = ({ text, t }) => {
   const f = useCurrentFrame();
@@ -40,18 +43,51 @@ export const Kicker: React.FC<{ text: string; color: string; fg: string; t: Them
   );
 };
 
-export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme }> = ({ asset, dur, t }) => {
+export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?: Shot; transition?: Transition }> = ({
+  asset,
+  dur,
+  t,
+  shot = "static",
+  transition = "fade",
+}) => {
   const f = useCurrentFrame();
-  const sc = interpolate(Math.min(1, f / dur), [0, 1], [1.04, 1.12]);
-  const intro = interpolate(f, [0, 6], [0, 1], { extrapolateRight: "clamp" });
+  const p = Math.min(1, f / dur);
+
+  // --- camera move (inner image) ---
+  let scale = 1.1;
+  let tx = 0;
+  let ty = 0;
+  if (shot === "push-in") scale = lerp(1.06, 1.2, p);
+  else if (shot === "pull-out") scale = lerp(1.2, 1.06, p);
+  else if (shot === "pan-left") { scale = 1.14; tx = lerp(5, -5, p); }
+  else if (shot === "pan-right") { scale = 1.14; tx = lerp(-5, 5, p); }
+  else if (shot === "tilt-up") { scale = 1.14; ty = lerp(5, -5, p); }
+
+  // --- transition in/out (outer layer), punchy ~6 frames ---
+  const TR = 6;
+  const inP = interpolate(f, [0, TR], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const outP = interpolate(f, [dur - TR, dur], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  let opacity = 1;
+  let otx = 0;
+  let oty = 0;
+  let clipPath: string | undefined;
+  if (transition === "fade") opacity = Math.min(inP, outP);
+  else if (transition === "slide-left") otx = (1 - inP) * 100 + (1 - outP) * -100;
+  else if (transition === "slide-up") oty = (1 - inP) * 100 + (1 - outP) * -100;
+  else if (transition === "wipe") {
+    const w = Math.min(inP, outP);
+    clipPath = `inset(0 ${(1 - w) * 100}% 0 0)`;
+  }
+  // "cut": no entrance/exit animation
+
   const isVideo = asset.toLowerCase().endsWith(".mp4") || asset.toLowerCase().endsWith(".mov");
   return (
-    <AbsoluteFill style={{ backgroundColor: t.night, opacity: intro }}>
+    <AbsoluteFill style={{ backgroundColor: t.night, opacity, transform: `translate(${otx}%, ${oty}%)`, clipPath }}>
       <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
         {isVideo ? (
-          <OffthreadVideo src={staticFile(asset)} style={{ width: 1080, transform: `scale(${sc})` }} />
+          <OffthreadVideo src={staticFile(asset)} style={{ width: 1080, transform: `translate(${tx}%, ${ty}%) scale(${scale})` }} />
         ) : (
-          <Img src={staticFile(asset)} style={{ width: 1080, transform: `scale(${sc})` }} />
+          <Img src={staticFile(asset)} style={{ width: 1080, transform: `translate(${tx}%, ${ty}%) scale(${scale})` }} />
         )}
       </AbsoluteFill>
     </AbsoluteFill>

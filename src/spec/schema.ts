@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });
+const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "static"]);
+const Transition = z.enum(["fade", "slide-left", "slide-up", "wipe", "cut"]);
 
 const Segment = z.discriminatedUnion("kind", [
   z.object({
@@ -8,6 +10,7 @@ const Segment = z.discriminatedUnion("kind", [
     text: z.string().min(1),
     caption: z.string().min(1),
     cta: z.boolean().default(false),
+    shot: Shot.optional(),
   }),
   z.object({
     kind: z.literal("app"),
@@ -15,6 +18,8 @@ const Segment = z.discriminatedUnion("kind", [
     text: z.string().min(1),
     caption: z.string().min(1),
     kicker: Kicker.optional(),
+    shot: Shot.optional(),
+    transition: Transition.optional(),
   }),
 ]);
 

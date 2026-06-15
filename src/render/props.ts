@@ -18,6 +18,8 @@ export interface KinoSegment {
   startSec: number;
   endSec: number;
   kicker?: { text: string; color: string; fg: string };
+  shot?: string; // resolved camera shot (see render/motion)
+  transition?: string; // resolved in/out transition for app cut-ins
 }
 
 export interface KinoProps {

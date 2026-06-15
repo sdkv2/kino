@@ -24,6 +24,9 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (HeyGen) →
 ```
 - `avatar` segments show the presenter; `app` segments show the screenshot/recording while the VO continues.
 - Open with an `avatar` hook, cut to `app` for the demo, return to `avatar` for the payoff + `cta`.
+- **Camera/transitions auto-vary** — omit and `kino` picks a varied shot + transition per cut-in.
+  Override per segment with `"shot"` (`push-in`/`pull-out`/`pan-left`/`pan-right`/`tilt-up`/`static`)
+  and, on `app` segments, `"transition"` (`fade`/`slide-left`/`slide-up`/`wipe`/`cut`).
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **Avatar looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.
