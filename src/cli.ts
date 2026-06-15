@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("0.1.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.1.0");
 
 program
   .command("build <spec>")
@@ -10,6 +10,7 @@ program
   .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4")
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
   .option("--background <kind>", "override faceless background: glow|image|mesh|aurora|particles|grid|custom")
+  .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background)")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
   });

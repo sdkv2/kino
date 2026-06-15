@@ -7,13 +7,14 @@
 ---
 
 **kino** turns an agent-authored JSON spec into finished vertical videos:
-ElevenLabs voiceover → HeyGen Avatar-IV lip-sync → Remotion composite → 9:16 / 3:4 MP4.
+ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or **faceless** → Remotion composite → 9:16 / 3:4 MP4.
 The agent supplies the creative; `kino` handles deterministic production.
 
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v0.1 built — `kino build`, `batch`, `--mock`, content-hash caching, `doctor`. 16 tests green.
+> **Status:** v1.1 — pluggable avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
+> animated background engine, output tagging, `--mock`, content-hash caching, `doctor`. 44 tests green.
 
 ## Install (global)
 ```bash
@@ -30,6 +31,17 @@ kino build specs/lie-test.json --mock   # free structural preview (no API spend)
 kino build specs/lie-test.json          # real render → out/lie-test/
 ```
 The driving agent authors specs — see [`skills/video-production`](skills/video-production/SKILL.md).
+
+## Pipeline & options (v1.1)
+- **Avatar engine** — `provider` (spec) / `defaultProvider` (brand) / `--provider`:
+  `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3), `replicate` (open-source lip-sync).
+  Avatars are **trimmed to on-camera segments** to cut spend; VO + avatar are content-hash cached.
+- **Faceless backgrounds** — `background` / `--background`: `glow`, `image`, `mesh`, `aurora`,
+  `particles`, `grid`, `custom` — frame-deterministic Canvas2D, auto-coloured from the brand.
+- **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
+- **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
+  keeps variant renders side-by-side instead of overwriting.
+- **Compliance** — brand `bannedPhrases` fail the build (no guaranteed-outcome copy).
 
 ## Brand assets (`logo/`)
 | File | Use |
