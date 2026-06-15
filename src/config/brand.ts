@@ -11,7 +11,8 @@ export const BrandSchema = z.object({
     white: z.string().default("#ffffff"),
     gold: z.string().default("#d99a20"),
   }),
-  font: z.string().default('Helvetica, "Helvetica Neue", Arial, sans-serif'),
+  font: z.string().default('Helvetica, "Helvetica Neue", Arial, sans-serif'), // registry font name (downloaded) or raw CSS family
+  labelFont: z.string().optional(), // registry font for storyboard/montage labels (default: the caption font)
   captionStyle: z
     .object({
       fontSize: z.number().default(74),

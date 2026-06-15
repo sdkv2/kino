@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.3.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.4.0");
 
 program
   .command("build <spec>")
@@ -62,6 +62,11 @@ program
   .description("List Avatar-IV photo-avatar looks (usable for lip-sync)")
   .option("--gender <g>")
   .action(async (o) => (await import("./commands/avatars.js")).avatars(o));
+
+program
+  .command("fonts")
+  .description("List the curated fonts (downloaded on demand) with descriptions + cache status")
+  .action(async () => (await import("./commands/fonts.js")).fonts());
 
 program
   .command("init [brand]")

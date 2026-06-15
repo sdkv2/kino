@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, Img, OffthreadVideo, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, BackgroundProps, WordTiming } from "../props";
 import type { Shot, Transition } from "../motion";
 import { activeWordIndex } from "../captions";
@@ -7,6 +7,23 @@ import { CanvasBackground } from "./backgrounds/CanvasBackground";
 import { getPreset, type DrawFn } from "./backgrounds/presets";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
+
+// Loads the brand TTF (a downloaded registry font) before rendering, under the family
+// "KinoBrandFont" that theme.font references. No-op when using a system font.
+export const FontLoader: React.FC<{ url?: string | null }> = ({ url }) => {
+  const [handle] = React.useState(() => (url ? delayRender("brand-font") : null));
+  React.useEffect(() => {
+    if (!url || handle === null) return;
+    const ff = new FontFace("KinoBrandFont", `url(${staticFile(url)})`);
+    ff.load()
+      .then((f) => {
+        document.fonts.add(f);
+        continueRender(handle);
+      })
+      .catch(() => continueRender(handle));
+  }, [url, handle]);
+  return null;
+};
 
 export const Caption: React.FC<{ text: string; t: Theme }> = ({ text, t }) => {
   const f = useCurrentFrame();

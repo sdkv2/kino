@@ -8,6 +8,7 @@
 - `kino frames <video> --at <s,…> [--montage] [--out <dir>]` — extract frames from a rendered video
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
+- `kino fonts` — list curated fonts (with descriptions + cache status)
 - `kino init [brand]` · `kino doctor`
 
 ## Iterative design loop (agents)
@@ -53,6 +54,12 @@ Provider-specific:
 - `HEDRA_API_KEY` — provider `hedra` (hedra.com/api-profile).
 - `REPLICATE_API_TOKEN` — provider `replicate` (replicate.com/account/api-tokens).
 Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
+
+## Fonts
+- `brand.font` is either a **registry font name** (`kino fonts` — e.g. `"Anton"`, `"Poppins"`) or a raw
+  CSS family string (back-compat). A registry name is **downloaded on demand** (Google Fonts → real TTF,
+  cached globally in `~/.kino/fonts/`) and loaded into the render via `FontFace`; offline → system fallback.
+- `brand.labelFont` (registry name) sets the storyboard/montage label font (defaults to the caption font).
 
 ## Captions
 - `captionMode` (brand default or per-segment): `phrase` (short editorial caption, block animation —
