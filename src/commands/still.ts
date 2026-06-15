@@ -11,9 +11,9 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 //   (neither)        one still per beat        --real          true VO/avatar + timing
 export async function still(
   specPath: string,
-  opts: { at?: string; segment?: string; real?: boolean; format?: string },
+  opts: { at?: string; segment?: string; real?: boolean; format?: string; font?: string },
 ): Promise<void> {
-  const r = await prepare(specPath, { mock: !opts.real, format: opts.format });
+  const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font });
   const sel = opts.at
     ? { at: parseTimes(opts.at) }
     : opts.segment != null
