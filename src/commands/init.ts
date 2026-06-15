@@ -5,10 +5,10 @@ import { log } from "../log.js";
 
 export async function init(brand = "default"): Promise<void> {
   const p = resolveProject();
-  for (const d of [p.brandDir(brand), join(p.assets, "screens"), join(p.assets, "recordings"), p.specs, p.out]) {
+  for (const d of [p.brandDir(brand), p.assetPath("screens"), p.assetPath("recordings"), join(p.projectRoot, "specs"), join(p.projectRoot, "out")]) {
     mkdirSync(d, { recursive: true });
   }
-  const envf = join(p.root, ".env");
+  const envf = join(p.workspaceRoot, ".env");
   if (!existsSync(envf)) writeFileSync(envf, "ELEVENLABS_API_KEY=\nHEYGEN_API_KEY=\n");
   const bf = join(p.brandDir(brand), "brand.json");
   if (!existsSync(bf)) {

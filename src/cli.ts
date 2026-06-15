@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.4.1");
+program.name("kino").description("Agent-driven short-form video production").version("1.5.0");
 
 program
   .command("build <spec>")
@@ -11,6 +11,7 @@ program
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
   .option("--background <kind>", "override faceless background: glow|image|mesh|aurora|particles|grid|custom")
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
+  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
@@ -20,7 +21,15 @@ program
   .command("inspect <spec>")
   .description("Print the resolved render plan (beats, timings) as JSON")
   .option("--real", "use real VO timings instead of the mock estimate")
+  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .action(async (s, o) => (await import("./commands/inspect.js")).inspect(s, o));
+
+program
+  .command("projects")
+  .description("List projects, or scaffold one: --new <name> --brand <brand>")
+  .option("--new <name>", "scaffold a new project under projects/")
+  .option("--brand <brand>", "brand to assign to the new project")
+  .action(async (o) => (await import("./commands/projects.js")).projects(o));
 
 program
   .command("still <spec>")
@@ -29,6 +38,7 @@ program
   .option("--segment <n>", "render the midpoint of segment n")
   .option("--format <fmt>", "9:16 or 3:4")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
+  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
@@ -37,6 +47,7 @@ program
   .description("Render one still per beat, tiled into a labeled contact sheet")
   .option("--format <fmt>", "9:16 or 3:4")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
+  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .action(async (s, o) => (await import("./commands/storyboard.js")).storyboard(s, o));
 
