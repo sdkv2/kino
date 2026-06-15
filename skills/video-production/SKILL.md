@@ -11,8 +11,10 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
 ## Workflow
 1. `kino doctor` — confirm ffmpeg and the keys for your chosen provider are present.
 2. Author a spec (schema below). Keep captions short; never claim guaranteed jobs/interviews.
-3. `kino build specs/foo.json --mock` — render structure/timing with **zero API spend**; check frames.
-4. `kino build specs/foo.json` — real render. Outputs to `out/<title>/`.
+3. **Iterate (fast, free):** `kino inspect specs/foo.json` to map the beats, then
+   `kino still specs/foo.json --segment N` (one frame, ~1–2s) or `kino storyboard specs/foo.json`
+   (all beats in one contact sheet). Edit the spec, re-preview. These default to mock (zero spend).
+4. `kino build specs/foo.json` — real render → `out/<title>/`. (`kino frames <mp4> --at …` for post-build QA.)
 
 ## Avatar provider (cost lever — pick deliberately)
 Set per spec with `"provider"`, or per brand with `defaultProvider`, or override with `--provider`:

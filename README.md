@@ -13,8 +13,9 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.2 — pluggable avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
-> animated background engine, word-synced captions, output tagging, `--mock`, caching, `doctor`. 51 tests green.
+> **Status:** v1.3 — pluggable avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
+> animated backgrounds, word-synced captions, agent inspection (inspect/still/storyboard/frames),
+> output tagging, `--mock`, caching, `doctor`. 57 tests green.
 
 ## Install (global)
 ```bash
@@ -44,6 +45,9 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
 - **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
   keeps variant renders side-by-side instead of overwriting.
 - **Compliance** — brand `bannedPhrases` fail the build (no guaranteed-outcome copy).
+- **Inspect & iterate** — `kino inspect` (plan as JSON), `kino still`/`storyboard` (fast mock previews
+  via Remotion `renderStill`), `kino frames` (extract from a render). Built for tight agent loops:
+  map beats → preview a beat → edit spec → re-preview → `build`.
 
 ## Brand assets (`logo/`)
 | File | Use |

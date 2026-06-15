@@ -1,5 +1,5 @@
 import { bundle } from "@remotion/bundler";
-import { renderMedia, selectComposition } from "@remotion/renderer";
+import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -27,6 +27,37 @@ export interface RenderOpts {
   formats: Array<"9:16" | "3:4">;
   outDir: string;
   title: string;
+}
+
+export interface StillsOpts {
+  props: KinoProps;
+  publicDir: string;
+  format: "9:16" | "3:4";
+  frames: Array<{ frame: number; name: string }>;
+  outDir: string;
+}
+
+// Render individual PNG stills (one bundle, many frames) — fast preview, no video encode.
+export async function renderStills({ props, publicDir, format, frames, outDir }: StillsOpts): Promise<string[]> {
+  mkdirSync(outDir, { recursive: true });
+  const serveUrl = await bundle({ entryPoint: ENTRY, publicDir });
+  const inputProps = props as unknown as Record<string, unknown>;
+  const { width, height } = DIMS[format];
+  const comp = await selectComposition({ serveUrl, id: "KinoVideo", inputProps });
+  const maxFrame = comp.durationInFrames - 1;
+  const outs: string[] = [];
+  for (const { frame, name } of frames) {
+    const out = join(outDir, `${name}.png`);
+    await renderStill({
+      composition: { ...comp, width, height },
+      serveUrl,
+      output: out,
+      frame: Math.min(maxFrame, Math.max(0, frame)),
+      inputProps,
+    });
+    outs.push(out);
+  }
+  return outs;
 }
 
 export async function renderVideo({ props, publicDir, formats, outDir, title }: RenderOpts): Promise<string[]> {
