@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
-import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, WordCaption } from "./components";
+import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, TweenOverlay, WordCaption } from "./components";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
@@ -53,7 +53,11 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               shot={s.shot as Shot | undefined}
               transition={s.transition as Transition | undefined}
             />
-            {s.kicker ? <Kicker text={s.kicker.text} color={s.kicker.color} fg={s.kicker.fg} t={theme} /> : null}
+            {s.kicker ? (
+              <TweenOverlay keyframes={s.kickerKeyframes ?? []} fromSec={s.startSec}>
+                <Kicker text={s.kicker.text} color={s.kicker.color} fg={s.kicker.fg} t={theme} />
+              </TweenOverlay>
+            ) : null}
           </Sequence>
         ))}
 
@@ -72,13 +76,15 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         const hero = !avatar && s.kind === "avatar";
         return (
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
-            {wordMode ? (
-              <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} />
-            ) : hero ? (
-              <HeroCaption text={s.caption} t={theme} />
-            ) : (
-              <Caption text={s.caption} t={theme} />
-            )}
+            <TweenOverlay keyframes={s.captionKeyframes ?? []} fromSec={s.startSec}>
+              {wordMode ? (
+                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} />
+              ) : hero ? (
+                <HeroCaption text={s.caption} t={theme} />
+              ) : (
+                <Caption text={s.caption} t={theme} />
+              )}
+            </TweenOverlay>
           </Sequence>
         );
       })}
