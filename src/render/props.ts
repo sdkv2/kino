@@ -60,13 +60,22 @@ export interface BackgroundProps {
   triggers: BgTrigger[]; // agent-authored one-shot actions (e.g. pulse)
 }
 
+// Brand mark overlay (faceless talking beats): resolved layout + an agent keyframe track.
+export interface LogoProps {
+  src: string; // staticFile-relative
+  sizePx: number;
+  x: number; // % of frame (anchored at centre)
+  y: number;
+  keyframes: BgKeyframe[]; // tween x/y/scale/opacity over time
+}
+
 export interface KinoProps {
   theme: Theme;
   fps: number;
   avatar: string | null; // staticFile-relative path to the (trimmed) avatar clip, or null for faceless
   avatarWindows: AvatarWindow[]; // placements of the avatar clip; empty when faceless
   voTrack: string | null; // staticFile-relative path to the full VO audio track
-  logo: string | null; // staticFile-relative brand mark, shown on faceless talking beats
+  logo: LogoProps | null; // brand mark shown on faceless talking beats
   background: BackgroundProps; // faceless background engine selection
   disclosure: string;
   segments: KinoSegment[];

@@ -16,6 +16,7 @@ import { planAvatarWindows } from "../avatar/plan.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
+import { resolveLogoSize, resolveLogoPosition } from "../render/elements.js";
 import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
@@ -133,6 +134,16 @@ export async function prepare(
   copyFileSync(vo.trackPath, join(publicDir, "vo.mp3"));
   const logoAbs = resolveBrandFile(brand.logo, project);
   if (logoAbs) copyFileSync(logoAbs, join(publicDir, "logo.png"));
+  const logoPos = resolveLogoPosition(spec.logoPosition ?? brand.logoPosition);
+  const logo = logoAbs
+    ? {
+        src: "logo.png",
+        sizePx: resolveLogoSize(spec.logoSize ?? brand.logoSize),
+        x: logoPos.x,
+        y: logoPos.y,
+        keyframes: spec.logoKeyframes ?? [],
+      }
+    : null;
 
   // Faceless background: stage the image (image kind) or read the custom draw-fn (custom kind).
   const bgKind = (opts.background as ReturnType<typeof resolveBackgroundKind> | undefined) ?? resolveBackgroundKind(brand, spec);
@@ -231,7 +242,7 @@ export async function prepare(
     avatar: avatarRel,
     avatarWindows,
     voTrack: "vo.mp3",
-    logo: logoAbs ? "logo.png" : null,
+    logo,
     background,
     disclosure: avatarRel ? brand.disclosure : (brand.facelessDisclosure ?? brand.disclosure),
     segments: renderSegments,
