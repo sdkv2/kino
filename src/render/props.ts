@@ -2,6 +2,7 @@
 // CLI (render.ts, build.ts) and the Remotion .tsx (bundled by esbuild) can import it.
 export interface Theme {
   font: string;
+  fontUrl?: string | null; // staticFile-relative TTF to load (registry font), else system font
   night: string;
   mint: string;
   green: string;

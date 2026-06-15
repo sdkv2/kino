@@ -13,6 +13,8 @@ import { buildVO, GAP } from "../vo/vo.js";
 import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
+import { lookupFont } from "../fonts/registry.js";
+import { ensureFont } from "../fonts/manager.js";
 import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps } from "../render/props.js";
@@ -57,6 +59,7 @@ export interface PrepareResult {
   formats: Array<"9:16" | "3:4">;
   project: Project;
   spec: Spec;
+  labelFont: string | null; // absolute TTF path for storyboard/montage labels, if resolved
 }
 
 // Everything build does up to (but not including) the final video render. Reused by the
@@ -139,6 +142,25 @@ export async function prepare(
     intensity: resolveBackgroundIntensity(brand, spec),
   };
 
+  // Brand font: a registry name downloads + stages a TTF for the captions; a raw CSS family passes through.
+  const fontDef = lookupFont(brand.font);
+  let themeFont = brand.font;
+  let fontUrl: string | null = null;
+  if (fontDef) {
+    const ttf = await ensureFont(fontDef.name);
+    if (ttf) {
+      copyFileSync(ttf, join(publicDir, "font.ttf"));
+      fontUrl = "font.ttf";
+      themeFont = `"KinoBrandFont", "${fontDef.family}", Helvetica, Arial, sans-serif`;
+    } else {
+      log.warn(`Font "${fontDef.name}" unavailable (offline?) — using system fallback`);
+      themeFont = `"${fontDef.family}", Helvetica, Arial, sans-serif`;
+    }
+  }
+  // Label font for storyboard/montage labels (defaults to the caption font).
+  const labelDef = lookupFont(brand.labelFont ?? brand.font);
+  const labelFont = labelDef ? await ensureFont(labelDef.name) : null;
+
   const c = brand.colors;
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
   let appIdx = 0;
@@ -172,7 +194,8 @@ export async function prepare(
 
   const props: KinoProps = {
     theme: {
-      font: brand.font,
+      font: themeFont,
+      fontUrl,
       night: c.night,
       mint: c.mint,
       green: c.green,
@@ -191,7 +214,7 @@ export async function prepare(
     segments: renderSegments,
   };
 
-  return { props, publicDir, formats, project, spec };
+  return { props, publicDir, formats, project, spec, labelFont };
 }
 
 export async function build(
