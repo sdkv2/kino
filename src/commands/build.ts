@@ -209,6 +209,7 @@ export async function prepare(
       captionMode,
       words: captionMode === "words" ? vo.words[i] : undefined,
       emphasis: captionMode === "words" ? seg.emphasis : undefined,
+      captionKeyframes: seg.captionKeyframes,
     };
     if (seg.kind === "app") {
       const shot = pickShot(appIdx, seg.shot as Shot | undefined);
@@ -218,6 +219,7 @@ export async function prepare(
         ...base,
         shot,
         transition,
+        kickerKeyframes: seg.kickerKeyframes,
         kicker: seg.kicker
           ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
           : undefined,

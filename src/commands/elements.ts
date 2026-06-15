@@ -10,6 +10,10 @@ export async function elements(): Promise<void> {
   process.stdout.write(
     `    positions: ${Object.keys(LOGO_POSITIONS).join(", ")}, or custom { x, y } (% of frame)  — set logoPosition\n`,
   );
-  process.stdout.write("    tween:     logoKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y are % of frame)\n");
-  process.stdout.write("\nAll overlays use the same AnimatedElement layer; captions/kickers adopt the same keyframe system next.\n");
+  process.stdout.write("    tween:     logoKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y are % of frame)\n\n");
+  process.stdout.write("  caption (per segment)\n");
+  process.stdout.write("    tween:     captionKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y offset, % of frame)\n\n");
+  process.stdout.write("  kicker (per app segment)\n");
+  process.stdout.write("    tween:     kickerKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y offset, % of frame)\n");
+  process.stdout.write("\nTimes are absolute on the main timeline — get per-word start/end from `kino inspect`.\n");
 }

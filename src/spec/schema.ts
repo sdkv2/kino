@@ -24,6 +24,7 @@ const Segment = z.discriminatedUnion("kind", [
     shot: Shot.optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
+    captionKeyframes: z.array(BgKeyframe).optional(),
   }),
   z.object({
     kind: z.literal("app"),
@@ -35,6 +36,8 @@ const Segment = z.discriminatedUnion("kind", [
     transition: Transition.optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
+    captionKeyframes: z.array(BgKeyframe).optional(),
+    kickerKeyframes: z.array(BgKeyframe).optional(),
   }),
 ]);
 

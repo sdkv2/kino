@@ -31,6 +31,8 @@ export interface KinoSegment {
   captionMode?: "phrase" | "words"; // "words" = spoken text revealed word-by-word, synced to VO
   words?: WordTiming[]; // absolute word timings (present for captionMode "words")
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
+  captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)
+  kickerKeyframes?: BgKeyframe[]; // tween the kicker (app segments)
 }
 
 // Where an avatar clip sits on the main timeline + which slice of the (trimmed) clip to play.
