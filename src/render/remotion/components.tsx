@@ -1,7 +1,9 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme } from "../props";
+import type { Theme, BackgroundProps } from "../props";
 import type { Shot, Transition } from "../motion";
+import { CanvasBackground } from "./backgrounds/CanvasBackground";
+import { getPreset, type DrawFn } from "./backgrounds/presets";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
@@ -67,21 +69,14 @@ export const HeroCaption: React.FC<{ text: string; t: Theme }> = ({ text, t }) =
   );
 };
 
-// Backdrop for faceless beats. With a brand image: slow Ken-Burns + a center scrim so the
-// hero text stays legible. Without one: two soft brand glows drifting over night.
-export const FacelessBackdrop: React.FC<{ t: Theme; bg?: string | null }> = ({ t, bg }) => {
+// Center scrim that keeps hero text legible over a busy background (derived from the brand night).
+const Scrim: React.FC<{ t: Theme }> = ({ t }) => (
+  <AbsoluteFill style={{ background: `radial-gradient(ellipse 72% 46% at 50% 50%, ${t.night}bd, ${t.night}38 68%, ${t.night}00)` }} />
+);
+
+// Two soft brand glows drifting over night (the zero-config default).
+const GlowBg: React.FC<{ t: Theme }> = ({ t }) => {
   const f = useCurrentFrame();
-  if (bg) {
-    const scale = interpolate(f, [0, 300], [1.05, 1.13], { extrapolateRight: "clamp" });
-    return (
-      <AbsoluteFill style={{ backgroundColor: t.night, overflow: "hidden" }}>
-        <Img src={bg} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${scale})` }} />
-        <AbsoluteFill
-          style={{ background: `radial-gradient(ellipse 72% 46% at 50% 50%, ${t.night}bd, ${t.night}38 68%, ${t.night}00)` }}
-        />
-      </AbsoluteFill>
-    );
-  }
   const dx = Math.sin(f / 60) * 6;
   const dy = Math.cos(f / 80) * 8;
   return (
@@ -90,6 +85,49 @@ export const FacelessBackdrop: React.FC<{ t: Theme; bg?: string | null }> = ({ t
       <div style={{ position: "absolute", bottom: `${8 - dy}%`, right: `${8 + dx}%`, width: 760, height: 760, borderRadius: "50%", background: `radial-gradient(circle, ${t.mint}30, transparent 62%)`, filter: "blur(54px)" }} />
     </AbsoluteFill>
   );
+};
+
+// Static brand image with a slow Ken-Burns push-in.
+const ImageBg: React.FC<{ src: string; t: Theme }> = ({ src, t }) => {
+  const f = useCurrentFrame();
+  const scale = interpolate(f, [0, 300], [1.05, 1.13], { extrapolateRight: "clamp" });
+  return (
+    <AbsoluteFill style={{ backgroundColor: t.night, overflow: "hidden" }}>
+      <Img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${scale})` }} />
+    </AbsoluteFill>
+  );
+};
+
+// Dispatcher: glow = CSS drift; image = Ken-Burns photo; mesh/aurora/particles/grid = canvas
+// presets; custom = the brand's own draw fn. Animated backgrounds get the legibility scrim.
+export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps }> = ({ t, background }) => {
+  const { kind, customCode, colors, intensity, image } = background;
+  const draw = React.useMemo<DrawFn | undefined>(() => {
+    if (kind === "custom" && customCode) {
+      // brand-authored draw fn (trusted, local config), runs per frame inside CanvasBackground
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      return new Function("ctx", "env", customCode) as DrawFn;
+    }
+    return getPreset(kind);
+  }, [kind, customCode]);
+
+  if (kind === "image" && image) {
+    return (
+      <AbsoluteFill>
+        <ImageBg src={staticFile(image)} t={t} />
+        <Scrim t={t} />
+      </AbsoluteFill>
+    );
+  }
+  if (draw) {
+    return (
+      <AbsoluteFill>
+        <CanvasBackground draw={draw} colors={colors} intensity={intensity} t={t} />
+        <Scrim t={t} />
+      </AbsoluteFill>
+    );
+  }
+  return <GlowBg t={t} />;
 };
 
 // Brand mark for faceless talking beats — top-center, gentle fade/scale in.

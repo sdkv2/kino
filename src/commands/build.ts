@@ -12,6 +12,7 @@ import { contentHash } from "../media/hash.js";
 import { buildVO, GAP } from "../vo/vo.js";
 import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
+import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo } from "../render/render.js";
 import type { KinoProps } from "../render/props.js";
@@ -50,7 +51,10 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
   return cache.put(key, "mp3", tmp);
 }
 
-export async function build(specPath: string, opts: { mock?: boolean; format?: string; provider?: string }): Promise<string[]> {
+export async function build(
+  specPath: string,
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string },
+): Promise<string[]> {
   const project = resolveProject();
   loadEnv(project.root);
   const spec = SpecSchema.parse(JSON.parse(readFileSync(specPath, "utf8")));
@@ -102,8 +106,28 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
   copyFileSync(vo.trackPath, join(publicDir, "vo.mp3"));
   const logoAbs = resolveBrandFile(brand.logo, project);
   if (logoAbs) copyFileSync(logoAbs, join(publicDir, "logo.png"));
-  const bgAbs = resolveBrandFile(brand.facelessBackdrop, project);
-  if (bgAbs) copyFileSync(bgAbs, join(publicDir, "faceless-bg.png"));
+
+  // Faceless background: stage the image (image kind) or read the custom draw-fn (custom kind).
+  const bgKind = (opts.background as ReturnType<typeof resolveBackgroundKind> | undefined) ?? resolveBackgroundKind(brand, spec);
+  let bgImageRel: string | null = null;
+  let bgCustomCode: string | null = null;
+  if (bgKind === "image") {
+    const imgAbs = resolveBrandFile(brand.facelessBackdrop, project);
+    if (!imgAbs) throw new Error('background "image" needs brand.facelessBackdrop');
+    copyFileSync(imgAbs, join(publicDir, "faceless-bg.png"));
+    bgImageRel = "faceless-bg.png";
+  } else if (bgKind === "custom") {
+    const compAbs = resolveBrandFile(brand.backgroundComponent, project);
+    if (!compAbs) throw new Error('background "custom" needs brand.backgroundComponent (a draw-fn .js file)');
+    bgCustomCode = readFileSync(compAbs, "utf8");
+  }
+  const background = {
+    kind: bgKind,
+    image: bgImageRel,
+    customCode: bgCustomCode,
+    colors: resolveBackgroundColors(brand),
+    intensity: resolveBackgroundIntensity(brand, spec),
+  };
 
   const c = brand.colors;
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
@@ -148,7 +172,7 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
     avatarWindows,
     voTrack: "vo.mp3",
     logo: logoAbs ? "logo.png" : null,
-    facelessBg: bgAbs ? "faceless-bg.png" : null,
+    background,
     disclosure: avatarRel ? brand.disclosure : (brand.facelessDisclosure ?? brand.disclosure),
     segments: renderSegments,
   };

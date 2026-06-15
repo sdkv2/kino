@@ -29,6 +29,7 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 ```jsonc
 { "brand": "<brand>", "title": "kebab-case", "format": ["9:16"], "voice": "<alias>",
   "provider": "none",            // none | heygen | hedra | replicate (else brand.defaultProvider)
+  "background": "mesh",          // faceless bg: glow|image|mesh|aurora|particles|grid|custom (else brand.background)
   "segments": [
     { "kind": "avatar", "text": "spoken (+ lip-synced if an avatar provider is set)", "caption": "on-screen text", "cta": true },
     { "kind": "app", "asset": "screens/x.png", "text": "spoken (avatar hidden)", "caption": "...",
