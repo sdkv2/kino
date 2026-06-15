@@ -20,7 +20,7 @@ const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number 
   );
 };
 
-export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, facelessBg, disclosure, segments }) => {
+export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, background, disclosure, segments }) => {
   const f = (s: number) => Math.round(s * fps);
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
@@ -38,7 +38,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           );
         })
       ) : (
-        <FacelessBackdrop t={theme} bg={facelessBg ? staticFile(facelessBg) : null} />
+        <FacelessBackdrop t={theme} background={background} />
       )}
 
       {segments

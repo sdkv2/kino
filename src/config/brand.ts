@@ -21,7 +21,11 @@ export const BrandSchema = z.object({
   disclosure: z.string(), // shown when an avatar is present
   facelessDisclosure: z.string().optional(), // shown when no avatar renders (falls back to disclosure)
   logo: z.string().optional(), // brand mark (transparent PNG) shown on faceless talking beats
-  facelessBackdrop: z.string().optional(), // background image for faceless beats (else CSS glow)
+  facelessBackdrop: z.string().optional(), // background image for faceless beats (used when background="image")
+  background: z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]).optional(), // faceless background engine
+  backgroundComponent: z.string().optional(), // path to a custom canvas draw fn (used when background="custom")
+  backgroundColors: z.array(z.string()).optional(), // palette for animated backgrounds (else mint/green/gold)
+  backgroundIntensity: z.number().optional(), // 0..1 motion strength (default 0.5)
   bannedPhrases: z.array(z.string()).default([]),
   defaultVoice: z.string().optional(),
   defaultLook: z.string().optional(),

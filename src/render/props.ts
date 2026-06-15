@@ -29,6 +29,15 @@ export interface AvatarWindow {
   audioStartSec: number; // offset into the trimmed avatar clip
 }
 
+// Faceless background selection, resolved at build time.
+export interface BackgroundProps {
+  kind: "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "custom";
+  image: string | null; // staticFile-relative path, for kind="image"
+  customCode: string | null; // draw-fn source, for kind="custom"
+  colors: string[]; // palette for animated backgrounds
+  intensity: number; // 0..1 motion strength
+}
+
 export interface KinoProps {
   theme: Theme;
   fps: number;
@@ -36,7 +45,7 @@ export interface KinoProps {
   avatarWindows: AvatarWindow[]; // placements of the avatar clip; empty when faceless
   voTrack: string | null; // staticFile-relative path to the full VO audio track
   logo: string | null; // staticFile-relative brand mark, shown on faceless talking beats
-  facelessBg: string | null; // staticFile-relative backdrop image for faceless beats
+  background: BackgroundProps; // faceless background engine selection
   disclosure: string;
   segments: KinoSegment[];
 }
