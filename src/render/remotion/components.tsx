@@ -186,6 +186,21 @@ export const AnimatedElement: React.FC<{
   );
 };
 
+// Tween wrapper for elements that already position themselves (captions, kickers). Keyframes offset
+// (x/y as % of frame), scale, and fade them over absolute time. No keyframes → pass-through (no change,
+// so the default look is preserved exactly).
+export const TweenOverlay: React.FC<{ keyframes: BgKeyframe[]; fromSec: number; children: React.ReactNode }> = ({ keyframes, fromSec, children }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  if (!keyframes.length) return <>{children}</>;
+  const p = paramsAt({ x: 0, y: 0, scale: 1, opacity: 1 }, keyframes, fromSec + frame / fps);
+  return (
+    <AbsoluteFill style={{ transform: `translate(${numOf(p.x, 0)}%, ${numOf(p.y, 0)}%) scale(${numOf(p.scale, 1)})`, opacity: numOf(p.opacity, 1) }}>
+      {children}
+    </AbsoluteFill>
+  );
+};
+
 // Brand mark for faceless talking beats — configurable size/position, agent-tweenable.
 export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number; keyframes: BgKeyframe[]; fromSec: number }> = ({
   src,

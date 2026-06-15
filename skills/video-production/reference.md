@@ -100,6 +100,9 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - `words` mode uses real word timings from ElevenLabs `…/with-timestamps` (faked evenly under `--mock`),
   so the on-screen words are the spoken words. Effects: typewriter reveal + pop, active-word highlight,
   and per-segment `emphasis: ["word", …]` (glow + shake on those words while active).
+- **Tween captions/kickers** over time: per-segment `captionKeyframes` (and `kickerKeyframes` on app
+  segments) `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame). Same
+  keyframe system as the logo + background; `at` is absolute (use `kino inspect` word times). `kino elements`.
 
 ## Cost model
 - Avatar engines bill per second of generated avatar; kino **trims the avatar to on-camera segments
