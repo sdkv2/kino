@@ -1,10 +1,20 @@
 # kino reference
 
 ## Commands
-- `kino build <spec> [--mock] [--format 9:16,3:4] [--provider <p>] [--background <kind>]`
+- `kino build <spec> [--mock] [--format 9:16,3:4] [--provider <p>] [--background <kind>] [--tag <label>]`
+- `kino inspect <spec> [--real]` — print the resolved plan (beats, timings, modes) as JSON
+- `kino still <spec> [--at <s,…> | --segment <n>] [--real] [--format]` — render one frame fast (no encode)
+- `kino storyboard <spec> [--real] [--format]` — one still per beat tiled into a labeled contact sheet
+- `kino frames <video> --at <s,…> [--montage] [--out <dir>]` — extract frames from a rendered video
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
 - `kino init [brand]` · `kino doctor`
+
+## Iterative design loop (agents)
+`still`/`storyboard`/`inspect` default to **mock** (fast, $0; captions/background/layout render identically —
+only avatar+VO timing differ). Loop: `kino inspect` (map the beats) → `kino still --segment N` (preview one
+beat in ~1–2s) → edit the spec → `kino still` again → `kino build` for the real render. Add `--real` for
+true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
 
 ## Brand config (`brands/<name>/brand.json`)
 `name, colors{night,mint,green,white,gold}, font, captionStyle{fontSize,strokeWidth},

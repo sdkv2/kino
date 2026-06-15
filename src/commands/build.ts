@@ -51,10 +51,20 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
   return cache.put(key, "mp3", tmp);
 }
 
-export async function build(
+export interface PrepareResult {
+  props: KinoProps;
+  publicDir: string;
+  formats: Array<"9:16" | "3:4">;
+  project: Project;
+  spec: Spec;
+}
+
+// Everything build does up to (but not including) the final video render. Reused by the
+// inspection commands (still/storyboard/inspect) so they share the exact pipeline.
+export async function prepare(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; tag?: string },
-): Promise<string[]> {
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string },
+): Promise<PrepareResult> {
   const project = resolveProject();
   loadEnv(project.root);
   const spec = SpecSchema.parse(JSON.parse(readFileSync(specPath, "utf8")));
@@ -181,6 +191,14 @@ export async function build(
     segments: renderSegments,
   };
 
+  return { props, publicDir, formats, project, spec };
+}
+
+export async function build(
+  specPath: string,
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string; tag?: string },
+): Promise<string[]> {
+  const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
   log.step("render");
   // Tag variant renders (explicit --tag, else the --background override) so they don't overwrite the default.
   const outName = variantName(spec.title, opts.tag ?? opts.background);

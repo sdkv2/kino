@@ -1,0 +1,52 @@
+import { describe, it, expect } from "vitest";
+import { inspectPlan, parseTimes, pickFrames } from "../src/render/preview.js";
+import type { KinoProps } from "../src/render/props.js";
+
+const props = {
+  fps: 30,
+  avatar: null,
+  background: { kind: "mesh", image: null, customCode: null, colors: [], intensity: 0.5 },
+  segments: [
+    { kind: "avatar", caption: "hi", startSec: 0, endSec: 2 },
+    { kind: "app", asset: "x.png", caption: "a", startSec: 2.3, endSec: 5, kicker: { text: "86%", color: "#1", fg: "#0" }, captionMode: "words" },
+  ],
+} as unknown as KinoProps;
+
+describe("inspectPlan", () => {
+  it("summarises the resolved render plan", () => {
+    const p = inspectPlan(props);
+    expect(p).toMatchObject({ fps: 30, faceless: true, background: "mesh" });
+    expect(p.durationSec).toBeCloseTo(5);
+    expect(p.segments[0]).toMatchObject({ index: 0, kind: "avatar", startSec: 0, endSec: 2, durSec: 2, captionMode: "phrase", hasKicker: false });
+    expect(p.segments[1]).toMatchObject({ index: 1, kind: "app", asset: "x.png", captionMode: "words", hasKicker: true });
+  });
+});
+
+describe("parseTimes", () => {
+  it("parses a comma list of seconds, dropping junk", () => {
+    expect(parseTimes("1,3.5,9")).toEqual([1, 3.5, 9]);
+    expect(parseTimes("0, 2.2 , x, 4")).toEqual([0, 2.2, 4]);
+  });
+});
+
+describe("pickFrames", () => {
+  const segs = [
+    { kind: "avatar", startSec: 0, endSec: 2 },
+    { kind: "app", startSec: 2.3, endSec: 5 },
+  ];
+  it("at-list → one frame per timestamp", () => {
+    expect(pickFrames(segs, 30, { at: [1, 4] })).toEqual([
+      { frame: 30, label: "1s" },
+      { frame: 120, label: "4s" },
+    ]);
+  });
+  it("segment → the midpoint frame of that segment", () => {
+    expect(pickFrames(segs, 30, { segment: 1 })).toEqual([{ frame: Math.round(3.65 * 30), label: "1 app" }]);
+  });
+  it("default → one midpoint frame per beat (storyboard)", () => {
+    const r = pickFrames(segs, 30, {});
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ frame: 30 });
+    expect(r[1]).toMatchObject({ frame: Math.round(3.65 * 30) });
+  });
+});
