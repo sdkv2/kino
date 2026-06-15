@@ -56,15 +56,13 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           </Sequence>
         ))}
 
-      {/* Brand mark on faceless talking beats (top-center, above the hero text). */}
+      {/* Brand mark on faceless talking runs — one per contiguous run so it holds steady as the text changes. */}
       {!avatar && logo
-        ? segments.map((s, i) =>
-            s.kind === "avatar" ? (
-              <Sequence key={`lg${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
-                <Logo src={staticFile(logo)} />
-              </Sequence>
-            ) : null,
-          )
+        ? avatarWindows.map((w, i) => (
+            <Sequence key={`lg${i}`} from={f(w.fromSec)} durationInFrames={f(w.toSec) - f(w.fromSec)}>
+              <Logo src={staticFile(logo)} />
+            </Sequence>
+          ))
         : null}
 
       {segments.map((s, i) => {
