@@ -77,7 +77,7 @@ export const FacelessBackdrop: React.FC<{ t: Theme; bg?: string | null }> = ({ t
       <AbsoluteFill style={{ backgroundColor: t.night, overflow: "hidden" }}>
         <Img src={bg} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${scale})` }} />
         <AbsoluteFill
-          style={{ background: "radial-gradient(ellipse 72% 46% at 50% 50%, rgba(11,16,32,.74), rgba(11,16,32,.22) 68%, rgba(11,16,32,0))" }}
+          style={{ background: `radial-gradient(ellipse 72% 46% at 50% 50%, ${t.night}bd, ${t.night}38 68%, ${t.night}00)` }}
         />
       </AbsoluteFill>
     );
