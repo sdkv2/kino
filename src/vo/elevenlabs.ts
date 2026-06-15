@@ -1,5 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { genSilence } from "../media/ffmpeg.js";
+import { charsToWords } from "../render/captions.js";
+import type { WordTiming } from "../render/props.js";
 
 const BASE = "https://api.elevenlabs.io/v1";
 
@@ -51,4 +53,35 @@ export async function tts(
 export async function ttsMock(text: string, out: string): Promise<void> {
   const words = text.trim().split(/\s+/).length;
   await genSilence(Math.max(0.8, words * 0.38), out);
+}
+
+// Like tts(), but also returns clip-relative word timings (for word-synced captions).
+export async function ttsWithTimestamps(
+  apiKey: string,
+  voiceId: string,
+  text: string,
+  out: string,
+  settings = DEFAULT_SETTINGS,
+): Promise<WordTiming[]> {
+  const r = await fetch(`${BASE}/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, {
+    method: "POST",
+    headers: { "xi-api-key": apiKey, "content-type": "application/json" },
+    body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: settings }),
+  });
+  if (!r.ok) throw new Error(`ElevenLabs TTS(timestamps) ${r.status}: ${await r.text()}`);
+  const d = (await r.json()) as {
+    audio_base64: string;
+    alignment?: { characters: string[]; character_start_times_seconds: number[]; character_end_times_seconds: number[] };
+  };
+  writeFileSync(out, Buffer.from(d.audio_base64, "base64"));
+  const a = d.alignment;
+  return a ? charsToWords(a.characters, a.character_start_times_seconds, a.character_end_times_seconds) : [];
+}
+
+// --mock timestamps: evenly spaced fake word timings over the silent clip.
+export async function ttsMockWithTimestamps(text: string, out: string): Promise<WordTiming[]> {
+  const words = text.trim().split(/\s+/);
+  const per = 0.38;
+  await genSilence(Math.max(0.8, words.length * per), out);
+  return words.map((w, i) => ({ word: w, start: i * per, end: (i + 1) * per }));
 }

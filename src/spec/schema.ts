@@ -5,6 +5,7 @@ const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", 
 const Transition = z.enum(["fade", "fly-left", "fly-up", "pop", "cut"]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
+const CaptionMode = z.enum(["phrase", "words"]);
 
 const Segment = z.discriminatedUnion("kind", [
   z.object({
@@ -13,6 +14,8 @@ const Segment = z.discriminatedUnion("kind", [
     caption: z.string().min(1),
     cta: z.boolean().default(false),
     shot: Shot.optional(),
+    captionMode: CaptionMode.optional(),
+    emphasis: z.array(z.string()).optional(),
   }),
   z.object({
     kind: z.literal("app"),
@@ -22,6 +25,8 @@ const Segment = z.discriminatedUnion("kind", [
     kicker: Kicker.optional(),
     shot: Shot.optional(),
     transition: Transition.optional(),
+    captionMode: CaptionMode.optional(),
+    emphasis: z.array(z.string()).optional(),
   }),
 ]);
 
