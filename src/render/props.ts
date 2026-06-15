@@ -40,13 +40,24 @@ export interface AvatarWindow {
   audioStartSec: number; // offset into the trimmed avatar clip
 }
 
-// Faceless background selection, resolved at build time.
+// Faceless background selection + agent animation, resolved at build time.
+export type BgParamValue = number | string;
+export interface BgKeyframe {
+  at: number;
+  params: Record<string, BgParamValue>;
+  ease?: "linear" | "easeInOut";
+}
+export interface BgTrigger {
+  at: number;
+  action: string;
+}
 export interface BackgroundProps {
   kind: "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "custom";
   image: string | null; // staticFile-relative path, for kind="image"
   customCode: string | null; // draw-fn source, for kind="custom"
-  colors: string[]; // palette for animated backgrounds
-  intensity: number; // 0..1 motion strength
+  params: Record<string, BgParamValue>; // base param values (tweened by keyframes)
+  keyframes: BgKeyframe[]; // agent-authored param tweens over time
+  triggers: BgTrigger[]; // agent-authored one-shot actions (e.g. pulse)
 }
 
 export interface KinoProps {

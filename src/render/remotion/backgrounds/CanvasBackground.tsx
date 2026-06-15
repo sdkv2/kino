@@ -1,16 +1,19 @@
 import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme } from "../../props";
+import type { Theme, BgParamValue, BgKeyframe, BgTrigger } from "../../props";
+import { paramsAt, pulseAt } from "../../bgparams";
 import type { DrawFn } from "./presets";
 
-// Generic frame-driven canvas. Draws via useLayoutEffect (synchronous, before paint) so Remotion
-// captures the frame deterministically. Clears + paints the night base each frame, then runs `draw`.
-export const CanvasBackground: React.FC<{ draw: DrawFn; colors: string[]; intensity: number; t: Theme }> = ({
-  draw,
-  colors,
-  intensity,
-  t,
-}) => {
+// Generic frame-driven canvas. Each frame: clear + paint night, resolve the agent's tweened params
+// + trigger pulse at the current time, then run `draw`. useLayoutEffect (sync, pre-paint) so Remotion
+// captures it deterministically.
+export const CanvasBackground: React.FC<{
+  draw: DrawFn;
+  params: Record<string, BgParamValue>;
+  keyframes: BgKeyframe[];
+  triggers: BgTrigger[];
+  t: Theme;
+}> = ({ draw, params, keyframes, triggers, t }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -20,7 +23,6 @@ export const CanvasBackground: React.FC<{ draw: DrawFn; colors: string[]; intens
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // reset any state a previous frame's draw may have left behind
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
@@ -28,7 +30,8 @@ export const CanvasBackground: React.FC<{ draw: DrawFn; colors: string[]; intens
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = t.night;
     ctx.fillRect(0, 0, width, height);
-    draw(ctx, { frame, fps, width, height, colors, intensity });
+    const tt = frame / fps;
+    draw(ctx, { frame, fps, width, height, params: paramsAt(params, keyframes, tt), pulse: pulseAt(triggers, tt) });
   });
 
   return (

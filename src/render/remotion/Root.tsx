@@ -19,7 +19,7 @@ const DEFAULTS: KinoProps = {
   avatarWindows: [],
   voTrack: null,
   logo: null,
-  background: { kind: "glow", image: null, customCode: null, colors: ["#80e2b4", "#0c8d64", "#d99a20"], intensity: 0.5 },
+  background: { kind: "glow", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
   disclosure: "AI avatar & voice · sample data",
   segments: [],
 };
