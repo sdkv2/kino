@@ -1,7 +1,7 @@
 # kino reference
 
 ## Commands
-- `kino build <spec> [--mock] [--format 9:16,3:4] [--provider none|heygen|hedra|replicate]`
+- `kino build <spec> [--mock] [--format 9:16,3:4] [--provider <p>] [--background <kind>]`
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
 - `kino init [brand]` · `kino doctor`
@@ -13,8 +13,21 @@ defaultProvider?, voiceAliases{}, lookAliases{}`.
 
 Faceless branding (optional):
 - `logo` — transparent brand mark (PNG); shown top-center on faceless talking beats.
-- `facelessBackdrop` — background image for faceless beats (else animated CSS glow). A center
-  scrim is applied automatically so hero text stays legible.
+- `background` — faceless background engine (see below). Default: `image` if `facelessBackdrop`
+  set, else `glow`. Override per-video with spec `background` or `--background <kind>`.
+- `facelessBackdrop` — image used when `background: "image"`.
+- `backgroundComponent` — custom draw-fn file, used when `background: "custom"`.
+- `backgroundColors` — palette for animated backgrounds (default: mint/green/gold).
+- `backgroundIntensity` — 0..1 motion strength (default 0.5); spec `backgroundIntensity` overrides.
+
+## Faceless backgrounds
+Frame-driven (deterministic) layers behind the hero text; a center scrim is auto-applied for legibility.
+- `glow` — animated CSS brand glows (zero-config default).
+- `image` — static `facelessBackdrop` with a slow Ken-Burns.
+- `mesh` / `aurora` / `particles` / `grid` — built-in Canvas2D presets, auto-coloured from the brand.
+- `custom` — your own Canvas2D `draw` fn. `backgroundComponent` points to a `.js` file whose body draws
+  using `ctx` + `env`, e.g.: `const {frame,width,height,colors,intensity}=env; ctx.fillStyle=colors[0]; ...`.
+  **Must be frame-driven** (use `env.frame`, never `Date.now()`/un-seeded `Math.random()`) or frames won't match.
 
 Provider-specific:
 - `avatarImage` — portrait file (path under project root) used as the source for `hedra`/`replicate`.
