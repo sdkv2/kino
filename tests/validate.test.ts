@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { complianceScan, resolveVoiceLook } from "../src/spec/validate.js";
+import { complianceScan, resolveVoiceLook, resolveProvider, resolveVoice } from "../src/spec/validate.js";
 import type { Brand } from "../src/config/brand.js";
 import type { Spec } from "../src/spec/schema.js";
 
@@ -27,5 +27,29 @@ describe("resolveVoiceLook", () => {
   it("resolves aliases to ids, honouring spec overrides then brand defaults", () => {
     const r = resolveVoiceLook({ voice: "will" } as Spec, brand);
     expect(r).toEqual({ voiceId: "voice123", lookId: "look456" });
+  });
+});
+
+describe("resolveVoice", () => {
+  it("resolves the voice alias without requiring an avatar look (faceless needs no look)", () => {
+    expect(resolveVoice({} as unknown as Spec, brand)).toBe("voice123");
+  });
+  it("honours a spec voice override", () => {
+    const b = { defaultVoice: "x", voiceAliases: { will: "voice123", x: "other" } } as unknown as Brand;
+    expect(resolveVoice({ voice: "will" } as unknown as Spec, b)).toBe("voice123");
+  });
+});
+
+describe("resolveProvider", () => {
+  it("defaults to heygen when neither spec nor brand sets one", () => {
+    expect(resolveProvider({} as unknown as Spec, {} as unknown as Brand)).toBe("heygen");
+  });
+  it("falls back to the brand default when the spec is silent", () => {
+    expect(resolveProvider({} as unknown as Spec, { defaultProvider: "none" } as unknown as Brand)).toBe("none");
+  });
+  it("lets the spec override the brand default", () => {
+    expect(
+      resolveProvider({ provider: "hedra" } as unknown as Spec, { defaultProvider: "none" } as unknown as Brand),
+    ).toBe("hedra");
   });
 });

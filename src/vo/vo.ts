@@ -8,7 +8,7 @@ import { contentHash } from "../media/hash.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { tts, ttsMock, DEFAULT_SETTINGS } from "./elevenlabs.js";
 
-const GAP = 0.32;
+export const GAP = 0.32;
 
 export function computeTimings(durations: number[], gap: number): SegmentTiming[] {
   const out: SegmentTiming[] = [];
@@ -52,5 +52,5 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock }: BuildVOOpt
     await stitchAudio(clips, GAP, tmp);
     track = cache.put(trackKey, "mp3", tmp);
   }
-  return { trackPath: track, timings, totalSec: timings.at(-1)!.endSec };
+  return { trackPath: track, clips, timings, totalSec: timings.at(-1)!.endSec };
 }
