@@ -41,7 +41,8 @@ export function planAvatarWindows(
     if (endsRun) {
       windows.push({
         fromSec: timings[runStart!].startSec,
-        toSec: timings[i].endSec,
+        // hold to the next segment's start so the avatar/logo doesn't blink off during the VO gap
+        toSec: i + 1 < kinds.length ? timings[i + 1].startSec : timings[i].endSec,
         audioStartSec: avTrack[posOf.get(runStart!)!].startSec,
       });
       runStart = null;
