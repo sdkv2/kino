@@ -2,28 +2,51 @@ import { mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Cache } from "../media/cache.js";
+import type { Brand } from "../config/brand.js";
 import { contentHash } from "../media/hash.js";
+import type { Provider } from "./provider.js";
 import { uploadAsset, generate, pollDownload, generateMock } from "./heygen.js";
+import { hedraGenerate } from "./hedra.js";
+import { replicateGenerate, type ReplicateCfg } from "./replicate.js";
 
 export interface BuildAvatarOpts {
-  voPath: string;
-  lookId: string;
+  provider: Exclude<Provider, "none">;
+  audioPath: string; // trimmed avatar-only VO track (only the on-camera segments)
+  source: string; // heygen: look id · hedra/replicate: portrait image path
+  brand: Brand;
   cache: Cache;
   mock: boolean;
 }
 
-export async function buildAvatar({ voPath, lookId, cache, mock }: BuildAvatarOpts): Promise<string> {
-  const voHash = contentHash({ size: statSync(voPath).size, lookId, mock });
-  const cached = cache.get(voHash, "mp4");
+function replicateCfg(brand: Brand): ReplicateCfg {
+  return {
+    model: brand.replicateModel ?? "cjwbw/sadtalker",
+    imageField: brand.replicateImageField ?? "source_image",
+    audioField: brand.replicateAudioField ?? "driven_audio",
+    extra: brand.replicateInput ?? { preprocess: "full", still: true, enhancer: "gfpgan" },
+  };
+}
+
+export async function buildAvatar({ provider, audioPath, source, brand, cache, mock }: BuildAvatarOpts): Promise<string> {
+  // Cache on everything that changes the pixels: provider, look/image, trimmed-audio bytes.
+  const key = contentHash({ provider, size: statSync(audioPath).size, source, mock });
+  const cached = cache.get(key, "mp4");
   if (cached) return cached;
+
   const dir = mkdtempSync(join(tmpdir(), "kino-av-"));
   const tmp = join(dir, "avatar.mp4");
   if (mock) {
     await generateMock(tmp);
-  } else {
-    const assetId = await uploadAsset(voPath);
-    const videoId = await generate(lookId, assetId);
+  } else if (provider === "heygen") {
+    const assetId = await uploadAsset(audioPath);
+    const videoId = await generate(source, assetId);
     await pollDownload(videoId, tmp);
+  } else if (provider === "hedra") {
+    await hedraGenerate(audioPath, source, { modelId: brand.hedraModelId }, tmp);
+  } else if (provider === "replicate") {
+    await replicateGenerate(audioPath, source, replicateCfg(brand), tmp);
+  } else {
+    throw new Error(`Unknown avatar provider: ${provider}`);
   }
-  return cache.put(voHash, "mp4", tmp);
+  return cache.put(key, "mp4", tmp);
 }

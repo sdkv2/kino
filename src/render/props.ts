@@ -22,10 +22,19 @@ export interface KinoSegment {
   transition?: string; // resolved in/out transition for app cut-ins
 }
 
+// Where an avatar clip sits on the main timeline + which slice of the (trimmed) clip to play.
+export interface AvatarWindow {
+  fromSec: number; // main-timeline start
+  toSec: number; // main-timeline end
+  audioStartSec: number; // offset into the trimmed avatar clip
+}
+
 export interface KinoProps {
   theme: Theme;
   fps: number;
-  avatar: string | null; // staticFile-relative path, or null for no-avatar
+  avatar: string | null; // staticFile-relative path to the (trimmed) avatar clip, or null for faceless
+  avatarWindows: AvatarWindow[]; // placements of the avatar clip; empty when faceless
+  voTrack: string | null; // staticFile-relative path to the full VO audio track
   disclosure: string;
   segments: KinoSegment[];
 }

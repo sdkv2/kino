@@ -1,27 +1,44 @@
 import React from "react";
-import { AbsoluteFill, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { AppCutaway, Caption, Disclosure, Kicker } from "./components";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
-export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, disclosure, segments }) => {
+// One placement of the (trimmed) avatar clip, with a gentle push-in so the shot breathes.
+const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number }> = ({ src, trimFrames, durFrames }) => {
+  const f = useCurrentFrame();
+  const scale = interpolate(f, [0, durFrames], [1.0, 1.06], { extrapolateRight: "clamp" });
+  return (
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      <OffthreadVideo
+        src={src}
+        muted
+        trimBefore={trimFrames}
+        style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${scale})` }}
+      />
+    </AbsoluteFill>
+  );
+};
+
+export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, disclosure, segments }) => {
   const f = (s: number) => Math.round(s * fps);
-  const frame = useCurrentFrame();
-  const totalFrames = Math.round(Math.max(...segments.map((s) => s.endSec), 1) * fps);
-  // subtle continuous push-in on the avatar base so talking-head shots breathe
-  const avScale = interpolate(frame, [0, totalFrames], [1.0, 1.08], { extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
-      {avatar ? (
-        <AbsoluteFill style={{ overflow: "hidden" }}>
-          <OffthreadVideo
-            src={staticFile(avatar)}
-            style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${avScale})` }}
-          />
-        </AbsoluteFill>
-      ) : (
-        <AbsoluteFill style={{ backgroundColor: theme.night }} />
-      )}
+      {/* Continuous voiceover — covers every segment, including the app cut-ins where the avatar is trimmed out. */}
+      {voTrack ? <Audio src={staticFile(voTrack)} /> : null}
+
+      {/* Avatar base, placed only where someone is on camera (trimmed = cheaper to generate). */}
+      {avatar
+        ? avatarWindows.map((w, i) => {
+            const dur = f(w.toSec) - f(w.fromSec);
+            return (
+              <Sequence key={`av${i}`} from={f(w.fromSec)} durationInFrames={dur}>
+                <AvatarClip src={staticFile(avatar)} trimFrames={f(w.audioStartSec)} durFrames={dur} />
+              </Sequence>
+            );
+          })
+        : null}
+
       {segments
         .filter((s) => s.kind === "app")
         .map((s, i) => (
@@ -36,6 +53,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, disclosure,
             {s.kicker ? <Kicker text={s.kicker.text} color={s.kicker.color} fg={s.kicker.fg} t={theme} /> : null}
           </Sequence>
         ))}
+
       {segments.map((s, i) => (
         <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
           <Caption text={s.caption} t={theme} />
