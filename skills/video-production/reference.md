@@ -11,6 +11,11 @@
 disclosure, facelessDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
 defaultProvider?, voiceAliases{}, lookAliases{}`.
 
+Faceless branding (optional):
+- `logo` — transparent brand mark (PNG); shown top-center on faceless talking beats.
+- `facelessBackdrop` — background image for faceless beats (else animated CSS glow). A center
+  scrim is applied automatically so hero text stays legible.
+
 Provider-specific:
 - `avatarImage` — portrait file (path under project root) used as the source for `hedra`/`replicate`.
 - `hedraModelId` — Character-3 model id (else auto-picks the first from Hedra `/models`).

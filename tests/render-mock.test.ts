@@ -18,6 +18,8 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
+      logo: null,
+      facelessBg: null,
       disclosure: "test",
       segments: [{ kind: "avatar", caption: "hello", startSec: 0, endSec: 2 }],
     };
@@ -35,6 +37,8 @@ describe("renderVideo", () => {
       avatar: "avatar.mp4",
       avatarWindows: [{ fromSec: 0, toSec: 2, audioStartSec: 0 }],
       voTrack: null,
+      logo: null,
+      facelessBg: null,
       disclosure: "test",
       segments: [{ kind: "avatar", caption: "on camera", startSec: 0, endSec: 2 }],
     };

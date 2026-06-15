@@ -18,6 +18,8 @@ const DEFAULTS: KinoProps = {
   avatar: null,
   avatarWindows: [],
   voTrack: null,
+  logo: null,
+  facelessBg: null,
   disclosure: "AI avatar & voice · sample data",
   segments: [],
 };
