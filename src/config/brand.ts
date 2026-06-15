@@ -26,6 +26,7 @@ export const BrandSchema = z.object({
   backgroundComponent: z.string().optional(), // path to a custom canvas draw fn (used when background="custom")
   backgroundColors: z.array(z.string()).optional(), // palette for animated backgrounds (else mint/green/gold)
   backgroundIntensity: z.number().optional(), // 0..1 motion strength (default 0.5)
+  captionMode: z.enum(["phrase", "words"]).optional(), // default caption style (phrase = short block; words = synced)
   bannedPhrases: z.array(z.string()).default([]),
   defaultVoice: z.string().optional(),
   defaultLook: z.string().optional(),

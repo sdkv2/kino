@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.1.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.2.0");
 
 program
   .command("build <spec>")

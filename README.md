@@ -13,8 +13,8 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.1 — pluggable avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
-> animated background engine, output tagging, `--mock`, content-hash caching, `doctor`. 44 tests green.
+> **Status:** v1.2 — pluggable avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
+> animated background engine, word-synced captions, output tagging, `--mock`, caching, `doctor`. 51 tests green.
 
 ## Install (global)
 ```bash
@@ -38,6 +38,8 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
   Avatars are **trimmed to on-camera segments** to cut spend; VO + avatar are content-hash cached.
 - **Faceless backgrounds** — `background` / `--background`: `glow`, `image`, `mesh`, `aurora`,
   `particles`, `grid`, `custom` — frame-deterministic Canvas2D, auto-coloured from the brand.
+- **Captions** — `captionMode`: `phrase` (short editorial block) or `words` (spoken text revealed
+  word-by-word, synced to real VO timestamps; active-word highlight + per-segment `emphasis`).
 - **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
 - **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
   keeps variant renders side-by-side instead of overwriting.

@@ -11,6 +11,13 @@ export interface Theme {
   captionStroke: number;
 }
 
+// One spoken word and its absolute on-timeline span (from the VO timestamps).
+export interface WordTiming {
+  word: string;
+  start: number;
+  end: number;
+}
+
 export interface KinoSegment {
   kind: "avatar" | "app";
   asset?: string;
@@ -20,6 +27,9 @@ export interface KinoSegment {
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
   transition?: string; // resolved in/out transition for app cut-ins
+  captionMode?: "phrase" | "words"; // "words" = spoken text revealed word-by-word, synced to VO
+  words?: WordTiming[]; // absolute word timings (present for captionMode "words")
+  emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
 }
 
 // Where an avatar clip sits on the main timeline + which slice of the (trimmed) clip to play.

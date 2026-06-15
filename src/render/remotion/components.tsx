@@ -1,7 +1,8 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme, BackgroundProps } from "../props";
+import type { Theme, BackgroundProps, WordTiming } from "../props";
 import type { Shot, Transition } from "../motion";
+import { activeWordIndex } from "../captions";
 import { CanvasBackground } from "./backgrounds/CanvasBackground";
 import { getPreset, type DrawFn } from "./backgrounds/presets";
 
@@ -137,6 +138,56 @@ export const Logo: React.FC<{ src: string }> = ({ src }) => {
   return (
     <div style={{ position: "absolute", top: 150, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: s }}>
       <Img src={src} style={{ width: 150, transform: `scale(${interpolate(s, [0, 1], [0.9, 1])})` }} />
+    </div>
+  );
+};
+
+// Word-synced caption: the spoken words, revealed + highlighted in time with the VO.
+// Typewriter reveal (pop/bounce) per word at its start; active word highlighted; emphasised
+// words glow + shake. Driven by absolute word timings, so it's frame-deterministic.
+export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; startSec: number; t: Theme }> = ({
+  words,
+  emphasis = [],
+  startSec,
+  t,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const tAbs = startSec + frame / fps;
+  const active = activeWordIndex(words, tAbs);
+  const norm = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const emph = new Set(emphasis.map(norm));
+  return (
+    <div style={{ position: "absolute", left: 56, right: 56, bottom: 470, display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 18, rowGap: 4 }}>
+      {words.map((w, i) => {
+        const revealFrame = (tAbs - w.start) * fps;
+        const s = spring({ frame: revealFrame, fps, config: { damping: 12, mass: 0.6 } });
+        const isActive = i === active;
+        const isEmph = emph.has(norm(w.word));
+        const scale = (revealFrame <= 0 ? 0.6 : interpolate(s, [0, 1], [0.6, 1])) * (isActive ? 1.1 : 1);
+        const opacity = revealFrame <= 0 ? 0 : interpolate(s, [0, 1], [0, 1]);
+        const shake = isActive && isEmph ? Math.sin(frame * 1.4) * 3 : 0;
+        return (
+          <span
+            key={i}
+            style={{
+              display: "inline-block",
+              transform: `translateX(${shake}px) scale(${scale})`,
+              opacity,
+              fontFamily: t.font,
+              fontWeight: 900,
+              fontSize: Math.round(t.captionFontSize * 0.92),
+              color: isActive ? (isEmph ? t.gold : t.mint) : t.white,
+              lineHeight: 1.05,
+              WebkitTextStroke: `${t.captionStroke}px #000`,
+              paintOrder: "stroke fill" as React.CSSProperties["paintOrder"],
+              textShadow: isActive && isEmph ? `0 0 26px ${t.mint}` : "0 6px 18px rgba(0,0,0,.45)",
+            }}
+          >
+            {w.word}
+          </span>
+        );
+      })}
     </div>
   );
 };

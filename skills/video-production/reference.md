@@ -9,7 +9,7 @@
 ## Brand config (`brands/<name>/brand.json`)
 `name, colors{night,mint,green,white,gold}, font, captionStyle{fontSize,strokeWidth},
 disclosure, facelessDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
-defaultProvider?, voiceAliases{}, lookAliases{}`.
+defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}`.
 
 Faceless branding (optional):
 - `logo` — transparent brand mark (PNG); shown top-center on faceless talking beats.
@@ -43,6 +43,13 @@ Provider-specific:
 - `HEDRA_API_KEY` — provider `hedra` (hedra.com/api-profile).
 - `REPLICATE_API_TOKEN` — provider `replicate` (replicate.com/account/api-tokens).
 Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
+
+## Captions
+- `captionMode` (brand default or per-segment): `phrase` (short editorial caption, block animation —
+  default) or `words` (the **spoken `text`** revealed word-by-word, synced to the VO).
+- `words` mode uses real word timings from ElevenLabs `…/with-timestamps` (faked evenly under `--mock`),
+  so the on-screen words are the spoken words. Effects: typewriter reveal + pop, active-word highlight,
+  and per-segment `emphasis: ["word", …]` (glow + shake on those words while active).
 
 ## Cost model
 - Avatar engines bill per second of generated avatar; kino **trims the avatar to on-camera segments
