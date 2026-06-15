@@ -13,7 +13,23 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** design + implementation plan complete; build pending.
+> **Status:** v0.1 built — `kino build`, `batch`, `--mock`, content-hash caching, `doctor`. 16 tests green.
+
+## Install (global)
+```bash
+cd ~/kino && npm install && npm run build && npm link   # provides the `kino` command
+```
+Requires Node 18+, ffmpeg/ffprobe, the HeyGen CLI (`heygen`), and ElevenLabs + HeyGen keys in the project `.env`.
+
+## Use
+```bash
+cd <project> && kino init evidentcv     # scaffold .env, brand, dirs
+# ...fill brand.json (voiceAliases/lookAliases), add assets/, write specs/
+kino doctor
+kino build specs/lie-test.json --mock   # free structural preview (no API spend)
+kino build specs/lie-test.json          # real render → out/lie-test/
+```
+The driving agent authors specs — see [`skills/video-production`](skills/video-production/SKILL.md).
 
 ## Brand assets (`logo/`)
 | File | Use |
