@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import type { Brand } from "../config/brand.js";
 import type { Spec } from "./schema.js";
 import type { Project } from "../config/project.js";
+import type { Provider } from "../avatar/provider.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -17,6 +18,16 @@ export function complianceScan(spec: Spec, brand: Brand): ComplianceHit[] {
     }
   });
   return hits;
+}
+
+export function resolveProvider(spec: Spec, brand: Brand): Provider {
+  return (spec.provider ?? brand.defaultProvider ?? "heygen") as Provider;
+}
+
+export function resolveVoice(spec: Spec, brand: Brand): string {
+  const alias = spec.voice ?? brand.defaultVoice;
+  if (!alias) throw new Error("No voice: set spec.voice or brand.defaultVoice");
+  return brand.voiceAliases[alias] ?? alias;
 }
 
 export function resolveVoiceLook(spec: Spec, brand: Brand): { voiceId: string; lookId: string } {

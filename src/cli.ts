@@ -8,6 +8,7 @@ program
   .description("Generate a video from a spec (vo → avatar → render)")
   .option("--mock", "skip all paid APIs (silent VO + placeholder avatar)")
   .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4")
+  .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
   });
