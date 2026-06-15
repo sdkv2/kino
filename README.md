@@ -13,10 +13,10 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.6 — agent-animatable backgrounds (keyframes/triggers + word timestamps), projects
-> (brand-assignable file scoping), avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
-> word-synced captions, on-demand fonts, agent inspection (inspect/still/storyboard/frames/backgrounds),
-> output tagging, `--mock`, caching, `doctor`. 72 tests green.
+> **Status:** v1.7 — configurable + tweenable logo (AnimatedElement), agent-animatable backgrounds
+> (keyframes/triggers + word timestamps), projects (brand-assignable file scoping), avatar providers,
+> faceless mode, avatar-trim, word-synced captions, on-demand fonts, agent inspection
+> (inspect/still/storyboard/frames/backgrounds/elements), output tagging, `--mock`, caching, `doctor`. 74 tests green.
 
 ## Install (global)
 ```bash
@@ -52,6 +52,9 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
 - **Animated backgrounds** — `kino backgrounds` exposes each preset's params (colours/intensity) + actions
   (pulse); agents tween them via `backgroundKeyframes` and fire `backgroundTriggers` at timestamps
   (sync with `kino inspect` word times). Custom draw fns get `env.params` + `env.pulse`.
+- **Overlay elements** — `kino elements`: the logo has size (`small`/`medium`/`big`/px) + position
+  (cardinal/center/custom) presets and is tweenable via `logoKeyframes` (x/y/scale/opacity) on a reusable
+  `AnimatedElement` layer (captions/kickers next).
 - **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
 - **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
   keeps variant renders side-by-side instead of overwriting.
