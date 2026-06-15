@@ -31,6 +31,78 @@ export const Caption: React.FC<{ text: string; t: Theme }> = ({ text, t }) => {
   );
 };
 
+// Faceless talking beats: the text IS the visual. Big, centered, word-by-word pop so the
+// frame is full and alive instead of a small lower-third line over empty night.
+export const HeroCaption: React.FC<{ text: string; t: Theme }> = ({ text, t }) => {
+  const f = useCurrentFrame();
+  const words = text.split(" ");
+  return (
+    <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 80px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 6 }}>
+        {words.map((w, i) => {
+          const s = spring({ frame: f - i * 3, fps: 30, config: { damping: 13, mass: 0.7 } });
+          return (
+            <span
+              key={i}
+              style={{
+                display: "inline-block",
+                transform: `translateY(${interpolate(s, [0, 1], [44, 0])}px)`,
+                opacity: interpolate(s, [0, 1], [0, 1]),
+                fontFamily: t.font,
+                fontWeight: 900,
+                fontSize: Math.round(t.captionFontSize * 1.42),
+                color: t.white,
+                lineHeight: 1.06,
+                WebkitTextStroke: `${t.captionStroke}px #000`,
+                paintOrder: "stroke fill" as React.CSSProperties["paintOrder"],
+                textShadow: "0 8px 28px rgba(0,0,0,.5)",
+              }}
+            >
+              {w}
+            </span>
+          );
+        })}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// Backdrop for faceless beats. With a brand image: slow Ken-Burns + a center scrim so the
+// hero text stays legible. Without one: two soft brand glows drifting over night.
+export const FacelessBackdrop: React.FC<{ t: Theme; bg?: string | null }> = ({ t, bg }) => {
+  const f = useCurrentFrame();
+  if (bg) {
+    const scale = interpolate(f, [0, 300], [1.05, 1.13], { extrapolateRight: "clamp" });
+    return (
+      <AbsoluteFill style={{ backgroundColor: t.night, overflow: "hidden" }}>
+        <Img src={bg} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${scale})` }} />
+        <AbsoluteFill
+          style={{ background: "radial-gradient(ellipse 72% 46% at 50% 50%, rgba(11,16,32,.74), rgba(11,16,32,.22) 68%, rgba(11,16,32,0))" }}
+        />
+      </AbsoluteFill>
+    );
+  }
+  const dx = Math.sin(f / 60) * 6;
+  const dy = Math.cos(f / 80) * 8;
+  return (
+    <AbsoluteFill style={{ backgroundColor: t.night, overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: `${18 + dy}%`, left: `${12 + dx}%`, width: 920, height: 920, borderRadius: "50%", background: `radial-gradient(circle, ${t.green}55, transparent 62%)`, filter: "blur(46px)" }} />
+      <div style={{ position: "absolute", bottom: `${8 - dy}%`, right: `${8 + dx}%`, width: 760, height: 760, borderRadius: "50%", background: `radial-gradient(circle, ${t.mint}30, transparent 62%)`, filter: "blur(54px)" }} />
+    </AbsoluteFill>
+  );
+};
+
+// Brand mark for faceless talking beats — top-center, gentle fade/scale in.
+export const Logo: React.FC<{ src: string }> = ({ src }) => {
+  const f = useCurrentFrame();
+  const s = spring({ frame: f, fps: 30, config: { damping: 200 } });
+  return (
+    <div style={{ position: "absolute", top: 150, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: s }}>
+      <Img src={src} style={{ width: 150, transform: `scale(${interpolate(s, [0, 1], [0.9, 1])})` }} />
+    </div>
+  );
+};
+
 export const Kicker: React.FC<{ text: string; color: string; fg: string; t: Theme }> = ({ text, color, fg, t }) => {
   const f = useCurrentFrame();
   const s = spring({ frame: f, fps: 30, config: { damping: 180 } });

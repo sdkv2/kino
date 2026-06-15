@@ -35,6 +35,8 @@ export interface KinoProps {
   avatar: string | null; // staticFile-relative path to the (trimmed) avatar clip, or null for faceless
   avatarWindows: AvatarWindow[]; // placements of the avatar clip; empty when faceless
   voTrack: string | null; // staticFile-relative path to the full VO audio track
+  logo: string | null; // staticFile-relative brand mark, shown on faceless talking beats
+  facelessBg: string | null; // staticFile-relative backdrop image for faceless beats
   disclosure: string;
   segments: KinoSegment[];
 }
