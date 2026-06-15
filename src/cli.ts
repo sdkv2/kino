@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.4.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.4.1");
 
 program
   .command("build <spec>")
@@ -10,7 +10,8 @@ program
   .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4")
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
   .option("--background <kind>", "override faceless background: glow|image|mesh|aurora|particles|grid|custom")
-  .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background)")
+  .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
+  .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
   });
@@ -27,6 +28,7 @@ program
   .option("--at <list>", "comma-separated timestamps in seconds")
   .option("--segment <n>", "render the midpoint of segment n")
   .option("--format <fmt>", "9:16 or 3:4")
+  .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
@@ -34,6 +36,7 @@ program
   .command("storyboard <spec>")
   .description("Render one still per beat, tiled into a labeled contact sheet")
   .option("--format <fmt>", "9:16 or 3:4")
+  .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .action(async (s, o) => (await import("./commands/storyboard.js")).storyboard(s, o));
 
