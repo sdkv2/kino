@@ -18,7 +18,7 @@ import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
 import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo, variantName } from "../render/render.js";
-import type { KinoProps } from "../render/props.js";
+import type { KinoProps, WordTiming } from "../render/props.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { log } from "../log.js";
 
@@ -61,6 +61,7 @@ export interface PrepareResult {
   project: Project;
   spec: Spec;
   labelFont: string | null; // absolute TTF path for storyboard/montage labels, if resolved
+  words: WordTiming[][]; // per-segment word timings, absolute on the main timeline
 }
 
 // Everything build does up to (but not including) the final video render. Reused by the
@@ -147,12 +148,19 @@ export async function prepare(
     if (!compAbs) throw new Error('background "custom" needs brand.backgroundComponent (a draw-fn .js file)');
     bgCustomCode = readFileSync(compAbs, "utf8");
   }
+  const bgColors = resolveBackgroundColors(brand);
   const background = {
     kind: bgKind,
     image: bgImageRel,
     customCode: bgCustomCode,
-    colors: resolveBackgroundColors(brand),
-    intensity: resolveBackgroundIntensity(brand, spec),
+    params: {
+      colorA: bgColors[0],
+      colorB: bgColors[1],
+      colorC: bgColors[2],
+      intensity: resolveBackgroundIntensity(brand, spec),
+    },
+    keyframes: spec.backgroundKeyframes ?? [],
+    triggers: spec.backgroundTriggers ?? [],
   };
 
   // Brand font: a registry name downloads + stages a TTF for the captions; a raw CSS family passes
@@ -229,7 +237,7 @@ export async function prepare(
     segments: renderSegments,
   };
 
-  return { props, publicDir, formats, project, spec, labelFont };
+  return { props, publicDir, formats, project, spec, labelFont, words: vo.words };
 }
 
 export async function build(

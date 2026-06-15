@@ -2,7 +2,8 @@
 
 ## Commands
 - `kino build <spec> [--mock] [--format 9:16,3:4] [--provider <p>] [--background <kind>] [--tag <label>]`
-- `kino inspect <spec> [--real]` — print the resolved plan (beats, timings, modes) as JSON
+- `kino inspect <spec> [--real]` — resolved plan as JSON: beats, timings, modes + per-segment **word timestamps**
+- `kino backgrounds` — list animated backgrounds + their agent-controllable params/actions
 - `kino still <spec> [--at <s,…> | --segment <n>] [--real] [--format]` — render one frame fast (no encode)
 - `kino storyboard <spec> [--real] [--format]` — one still per beat tiled into a labeled contact sheet
 - `kino frames <video> --at <s,…> [--montage] [--out <dir>]` — extract frames from a rendered video
@@ -52,8 +53,21 @@ Frame-driven (deterministic) layers behind the hero text; a center scrim is auto
 - `image` — static `facelessBackdrop` with a slow Ken-Burns.
 - `mesh` / `aurora` / `particles` / `grid` — built-in Canvas2D presets, auto-coloured from the brand.
 - `custom` — your own Canvas2D `draw` fn. `backgroundComponent` points to a `.js` file whose body draws
-  using `ctx` + `env`, e.g.: `const {frame,width,height,colors,intensity}=env; ctx.fillStyle=colors[0]; ...`.
+  using `ctx` + `env` (`env.params`, `env.pulse`, `env.frame`, `env.width/height`).
   **Must be frame-driven** (use `env.frame`, never `Date.now()`/un-seeded `Math.random()`) or frames won't match.
+
+### Animating the background (agent-driven)
+`kino backgrounds` lists each preset's tweenable params (colorA/B/C, intensity) + actions (pulse). Drive
+them over time from the spec — keyframe params (numbers lerp, colours RGB-lerp, optional `easeInOut`) and
+fire one-shot actions at timestamps. Pair with `kino inspect` word times to sync to the VO.
+```jsonc
+"background": "mesh",
+"backgroundKeyframes": [
+  { "at": 0,   "params": { "intensity": 0.2, "colorA": "#80e2b4" } },
+  { "at": 4.0, "params": { "intensity": 1.0, "colorA": "#d99a20" }, "ease": "easeInOut" }
+],
+"backgroundTriggers": [ { "at": 2.2, "action": "pulse" } ]
+```
 
 Provider-specific:
 - `avatarImage` — portrait file (path under project root) used as the source for `hedra`/`replicate`.

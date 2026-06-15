@@ -6,6 +6,12 @@ const Transition = z.enum(["fade", "fly-left", "fly-up", "pop", "cut"]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
 const CaptionMode = z.enum(["phrase", "words"]);
+const BgKeyframe = z.object({
+  at: z.number(),
+  params: z.record(z.union([z.number(), z.string()])),
+  ease: z.enum(["linear", "easeInOut"]).optional(),
+});
+const BgTrigger = z.object({ at: z.number(), action: z.string() });
 
 const Segment = z.discriminatedUnion("kind", [
   z.object({
@@ -39,6 +45,8 @@ export const SpecSchema = z.object({
   provider: Provider.optional(), // overrides brand.defaultProvider
   background: Background.optional(), // overrides brand.background (faceless beats)
   backgroundIntensity: z.number().optional(), // 0..1 motion strength override
+  backgroundKeyframes: z.array(BgKeyframe).optional(), // agent-driven param tweens over time
+  backgroundTriggers: z.array(BgTrigger).optional(), // agent-driven one-shot actions (e.g. pulse)
   segments: z.array(Segment).min(1),
 });
 
