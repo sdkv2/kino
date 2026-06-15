@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
-import { AppCutaway, Caption, Disclosure, FacelessBackdrop, HeroCaption, Kicker, Logo } from "./components";
+import { AppCutaway, Caption, Disclosure, FacelessBackdrop, HeroCaption, Kicker, Logo, WordCaption } from "./components";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
@@ -66,11 +66,18 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         : null}
 
       {segments.map((s, i) => {
-        // Faceless talking beats become full-frame hero text; app beats keep the lower-third caption.
+        // words mode = synced spoken text; else faceless talking beats use hero text, app beats lower-third.
+        const wordMode = s.captionMode === "words" && s.words && s.words.length > 0;
         const hero = !avatar && s.kind === "avatar";
         return (
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
-            {hero ? <HeroCaption text={s.caption} t={theme} /> : <Caption text={s.caption} t={theme} />}
+            {wordMode ? (
+              <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} />
+            ) : hero ? (
+              <HeroCaption text={s.caption} t={theme} />
+            ) : (
+              <Caption text={s.caption} t={theme} />
+            )}
           </Sequence>
         );
       })}

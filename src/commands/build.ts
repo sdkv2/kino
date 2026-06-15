@@ -133,12 +133,16 @@ export async function build(
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
   let appIdx = 0;
   const renderSegments = spec.segments.map((seg, i) => {
+    const captionMode = (seg.captionMode ?? brand.captionMode ?? "phrase") as "phrase" | "words";
     const base = {
       kind: seg.kind,
       asset: seg.kind === "app" ? seg.asset : undefined,
       caption: seg.caption,
       startSec: vo.timings[i].startSec,
       endSec: vo.timings[i].endSec,
+      captionMode,
+      words: captionMode === "words" ? vo.words[i] : undefined,
+      emphasis: captionMode === "words" ? seg.emphasis : undefined,
     };
     if (seg.kind === "app") {
       const shot = pickShot(appIdx, seg.shot as Shot | undefined);
