@@ -10,6 +10,7 @@ import { buildVO } from "../vo/vo.js";
 import { buildAvatar } from "../avatar/avatar.js";
 import { renderVideo } from "../render/render.js";
 import type { KinoProps } from "../render/props.js";
+import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { log } from "../log.js";
 
 const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
@@ -57,6 +58,32 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
   }
 
   const c = brand.colors;
+  // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
+  let appIdx = 0;
+  const renderSegments = spec.segments.map((seg, i) => {
+    const base = {
+      kind: seg.kind,
+      asset: seg.kind === "app" ? seg.asset : undefined,
+      caption: seg.caption,
+      startSec: vo.timings[i].startSec,
+      endSec: vo.timings[i].endSec,
+    };
+    if (seg.kind === "app") {
+      const shot = pickShot(appIdx, seg.shot as Shot | undefined);
+      const transition = pickTransition(appIdx, seg.transition as Transition | undefined);
+      appIdx++;
+      return {
+        ...base,
+        shot,
+        transition,
+        kicker: seg.kicker
+          ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
+          : undefined,
+      };
+    }
+    return { ...base, shot: seg.shot as Shot | undefined };
+  });
+
   const props: KinoProps = {
     theme: {
       font: brand.font,
@@ -71,17 +98,7 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
     fps: 30,
     avatar: avatarRel,
     disclosure: brand.disclosure,
-    segments: spec.segments.map((seg, i) => ({
-      kind: seg.kind,
-      asset: seg.kind === "app" ? seg.asset : undefined,
-      caption: seg.caption,
-      startSec: vo.timings[i].startSec,
-      endSec: vo.timings[i].endSec,
-      kicker:
-        seg.kind === "app" && seg.kicker
-          ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
-          : undefined,
-    })),
+    segments: renderSegments,
   };
 
   log.step("render");
