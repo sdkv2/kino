@@ -32,6 +32,14 @@ describe("paramsAt", () => {
     ];
     expect(paramsAt(base, ek, 1).intensity).toBeCloseTo(0.5);
   });
+  it("overshoot eases past the target before settling", () => {
+    const ok = [
+      { at: 0, params: { scale: 0 } },
+      { at: 1, params: { scale: 1 }, ease: "overshoot" as const },
+    ];
+    expect(paramsAt(base, ok, 0.8).scale as number).toBeGreaterThan(1); // overshoots target=1
+    expect(paramsAt(base, ok, 1).scale).toBe(1); // settles exactly at the keyframe
+  });
 });
 
 describe("pulseAt", () => {
