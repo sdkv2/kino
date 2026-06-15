@@ -66,7 +66,7 @@ export interface PrepareResult {
 // inspection commands (still/storyboard/inspect) so they share the exact pipeline.
 export async function prepare(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string },
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string },
 ): Promise<PrepareResult> {
   const project = resolveProject();
   loadEnv(project.root);
@@ -142,9 +142,11 @@ export async function prepare(
     intensity: resolveBackgroundIntensity(brand, spec),
   };
 
-  // Brand font: a registry name downloads + stages a TTF for the captions; a raw CSS family passes through.
-  const fontDef = lookupFont(brand.font);
-  let themeFont = brand.font;
+  // Brand font: a registry name downloads + stages a TTF for the captions; a raw CSS family passes
+  // through. --font overrides brand.font for quick A/B.
+  const fontName = opts.font ?? brand.font;
+  const fontDef = lookupFont(fontName);
+  let themeFont = fontName;
   let fontUrl: string | null = null;
   if (fontDef) {
     const ttf = await ensureFont(fontDef.name);
@@ -158,7 +160,7 @@ export async function prepare(
     }
   }
   // Label font for storyboard/montage labels (defaults to the caption font).
-  const labelDef = lookupFont(brand.labelFont ?? brand.font);
+  const labelDef = lookupFont(brand.labelFont ?? fontName);
   const labelFont = labelDef ? await ensureFont(labelDef.name) : null;
 
   const c = brand.colors;
@@ -219,12 +221,13 @@ export async function prepare(
 
 export async function build(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; tag?: string },
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; tag?: string },
 ): Promise<string[]> {
   const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
   log.step("render");
-  // Tag variant renders (explicit --tag, else the --background override) so they don't overwrite the default.
-  const outName = variantName(spec.title, opts.tag ?? opts.background);
+  // Tag variant renders (explicit --tag, else a --background/--font override) so they don't overwrite the default.
+  const autoTag = opts.tag ?? opts.background ?? (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined);
+  const outName = variantName(spec.title, autoTag);
   const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName });
   outs.forEach((o) => log.ok(o));
   return outs;

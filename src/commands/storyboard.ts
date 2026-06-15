@@ -6,8 +6,8 @@ import { montage } from "../media/montage.js";
 import { log } from "../log.js";
 
 // One labeled still per beat, tiled into a single contact sheet — review the whole video at a glance.
-export async function storyboard(specPath: string, opts: { real?: boolean; format?: string }): Promise<void> {
-  const r = await prepare(specPath, { mock: !opts.real, format: opts.format });
+export async function storyboard(specPath: string, opts: { real?: boolean; format?: string; font?: string }): Promise<void> {
+  const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font });
   const picks = pickFrames(r.props.segments, r.props.fps, {});
   const format = r.formats[0] as "9:16" | "3:4";
   const frames = picks.map((_, i) => ({ frame: picks[i].frame, name: `sb-${i}` }));
