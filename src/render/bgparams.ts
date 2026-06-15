@@ -1,16 +1,36 @@
 // Pure keyframe tweening + trigger envelope for agent-driven backgrounds. Frame-deterministic.
 export type ParamValue = number | string;
+export type Ease = "linear" | "easeInOut" | "overshoot" | "spring";
 export interface Keyframe {
   at: number;
   params: Record<string, ParamValue>;
-  ease?: "linear" | "easeInOut";
+  ease?: Ease;
 }
 export interface Trigger {
   at: number;
   action: string;
 }
 
-const smoothstep = (p: number) => p * p * (3 - 2 * p);
+// Easing curves. overshoot (back-out) and spring (elastic) intentionally exceed 1 mid-way, so the
+// tweened value overshoots its target then settles — punchy.
+function applyEase(name: Ease | undefined, p: number): number {
+  switch (name) {
+    case "easeInOut":
+      return p * p * (3 - 2 * p);
+    case "overshoot": {
+      const c1 = 1.70158;
+      const c3 = c1 + 1;
+      return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+    }
+    case "spring": {
+      if (p === 0 || p === 1) return p;
+      const c4 = (2 * Math.PI) / 3;
+      return Math.pow(2, -10 * p) * Math.sin((p * 10 - 0.75) * c4) + 1;
+    }
+    default:
+      return p;
+  }
+}
 
 function rgb(hex: string): [number, number, number] | null {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -18,7 +38,7 @@ function rgb(hex: string): [number, number, number] | null {
   const n = parseInt(m[1], 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
-const hex2 = (n: number) => Math.round(n).toString(16).padStart(2, "0");
+const hex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
 
 function lerpValue(a: ParamValue, b: ParamValue, p: number): ParamValue {
   if (typeof a === "number" && typeof b === "number") return a + (b - a) * p;
@@ -51,8 +71,7 @@ export function paramsAt(base: Record<string, ParamValue>, keyframes: Keyframe[]
     const a = track[i];
     const b = track[i + 1];
     const raw = (t - a.at) / (b.at - a.at);
-    const p = b.ease === "easeInOut" ? smoothstep(raw) : raw;
-    out[key] = lerpValue(a.params[key], b.params[key], p);
+    out[key] = lerpValue(a.params[key], b.params[key], applyEase(b.ease, raw));
   }
   return out;
 }

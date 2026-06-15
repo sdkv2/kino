@@ -13,8 +13,8 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.8 — every overlay tweenable (logo + captions + kickers, one keyframe system),
-> configurable logo, agent-animatable backgrounds
+> **Status:** v1.9 — keyframe easings incl. spring/overshoot; every overlay tweenable
+> (logo + captions + kickers, one keyframe system), configurable logo, agent-animatable backgrounds
 > (keyframes/triggers + word timestamps), projects (brand-assignable file scoping), avatar providers,
 > faceless mode, avatar-trim, word-synced captions, on-demand fonts, agent inspection
 > (inspect/still/storyboard/frames/backgrounds/elements), output tagging, `--mock`, caching, `doctor`. 74 tests green.
