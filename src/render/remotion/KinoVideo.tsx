@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
-import { AppCutaway, Caption, Disclosure, FacelessBackdrop, HeroCaption, Kicker, Logo, WordCaption } from "./components";
+import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, WordCaption } from "./components";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
@@ -24,6 +24,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
   const f = (s: number) => Math.round(s * fps);
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
+      <FontLoader url={theme.fontUrl} />
       {/* Continuous voiceover — covers every segment, including the app cut-ins where the avatar is trimmed out. */}
       {voTrack ? <Audio src={staticFile(voTrack)} /> : null}
 

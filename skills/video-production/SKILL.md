@@ -10,6 +10,7 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
 
 ## Workflow
 1. `kino doctor` — confirm ffmpeg and the keys for your chosen provider are present.
+   (`kino fonts` lists fonts settable as `brand.font`/`brand.labelFont` — downloaded on demand.)
 2. Author a spec (schema below). Keep captions short; never claim guaranteed jobs/interviews.
 3. **Iterate (fast, free):** `kino inspect specs/foo.json` to map the beats, then
    `kino still specs/foo.json --segment N` (one frame, ~1–2s) or `kino storyboard specs/foo.json`

@@ -14,6 +14,6 @@ export async function storyboard(specPath: string, opts: { real?: boolean; forma
   const outDir = join(r.project.outDir(r.spec.title), "stills");
   const stills = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir });
   const out = join(r.project.outDir(r.spec.title), "storyboard.png");
-  await montage(stills.map((p, i) => ({ path: p, label: picks[i].label })), out);
+  await montage(stills.map((p, i) => ({ path: p, label: picks[i].label })), out, { font: r.labelFont ?? undefined });
   log.ok(out);
 }
