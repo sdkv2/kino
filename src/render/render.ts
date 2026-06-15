@@ -15,6 +15,12 @@ const DIMS: Record<string, { width: number; height: number }> = {
   "3:4": { width: 1080, height: 1440 },
 };
 
+// Output base name. A tag keeps variant renders (e.g. different backgrounds) side-by-side
+// instead of overwriting the default.
+export function variantName(title: string, tag?: string): string {
+  return tag ? `${title}-${tag}` : title;
+}
+
 export interface RenderOpts {
   props: KinoProps;
   publicDir: string; // assets root Remotion staticFile() reads from
