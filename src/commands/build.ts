@@ -14,7 +14,7 @@ import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { stitchAudio } from "../media/ffmpeg.js";
-import { renderVideo } from "../render/render.js";
+import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps } from "../render/props.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { log } from "../log.js";
@@ -53,7 +53,7 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
 
 export async function build(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string },
+  opts: { mock?: boolean; format?: string; provider?: string; background?: string; tag?: string },
 ): Promise<string[]> {
   const project = resolveProject();
   loadEnv(project.root);
@@ -178,7 +178,9 @@ export async function build(
   };
 
   log.step("render");
-  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: spec.title });
+  // Tag variant renders (explicit --tag, else the --background override) so they don't overwrite the default.
+  const outName = variantName(spec.title, opts.tag ?? opts.background);
+  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName });
   outs.forEach((o) => log.ok(o));
   return outs;
 }
