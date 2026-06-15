@@ -61,7 +61,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
       {!avatar && logo
         ? avatarWindows.map((w, i) => (
             <Sequence key={`lg${i}`} from={f(w.fromSec)} durationInFrames={f(w.toSec) - f(w.fromSec)}>
-              <Logo src={staticFile(logo)} />
+              <Logo src={staticFile(logo.src)} sizePx={logo.sizePx} x={logo.x} y={logo.y} keyframes={logo.keyframes} fromSec={w.fromSec} />
             </Sequence>
           ))
         : null}
