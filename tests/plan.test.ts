@@ -30,8 +30,8 @@ describe("planAvatarWindows", () => {
     expect(r.avatarIndices).toEqual([0, 1, 4]); // app clips never reach the avatar provider
     expect(r.windows).toHaveLength(2);
 
-    // window A: on the main timeline from seg0 start to seg1 end; plays the avatar clip from 0
-    expect(r.windows[0]).toMatchObject({ fromSec: timings[0].startSec, toSec: timings[1].endSec, audioStartSec: 0 });
+    // window A: from seg0 start, held to the next segment's start (gap-fill); plays the clip from 0
+    expect(r.windows[0]).toMatchObject({ fromSec: timings[0].startSec, toSec: timings[2].startSec, audioStartSec: 0 });
 
     // window B: the avatar-only track concatenates [2, 1.5, 1] with the same gap,
     // so window B reads from the 3rd clip's offset in that trimmed track.
