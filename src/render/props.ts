@@ -47,7 +47,7 @@ export type BgParamValue = number | string;
 export interface BgKeyframe {
   at: number;
   params: Record<string, BgParamValue>;
-  ease?: "linear" | "easeInOut";
+  ease?: "linear" | "easeInOut" | "overshoot" | "spring";
 }
 export interface BgTrigger {
   at: number;

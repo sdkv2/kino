@@ -9,7 +9,7 @@ const CaptionMode = z.enum(["phrase", "words"]);
 const BgKeyframe = z.object({
   at: z.number(),
   params: z.record(z.union([z.number(), z.string()])),
-  ease: z.enum(["linear", "easeInOut"]).optional(),
+  ease: z.enum(["linear", "easeInOut", "overshoot", "spring"]).optional(),
 });
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
