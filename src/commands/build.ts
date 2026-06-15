@@ -14,7 +14,7 @@ import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
 import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo } from "../render/render.js";
-import type { KinoProps, AvatarWindow } from "../render/props.js";
+import type { KinoProps } from "../render/props.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { log } from "../log.js";
 
@@ -75,8 +75,8 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
 
   log.step("avatar");
   const plan = planAvatarWindows(spec.segments.map((s) => s.kind), vo.timings, GAP);
+  const avatarWindows = plan.windows; // contiguous on-camera runs: avatar placement + steady faceless logo
   let avatarRel: string | null = null;
-  let avatarWindows: AvatarWindow[] = [];
   let avatarPath: string | null = null;
   if (provider === "none" || plan.avatarIndices.length === 0) {
     log.info("  · faceless (no avatar generated)");
@@ -85,7 +85,6 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
     const source = provider === "heygen" ? resolveVoiceLook(spec, brand).lookId : resolveSourceImage(spec, brand, project, provider);
     avatarPath = await buildAvatar({ provider, audioPath: avTrack, source, brand, cache, mock });
     avatarRel = "avatar.mp4";
-    avatarWindows = plan.windows;
     log.info(`  · ${plan.avatarIndices.length}/${spec.segments.length} segments on camera (trimmed)`);
   }
 
