@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme } from "../props";
 import type { Shot, Transition } from "../motion";
 
@@ -63,26 +63,34 @@ export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?:
   else if (shot === "pan-right") { scale = 1.14; tx = lerp(-5, 5, p); }
   else if (shot === "tilt-up") { scale = 1.14; ty = lerp(5, -5, p); }
 
-  // --- transition in/out (outer layer), punchy ~6 frames ---
-  const TR = 6;
-  const inP = interpolate(f, [0, TR], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const outP = interpolate(f, [dur - TR, dur], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  // --- transition (outer layer), CapCut-style: spring "fly in" + settle, quick eased exit ---
+  const { fps } = useVideoConfig();
+  const ein = spring({ frame: f, fps, config: { damping: 14, stiffness: 130, mass: 0.6 }, durationInFrames: 18 });
+  const eIO = Math.min(1, ein); // clamped (no overshoot) for opacity/scale
+  const eout = Easing.in(Easing.cubic)(
+    interpolate(f, [dur - 7, dur], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+  );
   let opacity = 1;
   let otx = 0;
   let oty = 0;
-  let clipPath: string | undefined;
-  if (transition === "fade") opacity = Math.min(inP, outP);
-  else if (transition === "slide-left") otx = (1 - inP) * 100 + (1 - outP) * -100;
-  else if (transition === "slide-up") oty = (1 - inP) * 100 + (1 - outP) * -100;
-  else if (transition === "wipe") {
-    const w = Math.min(inP, outP);
-    clipPath = `inset(0 ${(1 - w) * 100}% 0 0)`;
+  let oscale = 1;
+  if (transition === "fly-left") {
+    otx = (1 - ein) * 120 + eout * -130; // springs in from the right (slight overshoot), eases off left
+    oscale = lerp(1.12, 1.0, eIO); // oversize during entry so the slide never reveals an edge
+  } else if (transition === "fly-up") {
+    oty = (1 - ein) * 120 + eout * -130;
+    oscale = lerp(1.12, 1.0, eIO);
+  } else if (transition === "pop") {
+    oscale = (0.72 + 0.28 * ein) * (1 - 0.18 * eout); // zoom-punch in (spring overshoot), shrink out
+    opacity = Math.min(1, ein * 2) * (1 - eout);
+  } else if (transition === "fade") {
+    opacity = eIO * (1 - eout);
   }
   // "cut": no entrance/exit animation
 
   const isVideo = asset.toLowerCase().endsWith(".mp4") || asset.toLowerCase().endsWith(".mov");
   return (
-    <AbsoluteFill style={{ backgroundColor: t.night, opacity, transform: `translate(${otx}%, ${oty}%)`, clipPath }}>
+    <AbsoluteFill style={{ backgroundColor: t.night, opacity, transform: `translate(${otx}%, ${oty}%) scale(${oscale})` }}>
       <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
         {isVideo ? (
           <OffthreadVideo src={staticFile(asset)} style={{ width: 1080, transform: `translate(${tx}%, ${ty}%) scale(${scale})` }} />

@@ -26,7 +26,7 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (HeyGen) →
 - Open with an `avatar` hook, cut to `app` for the demo, return to `avatar` for the payoff + `cta`.
 - **Camera/transitions auto-vary** — omit and `kino` picks a varied shot + transition per cut-in.
   Override per segment with `"shot"` (`push-in`/`pull-out`/`pan-left`/`pan-right`/`tilt-up`/`static`)
-  and, on `app` segments, `"transition"` (`fade`/`slide-left`/`slide-up`/`wipe`/`cut`).
+  and, on `app` segments, `"transition"` (`fly-left`/`fly-up`/`pop`/`fade`/`cut` — spring/CapCut-style).
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **Avatar looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.
