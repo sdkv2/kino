@@ -19,9 +19,14 @@ The agent supplies the creative; `kino` handles deterministic production.
 
 ## Install (global)
 ```bash
+cd <your-project> && bash ~/kino/setup.sh   # installs the `kino` command + writes a project .env
+```
+`setup.sh` runs `npm install`/`build`/`link` and prompts for API keys (written to a `chmod 600`,
+git-ignored `.env`). Or do it by hand:
+```bash
 cd ~/kino && npm install && npm run build && npm link   # provides the `kino` command
 ```
-Requires Node 18+, ffmpeg/ffprobe, the HeyGen CLI (`heygen`), and ElevenLabs + HeyGen keys in the project `.env`.
+Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Faceless needs only an ElevenLabs key.
 
 ## Use
 ```bash
