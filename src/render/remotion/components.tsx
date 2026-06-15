@@ -119,7 +119,7 @@ const ImageBg: React.FC<{ src: string; t: Theme }> = ({ src, t }) => {
 // Dispatcher: glow = CSS drift; image = Ken-Burns photo; mesh/aurora/particles/grid = canvas
 // presets; custom = the brand's own draw fn. Animated backgrounds get the legibility scrim.
 export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps }> = ({ t, background }) => {
-  const { kind, customCode, colors, intensity, image } = background;
+  const { kind, customCode, params, keyframes, triggers, image } = background;
   const draw = React.useMemo<DrawFn | undefined>(() => {
     if (kind === "custom" && customCode) {
       // brand-authored draw fn (trusted, local config), runs per frame inside CanvasBackground
@@ -140,7 +140,7 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
   if (draw) {
     return (
       <AbsoluteFill>
-        <CanvasBackground draw={draw} colors={colors} intensity={intensity} t={t} />
+        <CanvasBackground draw={draw} params={params} keyframes={keyframes} triggers={triggers} t={t} />
         <Scrim t={t} />
       </AbsoluteFill>
     );

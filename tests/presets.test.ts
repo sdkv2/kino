@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getPreset, PRESET_NAMES } from "../src/render/remotion/backgrounds/presets.js";
 import type { DrawEnv } from "../src/render/remotion/backgrounds/presets.js";
+import { PRESET_SCHEMAS } from "../src/render/backgroundSchema.js";
 
 // A fake 2D context that records every call/assignment as a string, so we can assert a draw
 // is a pure function of its env (determinism is required for frame-by-frame Remotion capture).
@@ -31,12 +32,27 @@ function recordCtx() {
   return { ctx: ctx as any, log };
 }
 
-const env = (frame: number): DrawEnv => ({ frame, fps: 30, width: 1080, height: 1920, colors: ["#80e2b4", "#0c8d64", "#d99a20"], intensity: 0.5 });
+const env = (frame: number): DrawEnv => ({
+  frame,
+  fps: 30,
+  width: 1080,
+  height: 1920,
+  params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 },
+  pulse: 0,
+});
 
 describe("background presets", () => {
   it("exposes a draw fn for every named preset and nothing else", () => {
     for (const name of PRESET_NAMES) expect(typeof getPreset(name)).toBe("function");
     expect(getPreset("does-not-exist")).toBeUndefined();
+  });
+  it("publishes a discoverable param/action schema for each preset", () => {
+    for (const name of PRESET_NAMES) {
+      const s = PRESET_SCHEMAS[name];
+      expect(s.params.length).toBeGreaterThan(0);
+      expect(s.actions).toContain("pulse");
+      expect(s.params.map((p) => p.name)).toContain("intensity");
+    }
   });
 
   for (const name of ["mesh", "aurora", "particles", "grid"]) {

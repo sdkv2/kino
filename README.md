@@ -13,9 +13,10 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.5 — projects (brand-assignable file scoping), pluggable avatar providers, faceless mode,
-> avatar-trim, brand logo/disclosure, animated backgrounds, word-synced captions, on-demand font library,
-> agent inspection (inspect/still/storyboard/frames), output tagging, `--mock`, caching, `doctor`. 64 tests green.
+> **Status:** v1.6 — agent-animatable backgrounds (keyframes/triggers + word timestamps), projects
+> (brand-assignable file scoping), avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
+> word-synced captions, on-demand fonts, agent inspection (inspect/still/storyboard/frames/backgrounds),
+> output tagging, `--mock`, caching, `doctor`. 72 tests green.
 
 ## Install (global)
 ```bash
@@ -48,6 +49,9 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
   word-by-word, synced to real VO timestamps; active-word highlight + per-segment `emphasis`).
 - **Fonts** — `brand.font`/`labelFont` accept a curated font name (`kino fonts`) downloaded on demand
   (Google Fonts → cached `~/.kino/fonts/`), loaded into the render; or any raw CSS family.
+- **Animated backgrounds** — `kino backgrounds` exposes each preset's params (colours/intensity) + actions
+  (pulse); agents tween them via `backgroundKeyframes` and fire `backgroundTriggers` at timestamps
+  (sync with `kino inspect` word times). Custom draw fns get `env.params` + `env.pulse`.
 - **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
 - **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
   keeps variant renders side-by-side instead of overwriting.
