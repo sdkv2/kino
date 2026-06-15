@@ -13,9 +13,9 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.3 — pluggable avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
-> animated backgrounds, word-synced captions, agent inspection (inspect/still/storyboard/frames),
-> output tagging, `--mock`, caching, `doctor`. 57 tests green.
+> **Status:** v1.4 — pluggable avatar providers, faceless mode, avatar-trim, brand logo/disclosure,
+> animated backgrounds, word-synced captions, on-demand font library, agent inspection
+> (inspect/still/storyboard/frames), output tagging, `--mock`, caching, `doctor`. 59 tests green.
 
 ## Install (global)
 ```bash
@@ -41,6 +41,8 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
   `particles`, `grid`, `custom` — frame-deterministic Canvas2D, auto-coloured from the brand.
 - **Captions** — `captionMode`: `phrase` (short editorial block) or `words` (spoken text revealed
   word-by-word, synced to real VO timestamps; active-word highlight + per-segment `emphasis`).
+- **Fonts** — `brand.font`/`labelFont` accept a curated font name (`kino fonts`) downloaded on demand
+  (Google Fonts → cached `~/.kino/fonts/`), loaded into the render; or any raw CSS family.
 - **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
 - **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
   keeps variant renders side-by-side instead of overwriting.
