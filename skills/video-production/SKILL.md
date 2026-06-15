@@ -33,6 +33,7 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   "segments": [
     { "kind": "avatar", "text": "spoken (+ lip-synced if an avatar provider is set)", "caption": "on-screen text", "cta": true },
     { "kind": "app", "asset": "screens/x.png", "text": "spoken (avatar hidden)", "caption": "...",
+      "captionMode": "words", "emphasis": ["claim"],  // optional: spoken text, word-synced + highlighted
       "kicker": { "text": "86% match", "color": "mint" } } ] }
 ```
 - `avatar` segments are the on-camera/hook/payoff beats; `app` segments show the screenshot/recording while the VO continues. (Faceless still uses these kinds — `avatar` beats become branded caption cards.)
