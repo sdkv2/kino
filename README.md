@@ -18,7 +18,9 @@ The agent supplies the creative; `kino` handles deterministic production.
 ## Brand assets (`logo/`)
 | File | Use |
 |---|---|
-| `kino-logo.png` | Master wordmark + etymology note (cream) |
+| `kino-logo.png` | **Light master** — wordmark + etymology note (cream); used in this README |
 | `kino-wordmark.png` | Wordmark + brackets only |
-| `kino-logo-transparent.png` | Transparent background (best on light) |
+| `kino-logo-transparent.png` | Transparent (line-art; for **light** backgrounds) |
+| `kino-logo-dark.png` | **Dark master** — white ink on night |
+| `kino-logo-dark-transparent.png` | Transparent dark-mode (overlay on **dark**) |
 | `kino-icon.png` | 1024×1024 square icon |
