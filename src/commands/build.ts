@@ -27,7 +27,11 @@ const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", g
 
 // Resolve the portrait image hedra/replicate lip-sync against (heygen uses a hosted look id instead).
 function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider: Provider): string {
-  const img = spec.avatarLook ?? brand.avatarImage;
+  // avatarLook is a hosted look id for heygen; for hedra/replicate it's a portrait path. Only use it
+  // here if it's actually path-like, else fall back to brand.avatarImage (so a heygen look id like
+  // "lucas" doesn't get mistaken for an image when switching providers).
+  const pathLike = (s: string) => /[\\/]/.test(s) || /\.(png|jpe?g|webp)$/i.test(s);
+  const img = spec.avatarLook && pathLike(spec.avatarLook) ? spec.avatarLook : brand.avatarImage;
   if (!img) {
     throw new Error(`Provider "${provider}" needs a portrait image — set brand.avatarImage (or spec.avatarLook) to an image path.`);
   }

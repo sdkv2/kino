@@ -52,9 +52,17 @@ export async function replicateGenerate(audioPath: string, imagePath: string, cf
   const imageUrl = await uploadFile(imagePath);
   const audioUrl = await uploadFile(audioPath);
   const input = { [cfg.imageField]: imageUrl, [cfg.audioField]: audioUrl, ...cfg.extra };
-  const pred = cfg.model.includes(":")
-    ? await rj("/predictions", { method: "POST", json: { version: cfg.model.split(":")[1], input } })
-    : await rj(`/models/${cfg.model}/predictions`, { method: "POST", json: { input } });
+  // Resolve a version hash: pinned (owner/name:version) or the model's latest. The /v1/predictions
+  // {version} route works for community models; /models/.../predictions is official-models only (404s).
+  let version: string;
+  if (cfg.model.includes(":")) {
+    version = cfg.model.split(":")[1];
+  } else {
+    const m = await rj(`/models/${cfg.model}`, { method: "GET" });
+    version = m.latest_version?.id;
+    if (!version) throw new Error(`Replicate model ${cfg.model} has no runnable version`);
+  }
+  const pred = await rj("/predictions", { method: "POST", json: { version, input } });
   await download(await pollReplicate(pred), out);
 }
 
