@@ -9,7 +9,22 @@
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
 - `kino fonts` — list curated fonts (with descriptions + cache status)
+- `kino projects [--new <name> --brand <brand>]` — list or scaffold projects
 - `kino init [brand]` · `kino doctor`
+
+## Projects (file scoping)
+Keep campaigns from cluttering each other. A **workspace** holds shared `brands/` + `.kino-cache/`;
+each **project** is `projects/<name>/` with its own `specs/`, `assets/`, `out/`, and a `project.json`
+that assigns a brand and optional default overrides:
+```jsonc
+{ "brand": "evidentcv", "background": "mesh", "provider": "none", "font": "Inter", "captionMode": "phrase" }
+```
+- kino infers the project by walking up from the spec's path to the nearest `project.json`
+  (`kino build projects/launch/specs/hook.json`), or use `--project <name>`.
+- Precedence: CLI flag > spec > project.json > brand. A spec may omit `brand` (the project supplies it).
+- Brands are shared at the workspace, so brand assets (`logo`, `facelessBackdrop`) are workspace-relative;
+  app assets (`assets/...`) are project-relative.
+- **Back-compat:** with no `project.json`, the flat layout (`specs/ assets/ out/` at the root) still works.
 
 ## Iterative design loop (agents)
 `still`/`storyboard`/`inspect` default to **mock** (fast, $0; captions/background/layout render identically —

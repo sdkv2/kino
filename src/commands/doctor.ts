@@ -13,7 +13,7 @@ async function has(cmd: string, args: string[]): Promise<boolean> {
 }
 
 export async function doctor(): Promise<void> {
-  loadEnv(resolveProject().root);
+  loadEnv(resolveProject().workspaceRoot);
   const checks: Array<[string, boolean]> = [
     ["node", true],
     ["ffmpeg", await has("ffmpeg", ["-version"])],
