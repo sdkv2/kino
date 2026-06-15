@@ -21,7 +21,18 @@ describe("renderVideo", () => {
       logo: null,
       background: { kind: "glow", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
-      segments: [{ kind: "avatar", caption: "hello", startSec: 0, endSec: 2 }],
+      segments: [
+        {
+          kind: "avatar",
+          caption: "hello",
+          startSec: 0,
+          endSec: 2,
+          captionKeyframes: [
+            { at: 0, params: { y: 20, opacity: 0 } },
+            { at: 0.5, params: { y: 0, opacity: 1 }, ease: "easeInOut" },
+          ],
+        },
+      ],
     };
     const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "t" });
     expect(outs).toHaveLength(1);

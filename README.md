@@ -13,7 +13,8 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.7 — configurable + tweenable logo (AnimatedElement), agent-animatable backgrounds
+> **Status:** v1.8 — every overlay tweenable (logo + captions + kickers, one keyframe system),
+> configurable logo, agent-animatable backgrounds
 > (keyframes/triggers + word timestamps), projects (brand-assignable file scoping), avatar providers,
 > faceless mode, avatar-trim, word-synced captions, on-demand fonts, agent inspection
 > (inspect/still/storyboard/frames/backgrounds/elements), output tagging, `--mock`, caching, `doctor`. 74 tests green.
@@ -53,8 +54,8 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
   (pulse); agents tween them via `backgroundKeyframes` and fire `backgroundTriggers` at timestamps
   (sync with `kino inspect` word times). Custom draw fns get `env.params` + `env.pulse`.
 - **Overlay elements** — `kino elements`: the logo has size (`small`/`medium`/`big`/px) + position
-  (cardinal/center/custom) presets and is tweenable via `logoKeyframes` (x/y/scale/opacity) on a reusable
-  `AnimatedElement` layer (captions/kickers next).
+  (cardinal/center/custom) presets; **logo, captions, and kickers** are all tweenable
+  (`logoKeyframes` / `captionKeyframes` / `kickerKeyframes` — x/y/scale/opacity) on one shared keyframe layer.
 - **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
 - **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
   keeps variant renders side-by-side instead of overwriting.
