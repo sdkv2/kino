@@ -16,6 +16,8 @@ const DEFAULTS: KinoProps = {
   },
   fps: 30,
   avatar: null,
+  avatarWindows: [],
+  voTrack: null,
   disclosure: "AI avatar & voice · sample data",
   segments: [],
 };
