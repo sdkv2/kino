@@ -31,6 +31,14 @@ function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider
   return abs;
 }
 
+// Resolve an optional brand asset (logo/backdrop) to an absolute path under the project root.
+function resolveBrandFile(p: string | undefined, project: Project): string | null {
+  if (!p) return null;
+  const abs = isAbsolute(p) ? p : join(project.root, p);
+  if (!existsSync(abs)) throw new Error(`Brand asset not found: ${abs}`);
+  return abs;
+}
+
 // Stitch only the on-camera clips into the trimmed avatar track (cached so edits don't re-stitch).
 async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cache): Promise<string> {
   const avClips = indices.map((i) => clips[i]);
@@ -93,6 +101,10 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
   }
   if (avatarRel && avatarPath) copyFileSync(avatarPath, join(publicDir, avatarRel));
   copyFileSync(vo.trackPath, join(publicDir, "vo.mp3"));
+  const logoAbs = resolveBrandFile(brand.logo, project);
+  if (logoAbs) copyFileSync(logoAbs, join(publicDir, "logo.png"));
+  const bgAbs = resolveBrandFile(brand.facelessBackdrop, project);
+  if (bgAbs) copyFileSync(bgAbs, join(publicDir, "faceless-bg.png"));
 
   const c = brand.colors;
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
@@ -136,6 +148,8 @@ export async function build(specPath: string, opts: { mock?: boolean; format?: s
     avatar: avatarRel,
     avatarWindows,
     voTrack: "vo.mp3",
+    logo: logoAbs ? "logo.png" : null,
+    facelessBg: bgAbs ? "faceless-bg.png" : null,
     disclosure: avatarRel ? brand.disclosure : (brand.facelessDisclosure ?? brand.disclosure),
     segments: renderSegments,
   };
