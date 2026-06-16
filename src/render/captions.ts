@@ -41,3 +41,17 @@ export function activeWordIndex(words: WordTiming[], t: number): number {
 export function offsetWords(words: WordTiming[], dt: number): WordTiming[] {
   return words.map((w) => ({ word: w.word, start: w.start + dt, end: w.end + dt }));
 }
+
+// Caption comparison key: lowercased, alphanumerics only (drops punctuation/case so
+// "EvidentCV." matches "evidentcv").
+export function normWord(word: string): string {
+  return word.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Whether a caption word gets the brand-green highlight: the currently-spoken (active) word, or
+// the brand name itself (always, so the brand pops wherever it's said). One state — no extra colours.
+export function isHighlightWord(word: string, opts: { isActive: boolean; brandName?: string }): boolean {
+  if (opts.isActive) return true;
+  const b = opts.brandName ? normWord(opts.brandName) : "";
+  return b !== "" && normWord(word) === b;
+}

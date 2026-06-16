@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { charsToWords, activeWordIndex, offsetWords } from "../src/render/captions.js";
+import { charsToWords, activeWordIndex, offsetWords, normWord, isHighlightWord } from "../src/render/captions.js";
 
 describe("charsToWords", () => {
   it("aggregates per-character alignment into word timings", () => {
@@ -40,5 +40,32 @@ describe("activeWordIndex", () => {
 describe("offsetWords", () => {
   it("shifts word timings onto the main timeline", () => {
     expect(offsetWords([{ word: "x", start: 0, end: 0.5 }], 2)).toEqual([{ word: "x", start: 2, end: 2.5 }]);
+  });
+});
+
+describe("normWord", () => {
+  it("lowercases and strips non-alphanumerics", () => {
+    expect(normWord("EvidentCV.")).toBe("evidentcv");
+    expect(normWord("“really!”")).toBe("really");
+  });
+});
+
+describe("isHighlightWord", () => {
+  it("highlights the currently-spoken word", () => {
+    expect(isHighlightWord("anything", { isActive: true })).toBe(true);
+  });
+  it("does not highlight inactive ordinary words", () => {
+    expect(isHighlightWord("anything", { isActive: false })).toBe(false);
+  });
+  it("always highlights the brand name (case/punctuation-insensitive), even when inactive", () => {
+    expect(isHighlightWord("EvidentCV", { isActive: false, brandName: "EvidentCV" })).toBe(true);
+    expect(isHighlightWord("evidentcv.", { isActive: false, brandName: "EvidentCV" })).toBe(true);
+  });
+  it("leaves non-brand words alone when a brand name is set", () => {
+    expect(isHighlightWord("really", { isActive: false, brandName: "EvidentCV" })).toBe(false);
+  });
+  it("treats an empty/absent brand name as no brand match", () => {
+    expect(isHighlightWord("evidentcv", { isActive: false, brandName: "" })).toBe(false);
+    expect(isHighlightWord("evidentcv", { isActive: false })).toBe(false);
   });
 });
