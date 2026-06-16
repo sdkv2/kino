@@ -34,3 +34,13 @@ export async function stitchAudio(clips: string[], gapSec: number, out: string):
     "-i", list, "-c:a", "libmp3lame", "-b:a", "128k", out,
   ]);
 }
+
+// Pull a mono 16 kHz WAV out of a video (for speech-to-text). No video stream in the output.
+export async function extractAudio(video: string, out: string): Promise<void> {
+  await execa("ffmpeg", ["-y", "-loglevel", "error", "-i", video, "-vn", "-ac", "1", "-ar", "16000", out]);
+}
+
+// Grab one frame at `sec` seconds.
+export async function extractFrame(video: string, sec: number, out: string): Promise<void> {
+  await execa("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(sec), "-i", video, "-frames:v", "1", out]);
+}
