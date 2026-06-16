@@ -13,13 +13,9 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.11.1 — app cut-ins reveal the brand backdrop (not black) on entry; word captions
-> highlight the spoken word + the brand name in brand green
-> (single highlight colour); keyframe easings incl. spring/overshoot; every overlay tweenable
-> (logo + captions + kickers, one keyframe system), configurable logo, agent-animatable backgrounds
-> (keyframes/triggers + word timestamps), projects (brand-assignable file scoping), avatar providers,
-> faceless mode, avatar-trim, word-synced captions, on-demand fonts, agent inspection
-> (inspect/still/storyboard/frames/backgrounds/elements), output tagging, `--mock`, caching, `doctor`. 74 tests green.
+> **Status:** v1.12 — analyse external reference videos (`transcribe`/`scan`: Scribe STT + frame
+> extraction, research-only); app cut-ins reveal the brand backdrop; word captions highlight the
+> spoken word + brand name in green
 
 ## Install (global)
 ```bash
