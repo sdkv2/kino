@@ -21,6 +21,7 @@ import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
+import { resolveMotionGraphic } from "../render/motiongraphic.js";
 import { log } from "../log.js";
 
 const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
@@ -228,13 +229,21 @@ export async function prepare(
         kicker: seg.kicker
           ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
           : undefined,
+        motionOverlay: seg.motionOverlay ? resolveMotionGraphic(seg.motionOverlay, project) : undefined,
       };
     }
     if (seg.kind === "avatar") {
-      return { ...base, shot: seg.shot as Shot | undefined };
+      return {
+        ...base,
+        shot: seg.shot as Shot | undefined,
+        motionOverlay: seg.motionOverlay ? resolveMotionGraphic(seg.motionOverlay, project) : undefined,
+      };
     }
-    // motion segment: no shot/transition/overlay resolution in v1
-    return { ...base };
+    // motion segment: resolve the full-screen graphic; VO drives its duration like other beats.
+    return {
+      ...base,
+      motion: resolveMotionGraphic({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers }, project),
+    };
   });
 
   const props: KinoProps = {
