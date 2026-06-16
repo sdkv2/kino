@@ -28,19 +28,21 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
       {/* Continuous voiceover — covers every segment, including the app cut-ins where the avatar is trimmed out. */}
       {voTrack ? <Audio src={staticFile(voTrack)} /> : null}
 
-      {/* Base layer: avatar windows when on camera, else a living backdrop so faceless beats aren't empty. */}
-      {avatar ? (
-        avatarWindows.map((w, i) => {
-          const dur = f(w.toSec) - f(w.fromSec);
-          return (
-            <Sequence key={`av${i}`} from={f(w.fromSec)} durationInFrames={dur}>
-              <AvatarClip src={staticFile(avatar)} trimFrames={f(w.audioStartSec)} durFrames={dur} />
-            </Sequence>
-          );
-        })
-      ) : (
-        <FacelessBackdrop t={theme} background={background} />
-      )}
+      {/* Living brand backdrop, always the base layer: faceless beats aren't empty, and app cut-in
+          transitions reveal the brand background instead of raw black (the avatar covers it on camera). */}
+      <FacelessBackdrop t={theme} background={background} />
+
+      {/* Avatar windows on top of the backdrop during on-camera runs. */}
+      {avatar
+        ? avatarWindows.map((w, i) => {
+            const dur = f(w.toSec) - f(w.fromSec);
+            return (
+              <Sequence key={`av${i}`} from={f(w.fromSec)} durationInFrames={dur}>
+                <AvatarClip src={staticFile(avatar)} trimFrames={f(w.audioStartSec)} durFrames={dur} />
+              </Sequence>
+            );
+          })
+        : null}
 
       {segments
         .filter((s) => s.kind === "app")
