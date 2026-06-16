@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.11.1");
+program.name("kino").description("Agent-driven short-form video production").version("1.12.0");
 
 program
   .command("build <spec>")
@@ -57,7 +57,30 @@ program
   .option("--at <list>", "comma-separated timestamps in seconds")
   .option("--out <dir>", "output directory")
   .option("--montage", "also tile the frames into one image")
+  .option("--every <sec>", "a frame every N seconds (when --at is not given)")
+  .option("--count <n>", "N frames spaced evenly (when --at is not given)")
   .action(async (v, o) => (await import("./commands/frames.js")).frames(v, o));
+
+program
+  .command("transcribe <video>")
+  .description("Analyse an EXTERNAL reference video: transcribe speech to a timestamped transcript (research only — NOT for our own renders or the build pipeline)")
+  .option("--format <fmt>", "json | srt | vtt | text", "json")
+  .option("--out <file>", "write to a file instead of stdout")
+  .option("--mock", "offline canned transcript (no ffmpeg/network)")
+  .action(async (v, o) => {
+    await (await import("./commands/transcribe.js")).transcribe(v, o);
+  });
+
+program
+  .command("scan <video>")
+  .description("Analyse an EXTERNAL reference video: transcript + frames + contact sheet in one shot (research only)")
+  .option("--count <n>", "extract N frames evenly (default: one per transcript segment)")
+  .option("--every <sec>", "extract a frame every N seconds")
+  .option("--out <dir>", "output directory")
+  .option("--mock", "offline canned transcript")
+  .action(async (v, o) => {
+    await (await import("./commands/scan.js")).scan(v, o);
+  });
 
 program
   .command("batch <input>")
