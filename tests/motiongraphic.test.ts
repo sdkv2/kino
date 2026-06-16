@@ -86,6 +86,34 @@ describe("resolveMotionGraphic", () => {
   });
 });
 
+import { assertMotionGraphics } from "../src/spec/validate.js";
+import type { Spec } from "../src/spec/schema.js";
+
+describe("assertMotionGraphics", () => {
+  function projWith(file: string, contents: string) {
+    const root = mkdtempSync(join(tmpdir(), "kino-mgv-"));
+    const abs = join(root, "assets", file);
+    mkdirSync(join(abs, ".."), { recursive: true });
+    writeFileSync(abs, contents);
+    return { assetPath: (rel: string) => join(root, "assets", rel) };
+  }
+  it("passes when every motion source exists and is clean", () => {
+    const project = projWith("motion/ok.html", `<div style="width:calc(var(--progress)*100%)"></div>`);
+    const spec = { segments: [{ kind: "motion", source: "motion/ok.html", text: "x" }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).not.toThrow();
+  });
+  it("throws for a missing overlay source", () => {
+    const project = { assetPath: (rel: string) => join("/nope", rel) };
+    const spec = { segments: [{ kind: "app", asset: "a.png", text: "x", caption: "c", motionOverlay: { source: "motion/missing.html" } }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).toThrow(/Missing motion graphic/);
+  });
+  it("throws naming the segment + violation for a banned construct", () => {
+    const project = projWith("motion/bad.html", `<style>.b{transition:all .3s}</style>`);
+    const spec = { segments: [{ kind: "motion", source: "motion/bad.html", text: "x" }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).toThrow(/segment\[0\].*transition/i);
+  });
+});
+
 import { SpecSchema } from "../src/spec/schema.js";
 
 describe("SpecSchema motion graphics", () => {
