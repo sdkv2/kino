@@ -68,4 +68,13 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 - Use `--mock` while iterating to avoid avatar credit spend; real builds cache VO+avatar so edits to
   captions don't re-bill. Faceless real builds spend only ElevenLabs (no avatar credits at all).
 
+## Analysing reference videos (research only)
+
+Use `kino transcribe <video>` / `kino scan <video>` ONLY to study external reference clips
+(competitors, trending videos from `using-spider`). They transcribe speech to timestamped text and
+pull frames so you can see what's said and shown.
+
+Never use them on our own rendered output (we already have word timings from TTS — use `kino
+inspect`), and never inside the build pipeline. See `reference.md` for flags.
+
 See `reference.md` for command flags, brand config, and troubleshooting.

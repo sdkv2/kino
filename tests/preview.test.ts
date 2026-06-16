@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inspectPlan, parseTimes, pickFrames } from "../src/render/preview.js";
+import { inspectPlan, parseTimes, pickFrames, pickIntervalTimes } from "../src/render/preview.js";
 import type { KinoProps } from "../src/render/props.js";
 
 const props = {
@@ -48,5 +48,23 @@ describe("pickFrames", () => {
     expect(r).toHaveLength(2);
     expect(r[0]).toMatchObject({ frame: 30 });
     expect(r[1]).toMatchObject({ frame: Math.round(3.65 * 30) });
+  });
+});
+
+describe("pickIntervalTimes", () => {
+  it("spaces N frames evenly, inset from both ends", () => {
+    expect(pickIntervalTimes(10, { count: 4 })).toEqual([2, 4, 6, 8]);
+  });
+  it("count of 1 picks the midpoint", () => {
+    expect(pickIntervalTimes(10, { count: 1 })).toEqual([5]);
+  });
+  it("--every steps across the clip, centred", () => {
+    expect(pickIntervalTimes(10, { every: 2 })).toEqual([1, 3, 5, 7, 9]);
+  });
+  it("count wins when both count and every are given", () => {
+    expect(pickIntervalTimes(10, { count: 2, every: 1 })).toEqual([10 / 3, 20 / 3].map((n) => Math.round(n * 100) / 100));
+  });
+  it("returns [] when neither is set", () => {
+    expect(pickIntervalTimes(10, {})).toEqual([]);
   });
 });
