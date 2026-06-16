@@ -53,7 +53,7 @@ program
 
 program
   .command("frames <video>")
-  .description("Extract frames from a rendered video at given timestamps")
+  .description("Extract frames from any video — explicit timestamps, or evenly via --count/--every")
   .option("--at <list>", "comma-separated timestamps in seconds")
   .option("--out <dir>", "output directory")
   .option("--montage", "also tile the frames into one image")
