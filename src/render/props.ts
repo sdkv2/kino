@@ -8,6 +8,7 @@ export interface Theme {
   green: string;
   gold: string;
   white: string;
+  brandName?: string; // brand name token; rendered green wherever it appears in word captions
   captionFontSize: number;
   captionStroke: number;
 }
