@@ -85,3 +85,30 @@ describe("resolveMotionGraphic", () => {
     expect(() => resolveMotionGraphic({ source: "motion/bad.html" }, project)).toThrow(/keyframes/i);
   });
 });
+
+import { SpecSchema } from "../src/spec/schema.js";
+
+describe("SpecSchema motion graphics", () => {
+  it("parses a motion segment with params/keyframes/triggers", () => {
+    const spec = SpecSchema.parse({
+      title: "t", segments: [
+        { kind: "motion", source: "motion/stat.html", text: "eighty six percent",
+          params: { pct: 0 }, keyframes: [{ at: 0.2, params: { pct: 86 }, ease: "overshoot" }],
+          triggers: [{ at: 0.2, action: "pulse" }] },
+      ],
+    });
+    expect(spec.segments[0]).toMatchObject({ kind: "motion", source: "motion/stat.html" });
+  });
+  it("parses a motionOverlay on an app segment", () => {
+    const spec = SpecSchema.parse({
+      title: "t", segments: [
+        { kind: "app", asset: "screens/x.png", text: "look", caption: "c",
+          motionOverlay: { source: "motion/callout.html", params: { x: 50 } } },
+      ],
+    });
+    expect((spec.segments[0] as any).motionOverlay.source).toBe("motion/callout.html");
+  });
+  it("rejects a motion segment missing source", () => {
+    expect(() => SpecSchema.parse({ title: "t", segments: [{ kind: "motion", text: "x" }] })).toThrow();
+  });
+});
