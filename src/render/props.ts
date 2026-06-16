@@ -11,6 +11,7 @@ export interface Theme {
   brandName?: string; // brand name token; rendered green wherever it appears in word captions
   captionFontSize: number;
   captionStroke: number;
+  captionBg?: { bg: string; appOnly: boolean } | null; // translucent plate behind lower-third captions (opt-in)
 }
 
 // One spoken word and its absolute on-timeline span (from the VO timestamps).

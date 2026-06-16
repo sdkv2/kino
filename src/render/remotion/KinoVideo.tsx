@@ -76,15 +76,19 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         // words mode = synced spoken text; else faceless talking beats use hero text, app beats lower-third.
         const wordMode = s.captionMode === "words" && s.words && s.words.length > 0;
         const hero = !avatar && s.kind === "avatar";
+        // Backplate behind the lower-third caption (legibility over light app screenshots). appOnly
+        // (default) scopes it to app cut-ins; the hero text on faceless beats never gets a plate.
+        const cbg = theme.captionBg;
+        const backplate = cbg && (!cbg.appOnly || s.kind === "app") ? { bg: cbg.bg } : null;
         return (
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
             <TweenOverlay keyframes={s.captionKeyframes ?? []}>
               {wordMode ? (
-                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} />
+                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} />
               ) : hero ? (
                 <HeroCaption text={s.caption} t={theme} />
               ) : (
-                <Caption text={s.caption} t={theme} />
+                <Caption text={s.caption} t={theme} backplate={backplate} />
               )}
             </TweenOverlay>
           </Sequence>
