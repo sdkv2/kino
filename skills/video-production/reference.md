@@ -105,6 +105,9 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - `words` mode uses real word timings from ElevenLabs `…/with-timestamps` (faked evenly under `--mock`),
   so the on-screen words are the spoken words. Effects: typewriter reveal + pop, active-word highlight,
   and per-segment `emphasis: ["word", …]` (glow + shake on those words while active).
+- **Highlight colour:** the currently-spoken (active) word and the **brand name** (`brand.name`,
+  matched case/punctuation-insensitively) render in brand green (`colors.mint`) — one highlight state,
+  no other colours. So the brand name pops green wherever it's spoken, in any project.
 - **Tween captions/kickers** over time: per-segment `captionKeyframes` (and `kickerKeyframes` on app
   segments) `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame), and `at`
   is **relative to the segment start** (`at: 0` = the caption's entrance). Logo + background keyframes are
