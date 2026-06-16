@@ -16,7 +16,7 @@ import { planAvatarWindows } from "../avatar/plan.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
-import { resolveLogoSize, resolveLogoPosition } from "../render/elements.js";
+import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
 import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
@@ -245,6 +245,7 @@ export async function prepare(
       brandName: brand.name,
       captionFontSize: brand.captionStyle.fontSize,
       captionStroke: brand.captionStyle.strokeWidth,
+      captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
     },
     fps: 30,
     avatar: avatarRel,
