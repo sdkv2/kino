@@ -50,6 +50,15 @@ describe("lintMotionHtml", () => {
   it("rejects @import", () => {
     expect(lintMotionHtml(`<style>@import "https://evil/x.css";</style>`)[0]).toMatch(/import/i);
   });
+  it("rejects transition longhands (not just the shorthand)", () => {
+    expect(lintMotionHtml(`<style>.b{transition-property:width;transition-duration:.3s}</style>`).length).toBeGreaterThan(0);
+  });
+  it("rejects animation longhands", () => {
+    expect(lintMotionHtml(`<style>.b{animation-name:x;animation-delay:1s}</style>`).length).toBeGreaterThan(0);
+  });
+  it("rejects SVG SMIL <animate>", () => {
+    expect(lintMotionHtml(`<svg><rect><animate attributeName="x" dur="1s"/></rect></svg>`)[0]).toMatch(/SMIL|animate/i);
+  });
 });
 
 describe("sanitizeMotionHtml", () => {
