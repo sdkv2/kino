@@ -1,0 +1,44 @@
+<style>
+  .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+         font-family:var(--kino-font);color:var(--kino-white);
+         opacity:clamp(0, calc((1 - var(--progress)) * 8), 1)}
+  /* the whole system eases in smoothly (--enter easeInOut in spec) */
+  .sys{position:relative;width:920px;height:920px;display:flex;align-items:center;justify-content:center;
+       opacity:clamp(0, calc(var(--enter) * 2), 1);
+       transform:rotate(calc((1 - var(--enter)) * -24deg)) scale(calc(.78 + var(--enter) * .22))}
+  .ring{position:absolute;border-radius:50%;border:2px solid rgba(128,226,180,.14);inset:50% 50%;
+        opacity:calc(.45 + (sin(var(--t) * 0.8) * .5 + .5) * .4)}
+  .r1{width:430px;height:430px;margin:-215px} .r2{width:650px;height:650px;margin:-325px} .r3{width:900px;height:900px;margin:-450px}
+  /* each orbit revolves slowly at its own rate + phase, off absolute time --t (no RAF) */
+  .orb{position:absolute;inset:0}
+  .oa{transform:rotate(calc(var(--t) * 24deg))}
+  .ob{transform:rotate(calc(var(--t) * -18deg + 120deg))}
+  .oc{transform:rotate(calc(var(--t) * 13deg + 240deg))}
+  .od{transform:rotate(calc(var(--t) * -30deg + 60deg))}
+  .dot{position:absolute;top:50%;left:50%;border-radius:50%;background:currentColor;
+       box-shadow:0 0 calc(16px + var(--pulse) * 26px + (sin(var(--t) * 2) * .5 + .5) * 10px) currentColor;
+       transform:scale(calc(1 + var(--pulse) * .3))}
+  .d1{width:32px;height:32px;color:var(--kino-mint);margin:-16px 0 0 195px}
+  .d2{width:24px;height:24px;color:var(--gold);margin:-12px 0 0 309px}
+  .d3{width:18px;height:18px;color:var(--kino-white);margin:-9px 0 0 441px}
+  .d4{width:26px;height:26px;color:var(--kino-green);margin:-13px 0 0 309px}
+  .core{position:relative;width:250px;height:250px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        background:radial-gradient(circle, rgba(128,226,180, calc(.16 + var(--pulse) * .22)), rgba(11,16,32,0) 70%);
+        transform:scale(calc(1 + var(--pulse) * .1 + sin(var(--t) * 1) * .015))}
+  .mark{font-weight:900;font-size:84px;letter-spacing:-.02em;
+        background:linear-gradient(120deg, var(--kino-white), var(--kino-mint));
+        -webkit-background-clip:text;background-clip:text;color:transparent}
+  .foot{position:absolute;bottom:300px;width:100%;text-align:center;font-size:34px;font-weight:700;
+        letter-spacing:.12em;color:#9fb1c9;opacity:clamp(0, calc((var(--enter) - .4) * 3), 1)}
+</style>
+<div class="stage">
+  <div class="sys">
+    <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+    <div class="orb oa"><div class="dot d1"></div></div>
+    <div class="orb ob"><div class="dot d2"></div></div>
+    <div class="orb oc"><div class="dot d3"></div></div>
+    <div class="orb od"><div class="dot d4"></div></div>
+    <div class="core"><div class="mark">kino</div></div>
+  </div>
+  <div class="foot">ONE COMPONENT · CSS VARIABLES · ZERO JS</div>
+</div>
