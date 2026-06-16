@@ -3,6 +3,17 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, MotionGraphicProps } from "../props";
 import { paramsAt, pulseAt } from "../bgparams";
 
+// Trusted stylesheet injected into every motion-graphic shadow root: pause ALL animations so none
+// run on the wall clock (determinism), and scrub elements marked `.kino-anim` across the beat via a
+// --progress-driven negative animation-delay (the canonical Remotion scrub). Inert when the agent's
+// HTML defines no animations. --kino-delay (agent-set, default 0) staggers; sub-timing lives in the
+// @keyframes % stops; easing is the agent's via their timing-function.
+const KINO_SCRUB_STYLE =
+  "<style>*{animation-play-state:paused !important}" +
+  ".kino-anim{animation-duration:1s !important;animation-fill-mode:both !important;" +
+  "animation-iteration-count:1 !important;" +
+  "animation-delay:calc((var(--progress) - var(--kino-delay, 0)) * -1s) !important}</style>";
+
 // Inject the sanitized HTML into a Shadow root, then set CSS custom properties on the host every
 // frame. Custom properties inherit across the shadow boundary, so the agent's (shadow-scoped) CSS
 // reads --frame/--t/--progress/--pulse/--<param> and the brand palette. useLayoutEffect runs sync,
@@ -15,7 +26,7 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
     const host = hostRef.current;
     if (!host) return;
     if (!shadowRef.current) shadowRef.current = host.attachShadow({ mode: "open" });
-    shadowRef.current.innerHTML = html;
+    shadowRef.current.innerHTML = KINO_SCRUB_STYLE + html;
   }, [html]);
 
   useLayoutEffect(() => {
