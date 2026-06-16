@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Easing, Img, OffthreadVideo, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, BackgroundProps, WordTiming, BgKeyframe } from "../props";
 import type { Shot, Transition } from "../motion";
-import { activeWordIndex } from "../captions";
+import { activeWordIndex, isHighlightWord, normWord } from "../captions";
 import { paramsAt } from "../bgparams";
 import { CanvasBackground } from "./backgrounds/CanvasBackground";
 import { getPreset, type DrawFn } from "./backgrounds/presets";
@@ -229,15 +229,16 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
   const { fps } = useVideoConfig();
   const tAbs = startSec + frame / fps;
   const active = activeWordIndex(words, tAbs);
-  const norm = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const emph = new Set(emphasis.map(norm));
+  const emph = new Set(emphasis.map(normWord));
   return (
     <div style={{ position: "absolute", left: 56, right: 56, bottom: 470, display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 18, rowGap: 4 }}>
       {words.map((w, i) => {
         const revealFrame = (tAbs - w.start) * fps;
         const s = spring({ frame: revealFrame, fps, config: { damping: 12, mass: 0.6 } });
         const isActive = i === active;
-        const isEmph = emph.has(norm(w.word));
+        const isEmph = emph.has(normWord(w.word));
+        // Single highlight colour: the spoken word and the brand name go green. No gold/transition.
+        const isGreen = isHighlightWord(w.word, { isActive, brandName: t.brandName });
         const scale = (revealFrame <= 0 ? 0.6 : interpolate(s, [0, 1], [0.6, 1])) * (isActive ? 1.1 : 1);
         const opacity = revealFrame <= 0 ? 0 : interpolate(s, [0, 1], [0, 1]);
         const shake = isActive && isEmph ? Math.sin(frame * 1.4) * 3 : 0;
@@ -251,7 +252,7 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
               fontFamily: t.font,
               fontWeight: 900,
               fontSize: Math.round(t.captionFontSize * 0.92),
-              color: isActive ? (isEmph ? t.gold : t.mint) : t.white,
+              color: isGreen ? t.mint : t.white,
               lineHeight: 1.05,
               WebkitTextStroke: `${t.captionStroke}px #000`,
               paintOrder: "stroke fill" as React.CSSProperties["paintOrder"],

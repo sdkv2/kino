@@ -4,3 +4,6 @@ out/
 .env
 *.log
 dist/
+
+# macOS
+.DS_Store

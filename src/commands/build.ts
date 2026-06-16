@@ -242,6 +242,7 @@ export async function prepare(
       green: c.green,
       gold: c.gold,
       white: c.white,
+      brandName: brand.name,
       captionFontSize: brand.captionStyle.fontSize,
       captionStroke: brand.captionStyle.strokeWidth,
     },
