@@ -1,8 +1,9 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { Brand } from "../config/brand.js";
 import type { Spec } from "./schema.js";
 import type { Project } from "../config/project.js";
 import type { Provider } from "../avatar/provider.js";
+import { lintMotionHtml } from "../render/motiongraphic.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -48,6 +49,23 @@ export function assertAssetsExist(spec: Spec, project: Project): void {
   }
 }
 
+// Motion graphics: every referenced HTML file must exist and pass the determinism/safety lint.
+// Runs before VO generation so a bad graphic fails the build cheaply.
+export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: string): string }): void {
+  const refs: { source: string; where: string }[] = [];
+  spec.segments.forEach((seg, i) => {
+    if (seg.kind === "motion") refs.push({ source: seg.source, where: `segment[${i}]` });
+    const ov = (seg as { motionOverlay?: { source?: string } }).motionOverlay;
+    if (ov?.source) refs.push({ source: ov.source, where: `segment[${i}].motionOverlay` });
+  });
+  for (const { source, where } of refs) {
+    const abs = project.assetPath(source);
+    if (!existsSync(abs)) throw new Error(`Missing motion graphic for ${where}: assets/${source}`);
+    const violations = lintMotionHtml(readFileSync(abs, "utf8"));
+    if (violations.length) throw new Error(`Motion graphic ${where} (assets/${source}): ${violations.join("; ")}`);
+  }
+}
+
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   const hits = complianceScan(spec, brand);
   if (hits.length) {
@@ -55,4 +73,5 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   }
   resolveVoiceLook(spec, brand);
   assertAssetsExist(spec, project);
+  assertMotionGraphics(spec, project);
 }
