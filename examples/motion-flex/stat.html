@@ -1,0 +1,39 @@
+<style>
+  .stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+         font-family:var(--kino-font);color:var(--kino-white);
+         opacity:clamp(0, calc((1 - var(--progress)) * 8), 1)}
+  .card{display:flex;flex-direction:column;align-items:center}
+  /* each element eases in on its own slice of --progress — a stagger with NO extra params */
+  .label{font-size:32px;font-weight:800;letter-spacing:.30em;text-transform:uppercase;color:var(--kino-mint);
+         opacity:clamp(0, calc(var(--progress) * 11), 1);
+         transform:translateY(calc((1 - clamp(0, calc(var(--progress) * 11), 1)) * 20px))}
+  .big{position:relative;display:flex;align-items:flex-start;line-height:1;font-weight:900;
+       font-size:440px;letter-spacing:-.04em;margin:6px 0 8px;color:var(--kino-white);
+       text-shadow:0 0 calc(36px + (sin(var(--t) * 1.2) * .5 + .5) * 50px + var(--pulse) * 80px) rgba(128,226,180, calc(.26 + var(--pulse) * .45));
+       opacity:clamp(0, calc((var(--progress) - .05) * 8), 1);
+       transform:translateY(calc((1 - clamp(0, calc((var(--progress) - .05) * 8), 1)) * 34px + sin(var(--t) * 0.9) * -5px))
+                 scale(calc(.9 + clamp(0, calc((var(--progress) - .05) * 8), 1) * .1))}
+  .num::after{counter-reset: n round(down, var(--pct), 1);content:counter(n)}
+  .pc{font-size:175px;color:var(--gold);margin-top:46px;font-weight:900}
+  .track{margin-top:30px;width:780px;height:26px;border-radius:99px;background:#16203a;overflow:hidden;
+         box-shadow:inset 0 0 0 2px rgba(255,255,255,.06);
+         opacity:clamp(0, calc((var(--progress) - .14) * 9), 1)}
+  .fill{height:100%;border-radius:99px;width:calc(var(--pct) * 1%);
+        background:linear-gradient(90deg, var(--kino-green), var(--kino-mint));
+        box-shadow:0 0 calc(10px + var(--pulse) * 26px) rgba(128,226,180,.6)}
+  .cap{margin-top:32px;font-size:34px;font-weight:700;letter-spacing:.05em;color:#9fb1c9;display:flex;gap:0}
+  /* keyword stagger: sibling-index() gives each .kw its position (1,2,3) → auto per-item delay,
+     one rule, no per-child CSS and no extra spec params */
+  .kw{--d:calc((sibling-index() - 1) * .07);
+      opacity:clamp(0, calc((var(--progress) - .22 - var(--d)) * 8), 1);
+      transform:translateY(calc((1 - clamp(0, calc((var(--progress) - .22 - var(--d)) * 8), 1)) * 16px))}
+  .kw:not(:last-child)::after{content:" · ";color:#5b6b86}
+</style>
+<div class="stage">
+  <div class="card">
+    <div class="label">render determinism</div>
+    <div class="big"><span class="num"></span><span class="pc">%</span></div>
+    <div class="track"><div class="fill"></div></div>
+    <div class="cap"><span class="kw">frame-perfect</span><span class="kw">cache-friendly</span><span class="kw">agent-safe</span></div>
+  </div>
+</div>
