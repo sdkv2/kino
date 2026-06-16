@@ -47,7 +47,9 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 - `avatar` segments are the on-camera/hook/payoff beats; `app` segments show the screenshot/recording while the VO continues. (Faceless still uses these kinds — `avatar` beats become branded caption cards.)
 - Open with an `avatar` hook, cut to `app` for the demo, return to `avatar` for the payoff + `cta`.
 - **Camera/transitions auto-vary** — omit and `kino` picks a varied shot + transition per cut-in.
-  Override per segment with `"shot"` (`push-in`/`pull-out`/`pan-left`/`pan-right`/`tilt-up`/`static`)
+  Override per segment with `"shot"` (`push-in`/`pull-out`/`pan-left`/`pan-right`/`tilt-up`/`static`,
+  plus `scroll`/`scroll-up` to pan vertically through a **tall** app still — a simulated scroll that
+  reveals content below the frame; opt-in, so it's never auto-picked)
   and, on `app` segments, `"transition"` (`fly-left`/`fly-up`/`pop`/`fade`/`cut` — spring/CapCut-style).
 - **Faceless backgrounds animate**: `kino backgrounds` lists each preset's params (colours/intensity) +
   actions (pulse). Tween them over time with `backgroundKeyframes` and fire `backgroundTriggers` at

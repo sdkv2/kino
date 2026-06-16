@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Easing, Img, OffthreadVideo, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, BackgroundProps, WordTiming, BgKeyframe } from "../props";
-import type { Shot, Transition } from "../motion";
+import { shotTransform, type Shot, type Transition } from "../motion";
 import { activeWordIndex, isHighlightWord, normWord } from "../captions";
 import { paramsAt } from "../bgparams";
 import { CanvasBackground } from "./backgrounds/CanvasBackground";
@@ -309,15 +309,8 @@ export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?:
   const f = useCurrentFrame();
   const p = Math.min(1, f / dur);
 
-  // --- camera move (inner image) ---
-  let scale = 1.1;
-  let tx = 0;
-  let ty = 0;
-  if (shot === "push-in") scale = lerp(1.06, 1.2, p);
-  else if (shot === "pull-out") scale = lerp(1.2, 1.06, p);
-  else if (shot === "pan-left") { scale = 1.14; tx = lerp(5, -5, p); }
-  else if (shot === "pan-right") { scale = 1.14; tx = lerp(-5, 5, p); }
-  else if (shot === "tilt-up") { scale = 1.14; ty = lerp(5, -5, p); }
+  // --- camera move (inner image) --- (pure math in motion.ts; includes scroll/scroll-up)
+  const { scale, tx, ty } = shotTransform(shot, p);
 
   // --- transition (outer layer), CapCut-style: spring "fly in" + settle, quick eased exit ---
   const { fps } = useVideoConfig();
