@@ -79,10 +79,12 @@ exceed the target mid-way then settle (punchy landings). Applies to every keyfra
 Provider-specific:
 - `avatarImage` — portrait file (path under project root) used as the source for `hedra`/`replicate`.
 - `hedraModelId` — Character-3 model id (else auto-picks the first from Hedra `/models`).
-- `replicateModel` — `owner/name[:version]` (default `cjwbw/sadtalker`).
-- `replicateImageField` / `replicateAudioField` — input keys for the chosen model
-  (defaults `source_image` / `driven_audio`).
-- `replicateInput` — extra model inputs (default `{preprocess:"full",still:true,enhancer:"gfpgan"}`).
+- `replicateModel` — `owner/name[:version]` (default `bytedance/omni-human`, an official image+audio
+  talking-head model that boots reliably; the community `cjwbw/sadtalker` deployment tends to cold-stall).
+- `replicateImageField` / `replicateAudioField` — input keys for the chosen model (defaults `image` / `audio`).
+- `replicateInput` — extra model inputs (default `{}`). Community models need their own keys, e.g. SadTalker:
+  `replicateModel: "cjwbw/sadtalker"`, `replicateImageField: "source_image"`, `replicateAudioField: "driven_audio"`.
+- Note: `bytedance/omni-human` is premium + slow (~100s+ per short clip); faceless stays the cheap default.
 
 ## Env keys (`.env`, never committed)
 - `ELEVENLABS_API_KEY` — always (voiceover).
