@@ -3,14 +3,15 @@ import DOMPurify from "isomorphic-dompurify";
 import type { MotionGraphicProps, BgKeyframe, BgTrigger, BgParamValue } from "./props.js";
 
 // Determinism + safety denylist. Each pattern → a message that tells the agent what to do instead.
-// Motion in Tier 1 comes ONLY from CSS variables (var(--progress) etc.); anything time-based or
-// script-based is rejected so the rendered frame stays a pure function of useCurrentFrame().
+// Motion comes from CSS variables or from @keyframes that kino force-pauses + scrubs (see the
+// .kino-anim scrub injected by MotionGraphic). The render pauses ALL animations, so the only
+// animation declaration that could break determinism — animation-play-state — is rejected here;
+// CSS transition (no pause/scrub equivalent) is also rejected.
 const BANNED: { re: RegExp; msg: string }[] = [
   { re: /<script[\s>]/i, msg: "<script> is not allowed — motion comes from CSS variables, not JS" },
   { re: /\son\w+\s*=/i, msg: "inline event handlers (on*=) are not allowed" },
-  { re: /@keyframes/i, msg: "@keyframes is banned in v1 — animate by reading var(--progress)/var(--t)" },
   { re: /transition(-\w+)?\s*:/i, msg: "CSS transition is non-deterministic — drive motion from var(--progress)" },
-  { re: /animation(-\w+)?\s*:/i, msg: "CSS animation is non-deterministic in v1 — drive motion from var(--progress)" },
+  { re: /animation-play-state\s*:/i, msg: "animation-play-state is managed by kino — mark the element class=\"kino-anim\"; don't override the pause" },
   { re: /<(animate|animateTransform|animateMotion|set)[\s>]/i, msg: "SVG SMIL animation (<animate> etc.) is not allowed — drive motion from var(--progress)" },
   { re: /\b(requestAnimationFrame|setInterval|setTimeout)\b/i, msg: "timers/RAF are not allowed — motion is frame-driven by kino" },
   { re: /\b(Date\.now|Math\.random)\b/, msg: "Date.now/Math.random break determinism" },

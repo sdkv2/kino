@@ -9,8 +9,8 @@ describe("lintMotionHtml", () => {
     const html = `<style>.b{width:calc(var(--pct)*1%);color:var(--kino-mint)}</style><div class="b"></div>`;
     expect(lintMotionHtml(html)).toEqual([]);
   });
-  it("rejects @keyframes", () => {
-    expect(lintMotionHtml(`<style>@keyframes x{from{opacity:0}}</style>`)[0]).toMatch(/keyframes/i);
+  it("allows @keyframes (now scrubbed deterministically, not banned)", () => {
+    expect(lintMotionHtml(`<style>@keyframes x{from{opacity:0}to{opacity:1}}</style>`)).toEqual([]);
   });
   it("rejects CSS transition", () => {
     expect(lintMotionHtml(`<style>.b{transition: all .3s}</style>`)[0]).toMatch(/transition/i);
@@ -33,7 +33,6 @@ describe("lintMotionHtml", () => {
   });
   it("rejects each remaining non-deterministic / network construct", () => {
     for (const bad of [
-      `<style>.b{animation:spin 1s}</style>`,
       `<div>fetch(</div>`,
       `<div>XMLHttpRequest</div>`,
       `<div>setInterval</div>`,
@@ -53,8 +52,9 @@ describe("lintMotionHtml", () => {
   it("rejects transition longhands (not just the shorthand)", () => {
     expect(lintMotionHtml(`<style>.b{transition-property:width;transition-duration:.3s}</style>`).length).toBeGreaterThan(0);
   });
-  it("rejects animation longhands", () => {
-    expect(lintMotionHtml(`<style>.b{animation-name:x;animation-delay:1s}</style>`).length).toBeGreaterThan(0);
+  it("allows animation longhands except animation-play-state", () => {
+    expect(lintMotionHtml(`<style>.b{animation-name:x;animation-delay:1s;animation-duration:2s}</style>`)).toEqual([]);
+    expect(lintMotionHtml(`<style>.b{animation-play-state:running}</style>`)[0]).toMatch(/animation-play-state/i);
   });
   it("rejects SVG SMIL <animate>", () => {
     expect(lintMotionHtml(`<svg><rect><animate attributeName="x" dur="1s"/></rect></svg>`)[0]).toMatch(/SMIL|animate/i);
@@ -68,6 +68,12 @@ describe("sanitizeMotionHtml", () => {
     expect(out).toContain("hi");
     expect(out).not.toMatch(/script/i);
     expect(out).not.toMatch(/onclick/i);
+  });
+  it("keeps @keyframes + animation-name + the kino-anim class through sanitization", () => {
+    const out = sanitizeMotionHtml(`<style>@keyframes f{from{opacity:0}to{opacity:1}} .b{animation-name:f}</style><div class="b kino-anim"></div>`);
+    expect(out).toContain("@keyframes");
+    expect(out).toContain("animation-name");
+    expect(out).toContain("kino-anim");
   });
 });
 
@@ -90,8 +96,8 @@ describe("resolveMotionGraphic", () => {
     expect(() => resolveMotionGraphic({ source: "motion/x.html" }, project)).toThrow(/Missing motion graphic/);
   });
   it("throws listing the lint violation for a banned construct", () => {
-    const project = projWith("motion/bad.html", `<style>@keyframes x{from{opacity:0}}</style>`);
-    expect(() => resolveMotionGraphic({ source: "motion/bad.html" }, project)).toThrow(/keyframes/i);
+    const project = projWith("motion/bad.html", `<style>.b{animation-play-state:running}</style>`);
+    expect(() => resolveMotionGraphic({ source: "motion/bad.html" }, project)).toThrow(/animation-play-state/i);
   });
 });
 
