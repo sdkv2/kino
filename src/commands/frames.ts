@@ -11,7 +11,7 @@ export async function frames(
   video: string,
   opts: { at?: string; out?: string; montage?: boolean; every?: string; count?: string },
 ): Promise<void> {
-  let times = parseTimes(opts.at ?? "");
+  let times = opts.at ? parseTimes(opts.at) : [];
   if (!times.length && (opts.count || opts.every)) {
     const dur = await probeDuration(video);
     times = pickIntervalTimes(dur, {
