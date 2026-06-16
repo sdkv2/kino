@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pickShot, pickTransition, SHOTS, TRANSITIONS } from "../src/render/motion.js";
+import { pickShot, pickTransition, shotTransform, SHOTS, TRANSITIONS } from "../src/render/motion.js";
 
 describe("auto-vary motion picker", () => {
   it("cycles shots so consecutive app cut-ins differ", () => {
@@ -14,5 +14,26 @@ describe("auto-vary motion picker", () => {
   it("honours an explicit override", () => {
     expect(pickShot(0, "tilt-up")).toBe("tilt-up");
     expect(pickTransition(0, "cut")).toBe("cut");
+  });
+});
+
+describe("shotTransform", () => {
+  it("scroll pans top→bottom (positive ty → negative) at a mild zoom", () => {
+    expect(shotTransform("scroll", 0)).toEqual({ scale: 1.06, tx: 0, ty: 10 });
+    expect(shotTransform("scroll", 1)).toEqual({ scale: 1.06, tx: 0, ty: -10 });
+    expect(shotTransform("scroll", 0.5).ty).toBeCloseTo(0); // passes through centre
+  });
+
+  it("scroll-up reverses the pan (bottom→top)", () => {
+    expect(shotTransform("scroll-up", 0)).toEqual({ scale: 1.06, tx: 0, ty: -10 });
+    expect(shotTransform("scroll-up", 1)).toEqual({ scale: 1.06, tx: 0, ty: 10 });
+  });
+
+  it("keeps the existing shots unchanged", () => {
+    expect(shotTransform("push-in", 0).scale).toBeCloseTo(1.06);
+    expect(shotTransform("push-in", 1).scale).toBeCloseTo(1.2);
+    expect(shotTransform("pan-left", 0)).toEqual({ scale: 1.14, tx: 5, ty: 0 });
+    expect(shotTransform("tilt-up", 1)).toEqual({ scale: 1.14, tx: 0, ty: -5 });
+    expect(shotTransform("static", 0.5)).toEqual({ scale: 1.1, tx: 0, ty: 0 });
   });
 });

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });
-const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "static"]);
+const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "scroll", "scroll-up", "static"]);
 const Transition = z.enum(["fade", "fly-left", "fly-up", "pop", "cut"]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
