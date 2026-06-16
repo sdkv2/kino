@@ -64,7 +64,10 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   JSON owns timing.** Animate by reading kino-set CSS variables — `--progress` (0→1 over the beat),
   `--t`, `--frame`, `--pulse`, your `params` (e.g. `--pct`, tweened by `keyframes`), and the brand
   palette (`--kino-mint` etc.). **No `@keyframes`/`transition`/JS** — the build rejects them; motion
-  comes only from the variables. Run `kino motion` for the full contract + a copyable example, and
+  comes only from the variables. **Stagger reveals** so things don't all land at once — auto-stagger a
+  list with `sibling-index()` (`--d: calc((sibling-index() - 1) * .08)`), give each element its own
+  slice of `--progress`, or use a param-per-element with offset keyframe `at` times for spring/ease
+  control. Run `kino motion` for the full contract, the stagger recipes, and a copyable example;
   preview with `kino still`/`storyboard` like any other beat.
 
 ## Hard rules (the CLI enforces these — don't fight them)
