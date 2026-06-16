@@ -12,7 +12,10 @@ export async function elements(): Promise<void> {
   );
   process.stdout.write("    tween:     logoKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y are % of frame)\n\n");
   process.stdout.write("  caption (per segment)\n");
-  process.stdout.write("    tween:     captionKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y offset, % of frame)\n\n");
+  process.stdout.write("    tween:     captionKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y offset, % of frame)\n");
+  process.stdout.write(
+    "    backplate: brand captionStyle.background { color?, opacity?, appOnly? } — translucent panel behind lower-third captions for legibility over light app screens (opt-in; appOnly default true = app cut-ins only)\n\n",
+  );
   process.stdout.write("  kicker (per app segment)\n");
   process.stdout.write("    tween:     kickerKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y offset, % of frame)\n");
   process.stdout.write("\nTimes are absolute on the main timeline — get per-word start/end from `kino inspect`.\n");

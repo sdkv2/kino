@@ -26,7 +26,12 @@ export const FontLoader: React.FC<{ url?: string | null }> = ({ url }) => {
   return null;
 };
 
-export const Caption: React.FC<{ text: string; t: Theme }> = ({ text, t }) => {
+// Optional translucent panel behind lower-third captions (legibility over light app screenshots).
+// Spread onto the caption element only when a backplate is resolved; otherwise the look is unchanged.
+const plateStyle = (bg?: string | null): React.CSSProperties =>
+  bg ? { display: "inline-block", backgroundColor: bg, padding: "12px 32px", borderRadius: 30 } : {};
+
+export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: string } | null }> = ({ text, t, backplate }) => {
   const f = useCurrentFrame();
   const s = spring({ frame: f, fps: 30, config: { damping: 14, mass: 0.6 } });
   return (
@@ -44,6 +49,7 @@ export const Caption: React.FC<{ text: string; t: Theme }> = ({ text, t }) => {
           WebkitTextStroke: `${t.captionStroke}px #000`,
           paintOrder: "stroke fill" as React.CSSProperties["paintOrder"],
           textShadow: "0 6px 20px rgba(0,0,0,.45)",
+          ...plateStyle(backplate?.bg),
         }}
       >
         {text}
@@ -219,19 +225,30 @@ export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number;
 // Word-synced caption: the spoken words, revealed + highlighted in time with the VO.
 // Typewriter reveal (pop/bounce) per word at its start; active word highlighted; emphasised
 // words glow + shake. Driven by absolute word timings, so it's frame-deterministic.
-export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; startSec: number; t: Theme }> = ({
+export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; startSec: number; t: Theme; backplate?: { bg: string } | null }> = ({
   words,
   emphasis = [],
   startSec,
   t,
+  backplate,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const tAbs = startSec + frame / fps;
   const active = activeWordIndex(words, tAbs);
   const emph = new Set(emphasis.map(normWord));
-  return (
-    <div style={{ position: "absolute", left: 56, right: 56, bottom: 470, display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 18, rowGap: 4 }}>
+  const row = (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        justifyContent: "center",
+        columnGap: 18,
+        rowGap: 4,
+        maxWidth: "100%",
+        ...plateStyle(backplate?.bg),
+      }}
+    >
       {words.map((w, i) => {
         const revealFrame = (tAbs - w.start) * fps;
         const s = spring({ frame: revealFrame, fps, config: { damping: 12, mass: 0.6 } });
@@ -264,6 +281,9 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
         );
       })}
     </div>
+  );
+  return (
+    <div style={{ position: "absolute", left: 56, right: 56, bottom: 470, display: "flex", justifyContent: "center" }}>{row}</div>
   );
 };
 

@@ -54,7 +54,7 @@ beat in ~1–2s) → edit the spec → `kino still` again → `kino build` for t
 true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
 
 ## Brand config (`brands/<name>/brand.json`)
-`name, colors{night,mint,green,white,gold}, font, captionStyle{fontSize,strokeWidth},
+`name, colors{night,mint,green,white,gold}, font, captionStyle{fontSize,strokeWidth,background?},
 disclosure, facelessDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
 defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}`.
 
@@ -133,6 +133,11 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   segments) `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame), and `at`
   is **relative to the segment start** (`at: 0` = the caption's entrance). Logo + background keyframes are
   spec-level so their `at` is absolute on the main timeline. `kino elements`.
+- **Caption backplate** (legibility over light app screenshots): set brand
+  `captionStyle.background { color?, opacity?, appOnly? }` to draw a translucent rounded panel behind the
+  lower-third caption. Defaults: `color` = brand `night`, `opacity` = 0.82, `appOnly` = true (only behind
+  captions on `app` cut-ins; faceless hero text is never plated). Opt-in — omit it and captions render
+  exactly as before. Pairs with `captionKeyframes` for positioning.
 
 ## Cost model
 - Avatar engines bill per second of generated avatar; kino **trims the avatar to on-camera segments
