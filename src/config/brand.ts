@@ -17,6 +17,15 @@ export const BrandSchema = z.object({
     .object({
       fontSize: z.number().default(74),
       strokeWidth: z.number().default(9),
+      // Optional translucent panel behind lower-third captions, for legibility over light app
+      // screenshots. Absent → captions render unchanged. appOnly (default true) scopes it to app cut-ins.
+      background: z
+        .object({
+          color: z.string().optional(), // default: brand night
+          opacity: z.number().min(0).max(1).optional(), // default 0.82
+          appOnly: z.boolean().optional(), // default true (only behind app-segment captions)
+        })
+        .optional(),
     })
     .default({}),
   disclosure: z.string(), // shown when an avatar is present
