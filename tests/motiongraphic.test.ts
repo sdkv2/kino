@@ -140,3 +140,16 @@ describe("SpecSchema motion graphics", () => {
     expect(() => SpecSchema.parse({ title: "t", segments: [{ kind: "motion", text: "x" }] })).toThrow();
   });
 });
+
+import { motionHelpText } from "../src/commands/motion.js";
+
+describe("kino motion help", () => {
+  it("documents the core CSS-variable contract and the rules", () => {
+    const t = motionHelpText();
+    expect(t).toMatch(/--progress/);
+    expect(t).toMatch(/--pulse/);
+    expect(t).toMatch(/--kino-mint/);
+    expect(t).toMatch(/@keyframes/); // names what is banned
+    expect(t).toMatch(/data:/); // inline assets guidance
+  });
+});
