@@ -19,11 +19,13 @@ export interface BuildAvatarOpts {
 }
 
 function replicateCfg(brand: Brand): ReplicateCfg {
+  // Default to the official bytedance/omni-human (image+audio talking head) — it boots reliably on
+  // Replicate, unlike the community SadTalker deployment which queues/cold-stalls. Override per brand.
   return {
-    model: brand.replicateModel ?? "cjwbw/sadtalker",
-    imageField: brand.replicateImageField ?? "source_image",
-    audioField: brand.replicateAudioField ?? "driven_audio",
-    extra: brand.replicateInput ?? { preprocess: "full", still: true, enhancer: "gfpgan" },
+    model: brand.replicateModel ?? "bytedance/omni-human",
+    imageField: brand.replicateImageField ?? "image",
+    audioField: brand.replicateAudioField ?? "audio",
+    extra: brand.replicateInput ?? {},
   };
 }
 
