@@ -1,6 +1,6 @@
 {
   "name": "kino",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "Agent-driven short-form video production CLI",
   "type": "module",
   "bin": {
