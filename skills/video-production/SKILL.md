@@ -57,6 +57,15 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 - **Overlay elements tween** (`kino elements`): the logo has `logoSize` (small/medium/big/px) +
   `logoPosition` (top/bottom/left/right/center/{x,y}%) and `logoKeyframes`; captions + kickers tween via
   per-segment `captionKeyframes` / `kickerKeyframes` — all x/y/scale/opacity over time, same keyframe system.
+- **Motion graphics** (`kino motion`): for a fully custom animated beat or overlay, author a
+  self-contained HTML/CSS file in `assets/motion/` and reference it from the spec — a full-screen
+  beat (`{ "kind": "motion", "source": "motion/x.html", "text": "spoken VO" }`) or an overlay on an
+  app/avatar beat (`"motionOverlay": { "source": "motion/x.html" }`). **You write the HTML/CSS; the
+  JSON owns timing.** Animate by reading kino-set CSS variables — `--progress` (0→1 over the beat),
+  `--t`, `--frame`, `--pulse`, your `params` (e.g. `--pct`, tweened by `keyframes`), and the brand
+  palette (`--kino-mint` etc.). **No `@keyframes`/`transition`/JS** — the build rejects them; motion
+  comes only from the variables. Run `kino motion` for the full contract + a copyable example, and
+  preview with `kino still`/`storyboard` like any other beat.
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.
