@@ -16,6 +16,30 @@ through text + stills:
 This is **read-only inspection**. It does not write a new video, burn in captions, or emit a
 kino spec — those are explicitly out of scope (see below).
 
+## Intended use (agent guidance — must be prominent in the docs)
+
+These commands exist **purely to analyse *other people's* videos** — competitor ads, trending /
+reference clips (e.g. what `using-spider` downloads), inspiration the agent is studying. They are a
+**research tool, not a production step.**
+
+**Use it when:** studying an external/downloaded clip — "what does this competitor ad say and
+show?", pulling hooks/pacing/structure from a trending video, building a swipe file.
+
+**Do NOT use it for:**
+
+- **kino's own rendered output.** kino already has exact word timings from the TTS
+  `…/with-timestamps` step — re-transcribing a clip we generated is wasteful and lossy. To inspect
+  our own renders, use `kino inspect` (plan + word times) and `kino frames`/`still`.
+- **Any part of the build/production pipeline.** `transcribe`/`scan` must never be wired into
+  `build`, caption generation, or spec authoring. They are read-only side tools.
+- **Transcribing the user's private/unrelated media** as a general utility. Scope is marketing
+  research on reference videos.
+
+This guidance is **load-bearing**: it ships verbatim in the agent-facing docs (`SKILL.md` +
+`reference.md`) and in each command's `--help` description, so an agent reaching for the wrong tool
+is corrected at the point of use. Every command description leads with "analyse an external
+reference video".
+
 ## Provider
 
 Speech-to-text uses **ElevenLabs Scribe** (`POST /v1/speech-to-text`, `model_id: scribe_v1`):
@@ -168,5 +192,9 @@ ffmpeg-touching helpers (`extractAudio`) follow the existing `tests/ffmpeg.test.
 
 ## Docs to update on completion
 
-`skills/video-production/reference.md` (new commands + the inspection workflow), `README.md` status
-line, version bump.
+- `skills/video-production/SKILL.md` + `reference.md` — new commands **and** the "Intended use"
+  guidance above (a clearly-headed section: research-only, not for our own renders, not in the
+  pipeline). This is a required deliverable, not an afterthought.
+- Each command's `commander` description (`--help`) leads with "analyse an external reference
+  video".
+- `README.md` status line; version bump.
