@@ -58,6 +58,29 @@ describe("renderVideo", () => {
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
 
+  it("composites an app cut-in over the backdrop in avatar mode without crashing", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-rapp-"));
+    await generateMock(join(outDir, "avatar.mp4"));
+    await generateMock(join(outDir, "app.mp4")); // stand-in for the app screen recording
+    const props: KinoProps = {
+      theme,
+      fps: 30,
+      avatar: "avatar.mp4",
+      avatarWindows: [{ fromSec: 0, toSec: 1, audioStartSec: 0 }],
+      voTrack: null,
+      logo: null,
+      background: { kind: "mesh", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
+      disclosure: "test",
+      segments: [
+        { kind: "avatar", caption: "hook", startSec: 0, endSec: 1 },
+        { kind: "app", asset: "app.mp4", caption: "cut-in", startSec: 1, endSec: 2, shot: "static", transition: "fly-left" },
+      ],
+    };
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "app" });
+    expect(outs).toHaveLength(1);
+    expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
+  }, 180000);
+
   it("renders an animated canvas-preset background", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-rbg-"));
     const props: KinoProps = {

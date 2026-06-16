@@ -53,6 +53,8 @@ Faceless branding (optional):
 
 ## Faceless backgrounds
 Frame-driven (deterministic) layers behind the hero text; a center scrim is auto-applied for legibility.
+The backdrop is always the base layer (even in avatar mode), so app cut-in transitions reveal the brand
+background rather than black — the avatar covers it on camera.
 - `glow` — animated CSS brand glows (zero-config default).
 - `image` — static `facelessBackdrop` with a slow Ken-Burns.
 - `mesh` / `aurora` / `particles` / `grid` — built-in Canvas2D presets, auto-coloured from the brand.
