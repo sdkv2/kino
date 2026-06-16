@@ -71,3 +71,19 @@ export function pickFrames(segments: SegLike[], fps: number, sel: FrameSelection
   }
   return segments.map((s, i) => ({ frame: mid(s, fps), label: `${i} ${s.kind} ${s.startSec.toFixed(1)}s` }));
 }
+
+// Frame timestamps across a clip of known duration when the agent doesn't know exact times:
+// `count` → N points spaced evenly and inset from both ends; `every` → one every N seconds,
+// centred. Precedence count > every. Empty when neither is set.
+export function pickIntervalTimes(durationSec: number, opts: { count?: number; every?: number }): number[] {
+  if (opts.count && opts.count > 0) {
+    const step = durationSec / (opts.count + 1);
+    return Array.from({ length: opts.count }, (_, i) => round2(step * (i + 1)));
+  }
+  if (opts.every && opts.every > 0) {
+    const out: number[] = [];
+    for (let t = opts.every / 2; t < durationSec; t += opts.every) out.push(round2(t));
+    return out.length ? out : [round2(durationSec / 2)];
+  }
+  return [];
+}
