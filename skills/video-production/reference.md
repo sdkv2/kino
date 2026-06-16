@@ -7,12 +7,31 @@
 - `kino elements` — list overlay elements (logo …) + their layout/tween controls
 - `kino still <spec> [--at <s,…> | --segment <n>] [--real] [--format]` — render one frame fast (no encode)
 - `kino storyboard <spec> [--real] [--format]` — one still per beat tiled into a labeled contact sheet
-- `kino frames <video> --at <s,…> [--montage] [--out <dir>]` — extract frames from a rendered video
+- `kino frames <video> [--at|--count|--every] [--montage]` — extract stills from any video
+- `kino transcribe <video> [--format …] [--out …]` — **(reference videos only)** speech → timestamped transcript
+- `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
 - `kino fonts` — list curated fonts (with descriptions + cache status)
 - `kino projects [--new <name> --brand <brand>]` — list or scaffold projects
 - `kino init [brand]` · `kino doctor`
+
+## Analysing reference videos (research only)
+
+`transcribe` and `scan` exist to study **other people's** videos — competitor ads, trending /
+reference clips (e.g. what `using-spider` downloads). They are a **research tool, not a production
+step.**
+
+- `kino transcribe <video> [--format json|srt|vtt|text] [--out <file>]` — speech → timestamped
+  transcript (`{ text, words:[{word,start,end}], segments:[…] }`). JSON is the agent-readable
+  default; cached by audio content-hash.
+- `kino scan <video> [--count N | --every S]` — transcript + one frame per segment (or evenly) +
+  a labeled contact sheet, in one call. "View this clip."
+- `kino frames <video> --count N | --every S | --at 1,3,5 [--montage]` — pull stills.
+
+**Do NOT** run these on kino's own renders (we already have exact word timings from TTS — use
+`kino inspect`/`frames`/`still`), and never wire them into `build` or spec authoring. STT is
+ElevenLabs Scribe (~$0.40/hr); needs `ELEVENLABS_API_KEY`.
 
 ## Projects (file scoping)
 Keep campaigns from cluttering each other. A **workspace** holds shared `brands/` + `.kino-cache/`;
