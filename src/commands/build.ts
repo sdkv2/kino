@@ -207,7 +207,7 @@ export async function prepare(
     const base = {
       kind: seg.kind,
       asset: seg.kind === "app" ? seg.asset : undefined,
-      caption: seg.caption,
+      caption: seg.caption ?? "",
       startSec: vo.timings[i].startSec,
       // hold visuals to the next beat's start so nothing blinks off during the inter-beat VO gap
       endSec: i + 1 < spec.segments.length ? vo.timings[i + 1].startSec : vo.timings[i].endSec,
@@ -230,7 +230,11 @@ export async function prepare(
           : undefined,
       };
     }
-    return { ...base, shot: seg.shot as Shot | undefined };
+    if (seg.kind === "avatar") {
+      return { ...base, shot: seg.shot as Shot | undefined };
+    }
+    // motion segment: no shot/transition/overlay resolution in v1
+    return { ...base };
   });
 
   const props: KinoProps = {
