@@ -160,5 +160,7 @@ describe("kino motion help", () => {
     expect(t).toMatch(/--kino-mint/);
     expect(t).toMatch(/@keyframes/); // names what is banned
     expect(t).toMatch(/data:/); // inline assets guidance
+    expect(t).toMatch(/stagger/i); // staggering guidance
+    expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
   });
 });
