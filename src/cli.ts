@@ -116,6 +116,11 @@ program
   .action(async () => (await import("./commands/elements.js")).elements());
 
 program
+  .command("motion")
+  .description("Show how to author motion-graphic HTML files + the CSS-variable contract")
+  .action(async () => (await import("./commands/motion.js")).motion());
+
+program
   .command("init [brand]")
   .description("Scaffold .env, a brand config, and project dirs")
   .action(async (b) => (await import("./commands/init.js")).init(b));
