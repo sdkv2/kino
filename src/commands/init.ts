@@ -10,25 +10,28 @@ export async function init(brand = "default"): Promise<void> {
   }
   const envf = join(p.workspaceRoot, ".env");
   if (!existsSync(envf)) writeFileSync(envf, "ELEVENLABS_API_KEY=\nHEYGEN_API_KEY=\n");
-  const bf = join(p.brandDir(brand), "brand.json");
+  const bf = join(p.brandDir(brand), "brand.md");
   if (!existsSync(bf)) {
     writeFileSync(
       bf,
-      JSON.stringify(
-        {
-          name: brand,
-          colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64" },
-          disclosure: "AI avatar & voice · sample data",
-          bannedPhrases: ["get the job", "guaranteed interview", "land more interviews"],
-          defaultVoice: "",
-          defaultLook: "",
-          voiceAliases: {},
-          lookAliases: {},
-        },
-        null,
-        2,
-      ),
+      [
+        "---",
+        `name: ${brand}`,
+        'colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64" }',
+        "# disclosure: AI-generated   # optional — shown on every video when set",
+        "# defaultVoice: <elevenlabs-voice-id>   # or set per spec",
+        "bannedPhrases: [get the job, guaranteed interview, land more interviews]",
+        "---",
+        `# ${brand} — brand guidelines`,
+        "",
+        "- Voice: (describe tone — e.g. confident, plain-spoken, short sentences)",
+        "- Look: (palette usage, gradients, what to avoid)",
+        "- Captions: (phrase vs word-by-word; what to emphasise)",
+        "",
+        "_All frontmatter is optional; anything omitted uses kino defaults._",
+        "",
+      ].join("\n"),
     );
   }
-  log.ok(`Initialised brand '${brand}'. Fill .env, brand.json, and add assets/specs.`);
+  log.ok(`Initialised brand '${brand}'. Fill .env and brands/${brand}/brand.md, then add assets/specs.`);
 }
