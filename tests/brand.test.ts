@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadBrand, loadBrandDoc, DEFAULT_BRAND, parseBrandMd } from "../src/config/brand.js";
-import { resolveVoice, validateSpec } from "../src/spec/validate.js";
+import { resolveVoice, validateSpec, resolveProvider } from "../src/spec/validate.js";
 import type { Spec } from "../src/spec/schema.js";
 import { brandText, listBrands } from "../src/commands/brand.js";
 import { init } from "../src/commands/init.js";
@@ -96,6 +96,12 @@ describe("kino brand", () => {
     const dir = brandDirWith("---\nname: acme\n---\nx\n");
     const brandsRoot = join(dir, "..");
     expect(listBrands(brandsRoot)).toContain("acme");
+  });
+});
+
+describe("resolveProvider default", () => {
+  it("defaults to faceless (none) when nothing sets a provider — a brandless build just works", () => {
+    expect(resolveProvider({} as Spec, DEFAULT_BRAND)).toBe("none");
   });
 });
 
