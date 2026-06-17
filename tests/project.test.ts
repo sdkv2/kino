@@ -49,6 +49,14 @@ describe("resolveProject", () => {
     expect(p.projectRoot).toBe(join(ws, "projects", "launch"));
     expect(p.isProject).toBe(true);
   });
+  it("allows nested asset paths but rejects ones that escape the project assets dir (path traversal)", () => {
+    const ws = mkdtempSync(join(tmpdir(), "kino-trav-"));
+    mkdirSync(join(ws, "brands"), { recursive: true });
+    const p = resolveProject({ cwd: ws });
+    expect(p.assetPath("screens/x.png")).toBe(join(ws, "assets", "screens", "x.png"));
+    expect(() => p.assetPath("../../../../etc/passwd")).toThrow(/escape/i);
+    expect(() => p.assetPath("motion/../../../secret.js")).toThrow(/escape/i);
+  });
 });
 
 describe("ProjectConfigSchema", () => {

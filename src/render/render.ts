@@ -2,7 +2,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import type { KinoProps } from "./props.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -19,6 +19,14 @@ const DIMS: Record<string, { width: number; height: number }> = {
 // instead of overwriting the default.
 export function variantName(title: string, tag?: string): string {
   return tag ? `${title}-${tag}` : title;
+}
+
+// bundle() writes a fresh webpack bundle (~17MB) to an OS temp dir on every render and never cleans
+// it up — hundreds of renders fill the disk (ENOSPC). Remove it after each render. Guarded on the
+// remotion bundle name so an unexpected serveUrl is never deleted.
+export function cleanupServeUrl(serveUrl: string): void {
+  if (!serveUrl || !/remotion-webpack-bundle/.test(serveUrl)) return;
+  rmSync(serveUrl, { recursive: true, force: true });
 }
 
 export interface RenderOpts {
@@ -41,42 +49,50 @@ export interface StillsOpts {
 export async function renderStills({ props, publicDir, format, frames, outDir }: StillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const serveUrl = await bundle({ entryPoint: ENTRY, publicDir });
-  const inputProps = props as unknown as Record<string, unknown>;
-  const { width, height } = DIMS[format];
-  const comp = await selectComposition({ serveUrl, id: "KinoVideo", inputProps });
-  const maxFrame = comp.durationInFrames - 1;
-  const outs: string[] = [];
-  for (const { frame, name } of frames) {
-    const out = join(outDir, `${name}.png`);
-    await renderStill({
-      composition: { ...comp, width, height },
-      serveUrl,
-      output: out,
-      frame: Math.min(maxFrame, Math.max(0, frame)),
-      inputProps,
-    });
-    outs.push(out);
+  try {
+    const inputProps = props as unknown as Record<string, unknown>;
+    const { width, height } = DIMS[format];
+    const comp = await selectComposition({ serveUrl, id: "KinoVideo", inputProps });
+    const maxFrame = comp.durationInFrames - 1;
+    const outs: string[] = [];
+    for (const { frame, name } of frames) {
+      const out = join(outDir, `${name}.png`);
+      await renderStill({
+        composition: { ...comp, width, height },
+        serveUrl,
+        output: out,
+        frame: Math.min(maxFrame, Math.max(0, frame)),
+        inputProps,
+      });
+      outs.push(out);
+    }
+    return outs;
+  } finally {
+    cleanupServeUrl(serveUrl);
   }
-  return outs;
 }
 
 export async function renderVideo({ props, publicDir, formats, outDir, title }: RenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const serveUrl = await bundle({ entryPoint: ENTRY, publicDir });
-  const inputProps = props as unknown as Record<string, unknown>;
-  const outputs: string[] = [];
-  for (const fmt of formats) {
-    const { width, height } = DIMS[fmt];
-    const comp = await selectComposition({ serveUrl, id: "KinoVideo", inputProps });
-    const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
-    await renderMedia({
-      composition: { ...comp, width, height },
-      serveUrl,
-      codec: "h264",
-      inputProps,
-      outputLocation: out,
-    });
-    outputs.push(out);
+  try {
+    const inputProps = props as unknown as Record<string, unknown>;
+    const outputs: string[] = [];
+    for (const fmt of formats) {
+      const { width, height } = DIMS[fmt];
+      const comp = await selectComposition({ serveUrl, id: "KinoVideo", inputProps });
+      const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
+      await renderMedia({
+        composition: { ...comp, width, height },
+        serveUrl,
+        codec: "h264",
+        inputProps,
+        outputLocation: out,
+      });
+      outputs.push(out);
+    }
+    return outputs;
+  } finally {
+    cleanupServeUrl(serveUrl);
   }
-  return outputs;
 }

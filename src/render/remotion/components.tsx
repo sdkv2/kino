@@ -6,6 +6,7 @@ import { activeWordIndex, isHighlightWord, normWord } from "../captions";
 import { paramsAt } from "../bgparams";
 import { CanvasBackground } from "./backgrounds/CanvasBackground";
 import { getPreset, type DrawFn } from "./backgrounds/presets";
+import { CAPTION_BOTTOM } from "../captionLayout";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
@@ -35,7 +36,7 @@ export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: strin
   const f = useCurrentFrame();
   const s = spring({ frame: f, fps: 30, config: { damping: 14, mass: 0.6 } });
   return (
-    <div style={{ position: "absolute", left: 48, right: 48, bottom: 470, display: "flex", justifyContent: "center" }}>
+    <div style={{ position: "absolute", left: 48, right: 48, bottom: CAPTION_BOTTOM, display: "flex", justifyContent: "center" }}>
       <span
         style={{
           transform: `scale(${interpolate(s, [0, 1], [0.7, 1])})`,
@@ -283,7 +284,7 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
     </div>
   );
   return (
-    <div style={{ position: "absolute", left: 56, right: 56, bottom: 470, display: "flex", justifyContent: "center" }}>{row}</div>
+    <div style={{ position: "absolute", left: 56, right: 56, bottom: CAPTION_BOTTOM, display: "flex", justifyContent: "center" }}>{row}</div>
   );
 };
 

@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
+import { captionBandBottom } from "../captionLayout";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
@@ -71,7 +72,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           const dur = f(s.endSec) - f(s.startSec);
           return (
             <Sequence key={`m${i}`} from={f(s.startSec)} durationInFrames={dur}>
-              <MotionGraphic data={s.motion!} durationFrames={dur} t={theme} />
+              <MotionGraphic data={s.motion!} durationFrames={dur} t={theme} captionBottom={captionBandBottom(s, !!avatar)} />
             </Sequence>
           );
         })}
@@ -83,7 +84,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           const dur = f(s.endSec) - f(s.startSec);
           return (
             <Sequence key={`mo${i}`} from={f(s.startSec)} durationInFrames={dur}>
-              <MotionGraphic data={s.motionOverlay!} durationFrames={dur} t={theme} />
+              <MotionGraphic data={s.motionOverlay!} durationFrames={dur} t={theme} captionBottom={captionBandBottom(s, !!avatar)} />
             </Sequence>
           );
         })}
