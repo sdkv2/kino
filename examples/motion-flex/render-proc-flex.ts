@@ -19,6 +19,17 @@ const theme = {
   captionFontSize: 74, captionStroke: 9,
 };
 
+// Per-bar grow tweens for the chart: 0 → 1, eased (overshoot = punchy pop, not stiff), staggered ~0.12s
+// apart. JSON owns the timing; chart.js multiplies each data-driven bar height by its var(--g<i>).
+const chartParams: Record<string, number> = {};
+const chartKeys: { at: number; params: Record<string, number>; ease?: "overshoot" | "easeInOut" }[] = [];
+for (let i = 0; i < 6; i++) {
+  const s = 0.3 + i * 0.12;
+  chartParams[`g${i}`] = 0;
+  chartKeys.push({ at: s, params: { [`g${i}`]: 0 } });
+  chartKeys.push({ at: s + 0.8, params: { [`g${i}`]: 1 }, ease: "overshoot" });
+}
+
 const props: KinoProps = {
   theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
   background: {
@@ -32,7 +43,7 @@ const props: KinoProps = {
     {
       kind: "motion", caption: "", startSec: 0, endSec: 5.0,
       motion: resolveMotionGraphic(
-        { source: "proc/chart.js", triggers: [{ at: 0.2, action: "pulse" }, { at: 2.6, action: "pulse" }] },
+        { source: "proc/chart.js", params: chartParams, keyframes: chartKeys, triggers: [{ at: 0.2, action: "pulse" }, { at: 1.9, action: "pulse" }] },
         project,
       ),
     },
@@ -61,8 +72,8 @@ if (process.env.FLEX_VIDEO) {
   console.log("video:", outs.join(", "));
 } else {
   const frames = [
-    { frame: 75, name: "p01-chart" },   // chart mid-grow (progress ~0.5)
-    { frame: 135, name: "p01b-chart" }, // chart settled
+    { frame: 30, name: "p01-chart" },    // chart mid grow-in (bars easing up / overshooting)
+    { frame: 75, name: "p01b-chart" },   // chart settled
     { frame: 250, name: "p02-field" },  // spiral (later, fuller reveal)
     { frame: 360, name: "p03-wave" },   // wave + wordmark
   ];
