@@ -6,6 +6,8 @@ import { loadBrand, loadBrandDoc, DEFAULT_BRAND, parseBrandMd } from "../src/con
 import { resolveVoice, validateSpec } from "../src/spec/validate.js";
 import type { Spec } from "../src/spec/schema.js";
 import { brandText, listBrands } from "../src/commands/brand.js";
+import { init } from "../src/commands/init.js";
+import { readFileSync as rfs, existsSync as exists } from "node:fs";
 
 function brandDirWith(md: string) {
   const root = mkdtempSync(join(tmpdir(), "kino-brand-"));
@@ -94,5 +96,22 @@ describe("kino brand", () => {
     const dir = brandDirWith("---\nname: acme\n---\nx\n");
     const brandsRoot = join(dir, "..");
     expect(listBrands(brandsRoot)).toContain("acme");
+  });
+});
+
+describe("kino init scaffolds brand.md", () => {
+  it("writes a brand.md (frontmatter + guidelines) and loads cleanly", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "kino-init-"));
+    const prev = process.cwd();
+    process.chdir(cwd);
+    try {
+      await init("acme");
+      const md = join(cwd, "brands", "acme", "brand.md");
+      expect(exists(md)).toBe(true);
+      expect(rfs(md, "utf8")).toMatch(/^---/);
+      expect(loadBrand(join(cwd, "brands", "acme")).name).toBe("acme");
+    } finally {
+      process.chdir(prev);
+    }
   });
 });
