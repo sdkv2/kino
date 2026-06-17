@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import DOMPurify from "isomorphic-dompurify";
 import type { MotionGraphicProps, BgKeyframe, BgTrigger, BgParamValue } from "./props.js";
+import { sanitizeMotionHtml } from "./sanitizeMotion.js";
+
+// Re-exported for back-compat (callers/tests import it from here).
+export { sanitizeMotionHtml };
 
 // Determinism + safety denylist. Each pattern → a message that tells the agent what to do instead.
 // Motion comes from CSS variables or from @keyframes that kino force-pauses + scrubs (see the
@@ -40,21 +43,18 @@ const BANNED_JS: { re: RegExp; msg: string }[] = [
   { re: /\bprocess\s*[.\[]/, msg: "process isn't available — render(env) runs in the browser, not Node" },
   { re: /\b(globalThis|window|document)\s*[.\[]/, msg: "globalThis/window/document aren't allowed — return an HTML string, don't touch the DOM" },
   { re: /\son\w+\s*=/i, msg: "inline event handlers (on*=) aren't allowed in generated markup" },
+  // Dynamic code execution + obfuscation. Best-effort hardening against bracket-notation / runtime
+  // string-building used to dodge the dotted Date.now/Math.random rules above (a denylist can't be
+  // exhaustive — the per-frame output is also DOMPurify-sanitized, and a true sandbox is the real fix).
+  { re: /\beval\s*\(/, msg: "eval() isn't allowed — render(env) must be a pure function of env" },
+  { re: /\bFunction\s*\(/, msg: "the Function constructor isn't allowed — render(env) must be a pure function of env" },
+  { re: /\b(atob|btoa)\s*\(/, msg: "atob/btoa aren't allowed — don't decode and execute strings at render time" },
+  { re: /\b(Date|Math)\s*\[/, msg: "computed access to Date/Math isn't allowed — use dotted Math.* geometry and env.t / env.frame" },
 ];
 
 // Returns a list of human-readable violations for a Tier-2 procedural (JS) source (empty = clean).
 export function lintMotionJs(src: string): string[] {
   return BANNED_JS.filter((b) => b.re.test(src)).map((b) => b.msg);
-}
-
-// Robust strip of script/handlers/dangerous tags while keeping the agent's <style> + structural markup.
-export function sanitizeMotionHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
-    ADD_TAGS: ["style"],
-    FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "base"],
-    ALLOW_DATA_ATTR: true,
-    FORCE_BODY: true,
-  });
 }
 
 export interface MotionGraphicRefInput {
