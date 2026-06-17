@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lintMotionHtml, sanitizeMotionHtml, resolveMotionGraphic } from "../src/render/motiongraphic.js";
+import { lintMotionHtml, sanitizeMotionHtml, resolveMotionGraphic, lintMotionJs } from "../src/render/motiongraphic.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,6 +61,27 @@ describe("lintMotionHtml", () => {
   });
 });
 
+describe("lintMotionJs", () => {
+  it("passes a clean render(env) body", () => {
+    expect(lintMotionJs("const n = env.params.count; return `<div>${n}</div>`;")).toEqual([]);
+  });
+  it("allows Math.* geometry", () => {
+    expect(lintMotionJs("return Math.sin(env.t) + Math.cos(env.frame) + Math.round(env.progress)")).toEqual([]);
+  });
+  it("rejects Math.random / Date.now / new Date", () => {
+    expect(lintMotionJs("return Math.random()")[0]).toMatch(/Math\.random/);
+    expect(lintMotionJs("return Date.now()")[0]).toMatch(/Date\.now/i);
+    expect(lintMotionJs("return new Date()")[0]).toMatch(/new Date/i);
+  });
+  it("rejects timers, network, modules, and Node/DOM globals", () => {
+    expect(lintMotionJs("setTimeout(()=>{},1)").length).toBeGreaterThan(0);
+    expect(lintMotionJs("fetch('/x')").length).toBeGreaterThan(0);
+    expect(lintMotionJs("require('fs')").length).toBeGreaterThan(0);
+    expect(lintMotionJs("const k = process.env.KEY").length).toBeGreaterThan(0);
+    expect(lintMotionJs("document.body.innerHTML = ''").length).toBeGreaterThan(0);
+  });
+});
+
 describe("sanitizeMotionHtml", () => {
   it("strips <script> and event handlers but keeps <style> + structure", () => {
     const out = sanitizeMotionHtml(`<style>.b{color:red}</style><div class="b" onclick="x()">hi</div><script>bad()</script>`);
@@ -99,6 +120,16 @@ describe("resolveMotionGraphic", () => {
     const project = projWith("motion/bad.html", `<style>.b{animation-play-state:running}</style>`);
     expect(() => resolveMotionGraphic({ source: "motion/bad.html" }, project)).toThrow(/animation-play-state/i);
   });
+  it("routes a .js source to proc (linted, not sanitized) with empty html", () => {
+    const project = projWith("motion/gen.js", "return `<div class=\"x\"></div>`;");
+    const props = resolveMotionGraphic({ source: "motion/gen.js" }, project);
+    expect(props.proc).toContain("<div");
+    expect(props.html).toBe("");
+  });
+  it("throws listing the JS lint violation for a banned construct in a .js source", () => {
+    const project = projWith("motion/bad.js", "return Math.random()");
+    expect(() => resolveMotionGraphic({ source: "motion/bad.js" }, project)).toThrow(/Math\.random/);
+  });
 });
 
 import { assertMotionGraphics } from "../src/spec/validate.js";
@@ -126,6 +157,11 @@ describe("assertMotionGraphics", () => {
     const project = projWith("motion/bad.html", `<style>.b{transition:all .3s}</style>`);
     const spec = { segments: [{ kind: "motion", source: "motion/bad.html", text: "x" }] } as unknown as Spec;
     expect(() => assertMotionGraphics(spec, project)).toThrow(/segment\[0\].*transition/i);
+  });
+  it("lints a .js motion source with the JS denylist", () => {
+    const project = projWith("motion/bad.js", "return fetch('/x')");
+    const spec = { segments: [{ kind: "motion", source: "motion/bad.js", text: "x" }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).toThrow(/network access/i);
   });
 });
 
@@ -167,6 +203,8 @@ describe("kino motion help", () => {
     expect(t).toMatch(/@keyframes/); // the scrub example uses @keyframes
     expect(t).toMatch(/kino-anim/); // the @keyframes scrub recipe
     expect(t).toMatch(/kino-cliptext/); // the background-clip:text glyph-edge helper
+    expect(t).toMatch(/render\(env\)/); // the procedural (.js) section
+    expect(t).toMatch(/\.js/);
     expect(t).toMatch(/data:/); // inline assets guidance
     expect(t).toMatch(/stagger/i); // staggering guidance
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe

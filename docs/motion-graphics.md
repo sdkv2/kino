@@ -11,6 +11,7 @@ Run `kino motion` for the same contract inline.
 - [Scrubbed @keyframes](#scrubbed-keyframes)
 - [Staggering reveals](#staggering-reveals)
 - [Gradient-clipped text (`kino-cliptext`)](#gradient-clipped-text-kino-cliptext)
+- [Procedural graphics (Tier 2)](#procedural-graphics-tier-2)
 - [Determinism & safety (the lint)](#determinism--safety-the-lint)
 - [Authoring tips](#authoring-tips)
 - [Worked examples](#worked-examples)
@@ -134,6 +135,30 @@ Gradient-filled text via `background-clip:text` only paints the gradient over th
 ```
 
 It's opt-in by design: a CSS selector can't match *computed* `background-clip`, and blanket padding would break `margin:auto` centering and tight letter-spaced runs. (Also: set the gradient with `background-image`, not the `background` shorthand — the shorthand resets `background-clip`.)
+
+## Procedural graphics (Tier 2)
+
+When a graphic needs loops or computed geometry (a chart of N bars, a ring of N dots, a scatter), point
+`source` at a **`.js`** file instead of `.html`. Its body is the body of `render(env)` and must **return
+an HTML string**; kino evaluates it in the browser **every frame** and injects the result into the same
+Shadow DOM, so the returned markup can still use the CSS-variable contract, `.kino-anim`, and
+`.kino-cliptext`.
+
+```js
+// assets/motion/bars.js  — body of render(env) → returns HTML
+const data = [40, 75, 55, 90];                 // structured data lives in the file; params stay scalar
+return data.map((h, i) =>
+  `<div class="bar kino-anim" style="left:${8 + i * 22}%;height:${h}%;--kino-delay:${i * 0.08}"></div>`
+).join("") +
+`<style>.bar{position:absolute;bottom:10%;width:8%;background:var(--kino-mint);
+  transform-origin:bottom;transform:scaleY(var(--progress))}</style>`;
+```
+
+`env = { frame, t, progress, pulse, params, palette:{mint,green,night,white,gold,font}, width, height }`.
+
+It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
+the build lints the source and rejects `Date.now`/`Math.random`/timers/`fetch`/`import`/`require`/`process`
+and direct `document`/`window` access. Reference it from the spec exactly like a `.html` graphic.
 
 ## Determinism & safety (the lint)
 

@@ -131,3 +131,58 @@ describe("empty disclosure", () => {
     expect(existsSync(outs[0])).toBe(true);
   }, 180000);
 });
+
+const greenOf = (s: string) => {
+  const m = s.match(/srgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (!m) throw new Error(`Unexpected pixel format: ${s}`);
+  return Number(m[2]);
+};
+
+describe("motion graphics procedural (Tier 2)", () => {
+  it("renders a procedural graphic driven by env.progress, deterministically", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-proc-"));
+    // full-frame block whose green channel = round(progress*255); sampling the centre reads progress.
+    const proc = "return `<div style=\"position:absolute;inset:0;background:rgb(0,${Math.round(env.progress*255)},0)\"></div>`;";
+    const props: KinoProps = {
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: { html: "", proc, params: {}, keyframes: [], triggers: [] } }],
+    };
+    // beat 0..2s = 60 frames; frame 6 → ~10% (dark green), frame 54 → ~90% (bright green).
+    const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "proc-pub-")), format: "9:16",
+      frames: [{ frame: 6, name: "p-early" }, { frame: 54, name: "p-late" }, { frame: 54, name: "p-late2" }], outDir });
+    const early = sampleCenter(outs[0]);
+    const late = sampleCenter(outs[1]);
+    const late2 = sampleCenter(outs[2]);
+    expect(early).not.toBe(late);          // env.progress advanced the generated colour
+    expect(late).toBe(late2);              // same frame twice → identical (deterministic)
+    expect(greenOf(early)).toBeLessThan(80);     // ~10%
+    expect(greenOf(late)).toBeGreaterThan(180);  // ~90%
+  }, 180000);
+
+  it("renders a blank frame (no crash) when render(env) throws", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-procerr-"));
+    const props: KinoProps = {
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: { html: "", proc: "throw new Error('boom');", params: {}, keyframes: [], triggers: [] } }],
+    };
+    const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "procerr-pub-")), format: "9:16", frames: [{ frame: 30, name: "err" }], outDir });
+    expect(existsSync(outs[0])).toBe(true);
+  }, 180000);
+
+  it("disables CSS transitions so markup can't animate on the wall clock", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-trans-"));
+    // opacity bound to --progress with a long transition; transition:none must snap it to the frame's
+    // value, so the same frame rendered twice is identical.
+    const html = `<style>.b{position:absolute;inset:0;background:#00ff00;opacity:var(--progress);transition:opacity 10s linear}</style><div class="b"></div>`;
+    const props: KinoProps = {
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: { html, params: {}, keyframes: [], triggers: [] } }],
+    };
+    const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "trans-pub-")), format: "9:16",
+      frames: [{ frame: 40, name: "tr" }, { frame: 40, name: "tr2" }], outDir });
+    expect(sampleCenter(outs[0])).toBe(sampleCenter(outs[1]));
+  }, 180000);
+});
