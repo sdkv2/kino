@@ -203,6 +203,8 @@ describe("kino motion help", () => {
     expect(t).toMatch(/@keyframes/); // the scrub example uses @keyframes
     expect(t).toMatch(/kino-anim/); // the @keyframes scrub recipe
     expect(t).toMatch(/kino-cliptext/); // the background-clip:text glyph-edge helper
+    expect(t).toMatch(/render\(env\)/); // the procedural (.js) section
+    expect(t).toMatch(/\.js/);
     expect(t).toMatch(/data:/); // inline assets guidance
     expect(t).toMatch(/stagger/i); // staggering guidance
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
