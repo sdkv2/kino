@@ -3,6 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadBrand, loadBrandDoc, DEFAULT_BRAND, parseBrandMd } from "../src/config/brand.js";
+import { resolveVoice, validateSpec } from "../src/spec/validate.js";
+import type { Spec } from "../src/spec/schema.js";
 
 function brandDirWith(md: string) {
   const root = mkdtempSync(join(tmpdir(), "kino-brand-"));
@@ -59,5 +61,22 @@ describe("loadBrandDoc", () => {
     const { brand, body } = loadBrandDoc(dir);
     expect(brand.name).toBe("acme");
     expect(body).toContain("punchy");
+  });
+});
+
+describe("resolveVoice (lazy)", () => {
+  it("returns '' when no voice is set anywhere (no throw)", () => {
+    expect(resolveVoice({} as Spec, DEFAULT_BRAND)).toBe("");
+  });
+  it("resolves spec.voice through aliases", () => {
+    expect(resolveVoice({ voice: "will" } as Spec, { ...DEFAULT_BRAND, voiceAliases: { will: "v9" } })).toBe("v9");
+  });
+});
+
+describe("validateSpec (no eager look requirement)", () => {
+  it("does not throw for a faceless spec with no voice/look", () => {
+    const spec = { segments: [{ kind: "avatar", text: "hi", caption: "c" }] } as unknown as Spec;
+    const project = { assetPath: (r: string) => "/nope/" + r } as unknown as Parameters<typeof validateSpec>[2];
+    expect(() => validateSpec(spec, DEFAULT_BRAND, project)).not.toThrow();
   });
 });

@@ -4,7 +4,7 @@ import { dirname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
-import { loadBrand, type Brand } from "../config/brand.js";
+import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
 import { SpecSchema, type Spec } from "../spec/schema.js";
 import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
@@ -83,8 +83,7 @@ export async function prepare(
   // A project.json assigns a brand + optional default overrides (layered under spec/CLI).
   const pc = project.projectConfigPath ? loadProjectConfig(project.projectConfigPath) : undefined;
   const brandName = spec.brand ?? pc?.brand;
-  if (!brandName) throw new Error("No brand: set spec.brand or a brand in the project's project.json");
-  const rawBrand = loadBrand(project.brandDir(brandName));
+  const rawBrand = brandName ? loadBrand(project.brandDir(brandName)) : DEFAULT_BRAND;
   const brand: Brand = {
     ...rawBrand,
     defaultProvider: pc?.provider ?? rawBrand.defaultProvider,
@@ -94,10 +93,13 @@ export async function prepare(
   };
   validateSpec(spec, brand, project);
   const provider = (opts.provider as Provider | undefined) ?? resolveProvider(spec, brand);
+  const mock = !!opts.mock;
   const voiceId = resolveVoice(spec, brand);
+  if (!mock && !voiceId) {
+    throw new Error("No voice for a real build — set spec.voice or the brand's defaultVoice (or use --mock).");
+  }
   const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4">;
   const cache = new Cache(project.cache);
-  const mock = !!opts.mock;
 
   log.info(`Building ${spec.title} · ${provider}${mock ? " · MOCK — no API spend" : ""}`);
 
