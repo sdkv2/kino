@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.12.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.13.0");
 
 program
   .command("build <spec>")
@@ -114,6 +114,11 @@ program
   .command("elements")
   .description("List overlay elements (logo …) + their layout/tween controls")
   .action(async () => (await import("./commands/elements.js")).elements());
+
+program
+  .command("motion")
+  .description("Show how to author motion-graphic HTML files + the CSS-variable contract")
+  .action(async () => (await import("./commands/motion.js")).motion());
 
 program
   .command("init [brand]")

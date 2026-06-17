@@ -22,7 +22,7 @@ export interface WordTiming {
 }
 
 export interface KinoSegment {
-  kind: "avatar" | "app";
+  kind: "avatar" | "app" | "motion";
   asset?: string;
   caption: string;
   startSec: number;
@@ -35,6 +35,8 @@ export interface KinoSegment {
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
   captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)
   kickerKeyframes?: BgKeyframe[]; // tween the kicker (app segments)
+  motion?: MotionGraphicProps; // resolved graphic for kind === "motion"
+  motionOverlay?: MotionGraphicProps; // resolved overlay graphic layered on this beat
 }
 
 // Where an avatar clip sits on the main timeline + which slice of the (trimmed) clip to play.
@@ -62,6 +64,14 @@ export interface BackgroundProps {
   params: Record<string, BgParamValue>; // base param values (tweened by keyframes)
   keyframes: BgKeyframe[]; // agent-authored param tweens over time
   triggers: BgTrigger[]; // agent-authored one-shot actions (e.g. pulse)
+}
+
+// A resolved motion graphic: the sanitized HTML plus the JSON-owned timing controls.
+export interface MotionGraphicProps {
+  html: string; // sanitized, self-contained (markup + one inline <style>)
+  params: Record<string, BgParamValue>; // base CSS-variable values
+  keyframes: BgKeyframe[]; // tween params over time (--<name>)
+  triggers: BgTrigger[]; // one-shot pulses (--pulse)
 }
 
 // Brand mark overlay (faceless talking beats): resolved layout + an agent keyframe track.

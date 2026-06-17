@@ -1,0 +1,62 @@
+<style>
+  /* Authored in vw (width-relative) units: kino's render canvas is 1080px wide, so 1vw = 10.8px and every
+     value resolves to its intended pixel size in the video — and the whole graphic scales to ANY width, so
+     a standalone preview at any panel size stays faithful (nothing clips). */
+  .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
+         font-family:var(--kino-font);color:var(--kino-white);
+         opacity:clamp(0, calc((1 - var(--progress)) * 10), 1)}
+  /* whole system eases in (--enter, easeInOut in spec) */
+  .sys{position:relative;width:85.185vw;height:85.185vw;display:flex;align-items:center;justify-content:center;
+       opacity:clamp(0, calc(var(--enter) * 2), 1);
+       transform:rotate(calc((1 - var(--enter)) * -22deg)) scale(calc(.8 + var(--enter) * .2))}
+  .ring{position:absolute;border-radius:50%;border:.185vw solid rgba(128,226,180,.13);inset:50% 50%;
+        opacity:calc(.4 + (sin(var(--t) * 0.8) * .5 + .5) * .4)}
+  .r1{width:39.815vw;height:39.815vw;margin:-19.907vw} .r2{width:60.185vw;height:60.185vw;margin:-30.093vw} .r3{width:83.333vw;height:83.333vw;margin:-41.667vw}
+  /* dots revolve continuously off --t at their own rate + phase (deterministic, no RAF) */
+  .orb{position:absolute;inset:0}
+  .oa{transform:rotate(calc(var(--t) * 24deg))}
+  .ob{transform:rotate(calc(var(--t) * -18deg + 120deg))}
+  .oc{transform:rotate(calc(var(--t) * 13deg + 240deg))}
+  .od{transform:rotate(calc(var(--t) * -30deg + 60deg))}
+  .dot{position:absolute;top:50%;left:50%;border-radius:50%;background:currentColor;
+       box-shadow:0 0 calc(1.481vw + var(--pulse) * 2.407vw + (sin(var(--t) * 2) * .5 + .5) * .926vw) currentColor;
+       transform:scale(calc(1 + var(--pulse) * .3))}
+  .d1{width:2.963vw;height:2.963vw;color:var(--kino-mint);margin:-1.481vw 0 0 18.056vw}
+  .d2{width:2.222vw;height:2.222vw;color:var(--gold);margin:-1.111vw 0 0 28.611vw}
+  .d3{width:1.667vw;height:1.667vw;color:var(--kino-white);margin:-.833vw 0 0 40.833vw}
+  .d4{width:2.407vw;height:2.407vw;color:var(--kino-green);margin:-1.204vw 0 0 28.611vw}
+  .core{position:relative;width:23.148vw;height:23.148vw;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        background:radial-gradient(circle, rgba(128,226,180, calc(.16 + var(--pulse) * .24)), rgba(11,16,32,0) 70%);
+        transform:scale(calc(1 + var(--pulse) * .1 + sin(var(--t) * 1) * .015))}
+  /* the wordmark pops in with a scrubbed @keyframes (.kino-anim) */
+  @keyframes markpop{0%{opacity:0;transform:scale(.5);filter:blur(1.111vw)}
+                     34%{opacity:1;transform:scale(1.04);filter:blur(0)}
+                     46%{transform:scale(1)} 100%{opacity:1;transform:scale(1);filter:blur(0)}}
+  /* class="kino-cliptext" gives the gradient paint box room for glyph ink the negative letter-spacing
+     pushes past the box (else background-clip:text renders it transparent → right of "o" looks cut). */
+  .mark{font-weight:900;font-size:8.148vw;letter-spacing:-.02em;animation-name:markpop;--kino-delay:.18;
+        background:linear-gradient(120deg, var(--kino-white), var(--kino-mint));
+        -webkit-background-clip:text;background-clip:text;color:transparent}
+  .foot{position:absolute;bottom:27.778vw;width:100%;text-align:center;font-size:3.056vw;font-weight:700;
+        letter-spacing:.16em;color:#9fb1c9;opacity:clamp(0, calc((var(--enter) - .4) * 3), 1)}
+  .vig{position:absolute;inset:0;pointer-events:none;
+       background:radial-gradient(ellipse 80% 70% at 50% 50%, transparent 48%, rgba(4,7,14,.55))}
+  /* beat 3 of 3 */
+  .beat{position:absolute;bottom:18.148vw;left:0;right:0;display:flex;gap:1.204vw;justify-content:center;
+        opacity:clamp(0, calc(var(--enter) * 2), 1)}
+  .beat i{width:1.204vw;height:1.204vw;border-radius:9.167vw;background:rgba(255,255,255,.16)}
+  .beat i.on{width:4.259vw;background:var(--kino-mint)}
+</style>
+<div class="stage">
+  <div class="sys">
+    <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+    <div class="orb oa"><div class="dot d1"></div></div>
+    <div class="orb ob"><div class="dot d2"></div></div>
+    <div class="orb oc"><div class="dot d3"></div></div>
+    <div class="orb od"><div class="dot d4"></div></div>
+    <div class="core"><div class="mark kino-anim kino-cliptext">kino</div></div>
+  </div>
+  <div class="foot">ONE COMPONENT · CSS VARIABLES · ZERO JS</div>
+  <div class="vig"></div>
+  <div class="beat"><i></i><i></i><i class="on"></i></div>
+</div>

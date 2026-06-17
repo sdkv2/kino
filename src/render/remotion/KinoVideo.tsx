@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, TweenOverlay, WordCaption } from "./components";
+import { MotionGraphic } from "./MotionGraphic";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
@@ -62,6 +63,30 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
             ) : null}
           </Sequence>
         ))}
+
+      {/* Full-screen motion-graphic beats. */}
+      {segments
+        .filter((s) => s.kind === "motion" && s.motion)
+        .map((s, i) => {
+          const dur = f(s.endSec) - f(s.startSec);
+          return (
+            <Sequence key={`m${i}`} from={f(s.startSec)} durationInFrames={dur}>
+              <MotionGraphic data={s.motion!} durationFrames={dur} t={theme} />
+            </Sequence>
+          );
+        })}
+
+      {/* Motion-graphic overlays layered on top of their host beat (avatar or app). */}
+      {segments
+        .filter((s) => s.motionOverlay)
+        .map((s, i) => {
+          const dur = f(s.endSec) - f(s.startSec);
+          return (
+            <Sequence key={`mo${i}`} from={f(s.startSec)} durationInFrames={dur}>
+              <MotionGraphic data={s.motionOverlay!} durationFrames={dur} t={theme} />
+            </Sequence>
+          );
+        })}
 
       {/* Brand mark on faceless talking runs — one per contiguous run so it holds steady as the text changes. */}
       {!avatar && logo
