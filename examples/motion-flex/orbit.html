@@ -1,15 +1,15 @@
 <style>
-  .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
          font-family:var(--kino-font);color:var(--kino-white);
-         opacity:clamp(0, calc((1 - var(--progress)) * 8), 1)}
-  /* the whole system eases in smoothly (--enter easeInOut in spec) */
+         opacity:clamp(0, calc((1 - var(--progress)) * 10), 1)}
+  /* whole system eases in (--enter, easeInOut in spec) */
   .sys{position:relative;width:920px;height:920px;display:flex;align-items:center;justify-content:center;
        opacity:clamp(0, calc(var(--enter) * 2), 1);
-       transform:rotate(calc((1 - var(--enter)) * -24deg)) scale(calc(.78 + var(--enter) * .22))}
-  .ring{position:absolute;border-radius:50%;border:2px solid rgba(128,226,180,.14);inset:50% 50%;
-        opacity:calc(.45 + (sin(var(--t) * 0.8) * .5 + .5) * .4)}
+       transform:rotate(calc((1 - var(--enter)) * -22deg)) scale(calc(.8 + var(--enter) * .2))}
+  .ring{position:absolute;border-radius:50%;border:2px solid rgba(128,226,180,.13);inset:50% 50%;
+        opacity:calc(.4 + (sin(var(--t) * 0.8) * .5 + .5) * .4)}
   .r1{width:430px;height:430px;margin:-215px} .r2{width:650px;height:650px;margin:-325px} .r3{width:900px;height:900px;margin:-450px}
-  /* each orbit revolves slowly at its own rate + phase, off absolute time --t (no RAF) */
+  /* dots revolve continuously off --t at their own rate + phase (deterministic, no RAF) */
   .orb{position:absolute;inset:0}
   .oa{transform:rotate(calc(var(--t) * 24deg))}
   .ob{transform:rotate(calc(var(--t) * -18deg + 120deg))}
@@ -23,13 +23,24 @@
   .d3{width:18px;height:18px;color:var(--kino-white);margin:-9px 0 0 441px}
   .d4{width:26px;height:26px;color:var(--kino-green);margin:-13px 0 0 309px}
   .core{position:relative;width:250px;height:250px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-        background:radial-gradient(circle, rgba(128,226,180, calc(.16 + var(--pulse) * .22)), rgba(11,16,32,0) 70%);
+        background:radial-gradient(circle, rgba(128,226,180, calc(.16 + var(--pulse) * .24)), rgba(11,16,32,0) 70%);
         transform:scale(calc(1 + var(--pulse) * .1 + sin(var(--t) * 1) * .015))}
-  .mark{font-weight:900;font-size:84px;letter-spacing:-.02em;
+  /* the wordmark pops in with a scrubbed @keyframes (.kino-anim) */
+  @keyframes markpop{0%{opacity:0;transform:scale(.5);filter:blur(12px)}
+                     34%{opacity:1;transform:scale(1.04);filter:blur(0)}
+                     46%{transform:scale(1)} 100%{opacity:1;transform:scale(1);filter:blur(0)}}
+  .mark{font-weight:900;font-size:88px;letter-spacing:-.02em;animation-name:markpop;--kino-delay:.18;
         background:linear-gradient(120deg, var(--kino-white), var(--kino-mint));
         -webkit-background-clip:text;background-clip:text;color:transparent}
-  .foot{position:absolute;bottom:300px;width:100%;text-align:center;font-size:34px;font-weight:700;
-        letter-spacing:.12em;color:#9fb1c9;opacity:clamp(0, calc((var(--enter) - .4) * 3), 1)}
+  .foot{position:absolute;bottom:300px;width:100%;text-align:center;font-size:33px;font-weight:700;
+        letter-spacing:.16em;color:#9fb1c9;opacity:clamp(0, calc((var(--enter) - .4) * 3), 1)}
+  .vig{position:absolute;inset:0;pointer-events:none;
+       background:radial-gradient(ellipse 80% 70% at 50% 50%, transparent 48%, rgba(4,7,14,.55))}
+  /* beat 3 of 3 */
+  .beat{position:absolute;bottom:196px;left:0;right:0;display:flex;gap:13px;justify-content:center;
+        opacity:clamp(0, calc(var(--enter) * 2), 1)}
+  .beat i{width:13px;height:13px;border-radius:99px;background:rgba(255,255,255,.16)}
+  .beat i.on{width:46px;background:var(--kino-mint)}
 </style>
 <div class="stage">
   <div class="sys">
@@ -38,7 +49,9 @@
     <div class="orb ob"><div class="dot d2"></div></div>
     <div class="orb oc"><div class="dot d3"></div></div>
     <div class="orb od"><div class="dot d4"></div></div>
-    <div class="core"><div class="mark">kino</div></div>
+    <div class="core"><div class="mark kino-anim">kino</div></div>
   </div>
   <div class="foot">ONE COMPONENT · CSS VARIABLES · ZERO JS</div>
+  <div class="vig"></div>
+  <div class="beat"><i></i><i></i><i class="on"></i></div>
 </div>

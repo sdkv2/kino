@@ -42,25 +42,26 @@ const props: KinoProps = {
     triggers: [],
   },
   disclosure: "motion graphics demo — authored in HTML, driven by JSON",
-  // Longer beats that overlap ~0.4s so each crossfades into the next (every graphic exit-fades on --progress).
+  // Beats overlap ~0.3s so each crossfades into the next; every animation finishes well before the
+  // beat ends (entrances + the count done by ~60%), leaving a clear settled hold before the crossfade.
   segments: [
     {
       kind: "motion",
       caption: "",
       startSec: 0,
-      endSec: 4.6,
+      endSec: 5.0,
       motion: resolveMotionGraphic(
         {
           source: "hero.html",
-          // kicker/rule/sub still ease in via spec params; the headline lines now use scrubbed
-          // @keyframes (.kino-anim) so they need no --t1/--t2 params at all.
+          // kicker/rule/sub ease in via spec params; the headline lines use scrubbed @keyframes
+          // (.kino-anim) so they need no --t1/--t2 params at all.
           params: { gold: GOLD, kick: 0, rule: 0, sub: 0 },
           keyframes: [
             { at: 0.1, params: { kick: 0 } }, { at: 1.1, params: { kick: 1 }, ease: "easeInOut" },
-            { at: 1.0, params: { rule: 0 } }, { at: 2.2, params: { rule: 1 }, ease: "easeInOut" },
-            { at: 1.3, params: { sub: 0 } }, { at: 2.4, params: { sub: 1 }, ease: "easeInOut" },
+            { at: 1.0, params: { rule: 0 } }, { at: 2.1, params: { rule: 1 }, ease: "easeInOut" },
+            { at: 1.3, params: { sub: 0 } }, { at: 2.3, params: { sub: 1 }, ease: "easeInOut" },
           ],
-          triggers: [{ at: 0.2, action: "pulse" }, { at: 2.4, action: "pulse" }],
+          triggers: [{ at: 0.2, action: "pulse" }, { at: 2.3, action: "pulse" }],
         },
         project,
       ),
@@ -68,17 +69,17 @@ const props: KinoProps = {
     {
       kind: "motion",
       caption: "",
-      startSec: 4.2,
-      endSec: 9.2,
+      startSec: 4.7,
+      endSec: 10.0,
       motion: resolveMotionGraphic(
         {
           source: "stat.html",
-          // entrance is staggered purely in CSS off --progress; only the count needs a keyframe.
+          // entrance staggered in CSS off --progress; the count finishes by ~60% so it holds at 98%.
           params: { pct: 0, gold: GOLD },
           keyframes: [
-            { at: 0.7, params: { pct: 0 } }, { at: 4.0, params: { pct: 98 }, ease: "easeInOut" },
+            { at: 0.7, params: { pct: 0 } }, { at: 3.2, params: { pct: 98 }, ease: "easeInOut" },
           ],
-          triggers: [{ at: 0.5, action: "pulse" }, { at: 4.0, action: "pulse" }],
+          triggers: [{ at: 0.5, action: "pulse" }, { at: 3.2, action: "pulse" }],
         },
         project,
       ),
@@ -86,14 +87,14 @@ const props: KinoProps = {
     {
       kind: "motion",
       caption: "",
-      startSec: 8.8,
-      endSec: 13.6,
+      startSec: 9.7,
+      endSec: 14.7,
       motion: resolveMotionGraphic(
         {
           source: "orbit.html",
           params: { gold: GOLD, enter: 0 },
           keyframes: [{ at: 0.1, params: { enter: 0 } }, { at: 1.5, params: { enter: 1 }, ease: "easeInOut" }],
-          triggers: [{ at: 0.4, action: "pulse" }, { at: 2.4, action: "pulse" }, { at: 4.2, action: "pulse" }],
+          triggers: [{ at: 0.4, action: "pulse" }, { at: 2.4, action: "pulse" }, { at: 4.0, action: "pulse" }],
         },
         project,
       ),
@@ -109,12 +110,12 @@ if (process.env.FLEX_VIDEO) {
   console.log("video:", outs.join(", "));
 } else {
   const frames = [
-    { frame: 16, name: "01-hero-lines-kf-a" },   // headline @keyframes rising, staggered
-    { frame: 30, name: "02-hero-lines-kf-b" },
-    { frame: 60, name: "03-hero-settled" },
-    { frame: 160, name: "04-stat-kw-kf-a" },     // keyword @keyframes staggering in
-    { frame: 172, name: "05-stat-kw-kf-b" },
-    { frame: 210, name: "06-stat-settled" },
+    { frame: 30, name: "01-hero-blur-rise" },   // headline @keyframes blur+rise, staggered
+    { frame: 100, name: "02-hero-hold" },        // settled hold: rule, sub, beat dots, vignette
+    { frame: 175, name: "03-stat-kw-stagger" },  // keywords @keyframes staggering, number gradient
+    { frame: 250, name: "04-stat-count-hold" },  // count holds at 98%, bar sheen, beat dots
+    { frame: 345, name: "05-orbit-mark-pop" },   // wordmark @keyframes pop, dots orbiting
+    { frame: 410, name: "06-orbit-hold" },
   ];
   const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "flex-")), format: "9:16", frames, outDir });
   console.log("stills:\n" + outs.join("\n"));
