@@ -3,7 +3,7 @@ import type { Brand } from "../config/brand.js";
 import type { Spec } from "./schema.js";
 import type { Project } from "../config/project.js";
 import type { Provider } from "../avatar/provider.js";
-import { lintMotionHtml } from "../render/motiongraphic.js";
+import { lintMotionHtml, lintMotionJs } from "../render/motiongraphic.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -61,7 +61,8 @@ export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: strin
   for (const { source, where } of refs) {
     const abs = project.assetPath(source);
     if (!existsSync(abs)) throw new Error(`Missing motion graphic for ${where}: assets/${source}`);
-    const violations = lintMotionHtml(readFileSync(abs, "utf8"));
+    const raw = readFileSync(abs, "utf8");
+    const violations = source.endsWith(".js") ? lintMotionJs(raw) : lintMotionHtml(raw);
     if (violations.length) throw new Error(`Motion graphic ${where} (assets/${source}): ${violations.join("; ")}`);
   }
 }
