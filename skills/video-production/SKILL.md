@@ -63,7 +63,9 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   app/avatar beat (`"motionOverlay": { "source": "motion/x.html" }`). **You write the HTML/CSS; the
   JSON owns timing.** Animate by reading kino-set CSS variables — `--progress` (0→1 over the beat),
   `--t`, `--frame`, `--pulse`, your `params` (e.g. `--pct`, tweened by `keyframes`), and the brand
-  palette (`--kino-mint` etc.). **No `@keyframes`/`transition`/JS** — the build rejects them; motion
+  palette (`--kino-mint` etc.). You can also use real **`@keyframes`** — add `class="kino-anim"` and
+  kino force-pauses + scrubs them across the beat deterministically (sub-timing in the `%` stops,
+  stagger via `--kino-delay`). **No CSS `transition`/JS and don't set `animation-play-state`** — motion
   comes only from the variables. **Stagger reveals** so things don't all land at once — auto-stagger a
   list with `sibling-index()` (`--d: calc((sibling-index() - 1) * .08)`), give each element its own
   slice of `--progress`, or use a param-per-element with offset keyframe `at` times for spring/ease
