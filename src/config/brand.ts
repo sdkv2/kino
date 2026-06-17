@@ -1,61 +1,131 @@
 import { z } from "zod";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parse as parseYaml } from "yaml";
 
-export const BrandSchema = z.object({
-  name: z.string(),
-  colors: z.object({
-    night: z.string(),
-    mint: z.string(),
-    green: z.string(),
-    white: z.string().default("#ffffff"),
-    gold: z.string().default("#d99a20"),
-  }),
-  font: z.string().default('Helvetica, "Helvetica Neue", Arial, sans-serif'), // registry font name (downloaded) or raw CSS family
-  labelFont: z.string().optional(), // registry font for storyboard/montage labels (default: the caption font)
-  captionStyle: z
-    .object({
-      fontSize: z.number().default(74),
-      strokeWidth: z.number().default(9),
-      // Optional translucent panel behind lower-third captions, for legibility over light app
-      // screenshots. Absent → captions render unchanged. appOnly (default true) scopes it to app cut-ins.
-      background: z
-        .object({
-          color: z.string().optional(), // default: brand night
-          opacity: z.number().min(0).max(1).optional(), // default 0.82
-          appOnly: z.boolean().optional(), // default true (only behind app-segment captions)
-        })
-        .optional(),
-    })
-    .default({}),
-  disclosure: z.string(), // shown when an avatar is present
-  facelessDisclosure: z.string().optional(), // shown when no avatar renders (falls back to disclosure)
-  logo: z.string().optional(), // brand mark (transparent PNG) shown on faceless talking beats
-  logoSize: z.union([z.enum(["small", "medium", "big"]), z.number()]).optional(), // default logo size
-  logoPosition: z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]).optional(),
-  facelessBackdrop: z.string().optional(), // background image for faceless beats (used when background="image")
-  background: z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]).optional(), // faceless background engine
-  backgroundComponent: z.string().optional(), // path to a custom canvas draw fn (used when background="custom")
-  backgroundColors: z.array(z.string()).optional(), // palette for animated backgrounds (else mint/green/gold)
-  backgroundIntensity: z.number().optional(), // 0..1 motion strength (default 0.5)
-  captionMode: z.enum(["phrase", "words"]).optional(), // default caption style (phrase = short block; words = synced)
-  bannedPhrases: z.array(z.string()).default([]),
-  defaultVoice: z.string().optional(),
-  defaultLook: z.string().optional(),
-  defaultProvider: z.enum(["none", "heygen", "hedra", "replicate"]).optional(),
-  avatarImage: z.string().optional(), // portrait used as the source for hedra/replicate
-  hedraModelId: z.string().optional(), // Character-3 model id (else auto-pick first from /models)
-  replicateModel: z.string().optional(), // owner/name[:version] of the lip-sync model (default cjwbw/sadtalker)
-  replicateImageField: z.string().optional(), // input key for the portrait (default source_image)
-  replicateAudioField: z.string().optional(), // input key for the audio (default driven_audio)
-  replicateInput: z.record(z.unknown()).optional(), // extra model inputs
-  voiceAliases: z.record(z.string()).default({}),
-  lookAliases: z.record(z.string()).default({}),
-});
+// The complete, resolved brand shape the render pipeline consumes (always fully populated after merge).
+const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
+const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
+const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
+const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
+const CaptionStyleBg = z.object({ color: z.string().optional(), opacity: z.number().min(0).max(1).optional(), appOnly: z.boolean().optional() });
 
-export type Brand = z.infer<typeof BrandSchema>;
+// Frontmatter: every field optional (defaults come from DEFAULT_BRAND). Types are still validated.
+export const BrandFrontmatterSchema = z
+  .object({
+    name: z.string().optional(),
+    colors: z
+      .object({
+        night: z.string().optional(),
+        mint: z.string().optional(),
+        green: z.string().optional(),
+        white: z.string().optional(),
+        gold: z.string().optional(),
+      })
+      .optional(),
+    font: z.string().optional(),
+    labelFont: z.string().optional(),
+    captionStyle: z
+      .object({ fontSize: z.number().optional(), strokeWidth: z.number().optional(), background: CaptionStyleBg.optional() })
+      .optional(),
+    disclosure: z.string().optional(),
+    facelessDisclosure: z.string().optional(),
+    logo: z.string().optional(),
+    logoSize: LogoSize.optional(),
+    logoPosition: LogoPosition.optional(),
+    facelessBackdrop: z.string().optional(),
+    background: Background.optional(),
+    backgroundComponent: z.string().optional(),
+    backgroundColors: z.array(z.string()).optional(),
+    backgroundIntensity: z.number().optional(),
+    captionMode: z.enum(["phrase", "words"]).optional(),
+    bannedPhrases: z.array(z.string()).optional(),
+    defaultVoice: z.string().optional(),
+    defaultLook: z.string().optional(),
+    defaultProvider: Provider.optional(),
+    avatarImage: z.string().optional(),
+    hedraModelId: z.string().optional(),
+    replicateModel: z.string().optional(),
+    replicateImageField: z.string().optional(),
+    replicateAudioField: z.string().optional(),
+    replicateInput: z.record(z.unknown()).optional(),
+    voiceAliases: z.record(z.string()).optional(),
+    lookAliases: z.record(z.string()).optional(),
+  })
+  .strict();
 
+export type BrandFrontmatter = z.infer<typeof BrandFrontmatterSchema>;
+
+export interface Brand {
+  name: string;
+  colors: { night: string; mint: string; green: string; white: string; gold: string };
+  font: string;
+  labelFont?: string;
+  captionStyle: { fontSize: number; strokeWidth: number; background?: z.infer<typeof CaptionStyleBg> };
+  disclosure: string;
+  facelessDisclosure?: string;
+  logo?: string;
+  logoSize?: z.infer<typeof LogoSize>;
+  logoPosition?: z.infer<typeof LogoPosition>;
+  facelessBackdrop?: string;
+  background?: z.infer<typeof Background>;
+  backgroundComponent?: string;
+  backgroundColors?: string[];
+  backgroundIntensity?: number;
+  captionMode?: "phrase" | "words";
+  bannedPhrases: string[];
+  defaultVoice?: string;
+  defaultLook?: string;
+  defaultProvider?: z.infer<typeof Provider>;
+  avatarImage?: string;
+  hedraModelId?: string;
+  replicateModel?: string;
+  replicateImageField?: string;
+  replicateAudioField?: string;
+  replicateInput?: Record<string, unknown>;
+  voiceAliases: Record<string, string>;
+  lookAliases: Record<string, string>;
+}
+
+// kino house defaults — used when no brand is set and to fill any field a brand.md omits.
+export const DEFAULT_BRAND: Brand = {
+  name: "",
+  colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", white: "#ffffff", gold: "#d99a20" },
+  font: 'Helvetica, "Helvetica Neue", Arial, sans-serif',
+  captionStyle: { fontSize: 74, strokeWidth: 9 },
+  disclosure: "", // none unless a brand/spec sets it
+  bannedPhrases: [],
+  voiceAliases: {},
+  lookAliases: {},
+};
+
+// Split a brand.md into its YAML frontmatter (object) + the markdown body (guidelines).
+export function parseBrandMd(text: string): { frontmatter: Record<string, unknown>; body: string } {
+  const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
+  if (!m) return { frontmatter: {}, body: text };
+  const fm = (parseYaml(m[1]) ?? {}) as Record<string, unknown>;
+  return { frontmatter: fm, body: m[2] };
+}
+
+function mergeBrand(base: Brand, fm: BrandFrontmatter): Brand {
+  return {
+    ...base,
+    ...fm,
+    colors: { ...base.colors, ...(fm.colors ?? {}) },
+    captionStyle: { ...base.captionStyle, ...(fm.captionStyle ?? {}) },
+  } as Brand;
+}
+
+// Read brands/<name>/brand.md → resolved Brand (frontmatter merged over DEFAULT_BRAND).
 export function loadBrand(brandDir: string): Brand {
-  const raw = JSON.parse(readFileSync(join(brandDir, "brand.json"), "utf8"));
-  return BrandSchema.parse(raw);
+  return loadBrandDoc(brandDir).brand;
+}
+
+// Like loadBrand, but also returns the markdown guidelines body (for `kino brand`).
+export function loadBrandDoc(brandDir: string): { brand: Brand; body: string } {
+  const mdPath = join(brandDir, "brand.md");
+  if (!existsSync(mdPath)) throw new Error(`Brand not found: ${mdPath} (brands are markdown now — create a brand.md)`);
+  const { frontmatter, body } = parseBrandMd(readFileSync(mdPath, "utf8"));
+  const fm = BrandFrontmatterSchema.parse(frontmatter);
+  return { brand: mergeBrand(DEFAULT_BRAND, fm), body };
 }
