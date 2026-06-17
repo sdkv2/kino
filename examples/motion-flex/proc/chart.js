@@ -1,7 +1,7 @@
 // Tier-2 procedural graphic (body of render(env) → HTML). Demonstrates DATA-DRIVEN layout:
 // the bars, value labels and axis labels are all generated from a data array with a loop —
-// painful to hand-author as static HTML. Bar growth is CSS-var driven (var(--progress)) and
-// staggered per bar; the glow swells on var(--pulse).
+// painful to hand-author as static HTML. Bar growth is driven by eased, staggered per-bar tweens
+// (var(--g<i>), overshoot — defined in the spec, so JSON owns the timing); the glow swells on var(--pulse).
 const data = [
   { l: "MON", v: 42 }, { l: "TUE", v: 61 }, { l: "WED", v: 54 },
   { l: "THU", v: 78 }, { l: "FRI", v: 69 }, { l: "SAT", v: 96 },
@@ -11,10 +11,10 @@ let bars = "";
 for (let i = 0; i < n; i++) {
   const d = data[i];
   const x = (gap + i * (bw + gap)).toFixed(2);
-  const g = `clamp(0, calc((var(--progress) - ${(0.06 + i * 0.06).toFixed(2)}) * 5), 1)`; // staggered grow-in
+  const g = `var(--g${i})`; // eased, staggered grow-in (overshoot), tweened in the spec — not a linear ramp
   const h = ((d.v / 100) * maxH).toFixed(2);
   bars +=
-    `<div class="bar" style="left:${x}%;height:calc(${h}% * ${g})"></div>` +
+    `<div class="bar" style="left:${x}%;height:${h}%;transform:scaleY(${g})"></div>` +
     `<div class="val" style="left:${x}%;bottom:calc(25% + ${h}% * ${g});opacity:${g}">${d.v}</div>` +
     `<div class="lab" style="left:${x}%">${d.l}</div>`;
 }
