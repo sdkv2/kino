@@ -13,9 +13,10 @@ The agent supplies the creative; `kino` handles deterministic production.
 - **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
 - **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
 
-> **Status:** v1.12 — analyse external reference videos (`transcribe`/`scan`: Scribe STT + frame
-> extraction, research-only); app cut-ins reveal the brand backdrop; word captions highlight the
-> spoken word + brand name in green
+> **Status:** v1.13 — **motion graphics**: agent-authored HTML/CSS beats & overlays driven by kino-set
+> CSS variables (deterministic in Remotion), with scrubbed `@keyframes` (`class="kino-anim"`) and a
+> `.kino-cliptext` helper. Plus (v1.12) external reference-video analysis (`transcribe`/`scan`),
+> brand-backdrop app cut-ins, and word-by-word captions.
 
 ## Install (global)
 ```bash
@@ -38,6 +39,14 @@ kino build specs/lie-test.json          # real render → out/lie-test/
 ```
 The driving agent authors specs — see [`skills/video-production`](skills/video-production/SKILL.md).
 
+## Documentation
+Full guides live in [`docs/`](docs/):
+- [Getting started](docs/getting-started.md) — install, scaffold, first render.
+- [CLI reference](docs/cli-reference.md) — every command + flag.
+- [Spec reference](docs/spec-reference.md) — the JSON spec, `brand.json`, `project.json`.
+- [Motion graphics](docs/motion-graphics.md) — author custom animated beats/overlays in HTML/CSS.
+- [Backgrounds & overlays](docs/backgrounds-and-overlays.md) — faceless backgrounds, logo, captions, kickers.
+
 ## Pipeline & options (v1.1)
 - **Avatar engine** — `provider` (spec) / `defaultProvider` (brand) / `--provider`:
   `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3), `replicate` (open-source lip-sync).
@@ -54,6 +63,10 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
 - **Overlay elements** — `kino elements`: the logo has size (`small`/`medium`/`big`/px) + position
   (cardinal/center/custom) presets; **logo, captions, and kickers** are all tweenable
   (`logoKeyframes` / `captionKeyframes` / `kickerKeyframes` — x/y/scale/opacity) on one shared keyframe layer.
+- **Motion graphics** — `kino motion`: author a self-contained HTML/CSS file in `assets/motion/`; kino drives
+  it per-frame via CSS variables (`--progress`/`--t`/`--pulse`/`--<param>` + brand palette), supports scrubbed
+  `@keyframes` (`class="kino-anim"`, `--kino-delay` stagger) and a `.kino-cliptext` helper, all sanitized +
+  determinism-linted. Use as a full beat (`kind:"motion"`) or a `motionOverlay`. See [docs/motion-graphics.md](docs/motion-graphics.md).
 - **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
 - **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
   keeps variant renders side-by-side instead of overwriting.
