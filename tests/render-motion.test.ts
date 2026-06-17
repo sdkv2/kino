@@ -117,3 +117,17 @@ describe("motion graphics kino-cliptext helper", () => {
     expect(magOn).toBeGreaterThan(magOff); // the helper paints the previously-clipped right edge → strictly more magenta
   }, 180000);
 });
+
+describe("empty disclosure", () => {
+  it("renders a still with no disclosure text without crashing", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-nodisc-"));
+    const props: KinoProps = {
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
+      disclosure: "",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: { html: `<div style="position:absolute;inset:0;background:#001"></div>`, params: {}, keyframes: [], triggers: [] } }],
+    };
+    const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "nodisc-pub-")), format: "9:16", frames: [{ frame: 20, name: "nd" }], outDir });
+    expect(existsSync(outs[0])).toBe(true);
+  }, 180000);
+});
