@@ -68,10 +68,23 @@ export interface BackgroundProps {
 
 // A resolved motion graphic: the sanitized HTML plus the JSON-owned timing controls.
 export interface MotionGraphicProps {
-  html: string; // sanitized, self-contained (markup + one inline <style>)
+  html: string; // sanitized, self-contained static markup (Tier 1); "" for procedural graphics
+  proc?: string; // Tier 2: linted JS source — body of render(env) → HTML string, evaluated per frame
   params: Record<string, BgParamValue>; // base CSS-variable values
   keyframes: BgKeyframe[]; // tween params over time (--<name>)
   triggers: BgTrigger[]; // one-shot pulses (--pulse)
+}
+
+// The argument passed to a Tier-2 procedural graphic's render(env) every frame.
+export interface MotionEnv {
+  frame: number; // integer frame within the beat
+  t: number; // seconds within the beat
+  progress: number; // 0 → 1 across the beat
+  pulse: number; // 0 → 1 trigger envelope
+  params: Record<string, BgParamValue>; // resolved spec params at this frame
+  palette: { mint: string; green: string; night: string; white: string; gold: string; font: string };
+  width: number; // canvas px (1080 for 9:16)
+  height: number; // canvas px (1920 for 9:16)
 }
 
 // Brand mark overlay (faceless talking beats): resolved layout + an agent keyframe track.
