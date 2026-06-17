@@ -12,6 +12,13 @@ const BgKeyframe = z.object({
   ease: z.enum(["linear", "easeInOut", "overshoot", "spring"]).optional(),
 });
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
+const motionFields = {
+  source: z.string().min(1),
+  params: z.record(z.union([z.number(), z.string()])).optional(),
+  keyframes: z.array(BgKeyframe).optional(),
+  triggers: z.array(BgTrigger).optional(),
+};
+const MotionGraphicRef = z.object(motionFields);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
 const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
 
@@ -25,6 +32,7 @@ const Segment = z.discriminatedUnion("kind", [
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
     captionKeyframes: z.array(BgKeyframe).optional(),
+    motionOverlay: MotionGraphicRef.optional(),
   }),
   z.object({
     kind: z.literal("app"),
@@ -38,6 +46,16 @@ const Segment = z.discriminatedUnion("kind", [
     emphasis: z.array(z.string()).optional(),
     captionKeyframes: z.array(BgKeyframe).optional(),
     kickerKeyframes: z.array(BgKeyframe).optional(),
+    motionOverlay: MotionGraphicRef.optional(),
+  }),
+  z.object({
+    kind: z.literal("motion"),
+    ...motionFields,
+    text: z.string().min(1),
+    caption: z.string().optional(),
+    captionMode: CaptionMode.optional(),
+    emphasis: z.array(z.string()).optional(),
+    captionKeyframes: z.array(BgKeyframe).optional(),
   }),
 ]);
 
