@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { loadBrand, loadBrandDoc, DEFAULT_BRAND, parseBrandMd } from "../src/config/brand.js";
 import { resolveVoice, validateSpec } from "../src/spec/validate.js";
 import type { Spec } from "../src/spec/schema.js";
+import { brandText, listBrands } from "../src/commands/brand.js";
 
 function brandDirWith(md: string) {
   const root = mkdtempSync(join(tmpdir(), "kino-brand-"));
@@ -78,5 +79,20 @@ describe("validateSpec (no eager look requirement)", () => {
     const spec = { segments: [{ kind: "avatar", text: "hi", caption: "c" }] } as unknown as Spec;
     const project = { assetPath: (r: string) => "/nope/" + r } as unknown as Parameters<typeof validateSpec>[2];
     expect(() => validateSpec(spec, DEFAULT_BRAND, project)).not.toThrow();
+  });
+});
+
+describe("kino brand", () => {
+  it("formats a brand's frontmatter summary + guidelines body", () => {
+    const dir = brandDirWith('---\nname: acme\ncolors: { mint: "#0f0" }\ndefaultVoice: v1\n---\n# Acme\n- be punchy\n');
+    const t = brandText(dir);
+    expect(t).toMatch(/acme/);
+    expect(t).toMatch(/#0f0/);
+    expect(t).toMatch(/be punchy/); // the guidelines body is printed
+  });
+  it("lists brand names that have a brand.md", () => {
+    const dir = brandDirWith("---\nname: acme\n---\nx\n");
+    const brandsRoot = join(dir, "..");
+    expect(listBrands(brandsRoot)).toContain("acme");
   });
 });

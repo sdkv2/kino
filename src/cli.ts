@@ -121,6 +121,11 @@ program
   .action(async () => (await import("./commands/motion.js")).motion());
 
 program
+  .command("brand [name]")
+  .description("List brands, or print a brand's styling values + markdown guidelines")
+  .action(async (name) => (await import("./commands/brand.js")).brand(name));
+
+program
   .command("init [brand]")
   .description("Scaffold .env, a brand config, and project dirs")
   .action(async (b) => (await import("./commands/init.js")).init(b));
