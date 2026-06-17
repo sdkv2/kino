@@ -14,12 +14,11 @@
        transform:translateY(calc((1 - clamp(0, calc((var(--progress) - .05) * 8), 1)) * 2.778vw + sin(var(--t) * 0.9) * -.463vw))
                  scale(calc(.92 + clamp(0, calc((var(--progress) - .05) * 8), 1) * .08))}
   /* gradient-filled number + a glow that pulses on triggers */
-  /* background-IMAGE (not the shorthand) so background-clip:text isn't reset → the gradient clips to the glyphs */
-  /* padding-x widens the gradient's paint box so the trailing/leading glyph ink (which negative
-     letter-spacing pushes past the content box) still has gradient behind it instead of rendering
-     transparent — the negative margin-x cancels it so layout/centering is unchanged. */
+  /* background-IMAGE (not the shorthand) so background-clip:text isn't reset → the gradient clips to the glyphs.
+     The spans carry class="kino-cliptext" so the trailing glyph ink the negative letter-spacing pushes
+     past the box keeps its gradient instead of rendering transparent (see `kino motion`). */
   .num,.pc{background-image:linear-gradient(180deg, #ffffff 0%, #cfe9dd 100%);-webkit-background-clip:text;background-clip:text;
-           color:transparent;padding-left:.12em;padding-right:.12em;margin-left:-.12em;margin-right:-.12em;
+           color:transparent;
            filter:drop-shadow(0 0 calc(2.407vw + (sin(var(--t) * 1.1) * .5 + .5) * 3.148vw + var(--pulse) * 6.481vw) rgba(128,226,180, calc(.3 + var(--pulse) * .4)))}
   .num::after{counter-reset: n round(down, var(--pct), 1);content:counter(n)}
   .pc{font-size:13.333vw;margin-top:3.889vw;background-image:linear-gradient(180deg, var(--gold) 0%, #b9791a 100%)}
@@ -52,7 +51,7 @@
 <div class="stage">
   <div class="card">
     <div class="label">render determinism</div>
-    <div class="big"><span class="num"></span><span class="pc">%</span></div>
+    <div class="big"><span class="num kino-cliptext"></span><span class="pc kino-cliptext">%</span></div>
     <div class="track"><div class="fill"></div></div>
     <div class="cap"><span class="kw kino-anim">frame-perfect</span><span class="kw kino-anim">cache-friendly</span><span class="kw kino-anim">agent-safe</span></div>
   </div>

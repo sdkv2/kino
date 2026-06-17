@@ -32,11 +32,9 @@
   @keyframes markpop{0%{opacity:0;transform:scale(.5);filter:blur(1.111vw)}
                      34%{opacity:1;transform:scale(1.04);filter:blur(0)}
                      46%{transform:scale(1)} 100%{opacity:1;transform:scale(1);filter:blur(0)}}
-  /* padding-x gives the gradient paint box room for glyph ink that negative letter-spacing pushes past
-     the content box (else background-clip:text renders it transparent → right of "o" looks cut);
-     negative margin-x cancels it so layout/centering is unchanged. */
+  /* class="kino-cliptext" gives the gradient paint box room for glyph ink the negative letter-spacing
+     pushes past the box (else background-clip:text renders it transparent → right of "o" looks cut). */
   .mark{font-weight:900;font-size:8.148vw;letter-spacing:-.02em;animation-name:markpop;--kino-delay:.18;
-        padding:0 .12em;margin:0 -.12em;
         background:linear-gradient(120deg, var(--kino-white), var(--kino-mint));
         -webkit-background-clip:text;background-clip:text;color:transparent}
   .foot{position:absolute;bottom:27.778vw;width:100%;text-align:center;font-size:3.056vw;font-weight:700;
@@ -56,7 +54,7 @@
     <div class="orb ob"><div class="dot d2"></div></div>
     <div class="orb oc"><div class="dot d3"></div></div>
     <div class="orb od"><div class="dot d4"></div></div>
-    <div class="core"><div class="mark kino-anim">kino</div></div>
+    <div class="core"><div class="mark kino-anim kino-cliptext">kino</div></div>
   </div>
   <div class="foot">ONE COMPONENT · CSS VARIABLES · ZERO JS</div>
   <div class="vig"></div>
