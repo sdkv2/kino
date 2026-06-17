@@ -66,7 +66,9 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   palette (`--kino-mint` etc.). You can also use real **`@keyframes`** — add `class="kino-anim"` and
   kino force-pauses + scrubs them across the beat deterministically (sub-timing in the `%` stops,
   stagger via `--kino-delay`). **No CSS `transition`/JS and don't set `animation-play-state`** — motion
-  is always frame-driven (CSS variables or scrubbed `@keyframes`). **Stagger reveals** so things don't all land at once — auto-stagger a
+  is always frame-driven (CSS variables or scrubbed `@keyframes`). For gradient-filled text
+  (`background-clip:text`) with tight/negative `letter-spacing`, add `class="kino-cliptext"` so the
+  last glyph's edge keeps its gradient instead of being clipped. **Stagger reveals** so things don't all land at once — auto-stagger a
   list with `sibling-index()` (`--d: calc((sibling-index() - 1) * .08)`), give each element its own
   slice of `--progress`, or use a param-per-element with offset keyframe `at` times for spring/ease
   control. Run `kino motion` for the full contract, the stagger recipes, and a copyable example;

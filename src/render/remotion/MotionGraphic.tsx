@@ -3,16 +3,22 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, MotionGraphicProps } from "../props";
 import { paramsAt, pulseAt } from "../bgparams";
 
-// Trusted stylesheet injected into every motion-graphic shadow root: pause ALL animations so none
-// run on the wall clock (determinism), and scrub elements marked `.kino-anim` across the beat via a
-// --progress-driven negative animation-delay (the canonical Remotion scrub). Inert when the agent's
-// HTML defines no animations. --kino-delay (agent-set, default 0) staggers; sub-timing lives in the
-// @keyframes % stops; easing is the agent's via their timing-function.
+// Trusted stylesheet injected into every motion-graphic shadow root:
+//  • pause ALL animations so none run on the wall clock (determinism), and scrub elements marked
+//    `.kino-anim` across the beat via a --progress-driven negative animation-delay (the canonical
+//    Remotion scrub). Inert when the agent's HTML defines no animations. --kino-delay (agent-set,
+//    default 0) staggers; sub-timing lives in the @keyframes % stops; easing is the agent's.
+//  • `.kino-cliptext` helper: gradient text via `background-clip:text` paints the gradient only over
+//    the content box, so glyph ink that negative letter-spacing pushes past that box renders
+//    transparent (the last glyph's edge looks sliced). This widens the paint box with inline padding,
+//    cancelled by equal negative margin so layout/centering is unchanged. Opt-in (a CSS selector
+//    can't match computed background-clip, and blanket padding would break margin:auto / tight runs).
 const KINO_SCRUB_STYLE =
   "<style>*{animation-play-state:paused !important}" +
   ".kino-anim{animation-duration:1s !important;animation-fill-mode:both !important;" +
   "animation-iteration-count:1 !important;" +
-  "animation-delay:calc((var(--progress) - var(--kino-delay, 0)) * -1s) !important}</style>";
+  "animation-delay:calc((var(--progress) - var(--kino-delay, 0)) * -1s) !important}" +
+  ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}</style>";
 
 // Inject the sanitized HTML into a Shadow root, then set CSS custom properties on the host every
 // frame. Custom properties inherit across the shadow boundary, so the agent's (shadow-scoped) CSS

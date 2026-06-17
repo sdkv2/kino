@@ -83,3 +83,37 @@ describe("motion graphics @keyframes scrub", () => {
     expect(latePx.b).toBeLessThan(80);
   }, 180000);
 });
+
+// fraction of the frame that is (near-)magenta — magenta is absent from the glow background, so this
+// measures the gradient-clipped glyph's painted area. ImageMagick: magenta→white, everything else→black.
+const magentaFraction = (png: string) =>
+  parseFloat(
+    execSync(`magick "${png}" -fuzz 28% -fill white -opaque '#ff00ff' -fuzz 0 -fill black +opaque white -format "%[fx:mean]" info:`)
+      .toString()
+      .trim(),
+  );
+
+describe("motion graphics kino-cliptext helper", () => {
+  it("restores the trailing glyph edge that background-clip:text would otherwise cut", async () => {
+    // A shrink-wrapped, gradient-clipped glyph with tight negative letter-spacing: the box ends up
+    // narrower than the ink, so the right of the "8" has no gradient behind it → transparent (cut).
+    // class="kino-cliptext" widens the paint box so that ink keeps its gradient. Solid magenta so it
+    // stands out from the mint/green/gold glow background.
+    const make = (cls: string) =>
+      `<style>.wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}` +
+      `.t{font-family:var(--kino-font);font-weight:900;font-size:620px;letter-spacing:-.12em;` +
+      `background-image:linear-gradient(#ff00ff,#ff00ff);-webkit-background-clip:text;background-clip:text;color:transparent}</style>` +
+      `<div class="wrap"><div class="t ${cls}">8</div></div>`;
+    const mkProps = (html: string): KinoProps => ({
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion: { html, params: {}, keyframes: [], triggers: [] } }],
+    });
+    const outDir = mkdtempSync(join(tmpdir(), "kino-clip-"));
+    const off = await renderStills({ props: mkProps(make("")), publicDir: mkdtempSync(join(tmpdir(), "clip-a-")), format: "9:16", frames: [{ frame: 30, name: "off" }], outDir });
+    const on = await renderStills({ props: mkProps(make("kino-cliptext")), publicDir: mkdtempSync(join(tmpdir(), "clip-b-")), format: "9:16", frames: [{ frame: 30, name: "on" }], outDir });
+    const magOff = magentaFraction(off[0]);
+    const magOn = magentaFraction(on[0]);
+    expect(magOff).toBeGreaterThan(0);     // a magenta "8" did render in both
+    expect(magOn).toBeGreaterThan(magOff); // the helper paints the previously-clipped right edge → strictly more magenta
+  }, 180000);
+});
