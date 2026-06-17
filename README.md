@@ -32,7 +32,7 @@ Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Faceless need
 ## Use
 ```bash
 cd <project> && kino init evidentcv     # scaffold .env, brand, dirs
-# ...fill brand.json (voiceAliases/lookAliases), add assets/, write specs/
+# ...fill brands/<brand>/brand.md (optional frontmatter + guidelines), add assets/, write specs/
 kino doctor
 kino build specs/lie-test.json --mock   # free structural preview (no API spend)
 kino build specs/lie-test.json          # real render → out/lie-test/
@@ -43,7 +43,7 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
 Full guides live in [`docs/`](docs/):
 - [Getting started](docs/getting-started.md) — install, scaffold, first render.
 - [CLI reference](docs/cli-reference.md) — every command + flag.
-- [Spec reference](docs/spec-reference.md) — the JSON spec, `brand.json`, `project.json`.
+- [Spec reference](docs/spec-reference.md) — the JSON spec, `brand.md`, `project.json`.
 - [Motion graphics](docs/motion-graphics.md) — author custom animated beats/overlays in HTML/CSS.
 - [Backgrounds & overlays](docs/backgrounds-and-overlays.md) — faceless backgrounds, logo, captions, kickers.
 
@@ -74,6 +74,9 @@ Full guides live in [`docs/`](docs/):
 - **Inspect & iterate** — `kino inspect` (plan as JSON), `kino still`/`storyboard` (fast mock previews
   via Remotion `renderStill`), `kino frames` (extract from a render). Built for tight agent loops:
   map beats → preview a beat → edit spec → re-preview → `build`.
+- **Brands (optional, markdown)** — `brands/<name>/brand.md`: YAML frontmatter (palette/font/voice/
+  disclosure — any subset, merged over kino defaults) + a free-form guidelines body the agent reads via
+  `kino brand <name>`. No brand needed to render. (Replaces the old `brand.json`.)
 - **Projects** — `projects/<name>/` scopes each campaign's `specs/assets/out`; `project.json` assigns a
   shared brand + default overrides. `kino projects` lists/scaffolds. Flat layout still works (back-compat).
 

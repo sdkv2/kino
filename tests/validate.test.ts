@@ -41,8 +41,8 @@ describe("resolveVoice", () => {
 });
 
 describe("resolveProvider", () => {
-  it("defaults to heygen when neither spec nor brand sets one", () => {
-    expect(resolveProvider({} as unknown as Spec, {} as unknown as Brand)).toBe("heygen");
+  it("defaults to faceless (none) when neither spec nor brand sets one", () => {
+    expect(resolveProvider({} as unknown as Spec, {} as unknown as Brand)).toBe("none");
   });
   it("falls back to the brand default when the spec is silent", () => {
     expect(resolveProvider({} as unknown as Spec, { defaultProvider: "none" } as unknown as Brand)).toBe("none");
