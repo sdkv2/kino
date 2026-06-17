@@ -23,8 +23,11 @@
   .line{display:block;overflow:hidden;padding:0 .926vw;animation-name:rise}
   .l1{--kino-delay:.05}
   .l2{--kino-delay:.13}
+  /* padding-x gives the gradient paint box room for glyph ink that negative letter-spacing pushes
+     past the content box (else background-clip:text renders that ink transparent → edges look cut);
+     negative margin-x cancels it so layout is unchanged. */
   .grad{background:linear-gradient(102deg, var(--kino-white) 0%, var(--kino-mint) 42%, var(--gold) 62%, var(--kino-white) 100%);
-        background-size:260% 100%;background-position:calc(var(--t) * -13%) 0;
+        background-size:260% 100%;background-position:calc(var(--t) * -13%) 0;padding:0 .12em;margin:0 -.12em;
         -webkit-background-clip:text;background-clip:text;color:transparent}
   .rule{height:.556vw;margin-top:3.889vw;border-radius:9.167vw;width:calc(var(--rule) * 50vw);
         background:linear-gradient(90deg, var(--kino-mint), var(--gold));

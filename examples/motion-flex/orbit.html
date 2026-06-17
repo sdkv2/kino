@@ -32,7 +32,11 @@
   @keyframes markpop{0%{opacity:0;transform:scale(.5);filter:blur(1.111vw)}
                      34%{opacity:1;transform:scale(1.04);filter:blur(0)}
                      46%{transform:scale(1)} 100%{opacity:1;transform:scale(1);filter:blur(0)}}
+  /* padding-x gives the gradient paint box room for glyph ink that negative letter-spacing pushes past
+     the content box (else background-clip:text renders it transparent → right of "o" looks cut);
+     negative margin-x cancels it so layout/centering is unchanged. */
   .mark{font-weight:900;font-size:8.148vw;letter-spacing:-.02em;animation-name:markpop;--kino-delay:.18;
+        padding:0 .12em;margin:0 -.12em;
         background:linear-gradient(120deg, var(--kino-white), var(--kino-mint));
         -webkit-background-clip:text;background-clip:text;color:transparent}
   .foot{position:absolute;bottom:27.778vw;width:100%;text-align:center;font-size:3.056vw;font-weight:700;
