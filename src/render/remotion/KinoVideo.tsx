@@ -119,7 +119,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           </Sequence>
         );
       })}
-      <Disclosure text={disclosure} t={theme} />
+      {disclosure ? <Disclosure text={disclosure} t={theme} /> : null}
     </AbsoluteFill>
   );
 };
