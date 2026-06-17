@@ -27,8 +27,7 @@ export function resolveProvider(spec: Spec, brand: Brand): Provider {
 
 export function resolveVoice(spec: Spec, brand: Brand): string {
   const alias = spec.voice ?? brand.defaultVoice;
-  if (!alias) throw new Error("No voice: set spec.voice or brand.defaultVoice");
-  return brand.voiceAliases[alias] ?? alias;
+  return alias ? (brand.voiceAliases[alias] ?? alias) : "";
 }
 
 export function resolveVoiceLook(spec: Spec, brand: Brand): { voiceId: string; lookId: string } {
@@ -71,7 +70,6 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   if (hits.length) {
     throw new Error("Compliance: banned phrases found — " + hits.map((h) => `"${h.phrase}" @ ${h.where}`).join("; "));
   }
-  resolveVoiceLook(spec, brand);
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
 }
