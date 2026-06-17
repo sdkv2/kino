@@ -22,7 +22,7 @@ export function complianceScan(spec: Spec, brand: Brand): ComplianceHit[] {
 }
 
 export function resolveProvider(spec: Spec, brand: Brand): Provider {
-  return (spec.provider ?? brand.defaultProvider ?? "heygen") as Provider;
+  return (spec.provider ?? brand.defaultProvider ?? "none") as Provider;
 }
 
 export function resolveVoice(spec: Spec, brand: Brand): string {
