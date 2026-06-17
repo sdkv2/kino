@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme, MotionGraphicProps } from "../props";
+import type { Theme, MotionGraphicProps, MotionEnv } from "../props";
 import { paramsAt, pulseAt } from "../bgparams";
 
 // Trusted stylesheet injected into every motion-graphic shadow root:
@@ -14,7 +14,7 @@ import { paramsAt, pulseAt } from "../bgparams";
 //    cancelled by equal negative margin so layout/centering is unchanged. Opt-in (a CSS selector
 //    can't match computed background-clip, and blanket padding would break margin:auto / tight runs).
 const KINO_SCRUB_STYLE =
-  "<style>*{animation-play-state:paused !important}" +
+  "<style>*{animation-play-state:paused !important;transition:none !important}" +
   ".kino-anim{animation-duration:1s !important;animation-fill-mode:both !important;" +
   "animation-iteration-count:1 !important;" +
   "animation-delay:calc((var(--progress) - var(--kino-delay, 0)) * -1s) !important}" +
@@ -51,7 +51,7 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   t,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const tt = frame / fps;
   const resolved = paramsAt(data.params, data.keyframes, tt);
   const pulse = pulseAt(data.triggers, tt);
@@ -70,9 +70,39 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   };
   for (const [k, v] of Object.entries(resolved)) vars[`--${k}`] = String(v);
 
+  // Tier 2: a procedural source is the body of render(env); memoize the compiled fn and evaluate it
+  // for this frame. It runs in the browser (no Node globals) and must be a pure (env) → HTML string.
+  const procFn = React.useMemo(
+    () =>
+      data.proc
+        ? // eslint-disable-next-line @typescript-eslint/no-implied-eval
+          (new Function("env", data.proc) as (env: MotionEnv) => unknown)
+        : null,
+    [data.proc],
+  );
+  let html = data.html;
+  if (procFn) {
+    const env: MotionEnv = {
+      frame,
+      t: tt,
+      progress,
+      pulse,
+      params: resolved,
+      palette: { mint: t.mint, green: t.green, night: t.night, white: t.white, gold: t.gold, font: t.font },
+      width,
+      height,
+    };
+    try {
+      html = String(procFn(env) ?? "");
+    } catch (err) {
+      html = "";
+      if (frame === 0) console.error("motion graphic render(env) threw:", err);
+    }
+  }
+
   return (
     <AbsoluteFill>
-      <ShadowHtml html={data.html} vars={vars} />
+      <ShadowHtml html={html} vars={vars} />
     </AbsoluteFill>
   );
 };

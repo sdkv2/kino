@@ -71,7 +71,9 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   stagger via `--kino-delay`). **No CSS `transition`/JS and don't set `animation-play-state`** — motion
   is always frame-driven (CSS variables or scrubbed `@keyframes`). For gradient-filled text
   (`background-clip:text`) with tight/negative `letter-spacing`, add `class="kino-cliptext"` so the
-  last glyph's edge keeps its gradient instead of being clipped. **Stagger reveals** so things don't all land at once — auto-stagger a
+  last glyph's edge keeps its gradient instead of being clipped. For loops/computed geometry, point
+  `source` at a `.js` file whose body is `render(env)` returning an HTML string (evaluated per frame,
+  determinism-linted) instead of a `.html` file. **Stagger reveals** so things don't all land at once — auto-stagger a
   list with `sibling-index()` (`--d: calc((sibling-index() - 1) * .08)`), give each element its own
   slice of `--progress`, or use a param-per-element with offset keyframe `at` times for spring/ease
   control. Run `kino motion` for the full contract, the stagger recipes, and a copyable example;
