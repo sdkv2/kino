@@ -52,12 +52,11 @@ const props: KinoProps = {
       motion: resolveMotionGraphic(
         {
           source: "hero.html",
-          // entrance params, smoothly easeInOut-eased by kino's keyframe engine → no bounce, gentle settle
-          params: { gold: GOLD, kick: 0, t1: 0, t2: 0, rule: 0, sub: 0 },
+          // kicker/rule/sub still ease in via spec params; the headline lines now use scrubbed
+          // @keyframes (.kino-anim) so they need no --t1/--t2 params at all.
+          params: { gold: GOLD, kick: 0, rule: 0, sub: 0 },
           keyframes: [
             { at: 0.1, params: { kick: 0 } }, { at: 1.1, params: { kick: 1 }, ease: "easeInOut" },
-            { at: 0.35, params: { t1: 0 } }, { at: 1.6, params: { t1: 1 }, ease: "easeInOut" },
-            { at: 0.6, params: { t2: 0 } }, { at: 1.9, params: { t2: 1 }, ease: "easeInOut" },
             { at: 1.0, params: { rule: 0 } }, { at: 2.2, params: { rule: 1 }, ease: "easeInOut" },
             { at: 1.3, params: { sub: 0 } }, { at: 2.4, params: { sub: 1 }, ease: "easeInOut" },
           ],
@@ -109,13 +108,13 @@ if (process.env.FLEX_VIDEO) {
   const outs = await renderVideo({ props, publicDir: mkdtempSync(join(tmpdir(), "flex-")), formats: ["9:16"], outDir, title: "motion-flex" });
   console.log("video:", outs.join(", "));
 } else {
-  // stat beat starts at frame 126 (4.2s); keyword stagger lands around progress 0.22–0.45 → frames ~159–193
   const frames = [
-    { frame: 150, name: "01-stat-number-in" },
-    { frame: 165, name: "02-kw-stagger-a" },
-    { frame: 174, name: "03-kw-stagger-b" },
-    { frame: 188, name: "04-kw-stagger-c" },
-    { frame: 210, name: "05-stat-settled" },
+    { frame: 16, name: "01-hero-lines-kf-a" },   // headline @keyframes rising, staggered
+    { frame: 30, name: "02-hero-lines-kf-b" },
+    { frame: 60, name: "03-hero-settled" },
+    { frame: 160, name: "04-stat-kw-kf-a" },     // keyword @keyframes staggering in
+    { frame: 172, name: "05-stat-kw-kf-b" },
+    { frame: 210, name: "06-stat-settled" },
   ];
   const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "flex-")), format: "9:16", frames, outDir });
   console.log("stills:\n" + outs.join("\n"));

@@ -22,11 +22,10 @@
         background:linear-gradient(90deg, var(--kino-green), var(--kino-mint));
         box-shadow:0 0 calc(10px + var(--pulse) * 26px) rgba(128,226,180,.6)}
   .cap{margin-top:32px;font-size:34px;font-weight:700;letter-spacing:.05em;color:#9fb1c9;display:flex;gap:0}
-  /* keyword stagger: sibling-index() gives each .kw its position (1,2,3) → auto per-item delay,
-     one rule, no per-child CSS and no extra spec params */
-  .kw{--d:calc((sibling-index() - 1) * .07);
-      opacity:clamp(0, calc((var(--progress) - .22 - var(--d)) * 8), 1);
-      transform:translateY(calc((1 - clamp(0, calc((var(--progress) - .22 - var(--d)) * 8), 1)) * 16px))}
+  /* keyword stagger via real @keyframes + class="kino-anim": sibling-index() sets each item's
+     --kino-delay, so kino scrubs them in one-after-another. One rule, no extra spec params. */
+  @keyframes kwin{0%{opacity:0;transform:translateY(16px)} 22%{opacity:1;transform:translateY(0)} 100%{opacity:1;transform:translateY(0)}}
+  .kw{animation-name:kwin; --kino-delay:calc((sibling-index() - 1) * .05 + .2)}
   .kw:not(:last-child)::after{content:" · ";color:#5b6b86}
 </style>
 <div class="stage">
@@ -34,6 +33,6 @@
     <div class="label">render determinism</div>
     <div class="big"><span class="num"></span><span class="pc">%</span></div>
     <div class="track"><div class="fill"></div></div>
-    <div class="cap"><span class="kw">frame-perfect</span><span class="kw">cache-friendly</span><span class="kw">agent-safe</span></div>
+    <div class="cap"><span class="kw kino-anim">frame-perfect</span><span class="kw kino-anim">cache-friendly</span><span class="kw kino-anim">agent-safe</span></div>
   </div>
 </div>

@@ -12,9 +12,13 @@
   .kicker{font-size:34px;font-weight:800;letter-spacing:.36em;text-transform:uppercase;color:var(--kino-mint);
           opacity:var(--kick);transform:translateY(calc((1 - var(--kick)) * -30px))}
   .head{margin:20px 0 0;text-align:center;line-height:.9;font-weight:900;font-size:210px;letter-spacing:-.02em}
-  .line{display:block;overflow:hidden;padding:0 8px}
-  .l1{opacity:var(--t1);transform:translateY(calc((1 - var(--t1)) * 105px))}
-  .l2{opacity:var(--t2);transform:translateY(calc((1 - var(--t2)) * 105px))}
+  /* the headline lines use real @keyframes (class="kino-anim") — kino force-pauses + scrubs them by
+     --progress. Sub-timing lives in the % stops (rise over 0→28%, hold to 100%); the two lines are
+     staggered with --kino-delay. No --t1/--t2 params needed. */
+  @keyframes rise{0%{opacity:0;transform:translateY(110px)} 28%{opacity:1;transform:translateY(0)} 100%{opacity:1;transform:translateY(0)}}
+  .line{display:block;overflow:hidden;padding:0 8px;animation-name:rise}
+  .l1{--kino-delay:.05}
+  .l2{--kino-delay:.13}
   /* slow gradient sheen drifting across the letters off --t */
   .grad{background:linear-gradient(105deg, var(--kino-white) 0%, var(--kino-mint) 38%, var(--gold) 58%, var(--kino-white) 100%);
         background-size:280% 100%;background-position:calc(var(--t) * -16%) 0;
@@ -29,8 +33,8 @@
   <div class="glow"></div>
   <div class="kicker">kino · feature flex</div>
   <h1 class="head">
-    <span class="line l1"><span class="grad">MOTION</span></span>
-    <span class="line l2"><span class="grad">GRAPHICS</span></span>
+    <span class="line l1 kino-anim"><span class="grad">MOTION</span></span>
+    <span class="line l2 kino-anim"><span class="grad">GRAPHICS</span></span>
   </h1>
   <div class="rule"></div>
   <div class="sub">AUTHORED IN HTML · DRIVEN BY JSON</div>
