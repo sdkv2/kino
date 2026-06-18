@@ -11,6 +11,10 @@ export interface VoiceSettings {
   style: number;
   use_speaker_boost: boolean;
 }
+// AUDIO FORMAT COUPLING: requests use mp3_44100_128 (44.1 kHz, 128 kbps MP3). This MUST stay in
+// sync with ffmpeg.ts (libmp3lame -b:a 128k, anullsrc r=44100) — the stitched track and the
+// per-clip VO must share a format, and the format is baked into the content-hash cache key, so
+// changing it here without changing ffmpeg.ts (and vice-versa) silently invalidates the cache.
 export const DEFAULT_SETTINGS: VoiceSettings = {
   stability: 0.45,
   similarity_boost: 0.75,
@@ -33,29 +37,7 @@ export async function listVoices(
   }));
 }
 
-export async function tts(
-  apiKey: string,
-  voiceId: string,
-  text: string,
-  out: string,
-  settings = DEFAULT_SETTINGS,
-): Promise<void> {
-  const r = await fetch(`${BASE}/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
-    method: "POST",
-    headers: { "xi-api-key": apiKey, "content-type": "application/json" },
-    body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: settings }),
-  });
-  if (!r.ok) throw new Error(`ElevenLabs TTS ${r.status}: ${await r.text()}`);
-  writeFileSync(out, Buffer.from(await r.arrayBuffer()));
-}
-
-// --mock: ~0.4s/word of silence so timing math + render still work with zero spend.
-export async function ttsMock(text: string, out: string): Promise<void> {
-  const words = text.trim().split(/\s+/).length;
-  await genSilence(Math.max(0.8, words * 0.38), out);
-}
-
-// Like tts(), but also returns clip-relative word timings (for word-synced captions).
+// ElevenLabs TTS that also returns clip-relative word timings (for word-synced captions).
 export async function ttsWithTimestamps(
   apiKey: string,
   voiceId: string,

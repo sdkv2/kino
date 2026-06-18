@@ -11,6 +11,7 @@ export async function probeDuration(file: string): Promise<number> {
   return parseFloat(stdout.trim());
 }
 
+// Keep 44100/128k MP3 in sync with elevenlabs.ts mp3_44100_128 (shared format + cache key).
 export async function genSilence(seconds: number, out: string): Promise<void> {
   await execa("ffmpeg", [
     "-y", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
@@ -18,6 +19,7 @@ export async function genSilence(seconds: number, out: string): Promise<void> {
   ]);
 }
 
+// Keep 44100/128k MP3 in sync with elevenlabs.ts mp3_44100_128 (shared format + cache key).
 export async function stitchAudio(clips: string[], gapSec: number, out: string): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "kino-stitch-"));
   const sil = join(dir, "sil.mp3");
