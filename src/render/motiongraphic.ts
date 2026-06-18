@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { MotionGraphicProps, BgKeyframe, BgTrigger, BgParamValue } from "./props.js";
 import { sanitizeMotionHtml } from "./sanitizeMotion.js";
+import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
 
 // Re-exported for back-compat (callers/tests import it from here).
 export { sanitizeMotionHtml };
@@ -62,6 +63,7 @@ export interface MotionGraphicRefInput {
   params?: Record<string, BgParamValue>;
   keyframes?: BgKeyframe[];
   triggers?: BgTrigger[];
+  loop?: boolean;
 }
 
 // Read the agent's HTML file, reject on lint violations, sanitize, and attach the JSON-owned
@@ -73,15 +75,32 @@ export function resolveMotionGraphic(
   const abs = project.assetPath(ref.source);
   if (!existsSync(abs)) throw new Error(`Missing motion graphic file: assets/${ref.source}`);
   const raw = readFileSync(abs, "utf8");
-  const base = { params: ref.params ?? {}, keyframes: ref.keyframes ?? [], triggers: ref.triggers ?? [] };
-  if (ref.source.endsWith(".js")) {
+  const base = {
+    params: ref.params ?? {},
+    keyframes: ref.keyframes ?? [],
+    triggers: ref.triggers ?? [],
+    loop: ref.loop,
+  };
+  const ext = ref.source.toLowerCase();
+  if (ext.endsWith(".js")) {
     // Tier 2: procedural source. Lint for determinism/safety; bake the JS verbatim (not sanitized —
     // it's code, not markup; its per-frame output is trusted like the custom-background draw fn).
     const violations = lintMotionJs(raw);
     if (violations.length) throw new Error(`Motion graphic assets/${ref.source}: ${violations.join("; ")}`);
     return { html: "", proc: raw, ...base };
   }
-  const violations = lintMotionHtml(raw);
-  if (violations.length) throw new Error(`Motion graphic assets/${ref.source}: ${violations.join("; ")}`);
-  return { html: sanitizeMotionHtml(raw), ...base };
+  if (ext.endsWith(".json")) {
+    // Tier 3: Lottie. Parse + validate + lint (throw), then warn (non-fatal).
+    const { data } = parseLottie(raw); // throws friendly parse/shape/duration errors
+    const violations = lintLottie(data);
+    if (violations.length) throw new Error(`Motion graphic assets/${ref.source}: ${violations.join("; ")}`);
+    for (const w of warnLottie(data)) console.warn(`Motion graphic assets/${ref.source}: ${w}`);
+    return { html: "", lottie: data, ...base };
+  }
+  if (ext.endsWith(".html")) {
+    const violations = lintMotionHtml(raw);
+    if (violations.length) throw new Error(`Motion graphic assets/${ref.source}: ${violations.join("; ")}`);
+    return { html: sanitizeMotionHtml(raw), ...base };
+  }
+  throw new Error(`Motion graphic assets/${ref.source}: motion source must be .html, .js, or .json`);
 }

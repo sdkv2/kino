@@ -175,3 +175,52 @@ describe("lottiePlaybackRate", () => {
     expect(lottiePlaybackRate(0, 90, 30, false)).toBe(1);
   });
 });
+
+import { resolveMotionGraphic } from "../src/render/motiongraphic.js";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+function projWith(file: string, contents: string) {
+  const root = mkdtempSync(join(tmpdir(), "kino-lot-"));
+  const abs = join(root, file);
+  mkdirSync(join(abs, ".."), { recursive: true });
+  writeFileSync(abs, contents);
+  return { assetPath: (rel: string) => join(root, rel) };
+}
+
+describe("resolveMotionGraphic — Lottie (.json) dispatch", () => {
+  const okLottie = JSON.stringify({ v: "5.7.4", fr: 30, ip: 0, op: 60, w: 1080, h: 1920, layers: [] });
+
+  it("routes a .json source to a lottie prop with empty html and forwards loop", () => {
+    const project = projWith("motion/anim.json", okLottie);
+    const props = resolveMotionGraphic({ source: "motion/anim.json", loop: true }, project);
+    expect(props.html).toBe("");
+    expect(props.proc).toBeUndefined();
+    expect(props.lottie).toMatchObject({ w: 1080 });
+    expect(props.loop).toBe(true);
+  });
+
+  it("dispatches case-insensitively (.JSON)", () => {
+    const project = projWith("motion/anim.JSON", okLottie);
+    const props = resolveMotionGraphic({ source: "motion/anim.JSON" }, project);
+    expect(props.lottie).toBeDefined();
+  });
+
+  it("throws listing the lint violation for a Lottie with an expression", () => {
+    const bad = JSON.stringify({ v: "5", fr: 30, ip: 0, op: 60, w: 10, h: 10,
+      layers: [{ ty: 4, ks: { o: { a: 0, k: 1, x: "$bm_rt=1" } } }] });
+    const project = projWith("motion/bad.json", bad);
+    expect(() => resolveMotionGraphic({ source: "motion/bad.json" }, project)).toThrow(/expression/i);
+  });
+
+  it("throws a friendly parse error for non-Lottie JSON", () => {
+    const project = projWith("motion/x.json", JSON.stringify({ hello: "world" }));
+    expect(() => resolveMotionGraphic({ source: "motion/x.json" }, project)).toThrow(/not a Lottie animation/i);
+  });
+
+  it("rejects an unknown extension instead of silently treating it as HTML", () => {
+    const project = projWith("motion/x.png", "not markup");
+    expect(() => resolveMotionGraphic({ source: "motion/x.png" }, project)).toThrow(/must be \.html, \.js, or \.json/i);
+  });
+});
