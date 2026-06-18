@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { SpecSchema } from "../src/spec/schema.js";
 import { parseLottie } from "../src/render/lottie.js";
 import { lintLottie } from "../src/render/lottie.js";
+import { warnLottie, lottiePlaybackRate } from "../src/render/lottie.js";
 
 describe("SpecSchema loop field", () => {
   it("accepts loop:true on a motionOverlay", () => {
@@ -139,5 +140,38 @@ describe("lintLottie", () => {
       { id: "b", e: 0, u: "i/", p: "b.png" },
     ];
     expect(lintLottie(two).filter((m) => /external asset/i.test(m))).toHaveLength(1);
+  });
+});
+
+describe("warnLottie", () => {
+  it("warns about a full-frame opaque solid (overlay occlusion)", () => {
+    const d: any = { v: "5", fr: 30, ip: 0, op: 60, w: 1080, h: 1920,
+      layers: [{ ty: 1, sc: "#000000", sw: 1080, sh: 1920, ks: { o: { a: 0, k: 100 } } }] };
+    expect(warnLottie(d).some((m) => /opaque background/i.test(m))).toBe(true);
+  });
+  it("does not warn when there is no full-frame opaque solid", () => {
+    const d: any = { v: "5", fr: 30, ip: 0, op: 60, w: 1080, h: 1920,
+      layers: [{ ty: 4, shapes: [] }] };
+    expect(warnLottie(d)).toEqual([]);
+  });
+});
+
+describe("lottiePlaybackRate", () => {
+  // Direction: docs say "higher = faster"; to play once across a LONGER beat, slow down (rate < 1).
+  it("stretches a 2s asset across a 3s beat (90 frames @30fps) → 2/3", () => {
+    expect(lottiePlaybackRate(2, 90, 30, false)).toBeCloseTo(2 / 3, 5);
+  });
+  it("normalizes fps via seconds, not raw frames (2s asset, 2s beat → 1)", () => {
+    expect(lottiePlaybackRate(2, 60, 30, false)).toBeCloseTo(1, 5);
+  });
+  it("speeds up when the beat is shorter than the asset (2s asset, 1s beat → 2)", () => {
+    expect(lottiePlaybackRate(2, 30, 30, false)).toBeCloseTo(2, 5);
+  });
+  it("returns 1 when looping", () => {
+    expect(lottiePlaybackRate(2, 90, 30, true)).toBe(1);
+  });
+  it("returns 1 for degenerate inputs (no stretch possible)", () => {
+    expect(lottiePlaybackRate(2, 0, 30, false)).toBe(1);
+    expect(lottiePlaybackRate(0, 90, 30, false)).toBe(1);
   });
 });

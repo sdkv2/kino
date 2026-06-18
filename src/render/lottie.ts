@@ -115,3 +115,46 @@ export function lintLottie(data: LottieData): string[] {
 
   return v;
 }
+
+// Non-fatal warnings (logged, not thrown). A full-frame opaque solid is fine for a kind:"motion" beat
+// but occludes the avatar/app when the same graphic is used as a motionOverlay.
+export function warnLottie(data: LottieData): string[] {
+  const w: string[] = [];
+  const W = Number((data as Record<string, unknown>).w);
+  const H = Number((data as Record<string, unknown>).h);
+  const layers = (data as Record<string, unknown>).layers;
+  if (Array.isArray(layers)) {
+    const opaqueFullFrameSolid = layers.some((l) => {
+      if (!l || typeof l !== "object") return false;
+      const layer = l as Record<string, any>;
+      if (layer.ty !== 1) return false; // solid layer
+      const full = Number(layer.sw) >= W && Number(layer.sh) >= H;
+      const o = layer.ks?.o;
+      // Static full opacity: { a:0, k:100 } (or k:[100]); animated opacity → don't warn (best-effort).
+      const opaque = o && o.a === 0 && (o.k === 100 || (Array.isArray(o.k) && o.k[0] === 100));
+      return full && opaque;
+    });
+    if (opaqueFullFrameSolid) {
+      w.push(
+        'opaque background detected — fine for kind:"motion", but as a motionOverlay this will hide the underlying video. Use a transparent-background export.',
+      );
+    }
+  }
+  return w;
+}
+
+// playbackRate to stretch a Lottie's full duration across the beat exactly once.
+// Docs (remotion.dev/docs/lottie/lottie): playbackRate is "the speed of the animation; a higher number
+// is faster". So rate = naturalSeconds / beatSeconds (slow down for a longer beat). Computed in SECONDS
+// so a non-composition-fps asset isn't mis-scaled. Returns 1 when looping or when inputs are degenerate.
+export function lottiePlaybackRate(
+  durationInSeconds: number,
+  beatFrames: number,
+  fps: number,
+  loop: boolean,
+): number {
+  if (loop) return 1;
+  const beatSeconds = beatFrames / fps;
+  if (!(durationInSeconds > 0) || !(beatSeconds > 0)) return 1;
+  return durationInSeconds / beatSeconds;
+}
