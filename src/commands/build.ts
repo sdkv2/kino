@@ -253,7 +253,7 @@ export async function prepare(
     // motion segment: resolve the full-screen graphic; VO drives its duration like other beats.
     return {
       ...base,
-      motion: resolveMotionGraphic({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers }, project),
+      motion: resolveMotionGraphic({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, project),
     };
   });
 
