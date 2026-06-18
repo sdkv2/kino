@@ -42,7 +42,8 @@ export interface BuildVOOpts {
  * (real ElevenLabs when !mock, silence+fake timings when mock) and cache the result. Then probe
  * durations, compute timeline timings with GAP, offset clip-relative word times onto the timeline,
  * and stitch one continuous track (also cached).
- * Contract: apiKey is required unless mock=true (real TTS calls assert it). Side effects: writes
+ * Contract: apiKey is required unless mock=true (real TTS calls pass it via the `apiKey!`
+ * non-null assertion). Side effects: writes
  * into the Cache dir and a temp dir. Returns the stitched track path, per-clip paths, timings, and
  * timeline-absolute word timings.
  */

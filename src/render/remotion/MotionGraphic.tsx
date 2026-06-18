@@ -71,7 +71,7 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       data.proc
         ? // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
           // source is trusted local project config that has already passed the sanitize + determinism lint
-          // (see src/render/sanitizeMotion.ts). Never feed untrusted/remote input here.
+          // (sanitize: src/render/sanitizeMotion.ts; lint: src/render/motiongraphic.ts). Never feed untrusted/remote input here.
           // eslint-disable-next-line @typescript-eslint/no-implied-eval
           (new Function("env", data.proc) as (env: MotionEnv) => unknown)
         : null,

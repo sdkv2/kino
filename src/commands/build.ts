@@ -1,7 +1,8 @@
 // Pipeline backbone: spec → VO → avatar plan/trim → faceless background → fonts → Remotion render.
 // prepare() is the shared resolver that does everything up to (but not including) the final encode;
-// the preview commands (still/storyboard/inspect) reuse it so they stay byte-for-byte in step with a
-// real build. build() adds only the render + variant-tagging on top.
+// the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
+// code path as a real build (note: they default to mock VO). build() adds only the render +
+// variant-tagging on top.
 import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, isAbsolute } from "node:path";

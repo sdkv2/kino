@@ -32,7 +32,7 @@ Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Faceless need
 ## Quickstart
 ```bash
 cd <project> && kino init evidentcv     # scaffold .env, brand.md, dirs
-kino doctor                             # preflight: keys, ffmpeg, fonts
+kino doctor                             # preflight: API keys, ffmpeg/ffprobe, heygen CLI
 kino build specs/lie-test.json --mock   # free structural preview (no API spend)
 kino build specs/lie-test.json          # real render → out/lie-test/
 ```

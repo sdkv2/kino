@@ -139,7 +139,7 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
     if (kind === "custom" && customCode) {
       // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
       // source is trusted local project config that has already passed the sanitize + determinism lint
-      // (see src/render/sanitizeMotion.ts). Never feed untrusted/remote input here.
+      // (sanitize: src/render/sanitizeMotion.ts; lint: src/render/motiongraphic.ts). Never feed untrusted/remote input here.
       // brand-authored draw fn, runs per frame inside CanvasBackground.
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       return new Function("ctx", "env", customCode) as DrawFn;

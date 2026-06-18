@@ -27,7 +27,8 @@ function applyEase(name: Ease | undefined, p: number): number {
     }
     case "spring": {
       // Elastic-out ease (Penner): a decaying sine wobble that converges on 1. c4 = 2π/3 is the
-      // elastic period; 2^(−10p) is the exponential decay envelope. Endpoints are pinned to avoid NaN.
+      // elastic period; 2^(−10p) is the exponential decay envelope. Endpoints are pinned so they're
+      // exactly 0 and 1 (the raw formula lands at ~1.0005 at p=1, not precisely 1).
       if (p === 0 || p === 1) return p;
       const c4 = (2 * Math.PI) / 3;
       return Math.pow(2, -10 * p) * Math.sin((p * 10 - 0.75) * c4) + 1;
