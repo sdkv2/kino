@@ -40,7 +40,7 @@ cd ~/kino && npm install && npm run build && npm link   # provides the `kino` co
 ## Verify your environment
 
 ```bash
-kino doctor      # checks dependencies (ffmpeg, ImageMagick) + which API keys are present
+kino doctor      # checks deps (ffmpeg/ffprobe, heygen CLI) + which API keys are present
 ```
 
 ## Scaffold a project
