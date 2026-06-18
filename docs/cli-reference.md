@@ -111,8 +111,8 @@ kino inspect specs/lie-test.json --real   # true ElevenLabs word timings
 
 ## Project setup
 
-### `init`
-Scaffold `.env`, a brand config, and project directories.
+### `init [brand]`
+Scaffold the workspace (`.env`, `brands/<brand>/brand.md`) plus a first project `projects/<brand>/` (with `specs/`, `assets/`, `out/`, and a `project.json` assigning the brand). Builds require a project, so this produces a ready-to-build layout. Defaults the brand/project name to `default`.
 
 ```
 kino init [brand]

@@ -3,6 +3,14 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.16.0] — Require a project (BREAKING)
+- **BREAKING:** removed the flat layout. Every build must run inside a `projects/<name>/` (with a
+  `project.json`); building a spec outside a project now fails with guidance instead of silently
+  using the workspace root.
+- `kino init <brand>` now scaffolds the workspace **and** a first project (`projects/<brand>/`),
+  rather than a flat layout.
+- Internals: split `resolveWorkspace` (shared brands/cache) from `resolveProject` (project-required).
+
 ## [1.15.0] — Markdown brands
 - Brands are now `brands/<name>/brand.md` (YAML frontmatter + guidelines body),
   replacing the old `brand.json`. Frontmatter is an optional subset merged over `DEFAULT_BRAND`.

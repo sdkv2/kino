@@ -46,13 +46,14 @@ kino doctor      # checks deps (ffmpeg/ffprobe, heygen CLI) + which API keys are
 ## Scaffold a project
 
 ```bash
-kino init evidentcv        # scaffold .env, a brand.md, and project dirs
+kino init evidentcv        # scaffold .env, a brand.md, and projects/evidentcv/
 ```
 
-kino supports two layouts:
+Every build runs inside a **project**:
 
-- **Projects** (recommended) — `kino projects --new <name> --brand <brand>` creates `projects/<name>/` with its own `specs/`, `assets/`, and `out/`, plus a `project.json` that assigns a brand and default overrides. `kino projects` lists what exists.
-- **Flat** — a single `specs/`, `assets/`, `out/`, and `brand.md` at the repo root (back-compat; still works).
+- `kino init <brand>` scaffolds the workspace plus a first project named after the brand: `projects/<brand>/` with its own `specs/`, `assets/`, and `out/`, plus a `project.json` that assigns the brand.
+- `kino projects --new <name> --brand <brand>` adds more projects; `kino projects` lists what exists.
+- A spec must live under a project's `specs/`. Building a spec that isn't inside a project fails with a message telling you to create one.
 
 A **brand** (`brand.md`) is YAML frontmatter (an optional subset of palette/font/voice/disclosure and other settings) followed by a free-form guidelines body. The frontmatter holds the palette, fonts, disclosures, default avatar provider, voice/look aliases, and banned phrases; the body is prose for the driving agent. Everything is optional and falls back to kino defaults — see [Spec reference → brand.md](spec-reference.md#brandmd).
 
