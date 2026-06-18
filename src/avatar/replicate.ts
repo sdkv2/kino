@@ -3,8 +3,9 @@
 //   POST /v1/models/{owner}/{name}/predictions {input} (latest version)  — or
 //   POST /v1/predictions {version,input}              (when a :version pin is given)
 //   GET  urls.get                                      → poll {status, output, error}
-// Default model is an image+audio talking-head (SadTalker); field names are overridable
-// per brand because each lip-sync model names its inputs differently.
+// The default model (set in avatar.ts → replicateCfg) is bytedance/omni-human, an image+audio
+// talking-head that boots reliably on Replicate. Field names are overridable per brand because
+// each lip-sync model names its inputs differently.
 import { download, filePart, fileName } from "../media/net.js";
 
 const API = "https://api.replicate.com/v1";
