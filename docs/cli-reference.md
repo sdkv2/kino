@@ -8,7 +8,7 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 
 - Build & preview — [`build`](#build) · [`still`](#still) · [`storyboard`](#storyboard) · [`batch`](#batch) · [`inspect`](#inspect)
 - Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor)
-- Discovery (what you can use) — [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion)
+- Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion)
 - Reference-video analysis (research only) — [`transcribe`](#transcribe) · [`scan`](#scan) · [`frames`](#frames)
 
 ---
@@ -151,6 +151,18 @@ kino doctor
 ## Discovery
 
 These commands print machine-readable contracts the driving agent reads before authoring a spec.
+
+### `brand`
+List brands, or print a brand's resolved styling values + guidelines body — the brand context the agent reads before authoring a spec. With no `name`, lists the brands found under `brands/` (each a subdir containing a `brand.md`); brands are optional, so kino falls back to defaults when none exist. With a `name`, prints that brand's resolved frontmatter (colors, font, caption mode, background, voice, disclosure) followed by the free-form markdown guidelines body. See [Spec reference](spec-reference.md) for the `brand.md` format.
+
+```
+kino brand [name]
+```
+
+```bash
+kino brand                # list available brands
+kino brand evidentcv      # resolved styling values + guidelines
+```
 
 ### `voices`
 List ElevenLabs voices.
