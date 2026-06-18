@@ -58,6 +58,26 @@ export function lintMotionJs(src: string): string[] {
   return BANNED_JS.filter((b) => b.re.test(src)).map((b) => b.msg);
 }
 
+// Determinism/safety lint for a motion source, dispatched on the (lowercased) extension — the single
+// source of truth shared by resolveMotionGraphic (which also needs the parsed result) and
+// assertMotionGraphics (validation-only). Returns violations (empty = clean); a Lottie parse failure
+// is surfaced as a violation rather than thrown, so callers format their own error. Keep the branch
+// set in sync with resolveMotionGraphic if a new extension is added.
+export function lintMotionSource(source: string, raw: string): string[] {
+  const ext = source.toLowerCase();
+  if (ext.endsWith(".js")) return lintMotionJs(raw);
+  if (ext.endsWith(".json")) {
+    try {
+      const { data } = parseLottie(raw);
+      return lintLottie(data);
+    } catch (err) {
+      return [(err as Error).message];
+    }
+  }
+  if (ext.endsWith(".html")) return lintMotionHtml(raw);
+  return ["motion source must be .html, .js, or .json"];
+}
+
 export interface MotionGraphicRefInput {
   source: string;
   params?: Record<string, BgParamValue>;
