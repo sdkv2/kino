@@ -12,13 +12,15 @@ export function containedPath(base: string, rel: string): string {
   return abs;
 }
 
-export interface Project {
+export interface Workspace {
   workspaceRoot: string; // holds shared brands/ + .kino-cache
-  projectRoot: string; // holds this project's specs/ assets/ out/ (== workspaceRoot in flat mode)
   cache: string;
-  projectConfigPath: string | null; // projectRoot/project.json, if present
-  isProject: boolean;
   brandDir(name: string): string; // shared, at the workspace
+}
+
+export interface Project extends Workspace {
+  projectRoot: string; // holds this project's specs/ assets/ out/
+  projectConfigPath: string; // projectRoot/project.json (always present — a project requires one)
   assetPath(rel: string): string; // scoped to the project
   outDir(title: string): string; // scoped to the project
 }
@@ -35,34 +37,53 @@ export function findUp(startDir: string, marker: string, existsFn: (p: string) =
   }
 }
 
-// Resolve the workspace (shared brands) + the active project (scoped specs/assets/out).
-//   - project name → workspaceRoot/projects/<name>
-//   - else spec path → walk up to the nearest project.json
-//   - else (flat / back-compat) → project root == workspace root
-export function resolveProject(opts: { specPath?: string; project?: string; cwd?: string } = {}): Project {
-  const cwd = opts.cwd ?? process.cwd();
+// Resolve the shared workspace: the nearest ancestor of cwd containing a brands/ dir (else cwd),
+// which holds shared brands/ and the .kino-cache. Use this for commands that don't need a project.
+export function resolveWorkspace(cwd: string = process.cwd()): Workspace {
   const workspaceRoot = findUp(cwd, "brands") ?? cwd;
-
-  let projectRoot: string;
-  if (opts.project) {
-    projectRoot = join(workspaceRoot, "projects", opts.project);
-  } else if (opts.specPath) {
-    projectRoot = findUp(resolve(dirname(opts.specPath)), "project.json") ?? workspaceRoot;
-  } else {
-    projectRoot = workspaceRoot;
-  }
-
-  const cp = join(projectRoot, "project.json");
-  const projectConfigPath = existsSync(cp) ? cp : null;
-
   return {
     workspaceRoot,
-    projectRoot,
     cache: join(workspaceRoot, ".kino-cache"),
-    projectConfigPath,
-    isProject: projectConfigPath !== null,
     brandDir: (name) => join(workspaceRoot, "brands", name),
-    assetPath: (rel) => containedPath(join(projectRoot, "assets"), rel),
-    outDir: (title) => join(projectRoot, "out", title),
+  };
+}
+
+// Resolve the shared workspace AND the active project. kino requires a project: specs/assets/out
+// live under projects/<name>/ with a project.json. Throws (no flat fallback) when none resolves.
+//   - project name → workspaceRoot/projects/<name>   (must contain project.json)
+//   - spec path    → nearest ancestor that contains project.json
+export function resolveProject(opts: { specPath?: string; project?: string; cwd?: string } = {}): Project {
+  const ws = resolveWorkspace(opts.cwd ?? process.cwd());
+
+  let projectRoot: string | null;
+  if (opts.project) {
+    projectRoot = join(ws.workspaceRoot, "projects", opts.project);
+  } else if (opts.specPath) {
+    projectRoot = findUp(resolve(dirname(opts.specPath)), "project.json");
+  } else {
+    projectRoot = null;
+  }
+
+  if (!projectRoot || !existsSync(join(projectRoot, "project.json"))) {
+    if (opts.project) {
+      throw new Error(
+        `Project '${opts.project}' not found at projects/${opts.project}/ (no project.json). ` +
+          `Create it with: kino projects --new ${opts.project} --brand <brand>`,
+      );
+    }
+    const where = opts.specPath ? `spec '${opts.specPath}'` : "this command";
+    throw new Error(
+      `No project found for ${where}. kino no longer supports a flat layout — every spec must live ` +
+        `under projects/<name>/specs/. Create one with: kino projects --new <name> --brand <brand>`,
+    );
+  }
+
+  const pr = projectRoot; // narrowed to string
+  return {
+    ...ws,
+    projectRoot: pr,
+    projectConfigPath: join(pr, "project.json"),
+    assetPath: (rel) => containedPath(join(pr, "assets"), rel),
+    outDir: (title) => join(pr, "out", title),
   };
 }

@@ -57,8 +57,9 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
   the build (no guaranteed-outcome copy).
 - **Inspect & iterate** — `inspect` (plan as JSON), `still`/`storyboard` (fast mock previews),
   `frames` (extract from a render). Built for tight agent loops.
-- **Brands & projects** — optional `brands/<name>/brand.md` (markdown frontmatter + guidelines);
-  `projects/<name>/` scopes each campaign's specs/assets/out. Flat layout still works.
+- **Brands & projects** — `brands/<name>/brand.md` (markdown frontmatter + guidelines) is shared;
+  every build runs inside a `projects/<name>/` (its own specs/assets/out + a `project.json` that
+  assigns a brand). `kino init <brand>` scaffolds the first one; `kino projects --new` adds more.
 
 ## Documentation
 Full guides live in [`docs/`](docs/):

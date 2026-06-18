@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveProject } from "../config/project.js";
+import { resolveWorkspace } from "../config/project.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
@@ -24,8 +24,8 @@ function mockTranscript(): Transcript {
 }
 
 async function realTranscribe(video: string): Promise<Transcript> {
-  const project = resolveProject();
-  loadEnv(project.workspaceRoot);
+  const ws = resolveWorkspace();
+  loadEnv(ws.workspaceRoot);
   const apiKey = requireKey("ELEVENLABS_API_KEY");
   const dir = mkdtempSync(join(tmpdir(), "kino-stt-"));
   const wav = join(dir, "audio.wav");
@@ -33,7 +33,7 @@ async function realTranscribe(video: string): Promise<Transcript> {
   await extractAudio(video, wav);
   const durationSec = await probeDuration(wav);
   if (!durationSec || durationSec < 0.05) throw new Error(`${video} has no audible audio track`);
-  const cache = new Cache(project.cache);
+  const cache = new Cache(ws.cache);
   const key = contentHash({ kind: "scribe", model: "scribe_v1", size: statSync(wav).size });
   const cached = cache.get(key, "json");
   if (cached) return JSON.parse(readFileSync(cached, "utf8")) as Transcript;

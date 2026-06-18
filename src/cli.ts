@@ -8,7 +8,7 @@ import { log } from "./log.js";
 import { formatCliError } from "./cliError.js";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.15.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.16.0");
 
 program
   .command("build <spec>")
@@ -134,7 +134,7 @@ program
 
 program
   .command("init [brand]")
-  .description("Scaffold .env, a brand config, and project dirs")
+  .description("Scaffold .env, a brand, and a first project under projects/<brand>")
   .action(async (b) => (await import("./commands/init.js")).init(b));
 
 program

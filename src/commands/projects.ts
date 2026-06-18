@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveProject } from "../config/project.js";
+import { resolveWorkspace } from "../config/project.js";
 import { ProjectConfigSchema } from "../config/projectConfig.js";
 
 // List projects (name → assigned brand), or scaffold one with --new <name> --brand <brand>.
 export async function projects(opts: { new?: string; brand?: string }): Promise<void> {
-  const { workspaceRoot } = resolveProject({});
+  const { workspaceRoot } = resolveWorkspace();
   const projectsDir = join(workspaceRoot, "projects");
 
   if (opts.new) {
