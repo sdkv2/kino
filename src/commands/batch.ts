@@ -1,3 +1,5 @@
+// batch: build many specs in one invocation — reads a JSON array of spec paths and runs build() on
+// each in sequence (same options applied to all).
 import { readFileSync } from "node:fs";
 import { build } from "./build.js";
 

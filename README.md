@@ -6,38 +6,59 @@
 
 ---
 
-**kino** turns an agent-authored JSON spec into finished vertical videos:
-ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or **faceless** → Remotion composite → 9:16 / 3:4 MP4.
-The agent supplies the creative; `kino` handles deterministic production.
+**kino** turns an agent-authored JSON spec into finished vertical videos. The driving agent supplies
+the creative; kino handles deterministic production: ElevenLabs voiceover, an optional AI avatar
+(HeyGen / Hedra / Replicate) or a **faceless** background, composited in Remotion to a 9:16 / 3:4 MP4.
 
-- **Design spec:** [`docs/superpowers/specs/2026-06-15-kino-design.md`](docs/superpowers/specs/2026-06-15-kino-design.md)
-- **Implementation plan:** [`docs/superpowers/plans/2026-06-15-kino.md`](docs/superpowers/plans/2026-06-15-kino.md)
+## Pipeline at a glance
+```
+spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ avatar plan + trim
+          ─▶ avatar (HeyGen/Hedra/Replicate) or faceless background
+          ─▶ Remotion composite ─▶ ffmpeg ─▶ out/<title>/…mp4
+```
+The agent authors specs; kino performs every step deterministically (no LLM inside the CLI).
 
-> **Status:** v1.13 — **motion graphics**: agent-authored HTML/CSS beats & overlays driven by kino-set
-> CSS variables (deterministic in Remotion), with scrubbed `@keyframes` (`class="kino-anim"`) and a
-> `.kino-cliptext` helper. Plus (v1.12) external reference-video analysis (`transcribe`/`scan`),
-> brand-backdrop app cut-ins, and word-by-word captions.
-
-## Install (global)
+## Install
 ```bash
 cd <your-project> && bash ~/kino/setup.sh   # installs the `kino` command + writes a project .env
 ```
-`setup.sh` runs `npm install`/`build`/`link` and prompts for API keys (written to a `chmod 600`,
-git-ignored `.env`). Or do it by hand:
+`setup.sh` runs `npm install` / `build` / `link` and prompts for API keys (written to a `chmod 600`,
+git-ignored `.env`). Manual install:
 ```bash
-cd ~/kino && npm install && npm run build && npm link   # provides the `kino` command
+cd ~/kino && npm install && npm run build && npm link
 ```
 Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Faceless needs only an ElevenLabs key.
 
-## Use
+## Quickstart
 ```bash
-cd <project> && kino init evidentcv     # scaffold .env, brand, dirs
-# ...fill brands/<brand>/brand.md (optional frontmatter + guidelines), add assets/, write specs/
-kino doctor
+cd <project> && kino init evidentcv     # scaffold .env, brand.md, dirs
+kino doctor                             # preflight: API keys, ffmpeg/ffprobe, heygen CLI
 kino build specs/lie-test.json --mock   # free structural preview (no API spend)
 kino build specs/lie-test.json          # real render → out/lie-test/
 ```
 The driving agent authors specs — see [`skills/video-production`](skills/video-production/SKILL.md).
+
+## Features
+- **Avatar engines** — `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3),
+  `replicate` (open-source lip-sync). Avatars are trimmed to on-camera segments to cut spend;
+  VO + avatar are content-hash cached.
+- **Faceless backgrounds** — `glow`, `image`, `mesh`, `aurora`, `particles`, `grid`, `custom` —
+  frame-deterministic Canvas2D, auto-coloured from the brand.
+- **Captions** — `phrase` (editorial block) or `words` (revealed word-by-word, synced to real VO
+  timestamps, with active-word highlight + per-segment emphasis).
+- **Fonts** — curated names (`kino fonts`) downloaded on demand (Google Fonts → `~/.kino/fonts/`),
+  or any raw CSS family.
+- **Animated backgrounds & overlays** — backgrounds, logo, captions, and kickers are all tweenable
+  on one keyframe layer (`backgroundKeyframes`/`logoKeyframes`/…), with timed `backgroundTriggers`.
+- **Motion graphics** — author a self-contained HTML/CSS file in `assets/motion/`; kino drives it
+  per-frame via CSS variables, with scrubbed `@keyframes` and a `.kino-cliptext` helper, sanitized
+  and determinism-linted. See [docs/motion-graphics.md](docs/motion-graphics.md).
+- **Branding & compliance** — logo mark + a per-mode AI `disclosure`; brand `bannedPhrases` fail
+  the build (no guaranteed-outcome copy).
+- **Inspect & iterate** — `inspect` (plan as JSON), `still`/`storyboard` (fast mock previews),
+  `frames` (extract from a render). Built for tight agent loops.
+- **Brands & projects** — optional `brands/<name>/brand.md` (markdown frontmatter + guidelines);
+  `projects/<name>/` scopes each campaign's specs/assets/out. Flat layout still works.
 
 ## Documentation
 Full guides live in [`docs/`](docs/):
@@ -47,38 +68,14 @@ Full guides live in [`docs/`](docs/):
 - [Motion graphics](docs/motion-graphics.md) — author custom animated beats/overlays in HTML/CSS.
 - [Backgrounds & overlays](docs/backgrounds-and-overlays.md) — faceless backgrounds, logo, captions, kickers.
 
-## Pipeline & options (v1.1)
-- **Avatar engine** — `provider` (spec) / `defaultProvider` (brand) / `--provider`:
-  `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3), `replicate` (open-source lip-sync).
-  Avatars are **trimmed to on-camera segments** to cut spend; VO + avatar are content-hash cached.
-- **Faceless backgrounds** — `background` / `--background`: `glow`, `image`, `mesh`, `aurora`,
-  `particles`, `grid`, `custom` — frame-deterministic Canvas2D, auto-coloured from the brand.
-- **Captions** — `captionMode`: `phrase` (short editorial block) or `words` (spoken text revealed
-  word-by-word, synced to real VO timestamps; active-word highlight + per-segment `emphasis`).
-- **Fonts** — `brand.font`/`labelFont` accept a curated font name (`kino fonts`) downloaded on demand
-  (Google Fonts → cached `~/.kino/fonts/`), loaded into the render; or any raw CSS family.
-- **Animated backgrounds** — `kino backgrounds` exposes each preset's params (colours/intensity) + actions
-  (pulse); agents tween them via `backgroundKeyframes` and fire `backgroundTriggers` at timestamps
-  (sync with `kino inspect` word times). Custom draw fns get `env.params` + `env.pulse`.
-- **Overlay elements** — `kino elements`: the logo has size (`small`/`medium`/`big`/px) + position
-  (cardinal/center/custom) presets; **logo, captions, and kickers** are all tweenable
-  (`logoKeyframes` / `captionKeyframes` / `kickerKeyframes` — x/y/scale/opacity) on one shared keyframe layer.
-- **Motion graphics** — `kino motion`: author a self-contained HTML/CSS file in `assets/motion/`; kino drives
-  it per-frame via CSS variables (`--progress`/`--t`/`--pulse`/`--<param>` + brand palette), supports scrubbed
-  `@keyframes` (`class="kino-anim"`, `--kino-delay` stagger) and a `.kino-cliptext` helper, all sanitized +
-  determinism-linted. Use as a full beat (`kind:"motion"`) or a `motionOverlay`. See [docs/motion-graphics.md](docs/motion-graphics.md).
-- **Branding** — `logo` mark on talking beats + a per-mode AI `disclosure` baked in.
-- **Output** — `out/<title>/<title>[-<tag>]-<format>.mp4`; `--tag` (auto-set from `--background`)
-  keeps variant renders side-by-side instead of overwriting.
-- **Compliance** — brand `bannedPhrases` fail the build (no guaranteed-outcome copy).
-- **Inspect & iterate** — `kino inspect` (plan as JSON), `kino still`/`storyboard` (fast mock previews
-  via Remotion `renderStill`), `kino frames` (extract from a render). Built for tight agent loops:
-  map beats → preview a beat → edit spec → re-preview → `build`.
-- **Brands (optional, markdown)** — `brands/<name>/brand.md`: YAML frontmatter (palette/font/voice/
-  disclosure — any subset, merged over kino defaults) + a free-form guidelines body the agent reads via
-  `kino brand <name>`. No brand needed to render. (Replaces the old `brand.json`.)
-- **Projects** — `projects/<name>/` scopes each campaign's `specs/assets/out`; `project.json` assigns a
-  shared brand + default overrides. `kino projects` lists/scaffolds. Flat layout still works (back-compat).
+## Development
+```bash
+npm run build     # tsc → dist/
+npm test          # vitest (run once);  npm run test:watch to watch
+npm run dev -- <args>   # run the CLI from source via tsx
+```
+Work on a feature branch (`feat/…`, `fix/…`, `chore/…`), bump `version` in `package.json` for
+releases, and open a PR to `main`. Version history lives in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Brand assets (`logo/`)
 | File | Use |

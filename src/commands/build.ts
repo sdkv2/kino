@@ -1,3 +1,8 @@
+// Pipeline backbone: spec → VO → avatar plan/trim → faceless background → fonts → Remotion render.
+// prepare() is the shared resolver that does everything up to (but not including) the final encode;
+// the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
+// code path as a real build (note: they default to mock VO). build() adds only the render +
+// variant-tagging on top.
 import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, isAbsolute } from "node:path";
@@ -24,6 +29,10 @@ import { pickShot, pickTransition, type Shot, type Transition } from "../render/
 import { resolveMotionGraphic } from "../render/motiongraphic.js";
 import { log } from "../log.js";
 
+// Foreground (text) colour for a kicker pill, keyed by the kicker's brand background colour: a
+// near-black ink on the light mint/gold chips, white on the green chip — each picked for contrast.
+// The background colours themselves come from the brand palette (see DEFAULT_BRAND.colors in
+// config/brand.ts).
 const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
 
 // Resolve the portrait image hedra/replicate lip-sync against (heygen uses a hosted look id instead).

@@ -3,8 +3,9 @@
 //   POST /v1/models/{owner}/{name}/predictions {input} (latest version)  — or
 //   POST /v1/predictions {version,input}              (when a :version pin is given)
 //   GET  urls.get                                      → poll {status, output, error}
-// Default model is an image+audio talking-head (SadTalker); field names are overridable
-// per brand because each lip-sync model names its inputs differently.
+// The default model (set in avatar.ts → replicateCfg) is bytedance/omni-human, an image+audio
+// talking-head that boots reliably on Replicate. Field names are overridable per brand because
+// each lip-sync model names its inputs differently.
 import { download, filePart, fileName } from "../media/net.js";
 
 const API = "https://api.replicate.com/v1";
@@ -15,8 +16,9 @@ function auth(): Record<string, string> {
   return { authorization: `Bearer ${t}` };
 }
 
+// Authenticated JSON fetch against the Replicate API (throws on non-2xx).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function rj(path: string, init: RequestInit & { json?: unknown } = {}): Promise<any> {
+async function replicateFetch(path: string, init: RequestInit & { json?: unknown } = {}): Promise<any> {
   const { json, headers, ...rest } = init;
   const url = path.startsWith("http") ? path : `${API}${path}`;
   const res = await fetch(url, {
@@ -58,11 +60,11 @@ export async function replicateGenerate(audioPath: string, imagePath: string, cf
   if (cfg.model.includes(":")) {
     version = cfg.model.split(":")[1];
   } else {
-    const m = await rj(`/models/${cfg.model}`, { method: "GET" });
+    const m = await replicateFetch(`/models/${cfg.model}`, { method: "GET" });
     version = m.latest_version?.id;
     if (!version) throw new Error(`Replicate model ${cfg.model} has no runnable version`);
   }
-  const pred = await rj("/predictions", { method: "POST", json: { version, input } });
+  const pred = await replicateFetch("/predictions", { method: "POST", json: { version, input } });
   await download(await pollReplicate(pred), out);
 }
 
@@ -77,7 +79,7 @@ async function pollReplicate(pred: any, timeoutSec = 900): Promise<string> {
       throw new Error(`Replicate ${cur.status}: ${cur.error ?? "unknown"}`);
     }
     await new Promise((r) => setTimeout(r, 5000));
-    cur = await rj(getUrl, { method: "GET" });
+    cur = await replicateFetch(getUrl, { method: "GET" });
   }
   throw new Error("Replicate timed out");
 }

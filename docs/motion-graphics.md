@@ -36,10 +36,11 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 | `--progress` | `0 → 1` across the beat (use for entrances/reveals) |
 | `--pulse` | `0 → 1` envelope fired by spec triggers (`{ at, action: "pulse" }`) |
 | `--<param>` | every key in the spec's `params`, tweened by `keyframes` (e.g. `--pct`) |
-| `--kino-mint` `--kino-green` `--kino-night` `--kino-white` | brand palette |
+| `--kino-mint` `--kino-green` `--kino-night` `--kino-white` `--kino-gold` | brand palette |
 | `--kino-font` | brand font family |
+| `--kino-caption-bottom` | px from the frame bottom where kino's caption band sits (`0px` when this beat has no caption) — keep your own text clear of it, e.g. `bottom:calc(var(--kino-caption-bottom) + 24px)` |
 
-> The gold accent is **not** auto-injected — pass it as a param if you need it (`"params": { "gold": "#d99a20" }` → `var(--gold)`).
+> The gold accent **is** auto-injected as `--kino-gold` (with a legacy `--gold` alias the shipped `examples/motion-flex/*` files use). You don't need to pass it as a param.
 
 ## Driving it from the spec
 

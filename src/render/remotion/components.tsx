@@ -6,6 +6,8 @@ import { activeWordIndex, isHighlightWord, normWord } from "../captions";
 import { paramsAt } from "../bgparams";
 import { CanvasBackground } from "./backgrounds/CanvasBackground";
 import { getPreset, type DrawFn } from "./backgrounds/presets";
+// CAPTION_BOTTOM: px offset of the lower-third caption band from the frame bottom (defined +
+// documented in captionLayout.ts; also exposed to motion graphics as --kino-caption-bottom).
 import { CAPTION_BOTTOM } from "../captionLayout";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
@@ -34,6 +36,8 @@ const plateStyle = (bg?: string | null): React.CSSProperties =>
 
 export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: string } | null }> = ({ text, t, backplate }) => {
   const f = useCurrentFrame();
+  // Entrance spring 0→1; damping 14 / mass 0.6 = a soft pop with a touch of overshoot. Drives the
+  // scale-up below (0.7→1, i.e. a 30% grow-in). left/right 48 = px side margins on the band.
   const s = spring({ frame: f, fps: 30, config: { damping: 14, mass: 0.6 } });
   return (
     <div style={{ position: "absolute", left: 48, right: 48, bottom: CAPTION_BOTTOM, display: "flex", justifyContent: "center" }}>
@@ -68,6 +72,9 @@ export const HeroCaption: React.FC<{ text: string; t: Theme }> = ({ text, t }) =
     <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 80px" }}>
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 6 }}>
         {words.map((w, i) => {
+          // `i * 3` = 3-frame stagger per word (left→right cascade). Spring damping 13 / mass 0.7
+          // drives the rise (translateY 44px→0) + fade (opacity 0→1). 1.42 below scales the hero
+          // font 42% above the lower-third caption size.
           const s = spring({ frame: f - i * 3, fps: 30, config: { damping: 13, mass: 0.7 } });
           return (
             <span
@@ -130,7 +137,10 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
   const { kind, customCode, params, keyframes, triggers, image } = background;
   const draw = React.useMemo<DrawFn | undefined>(() => {
     if (kind === "custom" && customCode) {
-      // brand-authored draw fn (trusted, local config), runs per frame inside CanvasBackground
+      // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
+      // source is trusted local project config that has already passed the sanitize + determinism lint
+      // (sanitize: src/render/sanitizeMotion.ts; lint: src/render/motiongraphic.ts). Never feed untrusted/remote input here.
+      // brand-authored draw fn, runs per frame inside CanvasBackground.
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       return new Function("ctx", "env", customCode) as DrawFn;
     }
@@ -251,14 +261,19 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
       }}
     >
       {words.map((w, i) => {
+        // revealFrame = frames since this word started (negative until it's spoken). Spring damping
+        // 12 / mass 0.6 = a brisk per-word pop.
         const revealFrame = (tAbs - w.start) * fps;
         const s = spring({ frame: revealFrame, fps, config: { damping: 12, mass: 0.6 } });
         const isActive = i === active;
         const isEmph = emph.has(normWord(w.word));
         // Single highlight colour: the spoken word and the brand name go green. No gold/transition.
         const isGreen = isHighlightWord(w.word, { isActive, brandName: t.brandName });
+        // Pop in 0.6→1 (40% grow), then the active word is bumped 1.1x (10% larger). Unspoken words
+        // (revealFrame<=0) stay at 0.6 scale / 0 opacity until their start.
         const scale = (revealFrame <= 0 ? 0.6 : interpolate(s, [0, 1], [0.6, 1])) * (isActive ? 1.1 : 1);
         const opacity = revealFrame <= 0 ? 0 : interpolate(s, [0, 1], [0, 1]);
+        // Emphasised active words shake ±3px; 1.4 = rad/frame oscillation speed (~7 wobbles/sec at 30fps).
         const shake = isActive && isEmph ? Math.sin(frame * 1.4) * 3 : 0;
         return (
           <span
@@ -290,6 +305,8 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
 
 export const Kicker: React.FC<{ text: string; color: string; fg: string; t: Theme }> = ({ text, color, fg, t }) => {
   const f = useCurrentFrame();
+  // damping 180 = heavily damped (no overshoot) → a clean fade-in (drives opacity only). top 150 = px
+  // from the frame top where the kicker pill sits.
   const s = spring({ frame: f, fps: 30, config: { damping: 180 } });
   return (
     <div style={{ position: "absolute", top: 150, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: s }}>
@@ -314,6 +331,8 @@ export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?:
   const { scale, tx, ty } = shotTransform(shot, p);
 
   // --- transition (outer layer), CapCut-style: spring "fly in" + settle, quick eased exit ---
+  // ein = entrance spring over ~18 frames (damping 14 / stiffness 130 / mass 0.6 → fast settle with a
+  // small overshoot). eout = exit ramp 0→1 over the last 7 frames (dur-7 → dur), cubic-eased.
   const { fps } = useVideoConfig();
   const ein = spring({ frame: f, fps, config: { damping: 14, stiffness: 130, mass: 0.6 }, durationInFrames: 18 });
   const eIO = Math.min(1, ein); // clamped (no overshoot) for opacity/scale
@@ -325,12 +344,15 @@ export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?:
   let oty = 0;
   let oscale = 1;
   if (transition === "fly-left") {
+    // 120 = entry offset (% of frame) it flies in from; -130 = exit travel off the left edge.
     otx = (1 - ein) * 120 + eout * -130; // springs in from the right (slight overshoot), eases off left
-    oscale = lerp(1.12, 1.0, eIO); // oversize during entry so the slide never reveals an edge
+    oscale = lerp(1.12, 1.0, eIO); // oversize 12% during entry so the slide never reveals an edge
   } else if (transition === "fly-up") {
     oty = (1 - ein) * 120 + eout * -130;
     oscale = lerp(1.12, 1.0, eIO);
   } else if (transition === "pop") {
+    // Scale 0.72→1 on entry (28% punch-up), shrink 18% on exit. opacity fades in over the first half
+    // of the spring (ein*2 clamped) and out with eout.
     oscale = (0.72 + 0.28 * ein) * (1 - 0.18 * eout); // zoom-punch in (spring overshoot), shrink out
     opacity = Math.min(1, ein * 2) * (1 - eout);
   } else if (transition === "fade") {

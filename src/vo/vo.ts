@@ -1,3 +1,7 @@
+// VO orchestration: turns spec.segments into a stitched voiceover track + per-word timings.
+// Each segment is TTS'd (or mocked) and content-hash cached (mp3 + json), then the clips are
+// concatenated with a fixed inter-segment GAP into one continuous track. Pure orchestration —
+// no avatar/render concerns. Public API: buildVO() → VOResult.
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +14,8 @@ import { offsetWords } from "../render/captions.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS } from "./elevenlabs.js";
 
+// Seconds of silence inserted between segments in the stitched track. Also part of the track
+// cache key (contentHash({clips, GAP})) — changing it re-stitches but does not re-bill TTS.
 export const GAP = 0.32;
 
 export function computeTimings(durations: number[], gap: number): SegmentTiming[] {
@@ -31,6 +37,16 @@ export interface BuildVOOpts {
   mock: boolean;
 }
 
+/**
+ * Build the voiceover for a spec. Per segment: reuse the cached mp3+json if present, else TTS
+ * (real ElevenLabs when !mock, silence+fake timings when mock) and cache the result. Then probe
+ * durations, compute timeline timings with GAP, offset clip-relative word times onto the timeline,
+ * and stitch one continuous track (also cached).
+ * Contract: apiKey is required unless mock=true (real TTS calls pass it via the `apiKey!`
+ * non-null assertion). Side effects: writes
+ * into the Cache dir and a temp dir. Returns the stitched track path, per-clip paths, timings, and
+ * timeline-absolute word timings.
+ */
 export async function buildVO({ spec, voiceId, cache, apiKey, mock }: BuildVOOpts): Promise<VOResult> {
   const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
   const clips: string[] = [];

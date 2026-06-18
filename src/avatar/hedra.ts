@@ -14,8 +14,9 @@ function apiKey(): string {
   return k;
 }
 
+// Authenticated JSON fetch against the Hedra API (throws on non-2xx).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function hj(path: string, init: RequestInit & { json?: unknown } = {}): Promise<any> {
+async function hedraFetch(path: string, init: RequestInit & { json?: unknown } = {}): Promise<any> {
   const { json, headers, ...rest } = init;
   const res = await fetch(`${BASE}${path}`, {
     ...rest,
@@ -31,7 +32,7 @@ async function hj(path: string, init: RequestInit & { json?: unknown } = {}): Pr
 }
 
 async function createAndUpload(file: string, type: "image" | "audio"): Promise<string> {
-  const asset = await hj("/assets", { method: "POST", json: { name: fileName(file), type } });
+  const asset = await hedraFetch("/assets", { method: "POST", json: { name: fileName(file), type } });
   const fd = new FormData();
   fd.append("file", await filePart(file), fileName(file));
   const res = await fetch(`${BASE}/assets/${asset.id}/upload`, {
@@ -44,7 +45,7 @@ async function createAndUpload(file: string, type: "image" | "audio"): Promise<s
 }
 
 async function pickModelId(): Promise<string> {
-  const models = await hj("/models", { method: "GET" });
+  const models = await hedraFetch("/models", { method: "GET" });
   const list = Array.isArray(models) ? models : (models.data ?? []);
   if (!list.length) throw new Error("Hedra: no models on this account");
   return list[0].id as string;
@@ -60,7 +61,7 @@ export async function hedraGenerate(audioPath: string, imagePath: string, opts: 
   const modelId = opts.modelId ?? (await pickModelId());
   const imageId = await createAndUpload(imagePath, "image");
   const audioId = await createAndUpload(audioPath, "audio");
-  const gen = await hj("/generations", {
+  const gen = await hedraFetch("/generations", {
     method: "POST",
     json: {
       type: "video",
@@ -81,7 +82,7 @@ export async function hedraGenerate(audioPath: string, imagePath: string, opts: 
 async function pollHedra(genId: string, timeoutSec = 900): Promise<string> {
   const deadline = Date.now() + timeoutSec * 1000;
   while (Date.now() < deadline) {
-    const d = await hj(`/generations/${genId}/status`, { method: "GET" });
+    const d = await hedraFetch(`/generations/${genId}/status`, { method: "GET" });
     if (d.status === "complete") {
       if (!d.url) throw new Error("Hedra reported complete but returned no url");
       return d.url as string;

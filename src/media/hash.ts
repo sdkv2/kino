@@ -1,3 +1,6 @@
+// Deterministic content hashing for cache keys. stable() serializes objects with sorted keys so
+// that key order never changes the hash; contentHash() returns the first 16 hex chars of the
+// SHA-256. Used everywhere a "did the inputs change?" cache decision is made.
 import { createHash } from "node:crypto";
 function stable(v: unknown): string {
   if (v && typeof v === "object" && !Array.isArray(v)) {

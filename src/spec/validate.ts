@@ -21,15 +21,34 @@ export function complianceScan(spec: Spec, brand: Brand): ComplianceHit[] {
   return hits;
 }
 
+// The resolver trio below collapses spec + brand defaults into the concrete values the pipeline
+// needs, applying the brand-alias passthrough (an alias resolves via brand.voiceAliases /
+// lookAliases; an unknown alias is passed through verbatim as a raw id). Note the deliberate
+// asymmetry around "missing" values: resolveVoice returns '' as a "no voice configured" sentinel
+// because a faceless build is valid, whereas resolveVoiceLook throws — an avatar build with no
+// voice or look is unrecoverable, so it fails loud rather than producing a silent empty render.
+
+/** spec.provider, else brand.defaultProvider, else "none" (faceless). */
 export function resolveProvider(spec: Spec, brand: Brand): Provider {
   return (spec.provider ?? brand.defaultProvider ?? "none") as Provider;
 }
 
+/**
+ * Resolve the voice id: spec.voice, else brand.defaultVoice, mapped through brand.voiceAliases
+ * (unknown alias passes through as a raw id). Returns '' when nothing is configured — a valid
+ * "no voice" state for faceless builds, not an error.
+ */
 export function resolveVoice(spec: Spec, brand: Brand): string {
   const alias = spec.voice ?? brand.defaultVoice;
   return alias ? (brand.voiceAliases[alias] ?? alias) : "";
 }
 
+/**
+ * Resolve both voice and avatar-look ids for an avatar build (spec value, else brand default, each
+ * mapped through its alias map with raw-id passthrough). Throws when either is missing: an avatar
+ * render with no voice or no look is unrecoverable, so this fails loud rather than returning a
+ * sentinel.
+ */
 export function resolveVoiceLook(spec: Spec, brand: Brand): { voiceId: string; lookId: string } {
   const voiceAlias = spec.voice ?? brand.defaultVoice;
   const lookAlias = spec.avatarLook ?? brand.defaultLook;

@@ -40,21 +40,21 @@ cd ~/kino && npm install && npm run build && npm link   # provides the `kino` co
 ## Verify your environment
 
 ```bash
-kino doctor      # checks dependencies (ffmpeg, ImageMagick) + which API keys are present
+kino doctor      # checks deps (ffmpeg/ffprobe, heygen CLI) + which API keys are present
 ```
 
 ## Scaffold a project
 
 ```bash
-kino init evidentcv        # scaffold .env, a brand.json, and project dirs
+kino init evidentcv        # scaffold .env, a brand.md, and project dirs
 ```
 
 kino supports two layouts:
 
 - **Projects** (recommended) — `kino projects --new <name> --brand <brand>` creates `projects/<name>/` with its own `specs/`, `assets/`, and `out/`, plus a `project.json` that assigns a brand and default overrides. `kino projects` lists what exists.
-- **Flat** — a single `specs/`, `assets/`, `out/`, and `brand.json` at the repo root (back-compat; still works).
+- **Flat** — a single `specs/`, `assets/`, `out/`, and `brand.md` at the repo root (back-compat; still works).
 
-A **brand** (`brand.json`) holds the palette, fonts, disclosures, default avatar provider, voice/look aliases, and banned phrases — see [Spec reference → brand.json](spec-reference.md#brandjson).
+A **brand** (`brand.md`) is YAML frontmatter (an optional subset of palette/font/voice/disclosure and other settings) followed by a free-form guidelines body. The frontmatter holds the palette, fonts, disclosures, default avatar provider, voice/look aliases, and banned phrases; the body is prose for the driving agent. Everything is optional and falls back to kino defaults — see [Spec reference → brand.md](spec-reference.md#brandmd).
 
 ## Write a spec and render it
 
@@ -92,7 +92,7 @@ Renders land at `out/<title>/<title>[-<tag>]-<format>.mp4` (e.g. `out/lie-test/l
 ## Next steps
 
 - **[CLI reference](cli-reference.md)** — every `kino` command and flag.
-- **[Spec reference](spec-reference.md)** — the full JSON spec, `brand.json`, and `project.json`.
+- **[Spec reference](spec-reference.md)** — the full JSON spec, `brand.md`, and `project.json`.
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
 - **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers.
 - The driving-agent playbook lives in [`skills/video-production/SKILL.md`](../skills/video-production/SKILL.md).

@@ -1,6 +1,6 @@
 # Spec reference
 
-A **spec** is the JSON file an agent authors to describe one video. kino validates it, generates voiceover, optionally renders an avatar, and composites everything with Remotion. This page documents every field of the spec, plus the `brand.json` and `project.json` configs it resolves against.
+A **spec** is the JSON file an agent authors to describe one video. kino validates it, generates voiceover, optionally renders an avatar, and composites everything with Remotion. This page documents every field of the spec, plus the `brand.md` and `project.json` configs it resolves against.
 
 The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) — invalid specs fail the build with a precise error.
 
@@ -9,7 +9,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Captions](#captions)
 - [Keyframes & triggers](#keyframes--triggers)
 - [Backgrounds](#backgrounds), [logo & overlays](#logo--overlay-tweening)
-- [brand.json](#brandjson) · [project.json](#projectjson)
+- [brand.md](#brandmd) · [project.json](#projectjson)
 - [Examples](#examples)
 
 ## Top-level fields
@@ -123,18 +123,37 @@ BgTrigger  = { at: number, action: string }   // e.g. { at: 1.2, action: "pulse"
 
 `logoSize`/`logoPosition` place the brand mark on faceless talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions and kickers tween the same way via `captionKeyframes`/`kickerKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
 
-## brand.json
+## brand.md
 
-The brand config (validated by [`src/config/brand.ts`](../src/config/brand.ts)) supplies palette, typography, disclosures, and avatar/voice defaults.
+The brand config lives at `brands/<name>/brand.md`: a YAML **frontmatter** block (between `---` fences) followed by a free-form **guidelines body**. The frontmatter supplies palette, typography, disclosures, and avatar/voice defaults (validated by [`src/config/brand.ts`](../src/config/brand.ts)); the body is prose for the driving agent. The frontmatter is merged over `DEFAULT_BRAND`, so every field is optional — anything omitted uses kino's defaults. The guidelines body carries no schema and is surfaced to the agent via `kino brand <name>`.
+
+```md
+---
+name: evidentcv
+colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64" }
+# disclosure: AI-generated   # optional — shown on every video when set
+# defaultVoice: <elevenlabs-voice-id>   # or set per spec
+bannedPhrases: [get the job, guaranteed interview, land more interviews]
+---
+# evidentcv — brand guidelines
+
+- Voice: (describe tone — e.g. confident, plain-spoken, short sentences)
+- Look: (palette usage, gradients, what to avoid)
+- Captions: (phrase vs word-by-word; what to emphasise)
+
+_All frontmatter is optional; anything omitted uses kino defaults._
+```
+
+The frontmatter fields. All brand fields are optional; anything omitted falls back to `DEFAULT_BRAND`.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `name` | string | ✅ | Brand name. |
-| `colors` | `{ night, mint, green, white?, gold? }` | ✅ | Palette. `white` default `#ffffff`, `gold` default `#d99a20`. |
+| `name` | string | — | Brand name. |
+| `colors` | `{ night, mint, green, white?, gold? }` | — | Palette. `white` default `#ffffff`, `gold` default `#d99a20`. |
 | `font` | string | — | Registry font name (downloaded) or raw CSS family. Default `Helvetica, ...`. |
 | `labelFont` | string | — | Registry font for storyboard/montage labels (default: caption font). |
 | `captionStyle` | `{ fontSize?, strokeWidth?, background? }` | — | `fontSize` 74, `strokeWidth` 9; `background` = the caption backplate `{ color?, opacity? (0..1, def .82), appOnly? (def true) }`. |
-| `disclosure` | string | ✅ | AI disclosure shown when an avatar is present. |
+| `disclosure` | string | — | AI disclosure shown when an avatar is present. |
 | `facelessDisclosure` | string | — | Disclosure for faceless renders (falls back to `disclosure`). |
 | `logo` | string | — | Brand mark (transparent PNG) for faceless talking beats. |
 | `logoSize` / `logoPosition` | size / position | — | Default logo layout. |

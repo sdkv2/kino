@@ -18,6 +18,8 @@ export const CanvasBackground: React.FC<{
   const { fps, width, height } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
 
+  // Intentional: this re-runs on the frame-derived inputs to redraw every frame. The dep array is
+  // deliberate (Remotion advances frame-by-frame); it is NOT a missing-deps bug — do not add a [].
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;

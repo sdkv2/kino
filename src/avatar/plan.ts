@@ -30,7 +30,7 @@ export function planAvatarWindows(
 
   // Offsets inside the trimmed avatar-only track (avatar clips concatenated with the same gap).
   const avTrack = computeTimings(avatarIndices.map((i) => timings[i].durSec), gap);
-  const posOf = new Map(avatarIndices.map((orig, pos) => [orig, pos]));
+  const origIndexToTrackPos = new Map(avatarIndices.map((orig, pos) => [orig, pos]));
 
   const windows: AvatarWindow[] = [];
   let runStart: number | null = null;
@@ -43,7 +43,7 @@ export function planAvatarWindows(
         fromSec: timings[runStart!].startSec,
         // hold to the next segment's start so the avatar/logo doesn't blink off during the VO gap
         toSec: i + 1 < kinds.length ? timings[i + 1].startSec : timings[i].endSec,
-        audioStartSec: avTrack[posOf.get(runStart!)!].startSec,
+        audioStartSec: avTrack[origIndexToTrackPos.get(runStart!)!].startSec,
       });
       runStart = null;
     }

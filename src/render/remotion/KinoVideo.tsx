@@ -6,6 +6,14 @@ import { captionBandBottom } from "../captionLayout";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
+// Top-level Remotion composition. Layers render back-to-front in this order:
+//   1. night backdrop fill   2. faceless brand backdrop   3. avatar video windows
+//   4. app cut-ins (each with its own kicker overlay)     5. full-screen motion-graphic beats
+//   6. motion-graphic overlays   7. logo (faceless beats only)   8. captions (word/hero/lower-third)
+//   9. AI disclosure
+// (Audio and FontLoader sit at the top but paint nothing.) Anything added must be slotted into this
+// stack deliberately. `f` below converts seconds→frames (sec * fps).
+
 // One placement of the (trimmed) avatar clip, with a gentle push-in so the shot breathes.
 const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number }> = ({ src, trimFrames, durFrames }) => {
   const f = useCurrentFrame();
