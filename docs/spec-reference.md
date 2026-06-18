@@ -144,16 +144,16 @@ bannedPhrases: [get the job, guaranteed interview, land more interviews]
 _All frontmatter is optional; anything omitted uses kino defaults._
 ```
 
-The frontmatter fields:
+The frontmatter fields. All brand fields are optional; anything omitted falls back to `DEFAULT_BRAND`.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `name` | string | ✅ | Brand name. |
-| `colors` | `{ night, mint, green, white?, gold? }` | ✅ | Palette. `white` default `#ffffff`, `gold` default `#d99a20`. |
+| `name` | string | — | Brand name. |
+| `colors` | `{ night, mint, green, white?, gold? }` | — | Palette. `white` default `#ffffff`, `gold` default `#d99a20`. |
 | `font` | string | — | Registry font name (downloaded) or raw CSS family. Default `Helvetica, ...`. |
 | `labelFont` | string | — | Registry font for storyboard/montage labels (default: caption font). |
 | `captionStyle` | `{ fontSize?, strokeWidth?, background? }` | — | `fontSize` 74, `strokeWidth` 9; `background` = the caption backplate `{ color?, opacity? (0..1, def .82), appOnly? (def true) }`. |
-| `disclosure` | string | ✅ | AI disclosure shown when an avatar is present. |
+| `disclosure` | string | — | AI disclosure shown when an avatar is present. |
 | `facelessDisclosure` | string | — | Disclosure for faceless renders (falls back to `disclosure`). |
 | `logo` | string | — | Brand mark (transparent PNG) for faceless talking beats. |
 | `logoSize` / `logoPosition` | size / position | — | Default logo layout. |
