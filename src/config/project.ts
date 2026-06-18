@@ -12,13 +12,16 @@ export function containedPath(base: string, rel: string): string {
   return abs;
 }
 
-export interface Project {
+export interface Workspace {
   workspaceRoot: string; // holds shared brands/ + .kino-cache
-  projectRoot: string; // holds this project's specs/ assets/ out/ (== workspaceRoot in flat mode)
   cache: string;
+  brandDir(name: string): string; // shared, at the workspace
+}
+
+export interface Project extends Workspace {
+  projectRoot: string; // holds this project's specs/ assets/ out/
   projectConfigPath: string | null; // projectRoot/project.json, if present
   isProject: boolean;
-  brandDir(name: string): string; // shared, at the workspace
   assetPath(rel: string): string; // scoped to the project
   outDir(title: string): string; // scoped to the project
 }
@@ -35,13 +38,24 @@ export function findUp(startDir: string, marker: string, existsFn: (p: string) =
   }
 }
 
+// Resolve the shared workspace: the nearest ancestor of cwd containing a brands/ dir (else cwd),
+// which holds shared brands/ and the .kino-cache. Use this for commands that don't need a project.
+export function resolveWorkspace(cwd: string = process.cwd()): Workspace {
+  const workspaceRoot = findUp(cwd, "brands") ?? cwd;
+  return {
+    workspaceRoot,
+    cache: join(workspaceRoot, ".kino-cache"),
+    brandDir: (name) => join(workspaceRoot, "brands", name),
+  };
+}
+
 // Resolve the workspace (shared brands) + the active project (scoped specs/assets/out).
 //   - project name → workspaceRoot/projects/<name>
 //   - else spec path → walk up to the nearest project.json
 //   - else (flat / back-compat) → project root == workspace root
 export function resolveProject(opts: { specPath?: string; project?: string; cwd?: string } = {}): Project {
-  const cwd = opts.cwd ?? process.cwd();
-  const workspaceRoot = findUp(cwd, "brands") ?? cwd;
+  const ws = resolveWorkspace(opts.cwd ?? process.cwd());
+  const workspaceRoot = ws.workspaceRoot;
 
   let projectRoot: string;
   if (opts.project) {
@@ -56,12 +70,10 @@ export function resolveProject(opts: { specPath?: string; project?: string; cwd?
   const projectConfigPath = existsSync(cp) ? cp : null;
 
   return {
-    workspaceRoot,
+    ...ws,
     projectRoot,
-    cache: join(workspaceRoot, ".kino-cache"),
     projectConfigPath,
     isProject: projectConfigPath !== null,
-    brandDir: (name) => join(workspaceRoot, "brands", name),
     assetPath: (rel) => containedPath(join(projectRoot, "assets"), rel),
     outDir: (title) => join(projectRoot, "out", title),
   };

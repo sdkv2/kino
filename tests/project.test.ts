@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveProject, findUp } from "../src/config/project.js";
+import { resolveProject, resolveWorkspace, findUp } from "../src/config/project.js";
 import { ProjectConfigSchema } from "../src/config/projectConfig.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,6 +22,17 @@ function makeWorkspace() {
   writeFileSync(join(ws, "projects", "launch", "project.json"), JSON.stringify({ brand: "evidentcv" }));
   return ws;
 }
+
+describe("resolveWorkspace", () => {
+  it("resolves the shared workspace root, cache, and brand dir", () => {
+    const ws = mkdtempSync(join(tmpdir(), "kino-ws-only-"));
+    mkdirSync(join(ws, "brands", "evidentcv"), { recursive: true });
+    const w = resolveWorkspace(ws);
+    expect(w.workspaceRoot).toBe(ws);
+    expect(w.cache).toBe(join(ws, ".kino-cache"));
+    expect(w.brandDir("evidentcv")).toBe(join(ws, "brands", "evidentcv"));
+  });
+});
 
 describe("resolveProject", () => {
   it("flat mode: no project.json → project root == workspace root (back-compat)", () => {

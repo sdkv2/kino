@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { resolveProject } from "../config/project.js";
+import { resolveWorkspace } from "../config/project.js";
 import { loadBrandDoc } from "../config/brand.js";
 
 // Brand names = subdirs of brands/ that contain a brand.md.
@@ -30,8 +30,8 @@ export function brandText(brandDir: string): string {
 }
 
 export async function brand(name?: string): Promise<void> {
-  const project = resolveProject();
-  const brandsRoot = join(project.workspaceRoot, "brands");
+  const ws = resolveWorkspace();
+  const brandsRoot = join(ws.workspaceRoot, "brands");
   if (!name) {
     const names = listBrands(brandsRoot);
     process.stdout.write(
@@ -41,5 +41,5 @@ export async function brand(name?: string): Promise<void> {
     );
     return;
   }
-  process.stdout.write(brandText(project.brandDir(name)));
+  process.stdout.write(brandText(ws.brandDir(name)));
 }

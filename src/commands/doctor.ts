@@ -1,5 +1,5 @@
 import { execa } from "execa";
-import { resolveProject } from "../config/project.js";
+import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
 import { log } from "../log.js";
 
@@ -13,7 +13,7 @@ async function has(cmd: string, args: string[]): Promise<boolean> {
 }
 
 export async function doctor(): Promise<void> {
-  loadEnv(resolveProject().workspaceRoot);
+  loadEnv(resolveWorkspace().workspaceRoot);
   const checks: Array<[string, boolean]> = [
     ["node", true],
     ["ffmpeg", await has("ffmpeg", ["-version"])],
