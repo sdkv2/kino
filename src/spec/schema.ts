@@ -1,3 +1,8 @@
+// THE SPEC CONTRACT. Zod schema for the agent-authored spec.json that drives a build: title,
+// format, segments (avatar/app/motion), captions, background, overlays, keyframes. This is the
+// single source of truth for what an agent may author; keep it and docs/spec-reference.md in sync.
+// Exports the Spec type used throughout the pipeline. Note: keyframe/trigger `at` is in seconds
+// (resolved against frame/fps in the render layer).
 import { z } from "zod";
 
 const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });

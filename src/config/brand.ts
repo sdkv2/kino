@@ -3,12 +3,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 
-// The complete, resolved brand shape the render pipeline consumes (always fully populated after merge).
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
 const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
 const CaptionStyleBg = z.object({ color: z.string().optional(), opacity: z.number().min(0).max(1).optional(), appOnly: z.boolean().optional() });
+
+// THE BRAND SPLIT: BrandFrontmatter (below) and Brand (further down) look like duplicates but model
+// two distinct states on purpose. BrandFrontmatter is the partial, every-field-optional on-disk
+// shape parsed from a brand.md YAML frontmatter. Brand is the fully-populated, resolved shape the
+// render pipeline consumes — produced by mergeBrand() layering the frontmatter over DEFAULT_BRAND.
+// Keep the two in sync field-for-field, but do not collapse them: one is "what the author wrote",
+// the other is "what every field is guaranteed to be after merge".
 
 // Frontmatter: every field optional (defaults come from DEFAULT_BRAND). Types are still validated.
 export const BrandFrontmatterSchema = z
@@ -56,6 +62,8 @@ export const BrandFrontmatterSchema = z
 
 export type BrandFrontmatter = z.infer<typeof BrandFrontmatterSchema>;
 
+// The complete, resolved brand shape the render pipeline consumes (always fully populated after the
+// merge over DEFAULT_BRAND — the resolved half of the brand split noted above).
 export interface Brand {
   name: string;
   colors: { night: string; mint: string; green: string; white: string; gold: string };
