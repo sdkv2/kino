@@ -4,6 +4,14 @@ import { existsSync, mkdirSync } from "node:fs";
 import { download } from "../media/net.js";
 import { lookupFont } from "./registry.js";
 
+// On-demand font manager. Resolves a curated font name (see registry.ts) to a TTF on disk, fetching
+// it once from Google Fonts into a global, cross-project cache (~/.kino/fonts/). The download is
+// offline-safe (returns null on any failure so callers fall back to a system font). The fetch leans
+// on two tricks worth knowing: (1) the LEGACY Google Fonts CSS API (fonts.googleapis.com/css?...)
+// served TrueType to old user-agents, so we spoof an old-Safari UA to get a real .ttf for any family
+// without hardcoding repo URLs; (2) the requested WEIGHT (e.g. 700) is a magic number that comes from
+// the registry entry (def.weight) — it selects which numeric font weight the CSS API returns.
+
 // Global, cross-project cache so a font is downloaded once for all videos.
 export function fontCacheDir(): string {
   return join(homedir(), ".kino", "fonts");

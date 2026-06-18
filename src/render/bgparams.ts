@@ -16,13 +16,18 @@ export interface Trigger {
 function applyEase(name: Ease | undefined, p: number): number {
   switch (name) {
     case "easeInOut":
+      // Smoothstep: 3p² − 2p³ — the classic S-curve (zero slope at both ends, no overshoot).
       return p * p * (3 - 2 * p);
     case "overshoot": {
+      // "Back-out" ease (Penner): pulls past 1 then settles. 1.70158 is the standard back-ease
+      // overshoot constant (≈10% overshoot); c3 = c1 + 1 is the cubic coefficient that pairs with it.
       const c1 = 1.70158;
       const c3 = c1 + 1;
       return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
     }
     case "spring": {
+      // Elastic-out ease (Penner): a decaying sine wobble that converges on 1. c4 = 2π/3 is the
+      // elastic period; 2^(−10p) is the exponential decay envelope. Endpoints are pinned to avoid NaN.
       if (p === 0 || p === 1) return p;
       const c4 = (2 * Math.PI) / 3;
       return Math.pow(2, -10 * p) * Math.sin((p * 10 - 0.75) * c4) + 1;

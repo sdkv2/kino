@@ -96,6 +96,16 @@ export interface Brand {
 }
 
 // kino house defaults — used when no brand is set and to fill any field a brand.md omits.
+//
+// THE PALETTE (canonical home). The five-slot brand colour set lives here; every other site that
+// needs a palette colour reads it from a resolved Brand.colors (which is DEFAULT_BRAND.colors merged
+// with any brand.md overrides) rather than redefining it. The slots and their roles:
+//   night  — page/background base (the dark canvas everything sits on).
+//   mint   — primary accent (light); highlights, kicker chips, default background tint.
+//   green  — brand colour / active-word highlight (the brand name + the currently-spoken word).
+//   white  — foreground text and the default caption ink.
+//   gold   — secondary accent; reserved emphasis (--kino-gold), gold kicker chips.
+// If you add or repurpose a slot, do it here and update Brand.colors + BrandFrontmatterSchema.colors.
 export const DEFAULT_BRAND: Brand = {
   name: "",
   colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", white: "#ffffff", gold: "#d99a20" },
