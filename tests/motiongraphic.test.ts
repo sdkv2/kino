@@ -80,6 +80,20 @@ describe("lintMotionJs", () => {
     expect(lintMotionJs("const k = process.env.KEY").length).toBeGreaterThan(0);
     expect(lintMotionJs("document.body.innerHTML = ''").length).toBeGreaterThan(0);
   });
+  it("rejects eval / Function constructor / atob (dynamic code execution)", () => {
+    expect(lintMotionJs("return eval('1+1')")[0]).toMatch(/eval/i);
+    expect(lintMotionJs("return new Function('return 1')()")[0]).toMatch(/Function/);
+    expect(lintMotionJs("return Function('return 1')()")[0]).toMatch(/Function/);
+    expect(lintMotionJs("return atob('YQ==')")[0]).toMatch(/eval|atob/i);
+  });
+  it("rejects computed access to Date/Math that bracket-notation uses to dodge Date.now/Math.random", () => {
+    expect(lintMotionJs('return Date["now"]()')[0]).toMatch(/Date/i);
+    expect(lintMotionJs('return Math["random"]()')[0]).toMatch(/Math/i);
+  });
+  it("still allows ordinary Math.* dotted geometry and user-defined functions", () => {
+    expect(lintMotionJs("return Math.sin(env.t) * Math.PI")).toEqual([]);
+    expect(lintMotionJs("const toBar = (v) => `<i style=height:${v}%></i>`; return toBar(env.params.v)")).toEqual([]);
+  });
 });
 
 describe("sanitizeMotionHtml", () => {
@@ -208,5 +222,6 @@ describe("kino motion help", () => {
     expect(t).toMatch(/data:/); // inline assets guidance
     expect(t).toMatch(/stagger/i); // staggering guidance
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
+    expect(t).toMatch(/--kino-caption-bottom/); // the caption-band var so authors avoid the caption
   });
 });

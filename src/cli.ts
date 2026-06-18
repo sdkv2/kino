@@ -1,4 +1,6 @@
 import { Command } from "commander";
+import { log } from "./log.js";
+import { formatCliError } from "./cliError.js";
 
 const program = new Command();
 program.name("kino").description("Agent-driven short-form video production").version("1.15.0");
@@ -135,4 +137,10 @@ program
   .description("Check environment (deps + keys)")
   .action(async () => (await import("./commands/doctor.js")).doctor());
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).catch((err) => {
+  // One clean line instead of an uncaught stack dump on every expected failure (bad spec, missing
+  // brand, lint violation…). Full stack still available with KINO_DEBUG=1.
+  log.error(formatCliError(err));
+  if (process.env.KINO_DEBUG) console.error(err);
+  process.exit(1);
+});

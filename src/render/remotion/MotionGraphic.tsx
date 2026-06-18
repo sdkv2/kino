@@ -2,6 +2,8 @@ import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, MotionGraphicProps, MotionEnv } from "../props";
 import { paramsAt, pulseAt } from "../bgparams";
+import { buildMotionVars } from "../motionVars";
+import { sanitizeMotionHtml } from "../sanitizeMotion";
 
 // Trusted stylesheet injected into every motion-graphic shadow root:
 //  • pause ALL animations so none run on the wall clock (determinism), and scrub elements marked
@@ -45,10 +47,11 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
 };
 
 // Full-frame motion-graphic layer. durationFrames maps --progress 0→1 across the beat.
-export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames: number; t: Theme }> = ({
+export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames: number; t: Theme; captionBottom?: number }> = ({
   data,
   durationFrames,
   t,
+  captionBottom,
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -57,18 +60,7 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   const pulse = pulseAt(data.triggers, tt);
   const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
 
-  const vars: Record<string, string> = {
-    "--frame": String(frame),
-    "--t": tt.toFixed(4),
-    "--progress": progress.toFixed(4),
-    "--pulse": pulse.toFixed(4),
-    "--kino-green": t.green,
-    "--kino-night": t.night,
-    "--kino-white": t.white,
-    "--kino-mint": t.mint,
-    "--kino-font": t.font,
-  };
-  for (const [k, v] of Object.entries(resolved)) vars[`--${k}`] = String(v);
+  const vars = buildMotionVars(t, { frame, t: tt, progress, pulse, params: resolved, captionBottom });
 
   // Tier 2: a procedural source is the body of render(env); memoize the compiled fn and evaluate it
   // for this frame. It runs in the browser (no Node globals) and must be a pure (env) → HTML string.
@@ -93,7 +85,9 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       height,
     };
     try {
-      html = String(procFn(env) ?? "");
+      // Sanitize the per-frame procedural output: it goes straight to innerHTML, so unlike the static
+      // .html (sanitized once at resolve time) its markup is dynamic and could smuggle event handlers.
+      html = sanitizeMotionHtml(String(procFn(env) ?? ""));
     } catch (err) {
       html = "";
       if (frame === 0) console.error("motion graphic render(env) threw:", err);

@@ -1,0 +1,25 @@
+import { describe, it, expect } from "vitest";
+import { CAPTION_BOTTOM, captionBandBottom } from "../src/render/captionLayout.js";
+import type { KinoSegment } from "../src/render/props.js";
+
+const seg = (o: Partial<KinoSegment>): KinoSegment => ({ kind: "motion", caption: "", startSec: 0, endSec: 2, ...o });
+
+describe("captionBandBottom", () => {
+  it("returns the caption band bottom for a motion beat with a caption", () => {
+    expect(captionBandBottom(seg({ caption: "hello" }), false)).toBe(CAPTION_BOTTOM);
+  });
+  it("returns 0 for a beat with no caption text and no words (nothing reserves the band)", () => {
+    expect(captionBandBottom(seg({ caption: "" }), false)).toBe(0);
+    expect(captionBandBottom(seg({ caption: "   " }), false)).toBe(0);
+  });
+  it("returns the band for a word-synced beat even when caption text is empty", () => {
+    const s = seg({ caption: "", captionMode: "words", words: [{ word: "hi", startSec: 0, endSec: 0.3 } as any] });
+    expect(captionBandBottom(s, false)).toBe(CAPTION_BOTTOM);
+  });
+  it("returns 0 for a faceless avatar beat (hero caption is centered, not in the bottom band)", () => {
+    expect(captionBandBottom(seg({ kind: "avatar", caption: "hook" }), false)).toBe(0);
+  });
+  it("returns the band for an app beat with a caption", () => {
+    expect(captionBandBottom(seg({ kind: "app", asset: "x.png", caption: "look" }), true)).toBe(CAPTION_BOTTOM);
+  });
+});

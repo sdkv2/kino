@@ -1,5 +1,16 @@
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
+
+// Join `rel` under `base`, rejecting any result that escapes `base` (path traversal via ../ or an
+// absolute rel). Asset/motion sources are project-scoped, so `source: "../../etc/passwd"` must not read
+// outside the project — and a .js motion source outside the project would be executed as code.
+export function containedPath(base: string, rel: string): string {
+  const abs = resolve(base, rel);
+  if (abs !== base && !abs.startsWith(base + sep)) {
+    throw new Error(`Asset path escapes the project assets dir: ${rel}`);
+  }
+  return abs;
+}
 
 export interface Project {
   workspaceRoot: string; // holds shared brands/ + .kino-cache
@@ -51,7 +62,7 @@ export function resolveProject(opts: { specPath?: string; project?: string; cwd?
     projectConfigPath,
     isProject: projectConfigPath !== null,
     brandDir: (name) => join(workspaceRoot, "brands", name),
-    assetPath: (rel) => join(projectRoot, "assets", rel),
+    assetPath: (rel) => containedPath(join(projectRoot, "assets"), rel),
     outDir: (title) => join(projectRoot, "out", title),
   };
 }
