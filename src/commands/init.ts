@@ -1,16 +1,28 @@
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { resolveProject } from "../config/project.js";
+import { resolveWorkspace } from "../config/project.js";
 import { log } from "../log.js";
 
+// Scaffold a workspace + a first project named after the brand. kino requires a project, so init
+// produces a ready-to-build one: brands/<brand>/brand.md, .env, and projects/<brand>/ with specs/,
+// assets/, out/, and a project.json that assigns the brand.
 export async function init(brand = "default"): Promise<void> {
-  const p = resolveProject();
-  for (const d of [p.brandDir(brand), p.assetPath("screens"), p.assetPath("recordings"), join(p.projectRoot, "specs"), join(p.projectRoot, "out")]) {
+  const ws = resolveWorkspace();
+  const projectRoot = join(ws.workspaceRoot, "projects", brand);
+  for (const d of [
+    ws.brandDir(brand),
+    join(projectRoot, "assets", "screens"),
+    join(projectRoot, "assets", "recordings"),
+    join(projectRoot, "specs"),
+    join(projectRoot, "out"),
+  ]) {
     mkdirSync(d, { recursive: true });
   }
-  const envf = join(p.workspaceRoot, ".env");
+  const envf = join(ws.workspaceRoot, ".env");
   if (!existsSync(envf)) writeFileSync(envf, "ELEVENLABS_API_KEY=\nHEYGEN_API_KEY=\n");
-  const bf = join(p.brandDir(brand), "brand.md");
+  const cfg = join(projectRoot, "project.json");
+  if (!existsSync(cfg)) writeFileSync(cfg, JSON.stringify({ brand }, null, 2) + "\n");
+  const bf = join(ws.brandDir(brand), "brand.md");
   if (!existsSync(bf)) {
     writeFileSync(
       bf,
@@ -33,5 +45,8 @@ export async function init(brand = "default"): Promise<void> {
       ].join("\n"),
     );
   }
-  log.ok(`Initialised brand '${brand}'. Fill .env and brands/${brand}/brand.md, then add assets/specs.`);
+  log.ok(
+    `Initialised project '${brand}'. Fill .env + brands/${brand}/brand.md, add specs under ` +
+      `projects/${brand}/specs/, then: kino build projects/${brand}/specs/<spec>.json`,
+  );
 }
