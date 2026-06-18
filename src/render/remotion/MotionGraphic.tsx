@@ -37,6 +37,8 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
     shadowRef.current.innerHTML = KINO_SCRUB_STYLE + html;
   }, [html]);
 
+  // Intentional: this re-runs on the frame-derived inputs to redraw every frame. The dep array is
+  // deliberate (Remotion advances frame-by-frame); it is NOT a missing-deps bug — do not add a [].
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -67,7 +69,10 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   const procFn = React.useMemo(
     () =>
       data.proc
-        ? // eslint-disable-next-line @typescript-eslint/no-implied-eval
+        ? // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
+          // source is trusted local project config that has already passed the sanitize + determinism lint
+          // (see src/render/sanitizeMotion.ts). Never feed untrusted/remote input here.
+          // eslint-disable-next-line @typescript-eslint/no-implied-eval
           (new Function("env", data.proc) as (env: MotionEnv) => unknown)
         : null,
     [data.proc],
