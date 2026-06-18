@@ -90,7 +90,7 @@ export async function prepare(
   const spec = SpecSchema.parse(JSON.parse(readFileSync(specPath, "utf8")));
 
   // A project.json assigns a brand + optional default overrides (layered under spec/CLI).
-  const pc = project.projectConfigPath ? loadProjectConfig(project.projectConfigPath) : undefined;
+  const pc = loadProjectConfig(project.projectConfigPath);
   const brandName = spec.brand ?? pc?.brand;
   const rawBrand = brandName ? loadBrand(project.brandDir(brandName)) : DEFAULT_BRAND;
   const brand: Brand = {

@@ -20,8 +20,7 @@ export interface Workspace {
 
 export interface Project extends Workspace {
   projectRoot: string; // holds this project's specs/ assets/ out/
-  projectConfigPath: string | null; // projectRoot/project.json, if present
-  isProject: boolean;
+  projectConfigPath: string; // projectRoot/project.json (always present — a project requires one)
   assetPath(rel: string): string; // scoped to the project
   outDir(title: string): string; // scoped to the project
 }
@@ -49,32 +48,42 @@ export function resolveWorkspace(cwd: string = process.cwd()): Workspace {
   };
 }
 
-// Resolve the workspace (shared brands) + the active project (scoped specs/assets/out).
-//   - project name → workspaceRoot/projects/<name>
-//   - else spec path → walk up to the nearest project.json
-//   - else (flat / back-compat) → project root == workspace root
+// Resolve the shared workspace AND the active project. kino requires a project: specs/assets/out
+// live under projects/<name>/ with a project.json. Throws (no flat fallback) when none resolves.
+//   - project name → workspaceRoot/projects/<name>   (must contain project.json)
+//   - spec path    → nearest ancestor that contains project.json
 export function resolveProject(opts: { specPath?: string; project?: string; cwd?: string } = {}): Project {
   const ws = resolveWorkspace(opts.cwd ?? process.cwd());
-  const workspaceRoot = ws.workspaceRoot;
 
-  let projectRoot: string;
+  let projectRoot: string | null;
   if (opts.project) {
-    projectRoot = join(workspaceRoot, "projects", opts.project);
+    projectRoot = join(ws.workspaceRoot, "projects", opts.project);
   } else if (opts.specPath) {
-    projectRoot = findUp(resolve(dirname(opts.specPath)), "project.json") ?? workspaceRoot;
+    projectRoot = findUp(resolve(dirname(opts.specPath)), "project.json");
   } else {
-    projectRoot = workspaceRoot;
+    projectRoot = null;
   }
 
-  const cp = join(projectRoot, "project.json");
-  const projectConfigPath = existsSync(cp) ? cp : null;
+  if (!projectRoot || !existsSync(join(projectRoot, "project.json"))) {
+    if (opts.project) {
+      throw new Error(
+        `Project '${opts.project}' not found at projects/${opts.project}/ (no project.json). ` +
+          `Create it with: kino projects --new ${opts.project} --brand <brand>`,
+      );
+    }
+    const where = opts.specPath ? `spec '${opts.specPath}'` : "this command";
+    throw new Error(
+      `No project found for ${where}. kino no longer supports a flat layout — every spec must live ` +
+        `under projects/<name>/specs/. Create one with: kino projects --new <name> --brand <brand>`,
+    );
+  }
 
+  const pr = projectRoot; // narrowed to string
   return {
     ...ws,
-    projectRoot,
-    projectConfigPath,
-    isProject: projectConfigPath !== null,
-    assetPath: (rel) => containedPath(join(projectRoot, "assets"), rel),
-    outDir: (title) => join(projectRoot, "out", title),
+    projectRoot: pr,
+    projectConfigPath: join(pr, "project.json"),
+    assetPath: (rel) => containedPath(join(pr, "assets"), rel),
+    outDir: (title) => join(pr, "out", title),
   };
 }
