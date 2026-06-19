@@ -186,3 +186,40 @@ describe("motion graphics procedural (Tier 2)", () => {
     expect(sampleCenter(outs[0])).toBe(sampleCenter(outs[1]));
   }, 180000);
 });
+
+describe("motion graphics CSS helper kit", () => {
+  const mkMotion = (html: string, triggers: { at: number; action: string }[] = []): KinoProps => ({
+    theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+    segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+      motion: { html, params: {}, keyframes: [], triggers } }],
+  });
+
+  it(".kino-pulse pops on a trigger (action:pulse) and is hidden before it, deterministically", async () => {
+    // Full-frame magenta box opacity/scale-driven by --pulse. Trigger at 0.5s (frame 15): hidden at
+    // frame 6 (pulse 0), shown at frame 16 (pulse ~1). Magenta is absent from the glow background.
+    const html = `<style>.b{position:absolute;inset:0;background:#ff00ff}</style><div class="b kino-pulse"></div>`;
+    const outs = await renderStills({
+      props: mkMotion(html, [{ at: 0.5, action: "pulse" }]),
+      publicDir: mkdtempSync(join(tmpdir(), "pulse-pub-")), format: "9:16",
+      frames: [{ frame: 6, name: "pre" }, { frame: 16, name: "on" }, { frame: 16, name: "on2" }],
+      outDir: mkdtempSync(join(tmpdir(), "kino-pulse-")),
+    });
+    expect(magentaFraction(outs[0])).toBeLessThan(0.05);    // before the trigger → --pulse 0 → hidden
+    expect(magentaFraction(outs[1])).toBeGreaterThan(0.5);  // on the trigger → --pulse ~1 → popped on
+    expect(sampleCenter(outs[1])).toBe(sampleCenter(outs[2])); // same frame twice → identical
+  }, 180000);
+
+  it(".kino-rise reveals across the beat and holds, deterministically", async () => {
+    // Reveal completes by ~35% of the beat then holds: hidden at frame 0 (opacity 0), shown by frame 50.
+    const html = `<style>.b{position:absolute;inset:0;background:#ff00ff}</style><div class="b kino-rise"></div>`;
+    const outs = await renderStills({
+      props: mkMotion(html),
+      publicDir: mkdtempSync(join(tmpdir(), "rise-pub-")), format: "9:16",
+      frames: [{ frame: 0, name: "start" }, { frame: 50, name: "held" }, { frame: 50, name: "held2" }],
+      outDir: mkdtempSync(join(tmpdir(), "kino-rise-")),
+    });
+    expect(magentaFraction(outs[0])).toBeLessThan(0.05);    // start of beat → opacity 0 → hidden
+    expect(magentaFraction(outs[1])).toBeGreaterThan(0.5);  // past ~35% → revealed + held
+    expect(sampleCenter(outs[1])).toBe(sampleCenter(outs[2])); // deterministic
+  }, 180000);
+});

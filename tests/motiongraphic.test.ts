@@ -245,6 +245,14 @@ describe("kino motion help", () => {
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
     expect(t).toMatch(/--kino-caption-bottom/); // the caption-band var so authors avoid the caption
   });
+  it("documents the CSS helper kit (reveals, pulse, fade-edges, easing tokens)", () => {
+    const t = motionHelpText();
+    expect(t).toMatch(/kino-rise/);
+    expect(t).toMatch(/kino-pop/);
+    expect(t).toMatch(/kino-pulse/);
+    expect(t).toMatch(/kino-fade-edges/);
+    expect(t).toMatch(/--kino-ease-/);
+  });
   it("documents the Tier-3 Lottie option and its rules", () => {
     const t = motionHelpText();
     expect(t).toMatch(/lottie/i);

@@ -7,22 +7,41 @@ import { sanitizeMotionHtml } from "../sanitizeMotion";
 import { Lottie, getLottieMetadata } from "@remotion/lottie";
 import { lottiePlaybackRate } from "../lottie";
 
-// Trusted stylesheet injected into every motion-graphic shadow root:
-//  • pause ALL animations so none run on the wall clock (determinism), and scrub elements marked
-//    `.kino-anim` across the beat via a --progress-driven negative animation-delay (the canonical
-//    Remotion scrub). Inert when the agent's HTML defines no animations. --kino-delay (agent-set,
-//    default 0) staggers; sub-timing lives in the @keyframes % stops; easing is the agent's.
-//  • `.kino-cliptext` helper: gradient text via `background-clip:text` paints the gradient only over
-//    the content box, so glyph ink that negative letter-spacing pushes past that box renders
-//    transparent (the last glyph's edge looks sliced). This widens the paint box with inline padding,
-//    cancelled by equal negative margin so layout/centering is unchanged. Opt-in (a CSS selector
-//    can't match computed background-clip, and blanket padding would break margin:auto / tight runs).
+// Trusted stylesheet injected into every motion-graphic shadow root. All of it is determinism-safe:
+// animations are force-paused and scrubbed by --progress (no wall clock), helpers read frame-driven
+// vars only, and there are no transitions / external url()s. Opt-in `.kino-*` utilities so an agent
+// reaches for polished motion without re-deriving it:
+//  • Scrub: pause ALL animations, then seek elements in the scrub set (`.kino-anim` + the built-in
+//    reveals below) to --progress via a negative animation-delay (the canonical Remotion scrub).
+//    --kino-delay (agent-set, default 0) staggers; sub-timing lives in the @keyframes % stops.
+//  • Easing tokens (`--kino-ease-out/-in-out/-overshoot/-spring`): cubic-beziers matching the spec's
+//    keyframe eases, for `animation-timing-function:var(--kino-ease-…)` in any @keyframes.
+//  • One-class reveals (`.kino-rise/.kino-blur-rise/.kino-pop/.kino-wipe`): complete in the first ~third
+//    of the beat then hold — no @keyframes to author. Compose with --kino-delay for staggered lists.
+//  • `.kino-pulse`: maps the word-trigger envelope --pulse → a pop (opacity + scale). Pairs with spec
+//    triggers `{ at, action:"pulse" }` placed at VO word times (kino inspect).
+//  • `.kino-cliptext`: widens the paint box of `background-clip:text` so tight/negative letter-spacing
+//    doesn't slice the last glyph's gradient edge (cancelled by equal negative margin → layout unchanged).
+//  • `.kino-fade-edges`: a top/bottom mask gradient to feather scrolling / overflowing content.
 const KINO_SCRUB_STYLE =
   "<style>*{animation-play-state:paused !important;transition:none !important}" +
-  ".kino-anim{animation-duration:1s !important;animation-fill-mode:both !important;" +
-  "animation-iteration-count:1 !important;" +
+  ":host{--kino-ease-out:cubic-bezier(.22,1,.36,1);--kino-ease-in-out:cubic-bezier(.65,0,.35,1);" +
+  "--kino-ease-overshoot:cubic-bezier(.34,1.56,.64,1);--kino-ease-spring:cubic-bezier(.22,1.4,.3,1)}" +
+  ".kino-anim,.kino-rise,.kino-blur-rise,.kino-pop,.kino-wipe{animation-duration:1s !important;" +
+  "animation-fill-mode:both !important;animation-iteration-count:1 !important;" +
   "animation-delay:calc((var(--progress) - var(--kino-delay, 0)) * -1s) !important}" +
-  ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}</style>";
+  ".kino-rise{animation-name:kino-rise;animation-timing-function:var(--kino-ease-out)}" +
+  ".kino-blur-rise{animation-name:kino-blur-rise;animation-timing-function:var(--kino-ease-out)}" +
+  ".kino-pop{animation-name:kino-pop;animation-timing-function:var(--kino-ease-overshoot)}" +
+  ".kino-wipe{animation-name:kino-wipe;animation-timing-function:var(--kino-ease-in-out)}" +
+  "@keyframes kino-rise{0%{opacity:0;transform:translateY(var(--kino-rise-y,42px))}35%{opacity:1;transform:none}100%{opacity:1;transform:none}}" +
+  "@keyframes kino-blur-rise{0%{opacity:0;filter:blur(16px);transform:translateY(26px)}45%{opacity:1;filter:blur(0);transform:none}100%{opacity:1;filter:blur(0);transform:none}}" +
+  "@keyframes kino-pop{0%{opacity:0;transform:scale(.7)}40%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(1)}}" +
+  "@keyframes kino-wipe{0%{clip-path:inset(0 100% 0 0)}40%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 0)}}" +
+  ".kino-pulse{opacity:var(--pulse,0);transform:scale(calc(.86 + var(--pulse,0) * .16))}" +
+  ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}" +
+  ".kino-fade-edges{-webkit-mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);" +
+  "mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent)}</style>";
 
 // Inject the sanitized HTML into a Shadow root, then set CSS custom properties on the host every
 // frame. Custom properties inherit across the shadow boundary, so the agent's (shadow-scoped) CSS
