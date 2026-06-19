@@ -78,6 +78,13 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   slice of `--progress`, or use a param-per-element with offset keyframe `at` times for spring/ease
   control. Run `kino motion` for the full contract, the stagger recipes, and a copyable example;
   preview with `kino still`/`storyboard` like any other beat.
+  **Tier-3 Lottie (`.json`):** point `source` at a designer-authored Bodymovin/LottieFiles `.json` file
+  to embed organic illustrated motion or AE-produced animations that an agent can't hand-author. kino
+  plays it deterministically via `@remotion/lottie`. Key rule: for a `motionOverlay`, the asset **must
+  have a transparent background** — an opaque export occludes the avatar or app screenshot. Add
+  `"loop": true` (sibling of `source`) to loop at native speed; default plays once stretched across the
+  beat. Assets must embed images (base64 `data:` URIs) and outline/embed fonts (no system fonts, no AE
+  expressions). Works in all three motion slots (`kind:"motion"`, `motionOverlay` on `avatar` or `app`).
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.

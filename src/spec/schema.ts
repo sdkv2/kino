@@ -22,6 +22,7 @@ const motionFields = {
   params: z.record(z.union([z.number(), z.string()])).optional(),
   keyframes: z.array(BgKeyframe).optional(),
   triggers: z.array(BgTrigger).optional(),
+  loop: z.boolean().optional(), // Tier-3 Lottie playback; inert for html/proc graphics
 };
 const MotionGraphicRef = z.object(motionFields);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);

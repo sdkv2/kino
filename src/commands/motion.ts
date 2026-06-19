@@ -80,6 +80,12 @@ export function motionHelpText(): string {
     "  · Inline images as data: URIs (external/relative url() won't resolve in the render).",
     "  · Sync timings to the VO with `kino inspect` (per-word start/end).",
     "",
+    "Lottie graphics (.json, Tier 3) — embed a designer-made Bodymovin/LottieFiles animation by",
+    'pointing source at a .json file: { "kind": "motion", "source": "motion/confetti.json", "text": "..." }.',
+    "It plays once stretched across the beat; add \"loop\": true (sibling of source) to loop at native speed.",
+    "Rules: assets must embed images (base64 data: URIs) and outline/embed fonts (no system fonts);",
+    "After Effects expressions are rejected. For a motionOverlay, use a TRANSPARENT-background export —",
+    "an opaque background hides the avatar/app underneath. Keep focal content clear of the lower-third caption.",
   ].join("\n");
 }
 

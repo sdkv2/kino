@@ -177,6 +177,27 @@ describe("assertMotionGraphics", () => {
     const spec = { segments: [{ kind: "motion", source: "motion/bad.js", text: "x" }] } as unknown as Spec;
     expect(() => assertMotionGraphics(spec, project)).toThrow(/network access/i);
   });
+  it("validates a clean Lottie .json motion source", () => {
+    const project = projWith("motion/ok.json", JSON.stringify({ v: "5.7.4", fr: 30, ip: 0, op: 60, w: 1080, h: 1920, layers: [] }));
+    const spec = { segments: [{ kind: "motion", source: "motion/ok.json", text: "x" }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).not.toThrow();
+  });
+  it("rejects a Lottie .json with an AE expression at validation time", () => {
+    const bad = JSON.stringify({ v: "5", fr: 30, ip: 0, op: 60, w: 10, h: 10, layers: [{ ty: 4, ks: { o: { a: 0, k: 1, x: "$bm_rt=1" } } }] });
+    const project = projWith("motion/bad.json", bad);
+    const spec = { segments: [{ kind: "motion", source: "motion/bad.json", text: "x" }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).toThrow(/segment\[0\].*expression/i);
+  });
+  it("rejects a non-Lottie .json at validation time (not silently HTML-linted)", () => {
+    const project = projWith("motion/x.json", JSON.stringify({ hello: "world" }));
+    const spec = { segments: [{ kind: "motion", source: "motion/x.json", text: "x" }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).toThrow(/not a Lottie animation/i);
+  });
+  it("rejects an unknown motion extension at validation time", () => {
+    const project = projWith("motion/x.png", "not markup");
+    const spec = { segments: [{ kind: "motion", source: "motion/x.png", text: "x" }] } as unknown as Spec;
+    expect(() => assertMotionGraphics(spec, project)).toThrow(/must be \.html, \.js, or \.json/i);
+  });
 });
 
 import { SpecSchema } from "../src/spec/schema.js";
@@ -223,5 +244,12 @@ describe("kino motion help", () => {
     expect(t).toMatch(/stagger/i); // staggering guidance
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
     expect(t).toMatch(/--kino-caption-bottom/); // the caption-band var so authors avoid the caption
+  });
+  it("documents the Tier-3 Lottie option and its rules", () => {
+    const t = motionHelpText();
+    expect(t).toMatch(/lottie/i);
+    expect(t).toMatch(/\.json/);
+    expect(t).toMatch(/loop/);
+    expect(t).toMatch(/transparent/i); // overlay-background rule
   });
 });

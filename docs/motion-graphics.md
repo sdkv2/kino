@@ -12,6 +12,7 @@ Run `kino motion` for the same contract inline.
 - [Staggering reveals](#staggering-reveals)
 - [Gradient-clipped text (`kino-cliptext`)](#gradient-clipped-text-kino-cliptext)
 - [Procedural graphics (Tier 2)](#procedural-graphics-tier-2)
+- [Embedded Lottie (Tier 3)](#embedded-lottie-tier-3)
 - [Determinism & safety (the lint)](#determinism--safety-the-lint)
 - [Authoring tips](#authoring-tips)
 - [Worked examples](#worked-examples)
@@ -160,6 +161,38 @@ return data.map((h, i) =>
 It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
 the build lints the source and rejects `Date.now`/`Math.random`/timers/`fetch`/`import`/`require`/`process`
 and direct `document`/`window` access. Reference it from the spec exactly like a `.html` graphic.
+
+## Embedded Lottie (Tier 3)
+
+When a graphic needs organic illustrated motion, complex vector morphs, or designer-crafted logo reveals that come out of After Effects — things no agent can author from scratch — point `source` at a **`.json`** Bodymovin/LottieFiles file instead of a `.html` or `.js` file. kino plays it deterministically via `@remotion/lottie` (which drives the animation off `useCurrentFrame()`, the same frame-seek discipline as the rest of the pipeline).
+
+```json
+{ "kind": "motion", "source": "motion/confetti.json", "text": "We just shipped it." }
+```
+
+Tier-3 Lottie works in **all three motion slots**: a full-screen `kind:"motion"` beat, a `motionOverlay` on an `avatar` beat, and a `motionOverlay` on an `app` beat.
+
+### Playback
+
+By default the animation plays **once, stretched** so its full duration spans the beat — matching the system's "everything is progress across the beat" model. Add `"loop": true` (a sibling of `source`) to loop the animation at native speed instead:
+
+```json
+{ "kind": "app", "asset": "screens/dashboard.png", "text": "...", "caption": "...",
+  "motionOverlay": { "source": "motion/sparkle.json", "loop": true } }
+```
+
+### Authoring rules
+
+The build **rejects** assets that violate kino's determinism/safety contract:
+
+- **Embed images** — any image assets must be base64 `data:` URIs (`e:1` in the Bodymovin JSON). External URL refs don't resolve during render.
+- **Outline text to shapes or embed the font** — external/system fonts are host-dependent and rejected. Headless Chromium has no guaranteed system fonts, so text would render with an unpredictable fallback.
+- **No After Effects expressions** — AE expressions (`x` fields holding JS source strings) evaluate JavaScript at render time. They're rejected as both non-deterministic and an eval surface. Re-export with expressions baked or removed.
+- **Transparent background for overlays** — when used as a `motionOverlay`, the Lottie renders above the avatar/app video. An opaque full-frame solid (a common AE export default) completely occludes the presenter or screenshot. Export with a transparent background, or use the Lottie as a full-screen `kind:"motion"` beat instead.
+- **Keep focal content clear of the lower-third caption band** — kino can't reflow a brought-in Lottie; captions win on z-order and sit on top, but the animation's content can sit behind them. Use `--kino-caption-bottom` guidance only for HTML/CSS Tier-1 graphics; for Lottie, design the asset with caption-safe framing.
+- **3 MB cap** — the serialized JSON ships inline in Remotion's inputProps. Simplify or split animations that exceed the limit.
+
+> `.lottie` (dotLottie binary) support and brand color-token recoloring are documented follow-ons and are not yet implemented.
 
 ## Determinism & safety (the lint)
 

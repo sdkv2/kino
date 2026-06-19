@@ -66,10 +66,16 @@ export interface BackgroundProps {
   triggers: BgTrigger[]; // agent-authored one-shot actions (e.g. pulse)
 }
 
+// A parsed Lottie (Bodymovin) animation document. Structurally JSON, so it serializes cleanly
+// through Remotion inputProps. Validated + linted at resolve time (src/render/lottie.ts).
+export type LottieData = Record<string, unknown>;
+
 // A resolved motion graphic: the sanitized HTML plus the JSON-owned timing controls.
 export interface MotionGraphicProps {
-  html: string; // sanitized, self-contained static markup (Tier 1); "" for procedural graphics
+  html: string; // sanitized static markup (Tier 1); "" for procedural AND lottie graphics
   proc?: string; // Tier 2: linted JS source — body of render(env) → HTML string, evaluated per frame
+  lottie?: LottieData; // Tier 3: parsed animationData
+  loop?: boolean; // Tier 3 playback (inert for html/proc); default false
   params: Record<string, BgParamValue>; // base CSS-variable values
   keyframes: BgKeyframe[]; // tween params over time (--<name>)
   triggers: BgTrigger[]; // one-shot pulses (--pulse)

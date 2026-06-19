@@ -4,6 +4,8 @@ import type { Theme, MotionGraphicProps, MotionEnv } from "../props";
 import { paramsAt, pulseAt } from "../bgparams";
 import { buildMotionVars } from "../motionVars";
 import { sanitizeMotionHtml } from "../sanitizeMotion";
+import { Lottie, getLottieMetadata } from "@remotion/lottie";
+import { lottiePlaybackRate } from "../lottie";
 
 // Trusted stylesheet injected into every motion-graphic shadow root:
 //  • pause ALL animations so none run on the wall clock (determinism), and scrub elements marked
@@ -68,14 +70,14 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   // for this frame. It runs in the browser (no Node globals) and must be a pure (env) → HTML string.
   const procFn = React.useMemo(
     () =>
-      data.proc
+      data.proc && !data.lottie
         ? // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
           // source is trusted local project config that has already passed the sanitize + determinism lint
           // (sanitize: src/render/sanitizeMotion.ts; lint: src/render/motiongraphic.ts). Never feed untrusted/remote input here.
           // eslint-disable-next-line @typescript-eslint/no-implied-eval
           (new Function("env", data.proc) as (env: MotionEnv) => unknown)
         : null,
-    [data.proc],
+    [data.proc, data.lottie],
   );
   let html = data.html;
   if (procFn) {
@@ -97,6 +99,29 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       html = "";
       if (frame === 0) console.error("motion graphic render(env) threw:", err);
     }
+  }
+
+  // Tier 3: a Lottie graphic renders via @remotion/lottie, which advances the animation off
+  // useCurrentFrame() (deterministic, like the rest of the pipeline). Returned AFTER all hooks above
+  // so rules-of-hooks holds; procFn is short-circuited to null for Lottie, so the html/env work above
+  // is inert here. playbackRate stretches the full animation once across the beat (loop=false).
+  if (data.lottie) {
+    const animationData = data.lottie as Parameters<typeof getLottieMetadata>[0];
+    const loop = data.loop ?? false;
+    const meta = getLottieMetadata(animationData);
+    if (!meta && frame === 0) console.warn("Lottie metadata unavailable — playing at native speed");
+    const playbackRate = meta ? lottiePlaybackRate(meta.durationInFrames, durationFrames, loop) : 1;
+    return (
+      <AbsoluteFill>
+        <Lottie
+          animationData={animationData}
+          loop={loop}
+          playbackRate={playbackRate}
+          preserveAspectRatio="xMidYMid meet"
+          style={{ width: "100%", height: "100%" }}
+        />
+      </AbsoluteFill>
+    );
   }
 
   return (
