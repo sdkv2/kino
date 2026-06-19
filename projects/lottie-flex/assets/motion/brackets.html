@@ -1,0 +1,21 @@
+<style>
+  /* Four corner registration brackets that snap inward on each word (--pulse). Crisp SVG strokes. */
+  .wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .reticle {
+    width: 64vw; height: 64vw;
+    opacity: var(--pulse, 0);
+    transform: scale(calc(1.34 - var(--pulse, 0) * 0.34));
+  }
+  .reticle svg { width: 100%; height: 100%; overflow: visible; }
+  .ink { stroke: var(--kino-white); fill: none; stroke-width: 9; stroke-linecap: butt; }
+  .dot { fill: var(--kino-green); }
+</style>
+<div class="wrap"><div class="reticle">
+  <svg viewBox="-200 -200 400 400">
+    <path class="ink" d="M-200,-120 L-200,-200 L-120,-200"/>
+    <path class="ink" d="M120,-200 L200,-200 L200,-120"/>
+    <path class="ink" d="M-200,120 L-200,200 L-120,200"/>
+    <path class="ink" d="M120,200 L200,200 L200,120"/>
+    <circle class="dot" r="9"/>
+  </svg>
+</div></div>

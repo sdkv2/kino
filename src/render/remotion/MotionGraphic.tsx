@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef } from "react";
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, MotionGraphicProps, MotionEnv } from "../props";
 import { paramsAt, pulseAt } from "../bgparams";
 import { buildMotionVars } from "../motionVars";
@@ -154,9 +154,36 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   // is inert here. playbackRate stretches the full animation once across the beat (loop=false).
   if (data.lottie) {
     const animationData = data.lottie as Parameters<typeof getLottieMetadata>[0];
-    const loop = data.loop ?? false;
     const meta = getLottieMetadata(animationData);
     if (!meta && frame === 0) console.warn("Lottie metadata unavailable — playing at native speed");
+
+    // Fire mode: when the graphic carries triggers (authored at VO word times via `kino inspect`),
+    // each trigger pops a fresh one-shot of the animation, so the Lottie moves in time with the words.
+    // A nested <Sequence from={wordFrame}> restarts the inner clock at the trigger (beat-local), and
+    // @remotion/lottie advances off that clock — deterministic, no imperative seeking. `loop` is ignored
+    // here (each burst is one-shot). Each burst plays once at its native wall-clock duration; bursts may
+    // overlap if words land closer than the burst length, so author short, transparent burst assets.
+    if (data.triggers && data.triggers.length > 0) {
+      const burstFrames = Math.max(1, Math.round((meta?.durationInSeconds ?? 1) * fps));
+      const burstRate = meta ? lottiePlaybackRate(meta.durationInFrames, burstFrames, false) : 1;
+      return (
+        <AbsoluteFill>
+          {data.triggers.map((tr, i) => (
+            <Sequence key={i} from={Math.round(tr.at * fps)} durationInFrames={burstFrames}>
+              <Lottie
+                animationData={animationData}
+                loop={false}
+                playbackRate={burstRate}
+                preserveAspectRatio="xMidYMid meet"
+                style={{ width: "100%", height: "100%" }}
+              />
+            </Sequence>
+          ))}
+        </AbsoluteFill>
+      );
+    }
+
+    const loop = data.loop ?? false;
     const playbackRate = meta ? lottiePlaybackRate(meta.durationInFrames, durationFrames, loop) : 1;
     return (
       <AbsoluteFill>

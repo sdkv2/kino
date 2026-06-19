@@ -247,6 +247,17 @@ By default the animation plays **once, stretched** so its full duration spans th
   "motionOverlay": { "source": "motion/sparkle.json", "loop": true } }
 ```
 
+### Word-fire: sync bursts to the narration
+
+Give a Lottie graphic **`triggers`** and it switches to *fire mode*: each trigger pops a fresh one-shot of the animation at that (beat-local) time, instead of stretching one play across the beat. Build the VO, run `kino inspect` to read the per-word times, then place a trigger on each word you want to punctuate — so the Lottie moves **in time with the words**:
+
+```json
+{ "kind": "motion", "source": "motion/pop.json", "text": "Real. Time. Sync.",
+  "triggers": [{ "at": 0.31, "action": "play" }, { "at": 0.92, "action": "play" }, { "at": 1.48, "action": "play" }] }
+```
+
+Each burst plays once at its native duration and unmounts, so use a **short, transparent** burst asset (~0.3–0.5s); bursts may overlap if words land closer than the burst length. Triggers take precedence over `loop`. (The `action` string is informational — every trigger fires.)
+
 ### Authoring rules
 
 The build **rejects** assets that violate kino's determinism/safety contract:

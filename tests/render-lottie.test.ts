@@ -66,3 +66,45 @@ describe("Tier-3 Lottie render", () => {
     expect(existsSync(outs[0])).toBe(true);
   }, 180000);
 });
+
+// The pop.json burst is magenta (#ff00ff), absent from the glow background. The center pixel (540,960)
+// is the burst's anchor, so it reads magenta whenever a burst is on screen and the background otherwise.
+const centerIsMagenta = (png: string) => {
+  const s = execSync(`magick "${png}" -format "%[pixel:p{540,960}]" info:`).toString();
+  const m = s.match(/srgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (!m) throw new Error(`Unexpected pixel format: ${s}`);
+  const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return r > 140 && b > 140 && g < 110;
+};
+const pop = JSON.parse(readFileSync(join(__dirname, "../examples/motion-lottie/pop.json"), "utf8"));
+
+describe("Tier-3 Lottie word-fire (triggers)", () => {
+  it("fires a one-shot burst at each trigger time and is absent before/between them", async () => {
+    // 2s beat = 60 frames @30fps. pop.json is a magenta burst (~0.4s). Triggers at 0.5s (frame 15) and
+    // 1.5s (frame 45): each fires the burst once; nothing renders before the first or between bursts.
+    const props: KinoProps = {
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: { html: "", lottie: pop, params: {}, keyframes: [],
+          triggers: [{ at: 0.5, action: "play" }, { at: 1.5, action: "play" }] } }],
+    };
+    const outs = await renderStills({
+      props, publicDir: mkdtempSync(join(tmpdir(), "lottie-fire-pub-")), format: "9:16",
+      frames: [
+        { frame: 5, name: "before" },   // before the first trigger → no burst
+        { frame: 22, name: "burst1" },  // inside burst 1 (trigger 15) → magenta
+        { frame: 22, name: "burst1b" }, // determinism
+        { frame: 38, name: "between" }, // burst 1 ended (~frame 27), burst 2 not yet (45) → no burst
+        { frame: 52, name: "burst2" },  // inside burst 2 (trigger 45) → magenta
+      ],
+      outDir: mkdtempSync(join(tmpdir(), "kino-lottie-fire-")),
+    });
+    expect(
+      execSync(`magick "${outs[1]}" -format "%[pixel:p{540,960}]" info:`).toString(),
+    ).toBe(execSync(`magick "${outs[2]}" -format "%[pixel:p{540,960}]" info:`).toString()); // determinism
+    expect(centerIsMagenta(outs[1])).toBe(true);  // burst 1 on screen at its trigger
+    expect(centerIsMagenta(outs[4])).toBe(true);  // burst 2 on screen at its trigger
+    expect(centerIsMagenta(outs[0])).toBe(false); // nothing before the first trigger
+    expect(centerIsMagenta(outs[3])).toBe(false); // nothing between bursts
+  }, 180000);
+});

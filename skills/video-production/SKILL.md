@@ -83,8 +83,10 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   plays it deterministically via `@remotion/lottie`. Key rule: for a `motionOverlay`, the asset **must
   have a transparent background** — an opaque export occludes the avatar or app screenshot. Add
   `"loop": true` (sibling of `source`) to loop at native speed; default plays once stretched across the
-  beat. Assets must embed images (base64 `data:` URIs) and outline/embed fonts (no system fonts, no AE
-  expressions). Works in all three motion slots (`kind:"motion"`, `motionOverlay` on `avatar` or `app`).
+  beat. **Word-fire:** give the Lottie `triggers` at VO word times (from `kino inspect`) and each fires a
+  fresh one-shot burst in sync with the words (use a short, transparent burst asset; triggers override
+  stretch/loop). Assets must embed images (base64 `data:` URIs) and outline/embed fonts (no system fonts,
+  no AE expressions). Works in all three motion slots (`kind:"motion"`, `motionOverlay` on `avatar` or `app`).
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.
