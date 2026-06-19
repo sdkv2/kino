@@ -182,6 +182,28 @@ kino injects a small, opt-in utility kit so you don't re-derive common motion. E
 /* --kino-ease-out · --kino-ease-in-out · --kino-ease-overshoot · --kino-ease-spring */
 ```
 
+### Texture & finish (SVG filter library)
+
+kino injects a small SVG filter library plus finish helpers, so you can add analog texture and depth that plain CSS can't reach. The filters are **static and seeded → identical every frame** (deterministic), and you reference them with `url(#…)` fragment ids, which the lint allows (only external/relative `url()`s are rejected).
+
+| Class / ref | Effect |
+|---|---|
+| `class="kino-grain"` | full-frame film-grain overlay (`feTurbulence` noise, `overlay` blend) |
+| `class="kino-vignette"` | radial edge-darkening |
+| `class="kino-mesh"` | soft multi-stop palette-gradient background (mint/gold/green on night) |
+| `class="kino-shadow"` | soft drop-shadow for depth |
+| `filter: url(#kino-grain)` | apply grain to your own element |
+| `filter: url(#kino-displace)` | organic, hand-drawn edge wobble (`feDisplacementMap`) |
+
+```html
+<div class="kino-mesh" style="position:absolute;inset:0"></div>   <!-- soft branded backdrop -->
+<div class="card kino-shadow">…</div>                            <!-- lift it off the page -->
+<div class="kino-vignette"></div>                                <!-- focus the centre -->
+<div class="kino-grain"></div>                                   <!-- analog grain on top -->
+```
+
+Grain is subtle by design — set the element's `opacity` higher for a heavier stock. The displacement filter is great on text or shape edges for a rough, screen-printed feel: `<h1 style="filter:url(#kino-displace)">…</h1>`.
+
 ## Procedural graphics (Tier 2)
 
 When a graphic needs loops or computed geometry (a chart of N bars, a ring of N dots, a scatter), point

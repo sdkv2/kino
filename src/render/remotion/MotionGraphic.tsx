@@ -23,6 +23,12 @@ import { lottiePlaybackRate } from "../lottie";
 //  • `.kino-cliptext`: widens the paint box of `background-clip:text` so tight/negative letter-spacing
 //    doesn't slice the last glyph's gradient edge (cancelled by equal negative margin → layout unchanged).
 //  • `.kino-fade-edges`: a top/bottom mask gradient to feather scrolling / overflowing content.
+//  • Texture & finish: `.kino-grain` (film-grain overlay via the injected #kino-grain feTurbulence
+//    filter), `.kino-vignette` (edge darken), `.kino-mesh` (soft palette mesh background),
+//    `.kino-shadow` (soft drop-shadow). Plus the injected SVG defs in KINO_DEFS that an agent can apply
+//    directly: `filter:url(#kino-grain)` and `filter:url(#kino-displace)` (organic edge wobble). The
+//    filters are static + seeded → identical every frame (deterministic); `url(#…)` fragment refs pass
+//    the lint (only external/relative url()s are rejected).
 const KINO_SCRUB_STYLE =
   "<style>*{animation-play-state:paused !important;transition:none !important}" +
   ":host{--kino-ease-out:cubic-bezier(.22,1,.36,1);--kino-ease-in-out:cubic-bezier(.65,0,.35,1);" +
@@ -41,7 +47,29 @@ const KINO_SCRUB_STYLE =
   ".kino-pulse{opacity:var(--pulse,0);transform:scale(calc(.86 + var(--pulse,0) * .16))}" +
   ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}" +
   ".kino-fade-edges{-webkit-mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);" +
-  "mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent)}</style>";
+  "mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent)}" +
+  ".kino-grain{position:absolute;inset:0;pointer-events:none;filter:url(#kino-grain);" +
+  "opacity:.5;mix-blend-mode:overlay}" +
+  ".kino-vignette{position:absolute;inset:0;pointer-events:none;" +
+  "background:radial-gradient(75% 70% at 50% 50%,transparent 42%,rgba(0,0,0,.55) 100%)}" +
+  ".kino-mesh{background:radial-gradient(60% 60% at 18% 22%,var(--kino-mint),transparent 60%)," +
+  "radial-gradient(55% 55% at 82% 28%,var(--kino-gold),transparent 60%)," +
+  "radial-gradient(70% 70% at 50% 92%,var(--kino-green),transparent 65%),var(--kino-night)}" +
+  ".kino-shadow{filter:drop-shadow(0 12px 26px rgba(0,0,0,.32))}</style>";
+
+// Injected SVG filter library (trusted, alongside KINO_SCRUB_STYLE). The genuinely SVG-only effects —
+// noise has no CSS equivalent, and feDisplacementMap gives an organic hand-drawn edge wobble. Static +
+// seeded → identical every frame (deterministic). Referenced from agent CSS via filter:url(#kino-…); the
+// hidden <svg> just hosts the <defs> so those fragment ids resolve inside the shadow root.
+const KINO_DEFS =
+  '<svg width="0" height="0" aria-hidden="true" style="position:absolute">' +
+  '<filter id="kino-grain" x="0" y="0" width="100%" height="100%">' +
+  '<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="11" stitchTiles="stitch"/>' +
+  '<feColorMatrix type="saturate" values="0"/></filter>' +
+  '<filter id="kino-displace" x="-10%" y="-10%" width="120%" height="120%">' +
+  '<feTurbulence type="fractalNoise" baseFrequency="0.01 0.014" numOctaves="2" seed="3" result="t"/>' +
+  '<feDisplacementMap in="SourceGraphic" in2="t" scale="20" xChannelSelector="R" yChannelSelector="G"/></filter>' +
+  "</svg>";
 
 // Inject the sanitized HTML into a Shadow root, then set CSS custom properties on the host every
 // frame. Custom properties inherit across the shadow boundary, so the agent's (shadow-scoped) CSS
@@ -55,7 +83,7 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
     const host = hostRef.current;
     if (!host) return;
     if (!shadowRef.current) shadowRef.current = host.attachShadow({ mode: "open" });
-    shadowRef.current.innerHTML = KINO_SCRUB_STYLE + html;
+    shadowRef.current.innerHTML = KINO_SCRUB_STYLE + KINO_DEFS + html;
   }, [html]);
 
   // Intentional: this re-runs on the frame-derived inputs to redraw every frame. The dep array is
