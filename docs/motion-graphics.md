@@ -11,6 +11,7 @@ Run `kino motion` for the same contract inline.
 - [Scrubbed @keyframes](#scrubbed-keyframes)
 - [Staggering reveals](#staggering-reveals)
 - [Gradient-clipped text (`kino-cliptext`)](#gradient-clipped-text-kino-cliptext)
+- [Helper classes (reveals, pulse, easing)](#helper-classes-reveals-pulse-easing)
 - [Procedural graphics (Tier 2)](#procedural-graphics-tier-2)
 - [Embedded Lottie (Tier 3)](#embedded-lottie-tier-3)
 - [Determinism & safety (the lint)](#determinism--safety-the-lint)
@@ -137,6 +138,71 @@ Gradient-filled text via `background-clip:text` only paints the gradient over th
 ```
 
 It's opt-in by design: a CSS selector can't match *computed* `background-clip`, and blanket padding would break `margin:auto` centering and tight letter-spaced runs. (Also: set the gradient with `background-image`, not the `background` shorthand — the shorthand resets `background-clip`.)
+
+## Helper classes (reveals, pulse, easing)
+
+kino injects a small, opt-in utility kit so you don't re-derive common motion. Everything here is **frame-driven and determinism-safe** — the reveals are scrubbed `@keyframes` (no wall clock), `kino-pulse` reads the trigger envelope, and there are no transitions or external `url()`s.
+
+**One-class reveals** — add the class to any element; it animates in over the first ~third of the beat, then holds. No `@keyframes` to author. They're part of the scrub set, so they stagger with `--kino-delay` exactly like `kino-anim`:
+
+| Class | Effect |
+|---|---|
+| `kino-rise` | fade + slide up (override distance with `--kino-rise-y`, default `42px`) |
+| `kino-blur-rise` | fade + de-blur + slide up (premium feel) |
+| `kino-pop` | scale-up with an overshoot settle |
+| `kino-wipe` | left-to-right clip reveal |
+
+```html
+<style>
+  .card { font-family:var(--kino-font); color:var(--kino-white); font-size:64px; }
+  .card { --kino-delay: calc((sibling-index() - 1) * .08); }  /* stagger a list */
+</style>
+<div class="card kino-blur-rise">Author</div>
+<div class="card kino-blur-rise">the</div>
+<div class="card kino-blur-rise">spec.</div>
+```
+
+**`kino-pulse`** — maps the `--pulse` envelope to an opacity + scale pop. Place spec `triggers` with `action:"pulse"` at the VO word times (from `kino inspect`) and the element punches on each word:
+
+```html
+<style>.dot { width:24vw; height:24vw; border-radius:50%; background:var(--kino-green); }</style>
+<div class="dot kino-pulse"></div>
+```
+```jsonc
+// in the spec, on this beat's motion / motionOverlay:
+"triggers": [{ "at": 0.31, "action": "pulse" }, { "at": 0.92, "action": "pulse" }]
+```
+
+**`kino-fade-edges`** — a top/bottom mask gradient that feathers overflowing or scrolling content so it doesn't hard-cut at the frame edge.
+
+**Easing tokens** — cubic-béziers matching the spec's keyframe eases, for your own `@keyframes`:
+
+```css
+.thing { animation-name:slide; animation-timing-function:var(--kino-ease-overshoot); }
+/* --kino-ease-out · --kino-ease-in-out · --kino-ease-overshoot · --kino-ease-spring */
+```
+
+### Texture & finish (SVG filter library)
+
+kino injects a small SVG filter library plus finish helpers, so you can add analog texture and depth that plain CSS can't reach. The filters are **static and seeded → identical every frame** (deterministic), and you reference them with `url(#…)` fragment ids, which the lint allows (only external/relative `url()`s are rejected).
+
+| Class / ref | Effect |
+|---|---|
+| `class="kino-grain"` | full-frame film-grain overlay (`feTurbulence` noise, `overlay` blend) |
+| `class="kino-vignette"` | radial edge-darkening |
+| `class="kino-mesh"` | soft multi-stop palette-gradient background (mint/gold/green on night) |
+| `class="kino-shadow"` | soft drop-shadow for depth |
+| `filter: url(#kino-grain)` | apply grain to your own element |
+| `filter: url(#kino-displace)` | organic, hand-drawn edge wobble (`feDisplacementMap`) |
+
+```html
+<div class="kino-mesh" style="position:absolute;inset:0"></div>   <!-- soft branded backdrop -->
+<div class="card kino-shadow">…</div>                            <!-- lift it off the page -->
+<div class="kino-vignette"></div>                                <!-- focus the centre -->
+<div class="kino-grain"></div>                                   <!-- analog grain on top -->
+```
+
+Grain is subtle by design — set the element's `opacity` higher for a heavier stock. The displacement filter is great on text or shape edges for a rough, screen-printed feel: `<h1 style="filter:url(#kino-displace)">…</h1>`.
 
 ## Procedural graphics (Tier 2)
 

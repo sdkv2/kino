@@ -30,6 +30,8 @@ describe("lintMotionHtml", () => {
     expect(lintMotionHtml(`<style>.b{background:url(foo.png)}</style>`).length).toBe(1);
     expect(lintMotionHtml(`<style>.b{background:url(data:image/png;base64,AA==)}</style>`)).toEqual([]);
     expect(lintMotionHtml(`<style>.b{fill:url(#grad)}</style>`)).toEqual([]);
+    // the injected SVG-texture filters are referenced by #fragment, so they pass the lint
+    expect(lintMotionHtml(`<style>.b{filter:url(#kino-grain)}.c{filter:url(#kino-displace)}</style>`)).toEqual([]);
   });
   it("rejects each remaining non-deterministic / network construct", () => {
     for (const bad of [
@@ -244,6 +246,17 @@ describe("kino motion help", () => {
     expect(t).toMatch(/stagger/i); // staggering guidance
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
     expect(t).toMatch(/--kino-caption-bottom/); // the caption-band var so authors avoid the caption
+  });
+  it("documents the CSS helper kit (reveals, pulse, fade-edges, easing tokens)", () => {
+    const t = motionHelpText();
+    expect(t).toMatch(/kino-rise/);
+    expect(t).toMatch(/kino-pop/);
+    expect(t).toMatch(/kino-pulse/);
+    expect(t).toMatch(/kino-fade-edges/);
+    expect(t).toMatch(/--kino-ease-/);
+    expect(t).toMatch(/kino-grain/);
+    expect(t).toMatch(/kino-vignette/);
+    expect(t).toMatch(/url\(#kino-displace\)/);
   });
   it("documents the Tier-3 Lottie option and its rules", () => {
     const t = motionHelpText();

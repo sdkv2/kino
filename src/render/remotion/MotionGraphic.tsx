@@ -7,22 +7,69 @@ import { sanitizeMotionHtml } from "../sanitizeMotion";
 import { Lottie, getLottieMetadata } from "@remotion/lottie";
 import { lottiePlaybackRate } from "../lottie";
 
-// Trusted stylesheet injected into every motion-graphic shadow root:
-//  • pause ALL animations so none run on the wall clock (determinism), and scrub elements marked
-//    `.kino-anim` across the beat via a --progress-driven negative animation-delay (the canonical
-//    Remotion scrub). Inert when the agent's HTML defines no animations. --kino-delay (agent-set,
-//    default 0) staggers; sub-timing lives in the @keyframes % stops; easing is the agent's.
-//  • `.kino-cliptext` helper: gradient text via `background-clip:text` paints the gradient only over
-//    the content box, so glyph ink that negative letter-spacing pushes past that box renders
-//    transparent (the last glyph's edge looks sliced). This widens the paint box with inline padding,
-//    cancelled by equal negative margin so layout/centering is unchanged. Opt-in (a CSS selector
-//    can't match computed background-clip, and blanket padding would break margin:auto / tight runs).
+// Trusted stylesheet injected into every motion-graphic shadow root. All of it is determinism-safe:
+// animations are force-paused and scrubbed by --progress (no wall clock), helpers read frame-driven
+// vars only, and there are no transitions / external url()s. Opt-in `.kino-*` utilities so an agent
+// reaches for polished motion without re-deriving it:
+//  • Scrub: pause ALL animations, then seek elements in the scrub set (`.kino-anim` + the built-in
+//    reveals below) to --progress via a negative animation-delay (the canonical Remotion scrub).
+//    --kino-delay (agent-set, default 0) staggers; sub-timing lives in the @keyframes % stops.
+//  • Easing tokens (`--kino-ease-out/-in-out/-overshoot/-spring`): cubic-beziers matching the spec's
+//    keyframe eases, for `animation-timing-function:var(--kino-ease-…)` in any @keyframes.
+//  • One-class reveals (`.kino-rise/.kino-blur-rise/.kino-pop/.kino-wipe`): complete in the first ~third
+//    of the beat then hold — no @keyframes to author. Compose with --kino-delay for staggered lists.
+//  • `.kino-pulse`: maps the word-trigger envelope --pulse → a pop (opacity + scale). Pairs with spec
+//    triggers `{ at, action:"pulse" }` placed at VO word times (kino inspect).
+//  • `.kino-cliptext`: widens the paint box of `background-clip:text` so tight/negative letter-spacing
+//    doesn't slice the last glyph's gradient edge (cancelled by equal negative margin → layout unchanged).
+//  • `.kino-fade-edges`: a top/bottom mask gradient to feather scrolling / overflowing content.
+//  • Texture & finish: `.kino-grain` (film-grain overlay via the injected #kino-grain feTurbulence
+//    filter), `.kino-vignette` (edge darken), `.kino-mesh` (soft palette mesh background),
+//    `.kino-shadow` (soft drop-shadow). Plus the injected SVG defs in KINO_DEFS that an agent can apply
+//    directly: `filter:url(#kino-grain)` and `filter:url(#kino-displace)` (organic edge wobble). The
+//    filters are static + seeded → identical every frame (deterministic); `url(#…)` fragment refs pass
+//    the lint (only external/relative url()s are rejected).
 const KINO_SCRUB_STYLE =
   "<style>*{animation-play-state:paused !important;transition:none !important}" +
-  ".kino-anim{animation-duration:1s !important;animation-fill-mode:both !important;" +
-  "animation-iteration-count:1 !important;" +
+  ":host{--kino-ease-out:cubic-bezier(.22,1,.36,1);--kino-ease-in-out:cubic-bezier(.65,0,.35,1);" +
+  "--kino-ease-overshoot:cubic-bezier(.34,1.56,.64,1);--kino-ease-spring:cubic-bezier(.22,1.4,.3,1)}" +
+  ".kino-anim,.kino-rise,.kino-blur-rise,.kino-pop,.kino-wipe{animation-duration:1s !important;" +
+  "animation-fill-mode:both !important;animation-iteration-count:1 !important;" +
   "animation-delay:calc((var(--progress) - var(--kino-delay, 0)) * -1s) !important}" +
-  ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}</style>";
+  ".kino-rise{animation-name:kino-rise;animation-timing-function:var(--kino-ease-out)}" +
+  ".kino-blur-rise{animation-name:kino-blur-rise;animation-timing-function:var(--kino-ease-out)}" +
+  ".kino-pop{animation-name:kino-pop;animation-timing-function:var(--kino-ease-overshoot)}" +
+  ".kino-wipe{animation-name:kino-wipe;animation-timing-function:var(--kino-ease-in-out)}" +
+  "@keyframes kino-rise{0%{opacity:0;transform:translateY(var(--kino-rise-y,42px))}35%{opacity:1;transform:none}100%{opacity:1;transform:none}}" +
+  "@keyframes kino-blur-rise{0%{opacity:0;filter:blur(16px);transform:translateY(26px)}45%{opacity:1;filter:blur(0);transform:none}100%{opacity:1;filter:blur(0);transform:none}}" +
+  "@keyframes kino-pop{0%{opacity:0;transform:scale(.7)}40%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(1)}}" +
+  "@keyframes kino-wipe{0%{clip-path:inset(0 100% 0 0)}40%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 0)}}" +
+  ".kino-pulse{opacity:var(--pulse,0);transform:scale(calc(.86 + var(--pulse,0) * .16))}" +
+  ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}" +
+  ".kino-fade-edges{-webkit-mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);" +
+  "mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent)}" +
+  ".kino-grain{position:absolute;inset:0;pointer-events:none;filter:url(#kino-grain);" +
+  "opacity:.5;mix-blend-mode:overlay}" +
+  ".kino-vignette{position:absolute;inset:0;pointer-events:none;" +
+  "background:radial-gradient(75% 70% at 50% 50%,transparent 42%,rgba(0,0,0,.55) 100%)}" +
+  ".kino-mesh{background:radial-gradient(60% 60% at 18% 22%,var(--kino-mint),transparent 60%)," +
+  "radial-gradient(55% 55% at 82% 28%,var(--kino-gold),transparent 60%)," +
+  "radial-gradient(70% 70% at 50% 92%,var(--kino-green),transparent 65%),var(--kino-night)}" +
+  ".kino-shadow{filter:drop-shadow(0 12px 26px rgba(0,0,0,.32))}</style>";
+
+// Injected SVG filter library (trusted, alongside KINO_SCRUB_STYLE). The genuinely SVG-only effects —
+// noise has no CSS equivalent, and feDisplacementMap gives an organic hand-drawn edge wobble. Static +
+// seeded → identical every frame (deterministic). Referenced from agent CSS via filter:url(#kino-…); the
+// hidden <svg> just hosts the <defs> so those fragment ids resolve inside the shadow root.
+const KINO_DEFS =
+  '<svg width="0" height="0" aria-hidden="true" style="position:absolute">' +
+  '<filter id="kino-grain" x="0" y="0" width="100%" height="100%">' +
+  '<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="11" stitchTiles="stitch"/>' +
+  '<feColorMatrix type="saturate" values="0"/></filter>' +
+  '<filter id="kino-displace" x="-10%" y="-10%" width="120%" height="120%">' +
+  '<feTurbulence type="fractalNoise" baseFrequency="0.01 0.014" numOctaves="2" seed="3" result="t"/>' +
+  '<feDisplacementMap in="SourceGraphic" in2="t" scale="20" xChannelSelector="R" yChannelSelector="G"/></filter>' +
+  "</svg>";
 
 // Inject the sanitized HTML into a Shadow root, then set CSS custom properties on the host every
 // frame. Custom properties inherit across the shadow boundary, so the agent's (shadow-scoped) CSS
@@ -36,7 +83,7 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
     const host = hostRef.current;
     if (!host) return;
     if (!shadowRef.current) shadowRef.current = host.attachShadow({ mode: "open" });
-    shadowRef.current.innerHTML = KINO_SCRUB_STYLE + html;
+    shadowRef.current.innerHTML = KINO_SCRUB_STYLE + KINO_DEFS + html;
   }, [html]);
 
   // Intentional: this re-runs on the frame-derived inputs to redraw every frame. The dep array is
