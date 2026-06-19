@@ -1,0 +1,157 @@
+{
+  "title": "lottie-word-flex",
+  "format": [
+    "9:16"
+  ],
+  "background": "mesh",
+  "segments": [
+    {
+      "kind": "avatar",
+      "text": "kino just learned Lottie.",
+      "caption": "kino just learned Lottie",
+      "captionMode": "words",
+      "emphasis": [
+        "Lottie"
+      ],
+      "motionOverlay": {
+        "source": "motion/pop-mint.json",
+        "triggers": [
+          {
+            "at": 0,
+            "action": "play"
+          },
+          {
+            "at": 0.48,
+            "action": "play"
+          },
+          {
+            "at": 0.79,
+            "action": "play"
+          },
+          {
+            "at": 1.09,
+            "action": "play"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "Drop in any animation you want.",
+      "caption": "drop in any animation",
+      "captionMode": "words",
+      "motionOverlay": {
+        "source": "motion/ring-gold.json",
+        "triggers": [
+          {
+            "at": 0,
+            "action": "play"
+          },
+          {
+            "at": 0.4,
+            "action": "play"
+          },
+          {
+            "at": 0.57,
+            "action": "play"
+          },
+          {
+            "at": 0.85,
+            "action": "play"
+          },
+          {
+            "at": 1.41,
+            "action": "play"
+          },
+          {
+            "at": 1.56,
+            "action": "play"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "And it fires in time with every single word.",
+      "caption": "synced to every word",
+      "captionMode": "words",
+      "emphasis": [
+        "every",
+        "word"
+      ],
+      "motionOverlay": {
+        "source": "motion/pop-green.json",
+        "triggers": [
+          {
+            "at": 0,
+            "action": "play"
+          },
+          {
+            "at": 0.22,
+            "action": "play"
+          },
+          {
+            "at": 0.36,
+            "action": "play"
+          },
+          {
+            "at": 0.8,
+            "action": "play"
+          },
+          {
+            "at": 0.94,
+            "action": "play"
+          },
+          {
+            "at": 1.24,
+            "action": "play"
+          },
+          {
+            "at": 1.46,
+            "action": "play"
+          },
+          {
+            "at": 1.83,
+            "action": "play"
+          },
+          {
+            "at": 2.21,
+            "action": "play"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "Deterministic. Frame perfect. That's kino.",
+      "caption": "frame perfect",
+      "captionMode": "words",
+      "cta": true,
+      "motionOverlay": {
+        "source": "motion/spark-white.json",
+        "triggers": [
+          {
+            "at": 0,
+            "action": "play"
+          },
+          {
+            "at": 1.35,
+            "action": "play"
+          },
+          {
+            "at": 1.67,
+            "action": "play"
+          },
+          {
+            "at": 2.38,
+            "action": "play"
+          },
+          {
+            "at": 2.68,
+            "action": "play"
+          }
+        ]
+      }
+    }
+  ]
+}
