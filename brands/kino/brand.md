@@ -2,15 +2,23 @@
 name: kino
 defaultProvider: none
 defaultVoice: TX3LPaxmHKxFdv7VOQHJ
-background: mesh
+font: Inter
+background: custom
+backgroundComponent: projects/lottie-flex/assets/marksman-bg.js
 facelessDisclosure: AI-generated voiceover
+captionStyle:
+  fontSize: 58
+  strokeWidth: 0
 colors:
-  night: "#0b1020"
-  mint: "#80e2b4"
-  green: "#0c8d64"
-  gold: "#d99a20"
-  white: "#ffffff"
+  night: "#F2EFE6"
+  white: "#16130D"
+  green: "#C8401F"
+  mint: "#16130D"
+  gold: "#8C8678"
 ---
 
-kino — a developer tool for agent-driven short-form video. Voice: punchy, confident,
-technical-but-hyped. Captions are 2–4 words, kinetic. Lean on the mint/green/gold accents.
+kino — agent-driven short-form video. Visual language: a technical spec-sheet / camera viewfinder.
+Flat warm-paper background (#F2EFE6), near-black ink, thin precise lines, marksman registration marks
+(corner brackets, crosshair ticks, a faint grid). One signal accent — a hunter's-orange red (#C8401F)
+for the active word and reticle centers. Type is restrained and mechanical (Inter, mono labels).
+Captions are 2–4 words. Nothing glows; everything is drawn, measured, deterministic.

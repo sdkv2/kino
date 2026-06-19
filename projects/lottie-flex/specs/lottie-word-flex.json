@@ -3,33 +3,41 @@
   "format": [
     "9:16"
   ],
-  "background": "mesh",
   "segments": [
     {
+      "kind": "motion",
+      "source": "motion/wordmark.html",
+      "text": "kino."
+    },
+    {
       "kind": "avatar",
-      "text": "kino just learned Lottie.",
-      "caption": "kino just learned Lottie",
+      "text": "Drop in any Lottie animation.",
+      "caption": "drop in any Lottie",
       "captionMode": "words",
       "emphasis": [
         "Lottie"
       ],
       "motionOverlay": {
-        "source": "motion/pop-mint.json",
+        "source": "motion/target.json",
         "triggers": [
           {
             "at": 0,
             "action": "play"
           },
           {
-            "at": 0.48,
+            "at": 0.36,
             "action": "play"
           },
           {
-            "at": 0.79,
+            "at": 0.52,
             "action": "play"
           },
           {
-            "at": 1.09,
+            "at": 0.78,
+            "action": "play"
+          },
+          {
+            "at": 1.08,
             "action": "play"
           }
         ]
@@ -37,30 +45,38 @@
     },
     {
       "kind": "avatar",
-      "text": "Drop in any animation you want.",
-      "caption": "drop in any animation",
+      "text": "It locks onto every word you speak.",
+      "caption": "locked to every word",
       "captionMode": "words",
+      "emphasis": [
+        "every",
+        "word"
+      ],
       "motionOverlay": {
-        "source": "motion/ring-gold.json",
+        "source": "motion/brackets.json",
         "triggers": [
           {
             "at": 0,
             "action": "play"
           },
           {
-            "at": 0.4,
+            "at": 0.22,
             "action": "play"
           },
           {
-            "at": 0.57,
+            "at": 0.51,
             "action": "play"
           },
           {
-            "at": 0.85,
+            "at": 0.79,
             "action": "play"
           },
           {
-            "at": 1.41,
+            "at": 1.13,
+            "action": "play"
+          },
+          {
+            "at": 1.39,
             "action": "play"
           },
           {
@@ -72,86 +88,38 @@
     },
     {
       "kind": "avatar",
-      "text": "And it fires in time with every single word.",
-      "caption": "synced to every word",
+      "text": "Frame perfect. Fully deterministic.",
+      "caption": "frame perfect",
       "captionMode": "words",
       "emphasis": [
-        "every",
-        "word"
+        "deterministic"
       ],
       "motionOverlay": {
-        "source": "motion/pop-green.json",
+        "source": "motion/crosshair.json",
         "triggers": [
           {
             "at": 0,
             "action": "play"
           },
           {
-            "at": 0.22,
+            "at": 0.43,
             "action": "play"
           },
           {
-            "at": 0.36,
+            "at": 1.17,
             "action": "play"
           },
           {
-            "at": 0.8,
-            "action": "play"
-          },
-          {
-            "at": 0.94,
-            "action": "play"
-          },
-          {
-            "at": 1.24,
-            "action": "play"
-          },
-          {
-            "at": 1.46,
-            "action": "play"
-          },
-          {
-            "at": 1.83,
-            "action": "play"
-          },
-          {
-            "at": 2.21,
+            "at": 1.53,
             "action": "play"
           }
         ]
       }
     },
     {
-      "kind": "avatar",
-      "text": "Deterministic. Frame perfect. That's kino.",
-      "caption": "frame perfect",
-      "captionMode": "words",
-      "cta": true,
-      "motionOverlay": {
-        "source": "motion/spark-white.json",
-        "triggers": [
-          {
-            "at": 0,
-            "action": "play"
-          },
-          {
-            "at": 1.35,
-            "action": "play"
-          },
-          {
-            "at": 1.67,
-            "action": "play"
-          },
-          {
-            "at": 2.38,
-            "action": "play"
-          },
-          {
-            "at": 2.68,
-            "action": "play"
-          }
-        ]
-      }
+      "kind": "motion",
+      "source": "motion/wordmark.html",
+      "text": "Motion, authored."
     }
   ]
 }
