@@ -77,9 +77,10 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `kind` | `"motion"` | ✅ | |
-| `source` | string | ✅ | Path to your HTML file (e.g. `motion/hook.html`). |
+| `source` | string | ✅ | Path to your HTML/JS/JSON file (e.g. `motion/hook.html`, `motion/confetti.json`). |
 | `text` | string | ✅ | Spoken VO for the beat. |
 | `caption` | string | — | Optional on-screen caption. |
+| `loop` | boolean | — | Tier-3 Lottie: loop at native speed instead of stretching once across the beat (default). |
 | `params` | `Record<string, number\|string>` | — | Base CSS-variable values (read as `--<key>`). |
 | `keyframes` | BgKeyframe[] | — | Tween params over the beat. |
 | `triggers` | BgTrigger[] | — | One-shot `pulse` envelopes (`--pulse`). |
@@ -87,7 +88,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `emphasis` | string[] | — | Emphasised words (`words` mode). |
 | `captionKeyframes` | BgKeyframe[] | — | Tween the caption. |
 
-> **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers? }`.
+> **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS.
 
 ### Enums
 

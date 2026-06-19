@@ -196,16 +196,16 @@ When `data.lottie` is present, render `<Lottie>` inside the existing `AbsoluteFi
 ```tsx
 import { Lottie, getLottieMetadata } from "@remotion/lottie";
 // ... inside MotionGraphic, after all hooks ...
-const { fps } = useVideoConfig();                 // already destructured at line 59
 if (data.lottie) {
   const loop = data.loop ?? false;                // first-class boolean field — no coercion
   const meta = getLottieMetadata(data.lottie);    // { width, height, fps, durationInFrames, durationInSeconds } | null
   // Stretch the full animation once across the beat. Docs: "A higher number is faster. Default: 1."
-  // → play once across a longer beat = SLOW DOWN, so rate = naturalSeconds / beatSeconds.
-  // Computed in SECONDS so a non-30fps asset isn't mis-scaled against the 30fps composition clock.
-  const beatSeconds = durationFrames / fps;
+  // → play once across a longer beat = SLOW DOWN, so rate = asset's native frames / beat's comp frames.
+  // @remotion/lottie maps comp-frame → lottie-frame-index × playbackRate, fps-agnostic: it does NOT
+  // reconcile native fps vs composition fps. Using the native-frame ratio is therefore correct and
+  // avoids a double fps-scaling bug. Verified by the render test's mid-beat assertion.
   const playbackRate =
-    !loop && meta && beatSeconds > 0 ? meta.durationInSeconds / beatSeconds : 1;
+    !loop && meta && durationFrames > 0 ? meta.durationInFrames / durationFrames : 1;
   return (
     <AbsoluteFill>
       <Lottie
@@ -237,16 +237,18 @@ if (data.lottie) {
 
 - **Default (`loop:false`):** the animation plays **once**, time-scaled so its full duration spans the
   beat. The formula is **pinned, not deferred**:
-  `playbackRate = meta.durationInSeconds / (durationFrames / fps)` — natural seconds over beat seconds.
+  `playbackRate = meta.durationInFrames / durationFrames` — the asset's native frame count over the
+  beat's composition frame count.
   Remotion docs state `playbackRate` is "the speed of the animation; a higher number is faster"
-  (https://www.remotion.dev/docs/lottie/lottie), so a beat **longer** than the asset gives `rate < 1`
-  (slower) and a **shorter** beat gives `rate > 1` (faster). The inverse (`beat / natural`) is wrong.
-- **fps normalization is mandatory:** `getLottieMetadata().durationInFrames` is in the Lottie's
-  **native** fps ("the duration in frames, if the fps from this object is used",
-  https://www.remotion.dev/docs/lottie/getlottiemetadata; example `{ fps: 29.97…, durationInFrames: 90 }`),
-  while `durationFrames` is in the **30fps** composition clock (`build.ts:274`, `KinoVideo.tsx`). Using
-  `meta.durationInSeconds` (and `fps` from `useVideoConfig()`, never a literal `30`) keeps both on the
-  same clock. A 60fps 2s asset and a 2s beat then correctly yield `rate = 1`.
+  (https://www.remotion.dev/docs/lottie/lottie), so a beat **longer** than the asset (more comp frames
+  than native frames) gives `rate < 1` (slower) and a **shorter** beat gives `rate > 1` (faster).
+- **Why native frames, not seconds:** `@remotion/lottie` maps comp-frame → lottie-frame-index ×
+  playbackRate. It is **fps-agnostic**: it does not reconcile the Lottie's native fps against the
+  composition fps. Using `meta.durationInSeconds / beatSeconds` (the earlier seconds-based formula)
+  introduces a double fps-scaling bug for non-30fps assets — the native-fps difference is already
+  encoded in `meta.durationInFrames`, so dividing by seconds reapplies it. The render test's **mid-beat
+  assertion** on a non-30fps asset (`fr:60` in a 30fps comp) caught this: at the half-way comp frame the
+  animation was not at 50% progress. Correcting to the native-frame ratio fixed it.
 - **`loop:true`:** `playbackRate = 1`, `loop = true` — native speed, repeats to fill the beat.
 
 ### 7.2 `getLottieMetadata` null contract
@@ -376,6 +378,10 @@ for the render test and as a usage example.
 Earlier draft → this version, after a 5-lens adversarial review:
 - **Pinned** the `playbackRate` direction (`natural/beat`, "higher = faster") instead of deferring it to
   a test, and made it **fps-normalized in seconds** (was a frame ratio mixing native vs composition fps).
+- **Formula corrected from seconds-ratio to native-frame-ratio** after the render test empirically showed
+  `@remotion/lottie`'s frame-index mapping is fps-agnostic: `playbackRate = meta.durationInFrames /
+  durationFrames`. The seconds-based formula (`meta.durationInSeconds / beatSeconds`) introduced a double
+  fps-scaling bug for non-30fps assets — the mid-beat assertion on a `fr:60` test asset caught it.
 - **`loop`** moved from a `params` boolean (which fails Zod `number|string`) to a first-class optional
   schema field; removed the undefined `toBool`/`computeStretchRate` helpers from the render snippet.
 - **Expression lint** narrowed to string-typed `x` (was: any key `x`, a false positive on

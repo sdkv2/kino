@@ -245,4 +245,11 @@ describe("kino motion help", () => {
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
     expect(t).toMatch(/--kino-caption-bottom/); // the caption-band var so authors avoid the caption
   });
+  it("documents the Tier-3 Lottie option and its rules", () => {
+    const t = motionHelpText();
+    expect(t).toMatch(/lottie/i);
+    expect(t).toMatch(/\.json/);
+    expect(t).toMatch(/loop/);
+    expect(t).toMatch(/transparent/i); // overlay-background rule
+  });
 });
