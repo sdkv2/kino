@@ -157,22 +157,23 @@ describe("warnLottie", () => {
 });
 
 describe("lottiePlaybackRate", () => {
-  // Direction: docs say "higher = faster"; to play once across a LONGER beat, slow down (rate < 1).
-  it("stretches a 2s asset across a 3s beat (90 frames @30fps) → 2/3", () => {
-    expect(lottiePlaybackRate(2, 90, 30, false)).toBeCloseTo(2 / 3, 5);
+  // @remotion/lottie maps composition frame → lottie frame INDEX × playbackRate (fps-agnostic), so the
+  // stretch is a NATIVE-FRAME ratio (durationInFrames / beatFrames). Pinned by tests/render-lottie.test.ts.
+  it("stretches a 120-frame asset across a 90-frame beat → 4/3", () => {
+    expect(lottiePlaybackRate(120, 90, false)).toBeCloseTo(4 / 3, 5);
   });
-  it("normalizes fps via seconds, not raw frames (2s asset, 2s beat → 1)", () => {
-    expect(lottiePlaybackRate(2, 60, 30, false)).toBeCloseTo(1, 5);
+  it("rate 1 when the asset's native frames equal the beat frames", () => {
+    expect(lottiePlaybackRate(60, 60, false)).toBeCloseTo(1, 5);
   });
-  it("speeds up when the beat is shorter than the asset (2s asset, 1s beat → 2)", () => {
-    expect(lottiePlaybackRate(2, 30, 30, false)).toBeCloseTo(2, 5);
+  it("speeds up when the asset has more native frames than the beat (60 over 30 → 2)", () => {
+    expect(lottiePlaybackRate(60, 30, false)).toBeCloseTo(2, 5);
   });
   it("returns 1 when looping", () => {
-    expect(lottiePlaybackRate(2, 90, 30, true)).toBe(1);
+    expect(lottiePlaybackRate(120, 90, true)).toBe(1);
   });
   it("returns 1 for degenerate inputs (no stretch possible)", () => {
-    expect(lottiePlaybackRate(2, 0, 30, false)).toBe(1);
-    expect(lottiePlaybackRate(0, 90, 30, false)).toBe(1);
+    expect(lottiePlaybackRate(120, 0, false)).toBe(1);
+    expect(lottiePlaybackRate(0, 90, false)).toBe(1);
   });
 });
 

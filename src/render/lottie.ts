@@ -143,18 +143,15 @@ export function warnLottie(data: LottieData): string[] {
   return w;
 }
 
-// playbackRate to stretch a Lottie's full duration across the beat exactly once.
-// Docs (remotion.dev/docs/lottie/lottie): playbackRate is "the speed of the animation; a higher number
-// is faster". So rate = naturalSeconds / beatSeconds (slow down for a longer beat). Computed in SECONDS
-// so a non-composition-fps asset isn't mis-scaled. Returns 1 when looping or when inputs are degenerate.
-export function lottiePlaybackRate(
-  durationInSeconds: number,
-  beatFrames: number,
-  fps: number,
-  loop: boolean,
-): number {
+// playbackRate to stretch a Lottie's full animation across the beat exactly once.
+// @remotion/lottie advances by mapping the composition frame to a lottie frame INDEX scaled only by
+// playbackRate — it does NOT reconcile the asset's native fps against the composition fps. So to span
+// `beatFrames` composition frames with an asset of `durationInFrames` NATIVE frames, the rate is a
+// frame-index ratio: durationInFrames / beatFrames (NOT a seconds ratio — the fps difference is
+// irrelevant because the mapping is frame-index-direct). This was verified empirically and is pinned by
+// the render test in tests/render-lottie.test.ts. Returns 1 when looping or when inputs are degenerate.
+export function lottiePlaybackRate(durationInFrames: number, beatFrames: number, loop: boolean): number {
   if (loop) return 1;
-  const beatSeconds = beatFrames / fps;
-  if (!(durationInSeconds > 0) || !(beatSeconds > 0)) return 1;
-  return durationInSeconds / beatSeconds;
+  if (!(durationInFrames > 0) || !(beatFrames > 0)) return 1;
+  return durationInFrames / beatFrames;
 }
