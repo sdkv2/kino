@@ -18,27 +18,27 @@
         "Lottie"
       ],
       "motionOverlay": {
-        "source": "motion/target.json",
+        "source": "motion/target.html",
         "triggers": [
           {
             "at": 0,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 0.36,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 0.52,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 0.78,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 1.08,
-            "action": "play"
+            "action": "pulse"
           }
         ]
       }
@@ -53,35 +53,35 @@
         "word"
       ],
       "motionOverlay": {
-        "source": "motion/brackets.json",
+        "source": "motion/brackets.html",
         "triggers": [
           {
             "at": 0,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 0.22,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 0.51,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 0.79,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 1.13,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 1.39,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 1.56,
-            "action": "play"
+            "action": "pulse"
           }
         ]
       }
@@ -95,23 +95,23 @@
         "deterministic"
       ],
       "motionOverlay": {
-        "source": "motion/crosshair.json",
+        "source": "motion/crosshair.html",
         "triggers": [
           {
             "at": 0,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 0.43,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 1.17,
-            "action": "play"
+            "action": "pulse"
           },
           {
             "at": 1.53,
-            "action": "play"
+            "action": "pulse"
           }
         ]
       }
