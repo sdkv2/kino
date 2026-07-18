@@ -17,7 +17,7 @@
       "captionMode": "words",
       "emphasis": ["deterministic"],
       "motionOverlay": {
-        "source": "motion/crosshair.html",
+        "source": "motion/reticle.html",
         "triggers": [
           { "at": 0.2, "action": "pulse" },
           { "at": 1.4, "action": "pulse" },

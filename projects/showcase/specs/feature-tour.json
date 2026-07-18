@@ -23,13 +23,11 @@
       "captionMode": "words",
       "emphasis": ["word"],
       "motionOverlay": {
-        "source": "motion/brackets.html",
+        "source": "motion/reticle.html",
         "triggers": [
-          { "at": 0, "action": "pulse" },
-          { "at": 0.5, "action": "pulse" },
-          { "at": 1.1, "action": "pulse" },
-          { "at": 1.7, "action": "pulse" },
-          { "at": 2.3, "action": "pulse" }
+          { "at": 0.3, "action": "pulse" },
+          { "at": 1.4, "action": "pulse" },
+          { "at": 2.5, "action": "pulse" }
         ]
       }
     },
@@ -38,7 +36,8 @@
       "text": "Keyframes, kickers, overlays. Everything tweens.",
       "caption": "everything tweens",
       "captionMode": "words",
-      "emphasis": ["Everything"]
+      "emphasis": ["Everything"],
+      "motionOverlay": { "source": "motion/hud.js" }
     },
     { "kind": "motion", "source": "motion/wordmark.html", "text": "Motion, authored. Every frame from a spec." }
   ]

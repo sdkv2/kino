@@ -1,0 +1,30 @@
+<style>
+  /* Tracking reticle — never static: two dashed rings counter-rotate continuously off --t, the
+     red center dot pops on each spec trigger (--pulse), and the rig scales in over the first 14%.
+     SVG geometry is centered on the viewBox origin so CSS rotation needs no transform-origin. */
+  .wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .rig { width: 46vw; height: 46vw; animation-name: enter; animation-timing-function: var(--kino-ease-out); }
+  @keyframes enter {
+    0% { opacity: 0; transform: scale(0.72); }
+    14% { opacity: 1; transform: scale(1); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  .rig svg { width: 100%; height: 100%; overflow: visible; }
+  .spin  { transform: rotate(calc(var(--t) * 21deg)); }
+  .spin2 { transform: rotate(calc(var(--t) * -14deg)); }
+  .ink { stroke: var(--kino-white); fill: none; }
+  .ring { opacity: calc(0.55 + var(--pulse, 0) * 0.45); }
+  .dot { fill: var(--kino-green); transform: scale(calc(0.85 + var(--pulse, 0) * 0.45)); }
+</style>
+<div class="wrap"><div class="rig kino-anim">
+  <svg viewBox="-200 -200 400 400">
+    <g class="spin"><circle class="ink ring" r="150" stroke-width="3" stroke-dasharray="10 14"/></g>
+    <g class="spin2"><circle class="ink ring" r="112" stroke-width="2" stroke-dasharray="4 18"/></g>
+    <line class="ink" x1="0" y1="-196" x2="0" y2="-158" stroke-width="6"/>
+    <line class="ink" x1="0" y1="196" x2="0" y2="158" stroke-width="6"/>
+    <line class="ink" x1="-196" y1="0" x2="-158" y2="0" stroke-width="6"/>
+    <line class="ink" x1="196" y1="0" x2="158" y2="0" stroke-width="6"/>
+    <circle class="ink" r="40" stroke-width="3"/>
+    <circle class="dot" r="12"/>
+  </svg>
+</div></div>
