@@ -18,6 +18,8 @@ export const FONTS: FontDef[] = [
   { name: "Bebas Neue", family: "Bebas Neue", description: "Tall condensed all-caps display — classic title look.", weight: 400 },
   { name: "Anton", family: "Anton", description: "Ultra-bold display — huge, punchy TikTok-style captions.", weight: 400 },
   { name: "Archivo Black", family: "Archivo Black", description: "Heavy grotesque display — high-impact headlines.", weight: 400 },
+  { name: "Space Grotesk", family: "Space Grotesk", description: "Technical geometric sans — engineered, spec-sheet feel.", weight: 700 },
+  { name: "IBM Plex Mono", family: "IBM Plex Mono", description: "Editorial monospace — labels, data, terminal aesthetics.", weight: 600 },
 ];
 
 export function lookupFont(name: string): FontDef | undefined {

@@ -2,7 +2,8 @@
 name: kino-dark
 defaultProvider: none
 defaultVoice: TX3LPaxmHKxFdv7VOQHJ
-font: Inter
+font: Space Grotesk
+labelFont: IBM Plex Mono
 background: mesh
 facelessDisclosure: AI-generated voiceover
 captionStyle:

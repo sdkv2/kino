@@ -2,7 +2,8 @@
 name: kino
 defaultProvider: none
 defaultVoice: TX3LPaxmHKxFdv7VOQHJ
-font: Inter
+font: Space Grotesk
+labelFont: IBM Plex Mono
 background: custom
 backgroundComponent: projects/lottie-flex/assets/marksman-bg.js
 facelessDisclosure: AI-generated voiceover
@@ -22,5 +23,5 @@ colors:
 kino — agent-driven short-form video. Visual language: a technical spec-sheet / camera viewfinder.
 Flat warm-paper background (#F2EFE6), near-black ink, thin precise lines, marksman registration marks
 (corner brackets, crosshair ticks, a faint grid). One signal accent — a hunter's-orange red (#C8401F)
-for the active word and reticle centers. Type is restrained and mechanical (Inter, mono labels).
+for the active word and reticle centers. Type is restrained and mechanical (Space Grotesk, IBM Plex Mono labels).
 Captions are 2–4 words. Nothing glows; everything is drawn, measured, deterministic.

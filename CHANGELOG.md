@@ -3,6 +3,13 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.17.1] — Typeface + caption legibility
+- Font registry: **Space Grotesk** (technical geometric sans) and **IBM Plex Mono** (editorial
+  monospace) — the kino/kino-dark brands now use them (captions/labels) instead of Inter.
+- kino/kino-dark brands enable the lower-third caption backplate (`captionStyle.background`) so
+  captions stay legible over dark/photographic footage; skill documents the legibility check.
+- Showcase `broll-cutaways` demo now cuts to real Pexels footage (downloads git-ignored).
+
 ## [1.17.0] — Pexels stock b-roll + guided setup
 - **`kino pexels <query>`** — search Pexels stock videos (portrait-first) and download one into a
   project's `assets/pexels/` with `--get <n>`; picks the smallest mp4 covering the 1080 render width.

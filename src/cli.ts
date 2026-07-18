@@ -8,7 +8,7 @@ import { log } from "./log.js";
 import { formatCliError } from "./cliError.js";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.17.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.17.1");
 
 program
   .command("build <spec>")
