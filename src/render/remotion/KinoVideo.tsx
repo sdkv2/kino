@@ -118,11 +118,11 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
             <TweenOverlay keyframes={s.captionKeyframes ?? []}>
               {wordMode ? (
-                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} />
+                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} styleName={s.captionStyle} anim={s.captionAnimation} />
               ) : hero ? (
-                <HeroCaption text={s.caption} t={theme} />
+                <HeroCaption text={s.caption} t={theme} styleName={s.captionStyle} anim={s.captionAnimation} />
               ) : (
-                <Caption text={s.caption} t={theme} backplate={backplate} />
+                <Caption text={s.caption} t={theme} backplate={backplate} styleName={s.captionStyle} anim={s.captionAnimation} />
               )}
             </TweenOverlay>
           </Sequence>

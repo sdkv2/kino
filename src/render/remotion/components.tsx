@@ -9,6 +9,7 @@ import { getPreset, type DrawFn } from "./backgrounds/presets";
 // CAPTION_BOTTOM: px offset of the lower-third caption band from the frame bottom (defined +
 // documented in captionLayout.ts; also exposed to motion graphics as --kino-caption-bottom).
 import { CAPTION_BOTTOM } from "../captionLayout";
+import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation } from "../textStyles";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
@@ -29,32 +30,36 @@ export const FontLoader: React.FC<{ url?: string | null }> = ({ url }) => {
   return null;
 };
 
-// Optional translucent panel behind lower-third captions (legibility over light app screenshots).
-// Spread onto the caption element only when a backplate is resolved; otherwise the look is unchanged.
-const plateStyle = (bg?: string | null): React.CSSProperties =>
-  bg ? { display: "inline-block", backgroundColor: bg, padding: "12px 32px", borderRadius: 30 } : {};
-
-export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: string } | null }> = ({ text, t, backplate }) => {
+export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: string } | null; styleName?: CaptionStyle; anim?: CaptionAnimation }> = ({
+  text,
+  t,
+  backplate,
+  styleName = "stroke",
+  anim,
+}) => {
   const f = useCurrentFrame();
-  // Entrance spring 0→1; damping 14 / mass 0.6 = a soft pop with a touch of overshoot. Drives the
-  // scale-up below (0.7→1, i.e. a 30% grow-in). left/right 48 = px side margins on the band.
+  // Entrance spring 0→1; damping 14 / mass 0.6 = a soft pop with a touch of overshoot. Native
+  // entrance (pop) keeps the exact legacy math; other presets come from animatePreset.
   const s = spring({ frame: f, fps: 30, config: { damping: 14, mass: 0.6 } });
+  const a =
+    !anim || anim === "pop"
+      ? { transform: `scale(${interpolate(s, [0, 1], [0.7, 1])})`, opacity: 1, filter: undefined as string | undefined }
+      : animatePreset(anim, { s, frame: f, index: 0 });
+  const ink = wordStyle(styleName, t, { shadow: "0 6px 20px rgba(0,0,0,.45)" });
   return (
     <div style={{ position: "absolute", left: 48, right: 48, bottom: CAPTION_BOTTOM, display: "flex", justifyContent: "center" }}>
       <span
         style={{
-          transform: `scale(${interpolate(s, [0, 1], [0.7, 1])})`,
           fontFamily: t.font,
-          fontWeight: 900,
           fontSize: t.captionFontSize,
-          color: t.white,
           textAlign: "center",
           lineHeight: 1.04,
           whiteSpace: "pre-line",
-          WebkitTextStroke: `${t.captionStroke}px #000`,
-          paintOrder: "stroke fill" as React.CSSProperties["paintOrder"],
-          textShadow: "0 6px 20px rgba(0,0,0,.45)",
-          ...plateStyle(backplate?.bg),
+          ...ink,
+          ...lineBoxStyle(styleName, t, backplate?.bg),
+          transform: a.transform,
+          opacity: a.opacity,
+          filter: composeFilters(ink.filter as string | undefined, a.filter),
         }}
       >
         {text}
@@ -63,34 +68,40 @@ export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: strin
   );
 };
 
-// Faceless talking beats: the text IS the visual. Big, centered, word-by-word pop so the
-// frame is full and alive instead of a small lower-third line over empty night.
-export const HeroCaption: React.FC<{ text: string; t: Theme }> = ({ text, t }) => {
+// Faceless talking beats: the text IS the visual. Big, centered, word-by-word cascade (native
+// entrance: rise) so the frame is full and alive instead of a small lower-third line.
+export const HeroCaption: React.FC<{ text: string; t: Theme; styleName?: CaptionStyle; anim?: CaptionAnimation }> = ({
+  text,
+  t,
+  styleName = "stroke",
+  anim,
+}) => {
   const f = useCurrentFrame();
   const words = text.split(" ");
   return (
     <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 80px" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 6, ...lineBoxStyle(styleName, t, null) }}>
         {words.map((w, i) => {
-          // `i * 3` = 3-frame stagger per word (left→right cascade). Spring damping 13 / mass 0.7
-          // drives the rise (translateY 44px→0) + fade (opacity 0→1). 1.42 below scales the hero
-          // font 42% above the lower-third caption size.
+          // `i * 3` = 3-frame stagger per word (left→right cascade). Spring damping 13 / mass 0.7.
+          // 1.42 scales the hero font 42% above the lower-third caption size.
           const s = spring({ frame: f - i * 3, fps: 30, config: { damping: 13, mass: 0.7 } });
+          const a =
+            !anim || anim === "rise"
+              ? { transform: `translateY(${interpolate(s, [0, 1], [44, 0])}px)`, opacity: interpolate(s, [0, 1], [0, 1]), filter: undefined as string | undefined }
+              : animatePreset(anim, { s, frame: f - i * 3, index: i });
+          const ink = wordStyle(styleName, t, { shadow: "0 8px 28px rgba(0,0,0,.5)" });
           return (
             <span
               key={i}
               style={{
                 display: "inline-block",
-                transform: `translateY(${interpolate(s, [0, 1], [44, 0])}px)`,
-                opacity: interpolate(s, [0, 1], [0, 1]),
                 fontFamily: t.font,
-                fontWeight: 900,
                 fontSize: Math.round(t.captionFontSize * 1.42),
-                color: t.white,
                 lineHeight: 1.06,
-                WebkitTextStroke: `${t.captionStroke}px #000`,
-                paintOrder: "stroke fill" as React.CSSProperties["paintOrder"],
-                textShadow: "0 8px 28px rgba(0,0,0,.5)",
+                ...ink,
+                transform: a.transform,
+                opacity: a.opacity,
+                filter: composeFilters(ink.filter as string | undefined, a.filter),
               }}
             >
               {w}
@@ -236,13 +247,15 @@ export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number;
 // Word-synced caption: the spoken words, revealed + highlighted in time with the VO.
 // Typewriter reveal (pop/bounce) per word at its start; active word highlighted; emphasised
 // words glow + shake. Driven by absolute word timings, so it's frame-deterministic.
-export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; startSec: number; t: Theme; backplate?: { bg: string } | null }> = ({
-  words,
-  emphasis = [],
-  startSec,
-  t,
-  backplate,
-}) => {
+export const WordCaption: React.FC<{
+  words: WordTiming[];
+  emphasis?: string[];
+  startSec: number;
+  t: Theme;
+  backplate?: { bg: string } | null;
+  styleName?: CaptionStyle;
+  anim?: CaptionAnimation;
+}> = ({ words, emphasis = [], startSec, t, backplate, styleName = "stroke", anim }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const tAbs = startSec + frame / fps;
@@ -257,7 +270,9 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
         columnGap: 18,
         rowGap: 4,
         maxWidth: "100%",
-        ...plateStyle(backplate?.bg),
+        // words mode never takes the whole-line highlight box (words box individually) — only the
+        // legacy backplate applies here.
+        ...lineBoxStyle("stroke", t, backplate?.bg),
       }}
     >
       {words.map((w, i) => {
@@ -267,29 +282,38 @@ export const WordCaption: React.FC<{ words: WordTiming[]; emphasis?: string[]; s
         const s = spring({ frame: revealFrame, fps, config: { damping: 12, mass: 0.6 } });
         const isActive = i === active;
         const isEmph = emph.has(normWord(w.word));
-        // Single highlight colour: the spoken word and the brand name go green. No gold/transition.
-        const isGreen = isHighlightWord(w.word, { isActive, brandName: t.brandName });
-        // Pop in 0.6→1 (40% grow), then the active word is bumped 1.1x (10% larger). Unspoken words
-        // (revealFrame<=0) stay at 0.6 scale / 0 opacity until their start.
-        const scale = (revealFrame <= 0 ? 0.6 : interpolate(s, [0, 1], [0.6, 1])) * (isActive ? 1.1 : 1);
-        const opacity = revealFrame <= 0 ? 0 : interpolate(s, [0, 1], [0, 1]);
-        // Emphasised active words shake ±3px; 1.4 = rad/frame oscillation speed (~7 wobbles/sec at 30fps).
+        // Single accent: the spoken word and the brand name take the style's highlight treatment.
+        const isHi = isHighlightWord(w.word, { isActive, brandName: t.brandName });
+        // Emphasised active words shake ±3px; 1.4 = rad/frame oscillation (~7 wobbles/sec at 30fps).
         const shake = isActive && isEmph ? Math.sin(frame * 1.4) * 3 : 0;
+        const ink = wordStyle(styleName, t, { highlight: isHi, emph: isActive && isEmph });
+        let transform: string;
+        let opacity: number;
+        let filter: string | undefined;
+        if (!anim || anim === "pop") {
+          // Native pop — exact legacy math: 0.6→1 grow-in, active word bumped 1.1x, unspoken hidden.
+          const scale = (revealFrame <= 0 ? 0.6 : interpolate(s, [0, 1], [0.6, 1])) * (isActive ? 1.1 : 1);
+          transform = `translateX(${shake}px) scale(${scale})`;
+          opacity = revealFrame <= 0 ? 0 : interpolate(s, [0, 1], [0, 1]);
+          filter = composeFilters(ink.filter as string | undefined);
+        } else {
+          const a = animatePreset(anim, { s, frame: revealFrame, index: i });
+          transform = `translateX(${shake}px) ${a.transform} scale(${isActive ? 1.1 : 1})`;
+          opacity = a.opacity;
+          filter = composeFilters(ink.filter as string | undefined, a.filter);
+        }
         return (
           <span
             key={i}
             style={{
               display: "inline-block",
-              transform: `translateX(${shake}px) scale(${scale})`,
-              opacity,
               fontFamily: t.font,
-              fontWeight: 900,
               fontSize: Math.round(t.captionFontSize * 0.92),
-              color: isGreen ? t.mint : t.white,
               lineHeight: 1.05,
-              WebkitTextStroke: `${t.captionStroke}px #000`,
-              paintOrder: "stroke fill" as React.CSSProperties["paintOrder"],
-              textShadow: isActive && isEmph ? `0 0 26px ${t.mint}` : "0 6px 18px rgba(0,0,0,.45)",
+              ...ink,
+              transform,
+              opacity,
+              filter,
             }}
           >
             {w.word}
