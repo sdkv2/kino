@@ -110,7 +110,9 @@ export const HeroCaption: React.FC<{ text: string; t: Theme; styleName?: Caption
   const words = text.split(" ");
   return (
     <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 80px" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 6, ...lineBoxStyle(styleName, t, null) }}>
+      {/* lineBoxStyle first: its highlight-plate display:inline-block must not clobber the flex
+          word row (flex owns columnGap — losing it collapses the gaps between words). */}
+      <div style={{ ...lineBoxStyle(styleName, t, null), display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 6 }}>
         {words.map((w, i) => {
           // `i * 3` = 3-frame stagger per word (left→right cascade). Spring damping 13 / mass 0.7.
           // 1.42 scales the hero font 42% above the lower-third caption size.
