@@ -25,6 +25,7 @@ import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from ".
 import { stitchAudio } from "../media/ffmpeg.js";
 import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
+import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic } from "../render/motiongraphic.js";
 import { log } from "../log.js";
@@ -216,17 +217,23 @@ export async function prepare(
   let appIdx = 0;
   const renderSegments = spec.segments.map((seg, i) => {
     const captionMode = (seg.captionMode ?? brand.captionMode ?? "phrase") as "phrase" | "words";
+    const startSec = vo.timings[i].startSec;
+    // hold visuals to the next beat's start so nothing blinks off during the inter-beat VO gap
+    const endSec = i + 1 < spec.segments.length ? vo.timings[i + 1].startSec : vo.timings[i].endSec;
+    const look = resolveCaptionLook(seg, spec, brand.captionStyle);
     const base = {
       kind: seg.kind,
       asset: seg.kind === "app" ? seg.asset : undefined,
       caption: seg.caption ?? "",
-      startSec: vo.timings[i].startSec,
-      // hold visuals to the next beat's start so nothing blinks off during the inter-beat VO gap
-      endSec: i + 1 < spec.segments.length ? vo.timings[i + 1].startSec : vo.timings[i].endSec,
+      startSec,
+      endSec,
       captionMode,
       words: captionMode === "words" ? vo.words[i] : undefined,
       emphasis: captionMode === "words" ? seg.emphasis : undefined,
       captionKeyframes: seg.captionKeyframes,
+      captionStyle: look.style,
+      captionAnimation: look.animation,
+      texts: resolveTexts(seg.texts, startSec, endSec, brand.captionStyle.fontSize, look),
     };
     if (seg.kind === "app") {
       const shot = pickShot(appIdx, seg.shot as Shot | undefined);

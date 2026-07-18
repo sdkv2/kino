@@ -1,5 +1,7 @@
 // Shared prop types for the Remotion composition. Lives in compiled-land so both the
 // CLI (render.ts, build.ts) and the Remotion .tsx (bundled by esbuild) can import it.
+import type { CaptionStyle, CaptionAnimation, ResolvedText } from "./textStyles.js";
+
 export interface Theme {
   font: string;
   fontUrl?: string | null; // staticFile-relative TTF to load (registry font), else system font
@@ -33,6 +35,9 @@ export interface KinoSegment {
   captionMode?: "phrase" | "words"; // "words" = spoken text revealed word-by-word, synced to VO
   words?: WordTiming[]; // absolute word timings (present for captionMode "words")
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
+  captionStyle?: CaptionStyle; // resolved look preset (segment ?? spec ?? brand; undefined = "stroke")
+  captionAnimation?: CaptionAnimation; // resolved entrance preset (undefined = the surface's native entrance)
+  texts?: ResolvedText[]; // standalone stylised text overlays, absolute-timed
   captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)
   kickerKeyframes?: BgKeyframe[]; // tween the kicker (app segments)
   motion?: MotionGraphicProps; // resolved graphic for kind === "motion"
