@@ -89,7 +89,7 @@ New `TextOverlay` component renders `texts` entries as `Sequence`s. Stack slot i
 | `stroke` | current look (default) | current look (default) |
 | `highlight` | active word gets rounded mint box, night ink | whole line boxed (opaque brand plate) |
 | `gradient` | mint→green background-clip fill; stroke dropped (background-clip conflict); drop-shadow for legibility | same |
-| `minimal` | weight 700, no stroke, soft shadow | same |
+| `minimal` | weight 700, no stroke, soft shadow; active/brand word mint | same |
 
 ## Animation mapping
 

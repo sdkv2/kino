@@ -71,11 +71,13 @@ describe("animatePreset", () => {
     for (const anim of ["typewriter", "none"] as const) {
       expect(animatePreset(anim, { s: 0, frame: -1, index: 0 }).opacity).toBe(0);
       expect(animatePreset(anim, { s: 0, frame: 0, index: 0 }).opacity).toBe(1);
+      expect(animatePreset(anim, { s: 0, frame: 0, index: 0 }).transform).toBe("none");
     }
   });
   it("blur-in sharpens 12px→0 with the spring", () => {
     expect(animatePreset("blur-in", { s: 0, frame: 0, index: 0 }).filter).toBe("blur(12px)");
     expect(animatePreset("blur-in", { s: 1, frame: 10, index: 0 }).filter).toBe("blur(0px)");
+    expect(animatePreset("blur-in", { s: 0, frame: 0, index: 0 }).transform).toBe("none");
   });
   it("wave bobs settled words on a per-index phase", () => {
     const a = animatePreset("wave", { s: 1, frame: 30, index: 0 });

@@ -124,7 +124,7 @@ An optional **backplate** (translucent panel behind lower-third captions for leg
 | `stroke` (default) | white ink, black stroke, mint active-word highlight | same |
 | `highlight` | active word (and the brand name) in a rounded mint box, night ink | whole line on an opaque night plate |
 | `gradient` | mint→green gradient fill (stroke dropped — clashes with the fill); drop-shadow for legibility | same |
-| `minimal` | weight 700, no stroke, soft shadow | same |
+| `minimal` | weight 700, no stroke, soft shadow; active/brand word mint | same |
 
 **Caption entrance** (`captionAnimation`) — layered `segment ?? spec ?? brand.captionStyle.animation`; unset = the surface's native entrance (`pop` for lower-third + words captions, `rise` for faceless hero text):
 

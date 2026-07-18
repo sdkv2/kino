@@ -77,7 +77,7 @@ export const TextOverlay: React.FC<{ o: ResolvedText; t: Theme }> = ({ o, t }) =
   const a = animatePreset(o.animation, { s, frame: f, index: 0 });
   const ink = wordStyle(o.style, t, {});
   return (
-    <div style={{ position: "absolute", left: `${o.x}%`, top: `${o.y}%`, transform: "translate(-50%, -50%)", display: "flex", justifyContent: "center" }}>
+    <div style={{ position: "absolute", left: `${o.x}%`, top: `${o.y}%`, transform: "translate(-50%, -50%)", maxWidth: "86%", display: "flex", justifyContent: "center" }}>
       <span
         style={{
           fontFamily: t.font,

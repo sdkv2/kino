@@ -142,7 +142,7 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   default `stroke`): `stroke` (legacy — white ink, black stroke, mint active-word highlight) · `highlight`
   (active word / brand name in a rounded mint box in words mode, whole line on an opaque night plate in
   phrase/hero mode) · `gradient` (mint→green fill, stroke dropped, drop-shadow for legibility) · `minimal`
-  (weight 700, no stroke, soft shadow).
+  (weight 700, no stroke, soft shadow; active/brand word mint).
 - **Caption entrance** (`captionAnimation`, same layering, `brand.captionStyle.animation`): `pop` (spring
   scale-in) · `rise` (translateY cascade) · `typewriter` (staggered instant reveal) · `wave` (pop then a
   per-word sine bob) · `blur-in` (blur→0 + fade) · `none` (static). Unset = the surface's native entrance
