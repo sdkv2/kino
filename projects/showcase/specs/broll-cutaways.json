@@ -11,7 +11,7 @@
     },
     {
       "kind": "app",
-      "asset": "broll/clip-a.mp4",
+      "asset": "pexels/35471095.mp4",
       "text": "One command searches Pexels and drops the clip into your project.",
       "caption": "kino pexels",
       "shot": "push-in",
@@ -20,7 +20,7 @@
     },
     {
       "kind": "app",
-      "asset": "broll/clip-b.mp4",
+      "asset": "pexels/12536125.mp4",
       "text": "Video assets cut in with the same shots and transitions as stills.",
       "caption": "same shots. same spec.",
       "shot": "pan-left",

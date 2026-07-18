@@ -5,6 +5,7 @@ out/
 *.log
 dist/
 projects/*/assets/broll/
+projects/*/assets/pexels/
 
 # macOS
 .DS_Store
