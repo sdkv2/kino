@@ -15,8 +15,9 @@ colors:
   night: "#16130D"
   white: "#F2EFE6"
   green: "#C8401F"
-  mint: "#F2EFE6"
+  mint: "#C8401F"
   gold: "#8C8678"
+backgroundColors: ["#F2EFE6", "#C8401F", "#8C8678"]
 ---
 
 kino-dark — the night variant of the kino spec-sheet look. Same technical language (registration

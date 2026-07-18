@@ -16,8 +16,9 @@ colors:
   night: "#F2EFE6"
   white: "#16130D"
   green: "#C8401F"
-  mint: "#16130D"
+  mint: "#C8401F"
   gold: "#8C8678"
+backgroundColors: ["#E7E1D2", "#C8401F", "#8C8678"]
 ---
 
 kino — agent-driven short-form video. Visual language: a technical spec-sheet / camera viewfinder.
