@@ -23,6 +23,7 @@ export async function doctor(): Promise<void> {
     ["HEYGEN_API_KEY (provider: heygen)", !!process.env.HEYGEN_API_KEY],
     ["HEDRA_API_KEY (provider: hedra)", !!process.env.HEDRA_API_KEY],
     ["REPLICATE_API_TOKEN (provider: replicate)", !!process.env.REPLICATE_API_TOKEN],
+    ["PEXELS_API_KEY (kino pexels — stock b-roll)", !!process.env.PEXELS_API_KEY],
   ];
   for (const [n, ok] of checks) ok ? log.ok(n) : log.warn(`${n} missing`);
   log.info("Faceless (provider: none) needs only ffmpeg + ELEVENLABS_API_KEY — no avatar credits.");

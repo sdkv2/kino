@@ -206,6 +206,24 @@ Show how to author motion-graphic HTML files + the CSS-variable contract. See [M
 kino motion
 ```
 
+### `pexels`
+Search Pexels stock videos (portrait by default) and download one into a project's `assets/pexels/`.
+Downloaded clips are referenced from `app` segments like any asset (`"asset": "pexels/<id>.mp4"`).
+Requires `PEXELS_API_KEY` in `.env` (free — [pexels.com/api](https://www.pexels.com/api/)).
+
+```
+kino pexels "city commute at night"                      # list matches: #, id, duration, size, author
+kino pexels "city commute at night" --get 2 --project x  # download match 2 → assets/pexels/<id>.mp4
+```
+
+| Flag | Meaning |
+|---|---|
+| `--get <n>` | download result *n* from the search |
+| `--count <n>` | results to list (default 8) |
+| `--landscape` | search landscape instead of portrait |
+| `--out <rel>` | asset-relative output path (default `pexels/<id>.mp4`) |
+| `--project <name>` | project whose `assets/` receives the download (required for `--get`) |
+
 ---
 
 ## Reference-video analysis (research only)

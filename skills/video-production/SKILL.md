@@ -88,6 +88,15 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   stretch/loop). Assets must embed images (base64 `data:` URIs) and outline/embed fonts (no system fonts,
   no AE expressions). Works in all three motion slots (`kind:"motion"`, `motionOverlay` on `avatar` or `app`).
 
+## Stock b-roll (Pexels)
+When a beat needs real-world footage the brand assets can't provide — lifestyle shots, environments,
+hands-on-phone, city texture — pull licensed stock video instead of settling for a static screenshot:
+`kino pexels "city commute at night"` lists portrait clips (duration, size, author), then
+`kino pexels "city commute at night" --get 2 --project <name>` downloads into `assets/pexels/<id>.mp4`.
+Reference it from an `app` segment like any asset (`"asset": "pexels/<id>.mp4"` — .mp4 assets play
+with the same shots/transitions as stills). Prefer real product footage when it exists; match the
+clip's duration to the beat's VO length (durations are listed). Needs `PEXELS_API_KEY` (free — pexels.com/api).
+
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.
   Brand `lookAliases` map a friendly name → look id. For `hedra`/`replicate`, set `brand.avatarImage`

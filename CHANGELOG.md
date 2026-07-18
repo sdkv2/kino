@@ -3,6 +3,19 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.17.0] — Pexels stock b-roll + guided setup
+- **`kino pexels <query>`** — search Pexels stock videos (portrait-first) and download one into a
+  project's `assets/pexels/` with `--get <n>`; picks the smallest mp4 covering the 1080 render width.
+  Needs a free `PEXELS_API_KEY`. Referenced from `app` segments like any asset (`.mp4` cut-ins
+  already play with the same shots/transitions as stills).
+- **setup.sh rewritten as a guided installer** — ASCII wordmark, prerequisite checks (Node 18+,
+  ffmpeg, ImageMagick) with offered Homebrew/apt install, then a per-key walkthrough (purpose +
+  where to get each key, required/optional, skip with Enter) and an end summary.
+- `kino doctor` now checks `PEXELS_API_KEY`; the video-production skill documents when to reach for
+  stock b-roll.
+- New `kino-dark` brand (night variant of the kino spec-sheet look) and a `projects/showcase/`
+  demo project with concept specs (`spec-in-video-out`, `feature-tour`, `broll-cutaways`).
+
 ## [1.16.0] — Require a project (BREAKING)
 - **BREAKING:** removed the flat layout. Every build must run inside a `projects/<name>/` (with a
   `project.json`); building a spec outside a project now fails with guidance instead of silently

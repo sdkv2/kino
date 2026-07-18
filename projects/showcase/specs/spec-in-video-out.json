@@ -1,0 +1,43 @@
+{
+  "title": "spec-in-video-out",
+  "format": ["9:16"],
+  "segments": [
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "kino." },
+    {
+      "kind": "avatar",
+      "text": "Your agent writes a spec. Kino renders the video.",
+      "caption": "spec in. video out.",
+      "captionMode": "words",
+      "emphasis": ["spec", "video"]
+    },
+    {
+      "kind": "avatar",
+      "text": "Voiceover, captions, motion graphics. Every frame deterministic.",
+      "caption": "every frame deterministic",
+      "captionMode": "words",
+      "emphasis": ["deterministic"],
+      "motionOverlay": {
+        "source": "motion/crosshair.html",
+        "triggers": [
+          { "at": 0, "action": "pulse" },
+          { "at": 0.6, "action": "pulse" },
+          { "at": 1.3, "action": "pulse" },
+          { "at": 2.1, "action": "pulse" }
+        ]
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "No timeline. No editor. Just JSON.",
+      "caption": "no editor. just JSON.",
+      "captionMode": "words",
+      "emphasis": ["JSON"]
+    },
+    {
+      "kind": "avatar",
+      "text": "Point your agent at kino.",
+      "caption": "agent-driven video",
+      "cta": true
+    }
+  ]
+}

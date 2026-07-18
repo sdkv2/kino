@@ -4,6 +4,7 @@ out/
 .env
 *.log
 dist/
+projects/*/assets/broll/
 
 # macOS
 .DS_Store

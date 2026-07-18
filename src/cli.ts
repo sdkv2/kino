@@ -8,7 +8,7 @@ import { log } from "./log.js";
 import { formatCliError } from "./cliError.js";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version("1.16.0");
+program.name("kino").description("Agent-driven short-form video production").version("1.17.0");
 
 program
   .command("build <spec>")
@@ -106,6 +106,16 @@ program
   .description("List Avatar-IV photo-avatar looks (usable for lip-sync)")
   .option("--gender <g>")
   .action(async (o) => (await import("./commands/avatars.js")).avatars(o));
+
+program
+  .command("pexels <query>")
+  .description("Search Pexels stock videos (portrait by default); --get <n> downloads into assets/pexels/")
+  .option("--get <n>", "download result #n from the search")
+  .option("--count <n>", "results to list (default 8)")
+  .option("--landscape", "search landscape instead of portrait")
+  .option("--out <rel>", "asset-relative output path (default pexels/<id>.mp4)")
+  .option("--project <name>", "target project whose assets/ receives the download (required for --get)")
+  .action(async (q, o) => (await import("./commands/pexels.js")).pexels(q, o));
 
 program
   .command("fonts")

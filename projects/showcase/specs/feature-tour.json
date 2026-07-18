@@ -1,0 +1,45 @@
+{
+  "title": "feature-tour",
+  "format": ["9:16"],
+  "background": "mesh",
+  "backgroundKeyframes": [
+    { "at": 0, "params": { "intensity": 0.2 } },
+    { "at": 4, "params": { "intensity": 0.75 }, "ease": "easeInOut" },
+    { "at": 9, "params": { "intensity": 0.35 }, "ease": "easeInOut" }
+  ],
+  "segments": [
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "kino." },
+    {
+      "kind": "avatar",
+      "text": "Six animated backgrounds, tweened live from the spec.",
+      "caption": "animated backgrounds",
+      "captionMode": "words",
+      "emphasis": ["Six", "tweened"]
+    },
+    {
+      "kind": "avatar",
+      "text": "Captions sync to the voice, word by word.",
+      "caption": "word by word sync",
+      "captionMode": "words",
+      "emphasis": ["word"],
+      "motionOverlay": {
+        "source": "motion/brackets.html",
+        "triggers": [
+          { "at": 0, "action": "pulse" },
+          { "at": 0.5, "action": "pulse" },
+          { "at": 1.1, "action": "pulse" },
+          { "at": 1.7, "action": "pulse" },
+          { "at": 2.3, "action": "pulse" }
+        ]
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "Keyframes, kickers, overlays. Everything tweens.",
+      "caption": "everything tweens",
+      "captionMode": "words",
+      "emphasis": ["Everything"]
+    },
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "Motion, authored." }
+  ]
+}

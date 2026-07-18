@@ -1,0 +1,22 @@
+{
+  "title": "footage-a",
+  "brand": "kino-dark",
+  "format": ["9:16"],
+  "background": "mesh",
+  "backgroundKeyframes": [
+    { "at": 0, "params": { "intensity": 0.3 } },
+    { "at": 5, "params": { "intensity": 0.8 }, "ease": "easeInOut" }
+  ],
+  "segments": [
+    {
+      "kind": "motion",
+      "source": "motion/crosshair.html",
+      "text": "Abstract motion footage clip A, rendered dark for cutaway contrast.",
+      "triggers": [
+        { "at": 0.4, "action": "pulse" },
+        { "at": 1.6, "action": "pulse" },
+        { "at": 2.8, "action": "pulse" }
+      ]
+    }
+  ]
+}

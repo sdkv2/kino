@@ -30,8 +30,9 @@ The agent authors specs; kino performs every step deterministically (no LLM insi
 git clone https://github.com/sdkv2/kino.git ~/kino     # clone the toolchain once
 cd <your-project> && bash ~/kino/setup.sh              # install `kino` + write a project .env
 ```
-`setup.sh` runs `npm install` / `build` / `link` and prompts for API keys (written to a `chmod 600`,
-git-ignored `.env`). Manual install:
+`setup.sh` is a guided installer: prerequisite checks (Node 18+, ffmpeg, ImageMagick — offers to
+install what's missing), `npm install` / `build` / `link`, then an API-key walkthrough (written to a
+`chmod 600`, git-ignored `.env`). Manual install:
 ```bash
 cd ~/kino && npm install && npm run build && npm link
 ```
@@ -56,6 +57,8 @@ The driving agent authors specs — see [`skills/video-production`](skills/video
   timestamps, with active-word highlight + per-segment emphasis).
 - **Fonts** — curated names (`kino fonts`) downloaded on demand (Google Fonts → `~/.kino/fonts/`),
   or any raw CSS family.
+- **Stock b-roll** — `kino pexels "<query>"` searches Pexels stock video (portrait-first) and pulls
+  clips into project assets; `.mp4` assets play in app cut-ins with the same shots/transitions as stills.
 - **Animated backgrounds & overlays** — backgrounds, logo, captions, and kickers are all tweenable
   on one keyframe layer (`backgroundKeyframes`/`logoKeyframes`/…), with timed `backgroundTriggers`.
 - **Motion graphics** — author a self-contained HTML/CSS file in `assets/motion/`; kino drives it
