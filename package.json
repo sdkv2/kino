@@ -13,6 +13,9 @@
     "src/render/remotion",
     "skills"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "prepare": "tsc",

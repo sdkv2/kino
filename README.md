@@ -4,6 +4,13 @@
 
 <p align="center"><em>Agent-driven short-form video production — spec in, video out.</em></p>
 
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A518-brightgreen.svg" alt="Node ≥18">
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
+  <img src="https://img.shields.io/badge/output-9%3A16%20MP4-black.svg" alt="9:16 MP4 output">
+</p>
+
 ---
 
 **kino** turns an agent-authored JSON spec into finished vertical videos. The driving agent supplies
@@ -20,7 +27,8 @@ The agent authors specs; kino performs every step deterministically (no LLM insi
 
 ## Install
 ```bash
-cd <your-project> && bash ~/kino/setup.sh   # installs the `kino` command + writes a project .env
+git clone https://github.com/sdkv2/kino.git ~/kino     # clone the toolchain once
+cd <your-project> && bash ~/kino/setup.sh              # install `kino` + write a project .env
 ```
 `setup.sh` runs `npm install` / `build` / `link` and prompts for API keys (written to a `chmod 600`,
 git-ignored `.env`). Manual install:
@@ -78,12 +86,6 @@ npm run dev -- <args>   # run the CLI from source via tsx
 Work on a feature branch (`feat/…`, `fix/…`, `chore/…`), bump `version` in `package.json` for
 releases, and open a PR to `main`. Version history lives in [`CHANGELOG.md`](CHANGELOG.md).
 
-## Brand assets (`logo/`)
-| File | Use |
-|---|---|
-| `kino-logo.png` | **Light master** — wordmark + etymology note (cream); used in this README |
-| `kino-wordmark.png` | Wordmark + brackets only |
-| `kino-logo-transparent.png` | Transparent (line-art; for **light** backgrounds) |
-| `kino-logo-dark.png` | **Dark master** — white ink on night |
-| `kino-logo-dark-transparent.png` | Transparent dark-mode (overlay on **dark**) |
-| `kino-icon.png` | 1024×1024 square icon |
+## License
+
+[MIT](LICENSE) © sdkv2
