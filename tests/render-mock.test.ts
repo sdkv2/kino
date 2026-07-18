@@ -144,4 +144,35 @@ describe("renderVideo", () => {
     expect(outs).toHaveLength(2);
     expect(outs.every((o) => existsSync(o) && o.endsWith(".png"))).toBe(true);
   }, 180000);
+
+  it("renders stylised captions and standalone text overlays", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-rstyle-"));
+    const props: KinoProps = {
+      theme,
+      fps: 30,
+      avatar: null,
+      avatarWindows: [],
+      voTrack: null,
+      logo: null,
+      background: { kind: "glow", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
+      disclosure: "test",
+      segments: [
+        {
+          kind: "avatar",
+          caption: "hi",
+          startSec: 0,
+          endSec: 2,
+          captionMode: "words",
+          words: [{ word: "hello", start: 0, end: 0.6 }, { word: "world", start: 0.7, end: 1.4 }],
+          emphasis: ["world"],
+          captionStyle: "highlight",
+          captionAnimation: "wave",
+          texts: [{ text: "3× faster", fromSec: 0.2, durSec: 1.5, x: 50, y: 16, sizePx: 111, style: "gradient", animation: "blur-in" }],
+        },
+      ],
+    };
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "style" });
+    expect(outs).toHaveLength(1);
+    expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
+  }, 180000);
 });

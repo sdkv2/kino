@@ -9,7 +9,7 @@ import { getPreset, type DrawFn } from "./backgrounds/presets";
 // CAPTION_BOTTOM: px offset of the lower-third caption band from the frame bottom (defined +
 // documented in captionLayout.ts; also exposed to motion graphics as --kino-caption-bottom).
 import { CAPTION_BOTTOM } from "../captionLayout";
-import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation } from "../textStyles";
+import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation, type ResolvedText } from "../textStyles";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
@@ -63,6 +63,36 @@ export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: strin
         }}
       >
         {text}
+      </span>
+    </div>
+  );
+};
+
+// Standalone stylised text overlay (spec `texts[]`): a one-line headline at a named slot, using
+// the same style/animation presets as captions. Anchored at its centre like AnimatedElement.
+export const TextOverlay: React.FC<{ o: ResolvedText; t: Theme }> = ({ o, t }) => {
+  const f = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const s = spring({ frame: f, fps, config: { damping: 14, mass: 0.6 } });
+  const a = animatePreset(o.animation, { s, frame: f, index: 0 });
+  const ink = wordStyle(o.style, t, {});
+  return (
+    <div style={{ position: "absolute", left: `${o.x}%`, top: `${o.y}%`, transform: "translate(-50%, -50%)", display: "flex", justifyContent: "center" }}>
+      <span
+        style={{
+          fontFamily: t.font,
+          fontSize: o.sizePx,
+          textAlign: "center",
+          lineHeight: 1.05,
+          whiteSpace: "pre-line",
+          ...ink,
+          ...lineBoxStyle(o.style, t, null),
+          transform: a.transform,
+          opacity: a.opacity,
+          filter: composeFilters(ink.filter as string | undefined, a.filter),
+        }}
+      >
+        {o.text}
       </span>
     </div>
   );

@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
-import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, TweenOverlay, WordCaption } from "./components";
+import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
 import { captionBandBottom } from "../captionLayout";
 import type { KinoProps } from "../props";
@@ -9,8 +9,8 @@ import type { Shot, Transition } from "../motion";
 // Top-level Remotion composition. Layers render back-to-front in this order:
 //   1. night backdrop fill   2. faceless brand backdrop   3. avatar video windows
 //   4. app cut-ins (each with its own kicker overlay)     5. full-screen motion-graphic beats
-//   6. motion-graphic overlays   7. logo (faceless beats only)   8. captions (word/hero/lower-third)
-//   9. AI disclosure
+//   6. motion-graphic overlays   7. standalone text overlays (spec `texts[]`)
+//   8. logo (faceless beats only)   9. captions (word/hero/lower-third)   10. AI disclosure
 // (Audio and FontLoader sit at the top but paint nothing.) Anything added must be slotted into this
 // stack deliberately. `f` below converts seconds→frames (sec * fps).
 
@@ -96,6 +96,15 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
             </Sequence>
           );
         })}
+
+      {/* Standalone stylised text overlays (spec `texts[]`) — above motion overlays, below captions. */}
+      {segments.flatMap((s, i) =>
+        (s.texts ?? []).map((o, j) => (
+          <Sequence key={`tx${i}-${j}`} from={f(o.fromSec)} durationInFrames={Math.max(1, f(o.durSec))}>
+            <TextOverlay o={o} t={theme} />
+          </Sequence>
+        )),
+      )}
 
       {/* Brand mark on faceless talking runs — one per contiguous run so it holds steady as the text changes. */}
       {!avatar && logo
