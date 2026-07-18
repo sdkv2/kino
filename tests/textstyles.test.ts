@@ -31,6 +31,15 @@ describe("wordStyle", () => {
     expect(off.color).toBe("#ffffff");
     expect(off.WebkitTextStroke).toBeUndefined();
   });
+  it("highlight keeps layout identical for active and inactive words (no wrap reflow)", () => {
+    // The box must be paint-only: padding differences move the flex wrap point and make
+    // words jump between rows as the highlight travels.
+    const on = wordStyle("highlight", t, { highlight: true });
+    const off = wordStyle("highlight", t);
+    expect(off.padding).toBe(on.padding);
+    expect(off.borderRadius).toBe(on.borderRadius);
+    expect(off.fontWeight).toBe(on.fontWeight);
+  });
   it("gradient clips a mint→green fill to the text and drops the stroke", () => {
     const s = wordStyle("gradient", t);
     expect(s.backgroundImage).toBe("linear-gradient(100deg, #80e2b4, #0c8d64)");

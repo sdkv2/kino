@@ -33,10 +33,12 @@ export function wordStyle(style: CaptionStyle, t: TextTheme, flags: WordFlags = 
   switch (style) {
     case "highlight":
       // CapCut-style: the accented word sits in a rounded mint box with night ink; the rest is
-      // plain white (no stroke — the box carries the contrast).
+      // plain white (no stroke — the box carries the contrast). Every word carries the same
+      // padding so the box is paint-only: a padding delta on just the active word moves the
+      // flex wrap point and makes words jump between rows as the highlight travels.
       return highlight
         ? { color: t.night, backgroundColor: t.mint, borderRadius: 14, padding: "0px 16px", fontWeight: 900 }
-        : { color: t.white, fontWeight: 900, textShadow: shadow };
+        : { color: t.white, borderRadius: 14, padding: "0px 16px", fontWeight: 900, textShadow: shadow };
     case "gradient":
       // background-clip fill conflicts with text stroke and textShadow — legibility comes from a
       // drop-shadow filter instead.
