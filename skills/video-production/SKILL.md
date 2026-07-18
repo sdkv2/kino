@@ -60,6 +60,12 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 - **Overlay elements tween** (`kino elements`): the logo has `logoSize` (small/medium/big/px) +
   `logoPosition` (top/bottom/left/right/center/{x,y}%) and `logoKeyframes`; captions + kickers tween via
   per-segment `captionKeyframes` / `kickerKeyframes` — all x/y/scale/opacity over time, same keyframe system.
+- **Stylised captions**: `captionStyle` (`stroke`/`highlight`/`gradient`/`minimal`, default `stroke`) and
+  `captionAnimation` (`pop`/`rise`/`typewriter`/`wave`/`blur-in`/`none`, default = the surface's native
+  entrance) set top-level or per-segment (segment overrides spec overrides brand). Per-segment
+  `texts: [{ text, at, dur?, position?, size?, style?, animation? }]` drops standalone headline overlays
+  anywhere on the frame (slot + small/medium/big, independent of the segment's own caption). Details +
+  the style/animation tables in `reference.md`.
 - **Motion graphics** (`kino motion`): for a fully custom animated beat or overlay, author a
   self-contained HTML/CSS file in `assets/motion/` and reference it from the spec — a full-screen
   beat (`{ "kind": "motion", "source": "motion/x.html", "text": "spoken VO" }`) or an overlay on an

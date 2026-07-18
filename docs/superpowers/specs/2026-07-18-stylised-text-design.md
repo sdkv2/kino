@@ -22,7 +22,9 @@ look: 900-weight brand font, white ink, black stroke, mint karaoke highlight.
 Two new enum fields, layered exactly like `captionMode` (segment ?? spec ?? brand ?? default):
 
 - `captionStyle`: `"stroke" | "highlight" | "gradient" | "minimal"` — default `"stroke"`
-- `captionAnimation`: `"pop" | "rise" | "typewriter" | "wave" | "blur-in" | "none"` — default `"pop"`
+- `captionAnimation`: `"pop" | "rise" | "typewriter" | "wave" | "blur-in" | "none"` — unset = the
+  surface's native entrance (`"pop"`; `"rise"` for faceless hero text), not a global default. A global
+  `"pop"` default would change faceless hero beats and break the pixel-identical regression gate.
 
 Both accepted at spec top level and per segment. Brand frontmatter gains
 `captionStyle.style` and `captionStyle.animation` alongside existing `fontSize` /

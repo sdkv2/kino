@@ -54,7 +54,7 @@ beat in ~1–2s) → edit the spec → `kino still` again → `kino build` for t
 true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
 
 ## Brand config (`brands/<name>/brand.json`)
-`name, colors{night,mint,green,white,gold}, font, captionStyle{fontSize,strokeWidth,background?},
+`name, colors{night,mint,green,white,gold}, font, captionStyle{fontSize,strokeWidth,background?,style?,animation?},
 disclosure, facelessDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
 defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}`.
 
@@ -138,6 +138,22 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   lower-third caption. Defaults: `color` = brand `night`, `opacity` = 0.82, `appOnly` = true (only behind
   captions on `app` cut-ins; faceless hero text is never plated). Opt-in — omit it and captions render
   exactly as before. Pairs with `captionKeyframes` for positioning.
+- **Caption look** (`captionStyle`, top-level or per-segment, layered `segment ?? spec ?? brand.captionStyle.style`,
+  default `stroke`): `stroke` (legacy — white ink, black stroke, mint active-word highlight) · `highlight`
+  (active word / brand name in a rounded mint box in words mode, whole line on an opaque night plate in
+  phrase/hero mode) · `gradient` (mint→green fill, stroke dropped, drop-shadow for legibility) · `minimal`
+  (weight 700, no stroke, soft shadow).
+- **Caption entrance** (`captionAnimation`, same layering, `brand.captionStyle.animation`): `pop` (spring
+  scale-in) · `rise` (translateY cascade) · `typewriter` (staggered instant reveal) · `wave` (pop then a
+  per-word sine bob) · `blur-in` (blur→0 + fade) · `none` (static). Unset = the surface's native entrance
+  (`pop`; `rise` for faceless hero text) — word-reveal *timing* in `words` mode always stays VO-driven,
+  the preset only shapes each word's entrance motion.
+- **Standalone text overlays**: per-segment `texts: [{ text, at, dur?, position?, size?, style?, animation? }]`
+  drops a headline anywhere on the frame, independent of the segment's own caption. `at` is seconds from
+  segment start; `dur` defaults to the segment end. `position` ∈ `top|center|bottom|left|right` (default
+  `center`); `size` ∈ `small|medium|big` = 0.7/1/1.5× the caption font size (default `medium`); `style`/
+  `animation` default to the segment's resolved caption look (animation falls back to `pop`). Overlays are
+  clamped to their segment.
 
 ## Cost model
 - Avatar engines bill per second of generated avatar; kino **trims the avatar to on-camera segments
