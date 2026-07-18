@@ -298,7 +298,10 @@ export const WordCaption: React.FC<{
           filter = composeFilters(ink.filter as string | undefined);
         } else {
           const a = animatePreset(anim, { s, frame: revealFrame, index: i });
-          transform = `translateX(${shake}px) ${a.transform} scale(${isActive ? 1.1 : 1})`;
+          // "none" is invalid inside a transform function list (Chromium drops the whole transform),
+          // so substitute identity when the preset has no transform of its own.
+          const baseT = a.transform === "none" ? "" : a.transform;
+          transform = `translateX(${shake}px) ${baseT} scale(${isActive ? 1.1 : 1})`.replace(/\s+/g, " ");
           opacity = a.opacity;
           filter = composeFilters(ink.filter as string | undefined, a.filter);
         }
