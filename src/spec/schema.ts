@@ -4,6 +4,19 @@
 // Exports the Spec type used throughout the pipeline. Note: keyframe/trigger `at` is in seconds
 // (resolved against frame/fps in the render layer).
 import { z } from "zod";
+import { CAPTION_STYLES, CAPTION_ANIMATIONS } from "../render/textStyles.js";
+
+const CaptionStyle = z.enum(CAPTION_STYLES);
+const CaptionAnimation = z.enum(CAPTION_ANIMATIONS);
+const TextOverlaySpec = z.object({
+  text: z.string().min(1),
+  at: z.number().min(0),
+  dur: z.number().positive().optional(),
+  position: z.enum(["top", "center", "bottom", "left", "right"]).default("center"),
+  size: z.enum(["small", "medium", "big"]).default("medium"),
+  style: CaptionStyle.optional(),
+  animation: CaptionAnimation.optional(),
+});
 
 const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });
 const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "scroll", "scroll-up", "static"]);
@@ -39,6 +52,9 @@ const Segment = z.discriminatedUnion("kind", [
     emphasis: z.array(z.string()).optional(),
     captionKeyframes: z.array(BgKeyframe).optional(),
     motionOverlay: MotionGraphicRef.optional(),
+    captionStyle: CaptionStyle.optional(),
+    captionAnimation: CaptionAnimation.optional(),
+    texts: z.array(TextOverlaySpec).optional(),
   }),
   z.object({
     kind: z.literal("app"),
@@ -53,6 +69,9 @@ const Segment = z.discriminatedUnion("kind", [
     captionKeyframes: z.array(BgKeyframe).optional(),
     kickerKeyframes: z.array(BgKeyframe).optional(),
     motionOverlay: MotionGraphicRef.optional(),
+    captionStyle: CaptionStyle.optional(),
+    captionAnimation: CaptionAnimation.optional(),
+    texts: z.array(TextOverlaySpec).optional(),
   }),
   z.object({
     kind: z.literal("motion"),
@@ -62,6 +81,9 @@ const Segment = z.discriminatedUnion("kind", [
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
     captionKeyframes: z.array(BgKeyframe).optional(),
+    captionStyle: CaptionStyle.optional(),
+    captionAnimation: CaptionAnimation.optional(),
+    texts: z.array(TextOverlaySpec).optional(),
   }),
 ]);
 
@@ -79,6 +101,8 @@ export const SpecSchema = z.object({
   logoSize: LogoSize.optional(), // small|medium|big or px (overrides brand.logoSize)
   logoPosition: LogoPosition.optional(), // top|bottom|left|right|center or {x,y}% (overrides brand)
   logoKeyframes: z.array(BgKeyframe).optional(), // tween logo x/y/scale/opacity over time
+  captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)
+  captionAnimation: CaptionAnimation.optional(), // caption entrance preset (overrides brand.captionStyle.animation)
   segments: z.array(Segment).min(1),
 });
 

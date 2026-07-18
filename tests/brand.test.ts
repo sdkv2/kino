@@ -121,3 +121,22 @@ describe("kino init scaffolds brand.md", () => {
     }
   });
 });
+
+describe("brand captionStyle presets", () => {
+  it("parses captionStyle.style/.animation and merges over defaults", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-brand-"));
+    writeFileSync(
+      join(dir, "brand.md"),
+      `---\nname: t\ncaptionStyle:\n  style: minimal\n  animation: rise\n---\nbody\n`,
+    );
+    const b = loadBrand(dir);
+    expect(b.captionStyle.style).toBe("minimal");
+    expect(b.captionStyle.animation).toBe("rise");
+    expect(b.captionStyle.fontSize).toBe(74); // defaults still merged
+  });
+  it("rejects an unknown style name", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-brand-"));
+    writeFileSync(join(dir, "brand.md"), `---\ncaptionStyle:\n  style: fancy\n---\n`);
+    expect(() => loadBrand(dir)).toThrow();
+  });
+});
