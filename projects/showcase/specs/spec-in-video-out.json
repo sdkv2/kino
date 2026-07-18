@@ -2,7 +2,7 @@
   "title": "spec-in-video-out",
   "format": ["9:16"],
   "segments": [
-    { "kind": "motion", "source": "motion/wordmark.html", "text": "kino." },
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "kino. Agent-driven video production." },
     {
       "kind": "avatar",
       "text": "Your agent writes a spec. Kino renders the video.",
@@ -19,10 +19,9 @@
       "motionOverlay": {
         "source": "motion/crosshair.html",
         "triggers": [
-          { "at": 0, "action": "pulse" },
-          { "at": 0.6, "action": "pulse" },
-          { "at": 1.3, "action": "pulse" },
-          { "at": 2.1, "action": "pulse" }
+          { "at": 0.2, "action": "pulse" },
+          { "at": 1.4, "action": "pulse" },
+          { "at": 2.6, "action": "pulse" }
         ]
       }
     },

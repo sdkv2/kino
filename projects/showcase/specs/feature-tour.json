@@ -8,7 +8,7 @@
     { "at": 9, "params": { "intensity": 0.35 }, "ease": "easeInOut" }
   ],
   "segments": [
-    { "kind": "motion", "source": "motion/wordmark.html", "text": "kino." },
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "kino. The agent-driven video toolchain." },
     {
       "kind": "avatar",
       "text": "Six animated backgrounds, tweened live from the spec.",
@@ -40,6 +40,6 @@
       "captionMode": "words",
       "emphasis": ["Everything"]
     },
-    { "kind": "motion", "source": "motion/wordmark.html", "text": "Motion, authored." }
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "Motion, authored. Every frame from a spec." }
   ]
 }
