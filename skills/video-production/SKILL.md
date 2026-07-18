@@ -96,6 +96,11 @@ hands-on-phone, city texture — pull licensed stock video instead of settling f
 Reference it from an `app` segment like any asset (`"asset": "pexels/<id>.mp4"` — .mp4 assets play
 with the same shots/transitions as stills). Prefer real product footage when it exists; match the
 clip's duration to the beat's VO length (durations are listed). Needs `PEXELS_API_KEY` (free — pexels.com/api).
+**Caption legibility over footage is not optional:** stock/photographic clips have uncontrolled
+luminance, so before shipping a spec with video (or busy screenshot) cut-ins, make sure the brand
+sets `captionStyle.background` (the translucent lower-third backplate, `appOnly` by default) — ink
+captions straight on dark footage disappear. Same check for kickers: pick a kicker `color` whose
+brand chip contrasts with the footage (preview with `kino still --segment <n>` before a real build).
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.

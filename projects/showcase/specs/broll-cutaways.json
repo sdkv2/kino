@@ -25,7 +25,7 @@
       "caption": "same shots. same spec.",
       "shot": "pan-left",
       "transition": "pop",
-      "kicker": { "text": "9:16 native", "color": "mint" }
+      "kicker": { "text": "9:16 native", "color": "green" }
     },
     {
       "kind": "avatar",

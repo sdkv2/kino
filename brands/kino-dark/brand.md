@@ -8,6 +8,8 @@ facelessDisclosure: AI-generated voiceover
 captionStyle:
   fontSize: 58
   strokeWidth: 0
+  background:
+    opacity: 0.85
 colors:
   night: "#16130D"
   white: "#F2EFE6"
