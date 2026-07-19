@@ -1,0 +1,41 @@
+<style>
+  /* A phrase settling onto the page. This beat owns its own type (the spec omits kino's
+     caption), so the words are set in the brand serif and rise word-by-word, blur clearing as they
+     land, over a thin amber rule that wipes from the centre out. @keyframes are scrubbed across the
+     beat by kino; per-word stagger via --kino-delay. Everything holds still once settled. */
+  .stage {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: var(--kino-font); color: var(--kino-white);
+    padding: 0 12%;
+  }
+  .line {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0 0.32em;
+    font-size: 132px; font-style: italic; font-weight: 500; line-height: 1.04;
+    letter-spacing: -0.005em;
+  }
+  .line span {
+    animation-name: rise; animation-timing-function: var(--kino-ease-out);
+    --kino-delay: calc((sibling-index() - 1) * 0.09);
+  }
+  @keyframes rise {
+    0%   { opacity: 0; transform: translateY(46px); filter: blur(13px); }
+    36%  { opacity: 1; transform: none; filter: blur(0); }
+    100% { opacity: 1; transform: none; filter: blur(0); }
+  }
+  .rule {
+    width: 320px; height: 2px; margin-top: 60px; background: var(--kino-mint);
+    transform: scaleX(0); transform-origin: center;
+    animation-name: wipe; animation-timing-function: var(--kino-ease-in-out);
+  }
+  @keyframes wipe { 0%{transform:scaleX(0)} 32%{transform:scaleX(0)} 70%{transform:scaleX(1)} 100%{transform:scaleX(1)} }
+</style>
+<div class="stage">
+  <div class="line">
+    <span class="kino-anim">the</span>
+    <span class="kino-anim">hours</span>
+    <span class="kino-anim">you</span>
+    <span class="kino-anim">keep</span>
+  </div>
+  <div class="rule kino-anim"></div>
+</div>

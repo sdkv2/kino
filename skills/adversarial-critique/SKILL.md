@@ -58,8 +58,9 @@ Task:
 2. Hunt major layout defects. Priority order:
    🔴 Overlap / collision — caption vs texts overlay, kicker, logo, CTA, motion graphic, or subject
    🔴 Overflow — text clipped by frame edge, wrapping into unreadability, cut off at sides
-   🟠 Bad positioning — caption pinned to top edge; CTA floating mid-frame instead of lower-third;
-      elements stacked in the same band; unsafe margin to TikTok/Reels UI (top/right/bottom)
+   🟠 Bad positioning — caption pinned to top edge; CTA left as a tiny lower-third subtitle on empty
+      mesh (should be centered end card with `cta: true`); elements stacked in the same band;
+      unsafe margin to TikTok/Reels UI (top/right/bottom)
    🟠 Legibility — light text on light subject, missing/weak caption backplate over busy footage,
       active-word colour that disappears into the ground
    🟡 Hierarchy noise — too many competing text layers; emphasis glow on many words; jittery
@@ -77,7 +78,7 @@ If truly clean: `OK — no major layout issues.`
 |---|---|
 | 🔴 | Caption overlapping `texts` / kicker / logo / CTA / motion |
 | 🔴 | Text cut off at frame edge or crushed by wrap |
-| 🟠 | CTA mid-frame (should be lower-third with `cta: true`) |
+| 🟠 | CTA as tiny lower-third on empty mesh (should be centered end card with `cta: true`) |
 | 🟠 | Caption glued to top edge; stacked bands; platform UI collision zone |
 | 🟠 | Unreadable over bright footage / no backplate |
 | 🟡 | Too many text layers; multi-word emphasis; position jitter across beats |

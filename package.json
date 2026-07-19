@@ -10,6 +10,21 @@
   },
   "description": "Agent-driven short-form video production CLI",
   "license": "MIT",
+  "author": "sdkv2",
+  "homepage": "https://github.com/sdkv2/kino#readme",
+  "bugs": {
+    "url": "https://github.com/sdkv2/kino/issues"
+  },
+  "keywords": [
+    "video",
+    "cli",
+    "agent",
+    "remotion",
+    "elevenlabs",
+    "short-form",
+    "tiktok",
+    "reels"
+  ],
   "type": "module",
   "bin": {
     "kino": "bin/kino.mjs"

@@ -1,0 +1,50 @@
+<style>
+  /* Authored in vw units — render canvas is 1080px wide, so 1vw = 10.8px. */
+  .stage{position:absolute;inset:0;font-family:var(--kino-font);color:var(--kino-white);overflow:hidden;
+         opacity:clamp(0, calc((1 - var(--progress)) * 12), 1)}
+  /* soft twilight-to-amber wash behind the signal */
+  .wash{position:absolute;left:50%;top:38%;width:120vw;height:120vw;margin:-60vw;pointer-events:none;
+        background:radial-gradient(circle, rgba(255,178,76,.22), rgba(55,183,166,.10) 45%, transparent 68%);
+        opacity:calc(.6 + var(--pulse) * .4 + (sin(var(--t) * 1.6) * .5 + .5) * .12)}
+  .wrap{position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;align-items:center;
+        transform:translateY(24vw)}
+  /* signal source: a glowing pin dot */
+  .core{position:relative;width:9vw;height:9vw;margin-bottom:6vw}
+  .dot{position:absolute;inset:2.6vw;border-radius:50%;background:var(--kino-mint);
+       box-shadow:0 0 4vw 1vw rgba(255,178,76,.6);
+       transform:scale(calc(.9 + var(--pulse) * .18 + (sin(var(--t) * 3.2) * .5 + .5) * .06))}
+  /* expanding signal rings — each fires/grows on a spec pulse trigger via --pulse */
+  .ring{position:absolute;left:50%;top:50%;width:9vw;height:9vw;margin:-4.5vw;border-radius:50%;
+        border:.5vw solid var(--kino-mint);
+        transform:scale(calc(.4 + var(--pulse) * 3.4));
+        opacity:calc((1 - var(--pulse)) * .8)}
+  .ring.b{border-color:var(--kino-green);transform:scale(calc(.4 + var(--pulse) * 2.3));
+          opacity:calc((1 - var(--pulse)) * .55)}
+  /* steady breathing halo ring so the signal feels live even between pulses */
+  .halo{position:absolute;left:50%;top:50%;width:9vw;height:9vw;margin:-4.5vw;border-radius:50%;
+        border:.28vw solid rgba(255,178,76,.35);
+        transform:scale(calc(1.8 + (sin(var(--t) * 1.9) * .5 + .5) * .5))}
+  /* big country counter */
+  .count{font-size:23vw;font-weight:900;line-height:.82;letter-spacing:-.02em;color:var(--kino-white);
+         opacity:clamp(0, calc((var(--progress) - .04) * 9), 1);
+         filter:drop-shadow(0 .6vw 1.6vw rgba(0,0,0,.45))}
+  .count b{color:var(--kino-mint);font-weight:900}
+  .count s{text-decoration:none;color:var(--kino-mint)}
+  .count s::before{counter-reset:c round(down, var(--n), 1);content:counter(c)}
+  .label{margin-top:2vw;font-family:var(--kino-label-font, var(--kino-font));
+         font-size:3vw;font-weight:600;letter-spacing:.42em;text-transform:uppercase;color:var(--kino-gold);
+         opacity:clamp(0, calc((var(--progress) - .18) * 9), 1)}
+</style>
+<div class="stage">
+  <div class="wash"></div>
+  <div class="wrap">
+    <div class="core">
+      <div class="halo"></div>
+      <div class="ring b"></div>
+      <div class="ring"></div>
+      <div class="dot"></div>
+    </div>
+    <div class="count"><s></s><b>+</b></div>
+    <div class="label">countries · one eSIM</div>
+  </div>
+</div>

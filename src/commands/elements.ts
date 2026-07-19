@@ -17,6 +17,9 @@ export async function elements(): Promise<void> {
     "    backplate: brand captionStyle.background { color?, opacity?, appOnly? } — translucent panel behind lower-third captions for legibility over light app screens (opt-in; appOnly default true = app cut-ins only)\n\n",
   );
   process.stdout.write("  kicker (per app segment)\n");
-  process.stdout.write("    tween:     kickerKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y offset, % of frame)\n");
-  process.stdout.write("\nTimes are absolute on the main timeline — get per-word start/end from `kino inspect`.\n");
+  process.stdout.write("    tween:     kickerKeyframes [{ at, params: { x, y, scale, opacity }, ease? }]  (x/y offset, % of frame)\n\n");
+  process.stdout.write("  zoom — camera push/pan on the app footage + frame chrome group (the canvas zoom for inset device footage; captions/logo/bg stay put)\n");
+  process.stdout.write("    tween:     zoomKeyframes [{ at, params: { scale, x, y, opacity }, ease? }]  (per app segment; x/y focal offset, % of frame)\n");
+  process.stdout.write("\nPer-segment tracks (caption / kicker / zoom) use `at` = seconds from the beat's start (0 = beat start; they ride the beat when VO timing shifts).\n");
+  process.stdout.write("The logo track is absolute on the main timeline — get per-word start/end from `kino inspect`.\n");
 }

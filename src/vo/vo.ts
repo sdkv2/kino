@@ -12,7 +12,7 @@ import type { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
 import { offsetWords } from "../render/captions.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
-import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL } from "./elevenlabs.js";
+import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL, modelSupportsContext } from "./elevenlabs.js";
 
 // Seconds of silence inserted between segments in the stitched track. Also part of the track
 // cache key (contentHash({clips, GAP})) — changing it re-stitches but does not re-bill TTS.
@@ -36,6 +36,7 @@ export interface BuildVOOpts {
   apiKey?: string;
   mock: boolean;
   model?: string; // TTS model_id; default DEFAULT_VOICE_MODEL (eleven_v3)
+  needClips?: boolean; // avatar providers need per-segment clips — forces the per-segment path
 }
 
 // ElevenLabs v3 audio tags ([excited], [short pause], …) are spoken direction, not caption copy —
@@ -57,24 +58,46 @@ export function stripTagWords(words: WordTiming[]): WordTiming[] {
  * (real ElevenLabs when !mock, silence+fake timings when mock) and cache the result. Then probe
  * durations, compute timeline timings with GAP, offset clip-relative word times onto the timeline,
  * and stitch one continuous track (also cached).
+ * Exception: real faceless builds on models without previous_text/next_text support (v3) TTS the
+ * whole script in ONE call instead — see buildVOSingle.
  * Contract: apiKey is required unless mock=true (real TTS calls pass it via the `apiKey!`
  * non-null assertion). Side effects: writes
  * into the Cache dir and a temp dir. Returns the stitched track path, per-clip paths, timings, and
  * timeline-absolute word timings.
  */
-export async function buildVO({ spec, voiceId, cache, apiKey, mock, model }: BuildVOOpts): Promise<VOResult> {
+export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needClips }: BuildVOOpts): Promise<VOResult> {
+  const resolvedModel = model ?? DEFAULT_VOICE_MODEL;
+  if (!mock && !needClips && !modelSupportsContext(resolvedModel)) {
+    return buildVOSingle(spec, voiceId, cache, apiKey!, resolvedModel);
+  }
   const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
   const clips: string[] = [];
   const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
-  const resolvedModel = model ?? DEFAULT_VOICE_MODEL;
+  const useCtx = modelSupportsContext(resolvedModel);
   for (const [i, seg] of spec.segments.entries()) {
-    const key = contentHash({ text: seg.text, voiceId, settings: DEFAULT_SETTINGS, mock, v: "ts", model: resolvedModel });
+    // Neighbor text is sent as previous_text/next_text so ElevenLabs keeps prosody continuous
+    // across segment seams (v2-family models only — v3 rejects it, so v3 keys stay context-free
+    // and existing v3 caches keep hitting). When sent, it's part of the cache key: editing one
+    // segment re-bills its neighbors too (their clips were conditioned on the old text).
+    const prev = useCtx ? spec.segments[i - 1]?.text : undefined;
+    const next = useCtx ? spec.segments[i + 1]?.text : undefined;
+    const key = contentHash({
+      text: seg.text,
+      ...(useCtx ? { prev, next } : {}),
+      voiceId,
+      settings: DEFAULT_SETTINGS,
+      mock,
+      v: "ts",
+      model: resolvedModel,
+    });
     let clip = cache.get(key, "mp3");
     let wordsFile = cache.get(key, "json");
     if (!clip || !wordsFile) {
       const tmp = join(dir, `seg${i}.mp3`);
       const words = stripTagWords(
-        mock ? await ttsMockWithTimestamps(seg.text, tmp) : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp, DEFAULT_SETTINGS, resolvedModel),
+        mock
+          ? await ttsMockWithTimestamps(seg.text, tmp)
+          : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp, DEFAULT_SETTINGS, resolvedModel, { previousText: prev, nextText: next }),
       );
       clip = cache.put(key, "mp3", tmp);
       const tmpJson = join(dir, `seg${i}.json`);
@@ -95,4 +118,56 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model }: Bui
     track = cache.put(trackKey, "mp3", tmp);
   }
   return { trackPath: track, clips, timings, words, totalSec: timings.at(-1)!.endSec };
+}
+
+/**
+ * Split the whole-script word timings back into per-segment arrays by consuming each segment's
+ * whitespace token count in order. Relies on the alignment echoing the input tokens (it mirrors
+ * the request text char-for-char); throws loudly on a count mismatch rather than desyncing captions.
+ */
+export function splitWordsBySegment(texts: string[], allWords: WordTiming[]): WordTiming[][] {
+  let off = 0;
+  const out = texts.map((t) => {
+    const n = t.trim().split(/\s+/).length;
+    const slice = allWords.slice(off, off + n);
+    off += n;
+    return slice;
+  });
+  if (off !== allWords.length) {
+    throw new Error(`VO single-call word mismatch: spec has ${off} words, alignment returned ${allWords.length}`);
+  }
+  return out;
+}
+
+// Real faceless builds on models that reject previous_text/next_text (v3): per-segment calls
+// can't be prosody-conditioned, so TTS the whole script in ONE call — the read flows naturally
+// across beats — then derive per-segment timings/words from the single alignment.
+// Segment startSec = its first word's start (0 for the opener); endSec = its last word's end
+// (track duration for the closer, so the natural decay isn't cut). Inter-beat gaps are whatever
+// pause the model produced, not GAP.
+// Tradeoff (accepted): one cache entry for the whole script — editing any segment re-bills the
+// entire VO. Avatar providers need per-segment clips, so they stay on the per-segment path.
+async function buildVOSingle(spec: Spec, voiceId: string, cache: Cache, apiKey: string, model: string): Promise<VOResult> {
+  const texts = spec.segments.map((s) => s.text);
+  const key = contentHash({ texts, voiceId, settings: DEFAULT_SETTINGS, v: "single", model });
+  let track = cache.get(key, "mp3");
+  let metaFile = cache.get(key, "json");
+  if (!track || !metaFile) {
+    const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
+    const tmp = join(dir, "track.mp3");
+    const allWords = await ttsWithTimestamps(apiKey, voiceId, texts.join("\n\n"), tmp, DEFAULT_SETTINGS, model);
+    const raw = splitWordsBySegment(texts, allWords);
+    const dur = await probeDuration(tmp);
+    const timings: SegmentTiming[] = raw.map((w, i) => {
+      const start = i === 0 ? 0 : w[0].start;
+      const end = i === raw.length - 1 ? dur : w.at(-1)!.end;
+      return { index: i, startSec: round2(start), endSec: round2(end), durSec: round2(end - start) };
+    });
+    const tmpJson = join(dir, "meta.json");
+    writeFileSync(tmpJson, JSON.stringify({ timings, words: raw.map(stripTagWords) }));
+    track = cache.put(key, "mp3", tmp);
+    metaFile = cache.put(key, "json", tmpJson);
+  }
+  const meta = JSON.parse(readFileSync(metaFile, "utf8")) as { timings: SegmentTiming[]; words: WordTiming[][] };
+  return { trackPath: track, clips: [], timings: meta.timings, words: meta.words, totalSec: meta.timings.at(-1)!.endSec };
 }

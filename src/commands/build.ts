@@ -122,6 +122,7 @@ export async function prepare(
     apiKey: mock ? undefined : requireKey("ELEVENLABS_API_KEY"),
     mock,
     model: spec.voiceModel,
+    needClips: provider !== "none",
   });
 
   log.step("avatar");
@@ -142,11 +143,18 @@ export async function prepare(
   // Stage everything Remotion reads via staticFile(): app assets, the avatar clip, and the VO track.
   const publicDir = join(project.outDir(spec.title), "_public");
   mkdirSync(publicDir, { recursive: true });
+  const staged = new Set<string>();
+  const stageAsset = (rel: string) => {
+    if (staged.has(rel)) return;
+    staged.add(rel);
+    const dest = join(publicDir, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    copyFileSync(project.assetPath(rel), dest);
+  };
   for (const seg of spec.segments) {
     if (seg.kind === "app") {
-      const dest = join(publicDir, seg.asset);
-      mkdirSync(dirname(dest), { recursive: true });
-      copyFileSync(project.assetPath(seg.asset), dest);
+      stageAsset(seg.asset);
+      if (seg.frame) stageAsset(seg.frame.src);
     }
   }
   if (avatarRel && avatarPath) copyFileSync(avatarPath, join(publicDir, avatarRel));
@@ -283,7 +291,13 @@ export async function prepare(
         ...base,
         shot,
         transition,
+        clipFrom: seg.clipFrom,
+        clipTo: seg.clipTo,
+        speed: seg.speed,
+        pauseAt: seg.pauseAt,
+        frame: seg.frame,
         kickerKeyframes: seg.kickerKeyframes,
+        zoomKeyframes: seg.zoomKeyframes,
         kicker: seg.kicker
           ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
           : undefined,

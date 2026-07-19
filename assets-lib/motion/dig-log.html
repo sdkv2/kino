@@ -1,0 +1,30 @@
+<style>
+  .stage{position:absolute;inset:0;overflow:hidden;font-family:var(--kino-font);
+    background:radial-gradient(ellipse at 50% 38%, #1c1712 0%, var(--kino-night) 72%)}
+  .wrap{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;align-items:center}
+  .card{width:78vw;background:var(--kino-white);border-radius:2vw;padding:6vw 6vw 5vw}
+  .chip{font-family:var(--kino-label-font, var(--kino-font));font-size:2.6vw;letter-spacing:.3em;
+    text-transform:uppercase;color:#8a7a5c;margin-bottom:4vw}
+  .row{display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:.25vw solid rgba(18,16,18,.14);padding:2.6vw 0;
+    --kino-delay:calc((sibling-index() - 1) * .14)}
+  .row:last-child{border-bottom:none}
+  .label{font-family:var(--kino-label-font, var(--kino-font));font-size:3.4vw;letter-spacing:.14em;
+    text-transform:uppercase;color:#6b5f47}
+  .value{font-family:var(--kino-label-font, var(--kino-font));font-size:4vw;font-weight:600;color:#121012}
+  .stamp{margin-top:5.5vw;align-self:center;font-weight:800;font-size:5.2vw;letter-spacing:.06em;
+    color:var(--kino-mint);border:.4vw solid var(--kino-mint);padding:1.6vw 5vw;border-radius:999px;
+    transform:rotate(-4deg);--kino-delay:.55}
+</style>
+<div class="stage">
+  <div class="wrap">
+    <div class="card">
+      <div class="chip kino-rise">dig log · entry 042</div>
+      <div class="row kino-rise"><span class="label">Shop</span><span class="value">Wax Trax</span></div>
+      <div class="row kino-rise"><span class="label">Price</span><span class="value">$14</span></div>
+      <div class="row kino-rise"><span class="label">Matrix</span><span class="value">V-2 · ST</span></div>
+    </div>
+    <div class="stamp kino-pop">logged</div>
+  </div>
+</div>

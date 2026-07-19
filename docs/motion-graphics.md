@@ -273,6 +273,14 @@ The build **rejects** assets that violate kino's determinism/safety contract:
 
 ### Sourcing from LottieFiles
 
+> **Licensing** — LottieFiles templates carry the original creator's license (free-tier templates
+> are typically free for personal/commercial use with restrictions that vary by creator; some
+> require attribution, some are paid-tier only). Cleaning a template (removing the background layer,
+> fixing the HSB artifact) does **not** change its license. Before adding a new template to the
+> shared `assets-lib/lottie/` library — which ships inside the published npm package — verify the
+> source template's license permits redistribution as-is. When in doubt, prefer CC0 sources or
+> author the animation from scratch.
+
 A shared library of pre-cleaned, brand-neutral animations lives in `assets-lib/lottie/` — copy a file
 into a project's `assets/motion/` and reference it like any Lottie. When adapting new downloads
 (download as **Lottie JSON**, not `.lottie`), templates from the LottieFiles creator
@@ -321,6 +329,13 @@ The build **rejects** a graphic that contains any of the following (each error t
 - **Prefer `easeInOut`** (or a smoothstep ramp) over `spring` for calm, premium motion; let entrances last ~1s and add slow continuous life off `--t` (e.g. `transform:rotate(calc(var(--t) * 20deg))`).
 - **Inline images as `data:` URIs** — external/relative `url()` won't resolve in the render.
 - **Sync to the voiceover** — read per-word start/end with `kino inspect` and place your keyframe `at` times on the words.
+
+## Shared library
+
+Original, brand-neutral Tier 1 motion graphics ready to copy into a project's `assets/motion/` live
+in [`assets-lib/motion/`](../assets-lib/motion/) — card reveals, dials, counters, a type-only reveal,
+an ink-drawn illustration. All original work (unlike the Lottie library, nothing here is adapted from
+a third-party template), so there's no external license to track.
 
 ## Worked examples
 

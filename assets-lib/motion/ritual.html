@@ -1,0 +1,43 @@
+<style>
+  /* Lunara — 10-minute ritual dial. Big number counts up; mono chip labels the beat.
+     Scrubbed via --progress / --n (tweened from the spec). No CSS transitions. */
+  .stage{position:absolute;inset:0;font-family:var(--kino-font);color:var(--kino-white);overflow:hidden;
+         opacity:clamp(0, calc((1 - var(--progress)) * 14), 1)}
+  /* Optical center above the lower-third caption band — was translateY(28vw) (too high / UI chrome). */
+  .wash{position:absolute;left:50%;top:48%;width:130vw;height:130vw;margin:-65vw;pointer-events:none;
+        background:radial-gradient(circle, rgba(184,164,255,.28), rgba(110,140,255,.10) 48%, transparent 70%);
+        opacity:calc(.55 + var(--pulse) * .35 + (sin(var(--t) * 1.4) * .5 + .5) * .1)}
+  /* Stack top below short-form chrome; was translateY(28vw) (~16%) — too high. */
+  .wrap{position:absolute;left:0;right:0;top:40%;display:flex;flex-direction:column;align-items:center}
+  .moon{position:relative;width:12vw;height:12vw;margin-bottom:4vw;
+        opacity:clamp(0, calc(var(--progress) * 8), 1)}
+  .disc{position:absolute;inset:0;border-radius:50%;background:var(--kino-mint);
+        box-shadow:0 0 5vw 1.2vw rgba(184,164,255,.45);
+        transform:scale(calc(.92 + var(--pulse) * .1))}
+  .crescent{position:absolute;inset:0;border-radius:50%;
+            background:radial-gradient(circle at 68% 42%, transparent 46%, var(--kino-night) 47%)}
+  .count{font-size:22vw;font-weight:600;line-height:.82;letter-spacing:-.03em;color:var(--kino-white);
+         font-style:italic;
+         opacity:clamp(0, calc((var(--progress) - .02) * 10), 1);
+         filter:drop-shadow(0 .6vw 1.8vw rgba(0,0,0,.5))}
+  .count s{text-decoration:none;color:var(--kino-mint)}
+  .count s::before{counter-reset:c round(down, var(--n), 1);content:counter(c)}
+  .unit{font-size:5.5vw;font-weight:500;letter-spacing:.08em;color:var(--kino-gold);
+        margin-top:1.5vw;
+        opacity:clamp(0, calc((var(--progress) - .12) * 9), 1)}
+  .chip{margin-top:5vw;font-family:var(--kino-label-font, var(--kino-font));
+        font-size:2.8vw;font-weight:600;letter-spacing:.38em;text-transform:uppercase;color:var(--kino-green);
+        opacity:clamp(0, calc((var(--progress) - .22) * 9), 1)}
+</style>
+<div class="stage">
+  <div class="wash"></div>
+  <div class="wrap">
+    <div class="moon">
+      <div class="disc"></div>
+      <div class="crescent"></div>
+    </div>
+    <div class="count"><s></s></div>
+    <div class="unit">minutes</div>
+    <div class="chip">ten minute wind-down</div>
+  </div>
+</div>

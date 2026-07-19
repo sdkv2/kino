@@ -25,6 +25,10 @@ export const DEFAULT_SETTINGS: VoiceSettings = {
 /** Default ElevenLabs TTS model_id when spec.voiceModel is omitted. */
 export const DEFAULT_VOICE_MODEL = "eleven_v3";
 
+// v3 rejects previous_text/next_text with 400 unsupported_model — prosody conditioning is
+// v2-family only. ponytail: prefix check, revisit when ElevenLabs ships v3 context support.
+export const modelSupportsContext = (model: string) => !model.startsWith("eleven_v3");
+
 export async function listVoices(
   apiKey: string,
 ): Promise<Array<{ id: string; name: string; gender?: string; accent?: string; age?: string }>> {
@@ -48,11 +52,22 @@ export async function ttsWithTimestamps(
   out: string,
   settings = DEFAULT_SETTINGS,
   model = DEFAULT_VOICE_MODEL,
+  context?: { previousText?: string; nextText?: string },
 ): Promise<WordTiming[]> {
+  // previous_text/next_text condition prosody on neighboring segments so per-segment clips
+  // don't reset pitch/pacing at every seam. Dropped for models that reject them (v3);
+  // JSON.stringify drops the fields when undefined.
+  const ctx = modelSupportsContext(model) ? context : undefined;
   const r = await fetch(`${BASE}/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, {
     method: "POST",
     headers: { "xi-api-key": apiKey, "content-type": "application/json" },
-    body: JSON.stringify({ text, model_id: model, voice_settings: settings }),
+    body: JSON.stringify({
+      text,
+      model_id: model,
+      voice_settings: settings,
+      previous_text: ctx?.previousText,
+      next_text: ctx?.nextText,
+    }),
   });
   if (!r.ok) throw new Error(`ElevenLabs TTS(timestamps) ${r.status}: ${await r.text()}`);
   const d = (await r.json()) as {

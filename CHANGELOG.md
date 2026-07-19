@@ -3,6 +3,24 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.18.1] — SFX/music bed, audio markers, and skill fan-out
+- **`sfx`/`music` spec fields**: free-placed sound-effect events and an auto-ducked music bed
+  (volume, duck level, tail fade) mixed into the Remotion render, resolved from a shared
+  `assets-lib/sfx/`/`assets-lib/music/` library (bare id) or a project asset (path).
+- **`kino audio-markers`**: analyzes any audio/video file into `{ rms, onsets, peaks, silences }`
+  JSON plus waveform/spectrogram PNGs, so SFX and music can be placed against real audio structure
+  instead of guessed timestamps.
+- **`kino music`**: lists bundled CC0 beds or searches Freesound (15–90s, short-form) for a track.
+- **`kino photos`** + a Pexels thumbnail preview for `kino pexels`, and a `--kino-label-font`
+  motion CSS var.
+- **`captionReveal: "word"|"all"`**: words-mode captions can now lay out the whole line at once
+  (highlight tracks VO) instead of only revealing word-by-word; storyboard gained a full-reveal
+  frame per beat.
+- **`ad-voice` and `adversarial-critique` skills** shipped alongside `video-production`, plus
+  `kino skills --install` fan-out into Cursor/Claude/Codex/`.agents` skill dirs.
+- ElevenLabs TTS now defaults to `eleven_v3` (inline audio tags); opt into `eleven_multilingual_v2`
+  for metronome-critical reads.
+
 ## [1.18.0] — Cinematic finish + full-frame caption cards
 - **Film-finish pass**: every render gets a luminance-adaptive vignette + deterministic grain that
   grades footage, backgrounds and the avatar into one cohesive image — paper texture on light brands,
@@ -16,7 +34,7 @@ versioning; the authoritative version is the `version` field in `package.json`.
   default `glow` is a brighter three-glow on a graded base; the centre scrim is now luminance-adaptive
   (fixes both the dark-brand black-holes and the light-brand washout).
 - Tighter caption/hero kerning; slightly deeper avatar push-in.
-- Showcase `synaptix` trailer: dropped an un-recolored grey placeholder Lottie overlay (off-brand and
+- Showcase trailer fix: dropped an un-recolored grey placeholder Lottie overlay (off-brand and
   non-transparent — violated the overlay transparency rule).
 
 ## [1.17.1] — Typeface + caption legibility

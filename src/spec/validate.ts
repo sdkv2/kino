@@ -62,8 +62,12 @@ export function resolveVoiceLook(spec: Spec, brand: Brand): { voiceId: string; l
 
 export function assertAssetsExist(spec: Spec, project: Project): void {
   for (const [i, seg] of spec.segments.entries()) {
-    if (seg.kind === "app" && !existsSync(project.assetPath(seg.asset))) {
+    if (seg.kind !== "app") continue;
+    if (!existsSync(project.assetPath(seg.asset))) {
       throw new Error(`Missing asset for segment[${i}]: assets/${seg.asset}`);
+    }
+    if (seg.frame && !existsSync(project.assetPath(seg.frame.src))) {
+      throw new Error(`Missing frame for segment[${i}]: assets/${seg.frame.src}`);
     }
   }
 }

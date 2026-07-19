@@ -32,6 +32,10 @@ step.**
   a labeled contact sheet, in one call. "View this clip."
 - `kino frames <video> --count N | --every S | --at 1,3,5 [--montage]` — pull stills.
 
+**Source recordings (production):** to cut a long capture into `app` beats, seat it in chrome, or
+retiming with `speed`/`pauseAt`, follow the `importing-footage` skill. Use `kino frames` on the
+source file (not `scan`/`transcribe`). App fields: `clipFrom`, `clipTo`, `speed`, `pauseAt`, `frame`.
+
 **Do NOT** run these on kino's own renders (we already have exact word timings from TTS — use
 `kino inspect`/`frames`/`still`), and never wire them into `build` or spec authoring. STT is
 ElevenLabs Scribe (~$0.40/hr); needs `ELEVENLABS_API_KEY`.
@@ -160,7 +164,8 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   is **relative to the segment start** (`at: 0` = the caption's entrance). Logo + background keyframes are
   spec-level so their `at` is absolute on the main timeline. `kino elements`. **Default: omit
   `captionKeyframes`.** Per-beat `y`/`scale` variety reads as captions jumping; use only to dodge a
-  bright subject on one beat. CTA lower-third is `cta: true`, not a `y` offset. **Keyframe timing is
+  bright subject on one beat. CTA end cards are `cta: true` (centered hero) — not a `y` offset into the
+  lower-third. **Keyframe timing is
   authored against whatever duration is current when you preview** — under `--mock` that's faked evenly
   and can diverge from the real VO's pacing (a beat can run longer or shorter for real than its mock
   estimate), so a background pulse or color shift timed to land on a specific beat can drift into the

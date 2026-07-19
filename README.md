@@ -36,7 +36,10 @@ install what's missing), `npm install` / `build` / `link`, then an API-key walkt
 ```bash
 cd ~/kino && npm install && npm run build && npm link
 ```
-Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Faceless needs only an ElevenLabs key.
+Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Real VO needs an
+[ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral — supports the project) —
+faceless builds need only that; avatar builds need it too whenever kino drives the voice
+(most setups), plus the avatar provider key.
 
 ## Quickstart
 ```bash
