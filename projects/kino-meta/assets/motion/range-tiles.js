@@ -14,9 +14,13 @@ for (var i = 0; i < tiles.length; i++){
     + '<div class="inner">' + tiles[i].body + '</div>'
     + '<div class="cap">' + tiles[i].label + '</div></div>';
 }
-return '<div class="wrap">' + html + '</div>'
+return '<div class="bg"></div><div class="wrap">' + html + '</div>'
 + '<div class="kino-grain"></div><div class="kino-vignette"></div>'
 + '<style>'
++ '.bg{position:absolute;inset:0;background:'
++   'radial-gradient(130% 90% at 50% 118%, rgba(128,226,180,.20), rgba(128,226,180,0) 58%),'
++   'radial-gradient(110% 75% at 22% -12%, rgba(217,154,32,.12), rgba(217,154,32,0) 55%),'
++   '#0b1020}'
 + '.wrap{position:absolute;left:8%;right:8%;top:30%;display:flex;flex-direction:column;gap:3vw}'
 + '.tile{border-radius:2.5vw;background:rgba(9,14,28,.8);border:0.12vw solid rgba(128,226,180,.25);'
 +   'height:16vw;display:flex;align-items:center;justify-content:space-between;padding:0 4vw}'
