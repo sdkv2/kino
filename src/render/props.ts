@@ -31,6 +31,8 @@ export interface KinoSegment {
   caption: string;
   startSec: number;
   endSec: number;
+  /** Faceless avatar beats with cta:true sit in the lower-third (not centered hero). */
+  cta?: boolean;
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
   transition?: string; // resolved in/out transition for app cut-ins

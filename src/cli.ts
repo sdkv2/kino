@@ -124,6 +124,25 @@ program
   .option("--project <name>", "target project whose assets/ receives the download (required for --get)")
   .action(async (q, o) => (await import("./commands/pexels.js")).pexels(q, o));
 
+program
+  .command("photos <query>")
+  .description("Search Pexels stock photos (portrait by default); --get <n> downloads into assets/pexels/")
+  .option("--get <n>", "download result #n from the search")
+  .option("--count <n>", "results to list (default 8)")
+  .option("--landscape", "search landscape instead of portrait")
+  .option("--out <rel>", "asset-relative output path (default pexels/<id>.jpg)")
+  .option("--project <name>", "target project whose assets/ receives the download (required for --get)")
+  .action(async (q, o) => (await import("./commands/photos.js")).photos(q, o));
+
+program
+  .command("music [query]")
+  .description(
+    "List bundled beds, or search Freesound CC0 (15–90s short-form). Bare ids work in specs.",
+  )
+  .option("--get [n]", "copy a bundled bed, or download Freesound result #n")
+  .option("--count <n>", "Freesound results to list (default 8)")
+  .option("--project <name>", "target project for --get")
+  .action(async (q, o) => (await import("./commands/music.js")).music(q, o));
 
 program
   .command("fonts")

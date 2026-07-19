@@ -12,7 +12,7 @@ import type { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
 import { offsetWords } from "../render/captions.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
-import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS } from "./elevenlabs.js";
+import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL } from "./elevenlabs.js";
 
 // Seconds of silence inserted between segments in the stitched track. Also part of the track
 // cache key (contentHash({clips, GAP})) — changing it re-stitches but does not re-bill TTS.
@@ -35,7 +35,7 @@ export interface BuildVOOpts {
   cache: Cache;
   apiKey?: string;
   mock: boolean;
-  model?: string; // TTS model_id; default eleven_multilingual_v2 (eleven_v3 enables audio tags)
+  model?: string; // TTS model_id; default DEFAULT_VOICE_MODEL (eleven_v3)
 }
 
 // ElevenLabs v3 audio tags ([excited], [short pause], …) are spoken direction, not caption copy —
@@ -66,15 +66,15 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model }: Bui
   const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
   const clips: string[] = [];
   const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
+  const resolvedModel = model ?? DEFAULT_VOICE_MODEL;
   for (const [i, seg] of spec.segments.entries()) {
-    // model joins the key only when set — existing v2 caches stay valid.
-    const key = contentHash({ text: seg.text, voiceId, settings: DEFAULT_SETTINGS, mock, v: "ts", ...(model ? { model } : {}) });
+    const key = contentHash({ text: seg.text, voiceId, settings: DEFAULT_SETTINGS, mock, v: "ts", model: resolvedModel });
     let clip = cache.get(key, "mp3");
     let wordsFile = cache.get(key, "json");
     if (!clip || !wordsFile) {
       const tmp = join(dir, `seg${i}.mp3`);
       const words = stripTagWords(
-        mock ? await ttsMockWithTimestamps(seg.text, tmp) : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp, DEFAULT_SETTINGS, model),
+        mock ? await ttsMockWithTimestamps(seg.text, tmp) : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp, DEFAULT_SETTINGS, resolvedModel),
       );
       clip = cache.put(key, "mp3", tmp);
       const tmpJson = join(dir, `seg${i}.json`);

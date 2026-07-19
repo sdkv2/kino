@@ -77,8 +77,8 @@ Browse / leaderboard: [skills.sh](https://skills.sh) (appears after installs). D
   timestamps, with active-word highlight + per-segment emphasis).
 - **Fonts** — curated names (`kino fonts`) downloaded on demand (Google Fonts → `~/.kino/fonts/`),
   or any raw CSS family.
-- **Stock b-roll** — `kino pexels "<query>"` searches Pexels stock video (portrait-first) and pulls
-  clips into project assets; `.mp4` assets play in app cut-ins with the same shots/transitions as stills.
+- **Stock media** — `kino pexels` (video) and `kino photos` (stills) search Pexels (portrait-first)
+  into project assets; same `PEXELS_API_KEY`. `.mp4` / `.jpg` work in app cut-ins.
 - **Animated backgrounds & overlays** — backgrounds, logo, captions, and kickers are all tweenable
   on one keyframe layer (`backgroundKeyframes`/`logoKeyframes`/…), with timed `backgroundTriggers`.
 - **Motion graphics** — author a self-contained HTML/CSS file in `assets/motion/`; kino drives it

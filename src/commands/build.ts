@@ -293,6 +293,7 @@ export async function prepare(
     if (seg.kind === "avatar") {
       return {
         ...base,
+        cta: seg.cta || undefined,
         shot: seg.shot as Shot | undefined,
         motionOverlay: seg.motionOverlay ? resolveMotionGraphic(seg.motionOverlay, project) : undefined,
       };

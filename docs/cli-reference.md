@@ -227,7 +227,7 @@ kino motion
 ```
 
 ### `pexels`
-Search Pexels stock videos (portrait by default) and download one into a project's `assets/pexels/`.
+Search Pexels stock **videos** (portrait by default) and download one into a project's `assets/pexels/`.
 Downloaded clips are referenced from `app` segments like any asset (`"asset": "pexels/<id>.mp4"`).
 Requires `PEXELS_API_KEY` in `.env` (free — [pexels.com/api](https://www.pexels.com/api/)).
 
@@ -243,6 +243,25 @@ kino pexels "city commute at night" --get 2 --project x  # download match 2 → 
 | `--landscape` | search landscape instead of portrait |
 | `--out <rel>` | asset-relative output path (default `pexels/<id>.mp4`) |
 | `--project <name>` | project whose `assets/` receives the download (required for `--get`) |
+
+### `photos`
+Search Pexels stock **photos** (portrait by default) and download one into `assets/pexels/`.
+Same key as `kino pexels`. Reference from `app` segments (`"asset": "pexels/<id>.jpg"`).
+
+```
+kino photos "coffee desk morning light"                      # list: #, id, size, author, thumb
+kino photos "coffee desk morning light" --get 2 --project x  # → assets/pexels/<id>.jpg
+```
+
+| Flag | Meaning |
+|---|---|
+| `--get <n>` | download result *n* from the search |
+| `--count <n>` | results to list (default 8) |
+| `--landscape` | search landscape instead of portrait |
+| `--out <rel>` | asset-relative output path (default `pexels/<id>.jpg`) |
+| `--project <name>` | project whose `assets/` receives the download (required for `--get`) |
+
+Screen local thumbs under `$TMPDIR/kino-pexels-photo-thumbs/` before `--get` (same habit as video).
 
 ---
 
