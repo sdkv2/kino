@@ -6,8 +6,13 @@ import type { CSSProperties } from "react";
 
 export const CAPTION_STYLES = ["stroke", "highlight", "gradient", "minimal"] as const;
 export const CAPTION_ANIMATIONS = ["pop", "rise", "typewriter", "wave", "blur-in", "none"] as const;
+// Words-mode reveal: "word" = each word pops in at its VO time (default); "all" = the whole caption
+// is laid out and faded in together, the active word highlighting as the VO reaches it (no per-word
+// entrance — a long line can't strand its first word at a wrapped corner during a VO pause).
+export const CAPTION_REVEALS = ["word", "all"] as const;
 export type CaptionStyle = (typeof CAPTION_STYLES)[number];
 export type CaptionAnimation = (typeof CAPTION_ANIMATIONS)[number];
+export type CaptionReveal = (typeof CAPTION_REVEALS)[number];
 
 // Structural subset of Theme (props.ts) — kept import-free so props.ts can import from here.
 export interface TextTheme {
@@ -118,13 +123,14 @@ export function composeFilters(...fs: Array<string | undefined>): string | undef
 // Layered caption look: segment ?? spec ?? brand ?? defaults. animation stays undefined when no
 // layer sets it — each surface then keeps its native entrance (pop, or rise for hero text).
 export function resolveCaptionLook(
-  seg: { captionStyle?: CaptionStyle; captionAnimation?: CaptionAnimation },
-  spec: { captionStyle?: CaptionStyle; captionAnimation?: CaptionAnimation },
-  brand?: { style?: CaptionStyle; animation?: CaptionAnimation },
-): { style: CaptionStyle; animation?: CaptionAnimation } {
+  seg: { captionStyle?: CaptionStyle; captionAnimation?: CaptionAnimation; captionReveal?: CaptionReveal },
+  spec: { captionStyle?: CaptionStyle; captionAnimation?: CaptionAnimation; captionReveal?: CaptionReveal },
+  brand?: { style?: CaptionStyle; animation?: CaptionAnimation; reveal?: CaptionReveal },
+): { style: CaptionStyle; animation?: CaptionAnimation; reveal: CaptionReveal } {
   return {
     style: seg.captionStyle ?? spec.captionStyle ?? brand?.style ?? "stroke",
     animation: seg.captionAnimation ?? spec.captionAnimation ?? brand?.animation,
+    reveal: seg.captionReveal ?? spec.captionReveal ?? brand?.reveal ?? "word",
   };
 }
 

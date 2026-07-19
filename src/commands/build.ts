@@ -233,9 +233,22 @@ export async function prepare(
       themeFont = `"${fontDef.family}", Helvetica, Arial, sans-serif`;
     }
   }
-  // Label font for storyboard/montage labels (defaults to the caption font).
+  // Label font for storyboard/montage labels (defaults to the caption font); also staged as a
+  // second Remotion typeface (themeLabelFont/labelFontUrl below) so motion beats can reach it via
+  // --kino-label-font without re-resolving the brand's font choice.
   const labelDef = lookupFont(brand.labelFont ?? fontName);
   const labelFont = labelDef ? await ensureFont(labelDef.name) : null;
+  let themeLabelFont: string | undefined;
+  let labelFontUrl: string | null = null;
+  if (labelDef) {
+    if (labelFont) {
+      copyFileSync(labelFont, join(publicDir, "label-font.ttf"));
+      labelFontUrl = "label-font.ttf";
+      themeLabelFont = `"KinoLabelFont", "${labelDef.family}", Helvetica, Arial, sans-serif`;
+    } else {
+      themeLabelFont = `"${labelDef.family}", Helvetica, Arial, sans-serif`;
+    }
+  }
 
   const c = brand.colors;
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
@@ -258,6 +271,7 @@ export async function prepare(
       captionKeyframes: seg.captionKeyframes,
       captionStyle: look.style,
       captionAnimation: look.animation,
+      captionReveal: look.reveal,
       texts: resolveTexts(seg.texts, startSec, endSec, brand.captionStyle.fontSize, look),
     };
     if (seg.kind === "app") {
@@ -294,6 +308,8 @@ export async function prepare(
     theme: {
       font: themeFont,
       fontUrl,
+      labelFont: themeLabelFont,
+      labelFontUrl,
       night: c.night,
       mint: c.mint,
       green: c.green,

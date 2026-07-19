@@ -61,7 +61,7 @@ type SegLike = Pick<KinoSegment, "kind" | "startSec" | "endSec">;
 const mid = (s: SegLike, fps: number) => Math.round(((s.startSec + s.endSec) / 2) * fps);
 
 // Which frames to grab: explicit timestamps, one segment's midpoint, or (default) one per beat.
-export function pickFrames(segments: SegLike[], fps: number, sel: FrameSelection): FramePick[] {
+export function pickFrames(segments: SegLike[], fps: number, sel: FrameSelection, perBeat = 1): FramePick[] {
   if (sel.at && sel.at.length) {
     return sel.at.map((t) => ({ frame: Math.round(t * fps), label: `${t}s` }));
   }
@@ -69,7 +69,17 @@ export function pickFrames(segments: SegLike[], fps: number, sel: FrameSelection
     const s = segments[sel.segment];
     return [{ frame: mid(s, fps), label: `${sel.segment} ${s.kind}` }];
   }
-  return segments.map((s, i) => ({ frame: mid(s, fps), label: `${i} ${s.kind} ${s.startSec.toFixed(1)}s` }));
+  // Default (storyboard): perBeat frames per beat. perBeat===1 keeps the legacy single midpoint.
+  // For perBeat>1 we sample from 0.45→0.9 of each beat so the LAST frame shows the caption fully
+  // revealed — words-mode reveals across the whole beat, so a midpoint-only frame hides the
+  // end-state where a caption overflows the frame or collides with a `texts` overlay.
+  return segments.flatMap((s, i) => {
+    if (perBeat <= 1) return [{ frame: mid(s, fps), label: `${i} ${s.kind} ${s.startSec.toFixed(1)}s` }];
+    return Array.from({ length: perBeat }, (_, j) => {
+      const at = s.startSec + (0.45 + (0.9 - 0.45) * (j / (perBeat - 1))) * (s.endSec - s.startSec);
+      return { frame: Math.round(at * fps), label: `${i} ${s.kind} ${at.toFixed(1)}s${j === perBeat - 1 ? " ·full" : ""}` };
+    });
+  });
 }
 
 // Frame timestamps across a clip of known duration when the agent doesn't know exact times:

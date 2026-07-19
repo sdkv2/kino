@@ -107,10 +107,16 @@ describe("composeFilters", () => {
 describe("resolveCaptionLook", () => {
   const brand = { style: "minimal", animation: "rise" } as const;
   it("layers segment over spec over brand over defaults", () => {
-    expect(resolveCaptionLook({}, {}, undefined)).toEqual({ style: "stroke", animation: undefined });
-    expect(resolveCaptionLook({}, {}, brand)).toEqual({ style: "minimal", animation: "rise" });
-    expect(resolveCaptionLook({}, { captionStyle: "gradient", captionAnimation: "wave" }, brand)).toEqual({ style: "gradient", animation: "wave" });
-    expect(resolveCaptionLook({ captionStyle: "highlight", captionAnimation: "pop" }, { captionStyle: "gradient" }, brand)).toEqual({ style: "highlight", animation: "pop" });
+    expect(resolveCaptionLook({}, {}, undefined)).toEqual({ style: "stroke", animation: undefined, reveal: "word" });
+    expect(resolveCaptionLook({}, {}, brand)).toEqual({ style: "minimal", animation: "rise", reveal: "word" });
+    expect(resolveCaptionLook({}, { captionStyle: "gradient", captionAnimation: "wave" }, brand)).toEqual({ style: "gradient", animation: "wave", reveal: "word" });
+    expect(resolveCaptionLook({ captionStyle: "highlight", captionAnimation: "pop" }, { captionStyle: "gradient" }, brand)).toEqual({ style: "highlight", animation: "pop", reveal: "word" });
+  });
+  it("resolves captionReveal — default word, layered segment > spec > brand", () => {
+    expect(resolveCaptionLook({}, {}, undefined).reveal).toBe("word");
+    expect(resolveCaptionLook({}, {}, { reveal: "all" }).reveal).toBe("all");
+    expect(resolveCaptionLook({}, { captionReveal: "all" }, undefined).reveal).toBe("all");
+    expect(resolveCaptionLook({ captionReveal: "all" }, { captionReveal: "word" }, undefined).reveal).toBe("all");
   });
 });
 

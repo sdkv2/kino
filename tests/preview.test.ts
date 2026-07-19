@@ -49,6 +49,17 @@ describe("pickFrames", () => {
     expect(r[0]).toMatchObject({ frame: 30 });
     expect(r[1]).toMatchObject({ frame: Math.round(3.65 * 30) });
   });
+  it("perBeat>1 → N frames per beat, last at 0.9 of the beat (full reveal)", () => {
+    const r = pickFrames(segs, 30, {}, 2);
+    expect(r).toHaveLength(4);
+    // beat 0 (0→2s): 0.45→0.9s, 0.9→1.8s
+    expect(r[0].frame).toBe(Math.round(0.9 * 30));
+    expect(r[1].frame).toBe(Math.round(1.8 * 30));
+    expect(r[1].label).toContain("·full");
+    // beat 1 (2.3→5s): last frame at 2.3 + 0.9*2.7 = 4.73s
+    expect(r[3].frame).toBe(Math.round(4.73 * 30));
+    expect(r[3].label).toContain("·full");
+  });
 });
 
 describe("pickIntervalTimes", () => {

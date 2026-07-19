@@ -9,7 +9,7 @@ import { getPreset, type DrawFn } from "./backgrounds/presets";
 // CAPTION_BOTTOM: px offset of the lower-third caption band from the frame bottom (defined +
 // documented in captionLayout.ts; also exposed to motion graphics as --kino-caption-bottom).
 import { CAPTION_BOTTOM } from "../captionLayout";
-import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation, type ResolvedText } from "../textStyles";
+import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation, type CaptionReveal, type ResolvedText } from "../textStyles";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
@@ -24,20 +24,22 @@ const luminance = (hex: string): number => {
   return 0.2126 * (r || 0) + 0.7152 * (g || 0) + 0.0722 * (b || 0);
 };
 
-// Loads the brand TTF (a downloaded registry font) before rendering, under the family
-// "KinoBrandFont" that theme.font references. No-op when using a system font.
-export const FontLoader: React.FC<{ url?: string | null }> = ({ url }) => {
-  const [handle] = React.useState(() => (url ? delayRender("brand-font") : null));
+// Loads a downloaded registry TTF before rendering, under `family` (theme.font/theme.labelFont
+// reference "KinoBrandFont"/"KinoLabelFont" by name). No-op when using a system font. Two font
+// slots share this loader: the caption font and a second `labelFont` motion beats can opt into
+// via --kino-label-font, for brands that pair a display face with a mono/label face.
+export const FontLoader: React.FC<{ url?: string | null; family?: string }> = ({ url, family = "KinoBrandFont" }) => {
+  const [handle] = React.useState(() => (url ? delayRender(`brand-font:${family}`) : null));
   React.useEffect(() => {
     if (!url || handle === null) return;
-    const ff = new FontFace("KinoBrandFont", `url(${staticFile(url)})`);
+    const ff = new FontFace(family, `url(${staticFile(url)})`);
     ff.load()
       .then((f) => {
         document.fonts.add(f);
         continueRender(handle);
       })
       .catch(() => continueRender(handle));
-  }, [url, handle]);
+  }, [url, family, handle]);
   return null;
 };
 
@@ -311,30 +313,33 @@ export const WordCaption: React.FC<{
   backplate?: { bg: string } | null;
   styleName?: CaptionStyle;
   anim?: CaptionAnimation;
+  reveal?: CaptionReveal; // "word" = per-word pop (default); "all" = whole line laid out, highlight tracks the VO
   // "lower" = the lower-third band (default; app cut-ins + on-camera avatar beats). "center" =
   // optical-centre hero placement at a larger size — used on faceless talking beats so the text
   // IS the frame instead of a lone line stranded under an empty top two-thirds.
   placement?: "lower" | "center";
-}> = ({ words, emphasis = [], startSec, t, backplate, styleName = "stroke", anim, placement = "lower" }) => {
+}> = ({ words, emphasis = [], startSec, t, backplate, styleName = "stroke", anim, reveal = "word", placement = "lower" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const tAbs = startSec + frame / fps;
   const active = activeWordIndex(words, tAbs);
   const emph = new Set(emphasis.map(normWord));
   const center = placement === "center";
+  const groupIn = spring({ frame, fps, config: { damping: 200, mass: 0.6 } }); // whole-caption fade for reveal="all"
   const sizeMul = center ? 1.42 : 0.92; // hero scale centred; legacy 0.92 in the lower band
   const row = (
     <div
       style={{
+        // words mode boxes each word individually, so only the legacy backplate applies to the row.
+        // Spread its plate first, then re-assert display:flex — lineBoxStyle's display:inline-block would
+        // otherwise clobber this row's flex layout and collapse the columnGap that spaces the words.
+        ...lineBoxStyle("stroke", t, backplate?.bg),
         display: "flex",
         flexWrap: "wrap",
         justifyContent: "center",
         columnGap: center ? 22 : 18,
         rowGap: center ? 8 : 4,
         maxWidth: "100%",
-        // words mode never takes the whole-line highlight box (words box individually) — only the
-        // legacy backplate applies here.
-        ...lineBoxStyle("stroke", t, backplate?.bg),
       }}
     >
       {words.map((w, i) => {
@@ -350,7 +355,14 @@ export const WordCaption: React.FC<{
         let transform: string;
         let opacity: number;
         let filter: string | undefined;
-        if (!anim || anim === "pop") {
+        if (reveal === "all") {
+          // reveal="all": the whole caption is laid out and faded in together (no per-word entrance),
+          // so a long line can't strand its first word at a wrapped corner during a VO pause. The
+          // active word still highlights (via ink) and bumps 1.1x as the VO reaches it.
+          transform = `scale(${isActive ? 1.1 : 1})`;
+          opacity = groupIn;
+          filter = composeFilters(ink.filter as string | undefined);
+        } else if (!anim || anim === "pop") {
           // Native pop — exact legacy math: 0.6→1 grow-in, active word bumped 1.1x, unspoken hidden.
           const scale = (revealFrame <= 0 ? 0.6 : interpolate(s, [0, 1], [0.6, 1])) * (isActive ? 1.1 : 1);
           transform = `scale(${scale})`;

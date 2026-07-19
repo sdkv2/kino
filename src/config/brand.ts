@@ -2,7 +2,7 @@ import { z } from "zod";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { CAPTION_STYLES, CAPTION_ANIMATIONS, type CaptionStyle, type CaptionAnimation } from "../render/textStyles.js";
+import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS, type CaptionStyle, type CaptionAnimation } from "../render/textStyles.js";
 
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
@@ -39,6 +39,7 @@ export const BrandFrontmatterSchema = z
         background: CaptionStyleBg.optional(),
         style: z.enum(CAPTION_STYLES).optional(),
         animation: z.enum(CAPTION_ANIMATIONS).optional(),
+        reveal: z.enum(CAPTION_REVEALS).optional(),
       })
       .optional(),
     disclosure: z.string().optional(),
