@@ -5,6 +5,7 @@ import { generateMock } from "../src/avatar/heygen.js";
 import { mkdtempSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execa } from "execa";
 import type { KinoProps } from "../src/render/props.js";
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9 };
@@ -175,4 +176,32 @@ describe("renderVideo", () => {
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
+});
+
+describe("renderVideo with sfx + music", () => {
+  it("renders an mp4 with sfx and a ducked music bed without crashing", async () => {
+    const publicDir = mkdtempSync(join(tmpdir(), "kino-sfxpub-"));
+    const outDir = mkdtempSync(join(tmpdir(), "kino-sfxout-"));
+    await execa("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=880:duration=0.3", join(publicDir, "sfx-0.mp3")]);
+    await execa("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", join(publicDir, "music.mp3")]);
+    const props: KinoProps = {
+      theme,
+      fps: 30,
+      avatar: null,
+      avatarWindows: [],
+      voTrack: null,
+      logo: null,
+      background: { kind: "glow", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
+      disclosure: "test",
+      sfx: [{ src: "sfx-0.mp3", at: 1.0, volume: 0.8 }],
+      music: { src: "music.mp3", volume: 0.2, duck: 0.05, fadeOutSec: 1, duckSpans: [{ from: 0, to: 2 }] },
+      segments: [
+        { kind: "avatar", caption: "hello", startSec: 0, endSec: 3 },
+      ],
+    };
+    const outs = await renderVideo({ props, publicDir, formats: ["9:16"], outDir, title: "sfx-check" });
+    expect(outs.length).toBe(1);
+    expect(existsSync(outs[0])).toBe(true);
+    expect(await probeDuration(outs[0])).toBeCloseTo(3.0, 0);
+  }, 120000);
 });
