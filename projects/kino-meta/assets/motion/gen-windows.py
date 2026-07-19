@@ -80,14 +80,17 @@ return WIN(full + '', caretOn, cam, '') .replace('<span class="send">', dots + '
 
 # --- beat 5: CTA lockup, then settle to the EMPTY ready-state == beat-0 frame 0 ---
 CLOSE = SHARED + r"""
-// first ~70% shows the CTA lockup fading in; last ~30% clears to the empty ready-state
-var fade = Math.min(1, env.progress / 0.6);            // lockup in
-var clear = Math.max(0, (env.progress - 0.7) / 0.3);   // lockup out + field empties
+// first ~70% shows the CTA lockup fading in; last ~25% clears to the empty ready-state.
+// clear must reach 1 (showFull=false) at the SAME 0.95 progress used by the caret guard below —
+// progress = frame/durationFrames maxes out at (durationFrames-1)/durationFrames, just under 1,
+// so a window ending at progress 1.0 would never fully resolve and the seam would never converge.
+var fade = Math.min(1, env.progress / 0.6);                          // lockup in
+var clear = Math.min(1, Math.max(0, (env.progress - 0.7) / 0.25));   // lockup out + field empties by 0.95
 var showFull = clear < 1;
 var field = showFull ? "Kino, make me an advert" : "";
-// caret solid for the last 5 frames (loop seam)
-var total = env.duration ? Math.round(env.duration * 30) : 0;
-var caretOn = (total && env.frame > total - 6) || Math.floor(env.frame / 15) % 2 === 0;
+// caret solid for the final stretch (loop seam — matches beat-0's t=0 solid caret);
+// no env.duration field exists, so gate off env.progress instead of a frame count
+var caretOn = env.progress > 0.95 || Math.floor(env.frame / 15) % 2 === 0;
 var camS = 1.0; // native scale at the seam
 var cta = '<div class="cta" style="opacity:' + (fade * (1 - clear)).toFixed(3) + '">'
   + '<div class="wm">kino</div>'
@@ -96,7 +99,7 @@ var cta = '<div class="cta" style="opacity:' + (fade * (1 - clear)).toFixed(3) +
   + '.wm{font-family:var(--kino-font);color:var(--kino-white);font-weight:800;font-size:9vw;'
   +   'text-shadow:0 0 5vw rgba(128,226,180,.5),0 0 8vw rgba(217,154,32,.35)}'
   + '.pill{display:inline-block;margin-top:2vw;padding:1.4vw 3.2vw;border-radius:5vw;'
-  +   'background:var(--kino-gold);color:#0b1020;font-family:var(--kino-label-font);font-size:2.6vw}'
+  +   'background:var(--kino-gold);color:var(--kino-night);font-family:var(--kino-label-font);font-size:2.6vw}'
   + '</style>';
 // when cleared, drop the CTA entirely so the final frame == empty prompt window
 return WIN(field, caretOn, "scale(" + camS.toFixed(3) + ")", showFull ? cta : "");
