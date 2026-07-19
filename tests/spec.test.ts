@@ -19,6 +19,17 @@ describe("SpecSchema", () => {
   it("requires app segments to have an asset", () => {
     expect(() => SpecSchema.parse({ ...valid, segments: [{ kind: "app", text: "x", caption: "y" }] })).toThrow();
   });
+  it("parses avatar and app segments without caption (captions truly optional)", () => {
+    const s = SpecSchema.parse({
+      title: "no-captions",
+      segments: [
+        { kind: "avatar", text: "spoken only" },
+        { kind: "app", asset: "screens/x.png", text: "spoken only" },
+      ],
+    });
+    expect(s.segments[0].caption).toBeUndefined();
+    expect(s.segments[1].caption).toBeUndefined();
+  });
 });
 
 describe("SpecSchema stylised text", () => {

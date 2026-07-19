@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, MotionGraphicProps, MotionEnv } from "../props";
 import { paramsAt, pulseAt } from "../bgparams";
-import { buildMotionVars } from "../motionVars";
+import { buildMotionVars, wordsShownAt } from "../motionVars";
 import { sanitizeMotionHtml } from "../sanitizeMotion";
 import { Lottie, getLottieMetadata } from "@remotion/lottie";
 import { lottiePlaybackRate } from "../lottie";
@@ -111,7 +111,18 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   const pulse = pulseAt(data.triggers, tt);
   const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
 
-  const vars = buildMotionVars(t, { frame, t: tt, progress, pulse, params: resolved, captionBottom });
+  const words = data.words ?? [];
+  const wordsShown = wordsShownAt(words, tt);
+  const vars = buildMotionVars(t, {
+    frame,
+    t: tt,
+    progress,
+    pulse,
+    params: resolved,
+    captionBottom,
+    wordsShown,
+    wordCount: words.length,
+  });
 
   // Tier 2: a procedural source is the body of render(env); memoize the compiled fn and evaluate it
   // for this frame. It runs in the browser (no Node globals) and must be a pure (env) → HTML string.
@@ -137,6 +148,7 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       palette: { mint: t.mint, green: t.green, night: t.night, white: t.white, gold: t.gold, font: t.font },
       width,
       height,
+      words,
     };
     try {
       // Sanitize the per-frame procedural output: it goes straight to innerHTML, so unlike the static

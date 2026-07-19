@@ -40,8 +40,12 @@ program
 
 program
   .command("still <spec>")
-  .description("Render a single frame fast (no encode): --at <sec> | --segment <n> | (per beat)")
+  .description("Render still(s) fast (no encode): --at | --segment | --around <sec> | (per beat)")
   .option("--at <list>", "comma-separated timestamps in seconds")
+  .option("--around <sec>", "N frames in a window around this timestamp (implies montage sheet)")
+  .option("--span <sec>", "window width for --around (default 1)")
+  .option("--count <n>", "frames in the --around window (default 5)")
+  .option("--montage", "tile multiple stills into one contact sheet")
   .option("--segment <n>", "render the midpoint of segment n")
   .option("--format <fmt>", "9:16 or 3:4")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
@@ -61,12 +65,14 @@ program
 
 program
   .command("frames <video>")
-  .description("Extract frames from any video — explicit timestamps, or evenly via --count/--every")
+  .description("Extract frames from any video — --at | --around <sec> | --count/--every")
   .option("--at <list>", "comma-separated timestamps in seconds")
+  .option("--around <sec>", "N frames in a window around this timestamp (implies montage sheet)")
+  .option("--span <sec>", "window width for --around (default 1)")
   .option("--out <dir>", "output directory")
   .option("--montage", "also tile the frames into one image")
-  .option("--every <sec>", "a frame every N seconds (when --at is not given)")
-  .option("--count <n>", "N frames spaced evenly (when --at is not given)")
+  .option("--every <sec>", "a frame every N seconds (when --at/--around is not given)")
+  .option("--count <n>", "with --around: frames in the window (default 5); else N frames spaced evenly")
   .action(async (v, o) => (await import("./commands/frames.js")).frames(v, o));
 
 program

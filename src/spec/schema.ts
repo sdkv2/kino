@@ -58,7 +58,7 @@ const Segment = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("avatar"),
     text: z.string().min(1),
-    caption: z.string().min(1),
+    caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     cta: z.boolean().default(false),
     shot: Shot.optional(),
     captionMode: CaptionMode.optional(),
@@ -74,7 +74,7 @@ const Segment = z.discriminatedUnion("kind", [
     kind: z.literal("app"),
     asset: z.string().min(1),
     text: z.string().min(1),
-    caption: z.string().min(1),
+    caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     kicker: Kicker.optional(),
     shot: Shot.optional(),
     transition: Transition.optional(),
@@ -133,6 +133,10 @@ export const SpecSchema = z
     // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
     // eleven_multilingual_v2 for metronome-critical / timing-stable reads.
     voiceModel: z.string().default("eleven_v3"),
+    // Cinematic-finish intensity (vignette + grain over photographic/app beats), 0..1. Default 1
+    // (graded film look). Set 0 for a clean, flat video — e.g. a light "paper" brand where the edge
+    // vignette reads as a dark border. Motion-graphic beats are never graded (they own their finish).
+    film: z.number().min(0).max(1).optional(),
     avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
     provider: Provider.optional(), // overrides brand.defaultProvider
     background: Background.optional(), // overrides brand.background (faceless beats)

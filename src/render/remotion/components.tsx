@@ -11,20 +11,13 @@ import { getPreset, type DrawFn } from "./backgrounds/presets";
 // CAPTION_BOTTOM: px offset of the lower-third caption band from the frame bottom (defined +
 // documented in captionLayout.ts; also exposed to motion graphics as --kino-caption-bottom).
 import { CAPTION_BOTTOM } from "../captionLayout";
+import { luminance, filmFinishParams } from "../filmFinish";
 import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation, type CaptionReveal, type ResolvedText } from "../textStyles";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
-// Relative luminance (0 dark → 1 light) of a #hex, so the finish/backdrop can adapt to a light
-// "paper" brand vs a dark neon one without any schema change (reads theme.night directly).
-const luminance = (hex: string): number => {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-  const r = parseInt(full.slice(0, 2), 16) / 255;
-  const g = parseInt(full.slice(2, 4), 16) / 255;
-  const b = parseInt(full.slice(4, 6), 16) / 255;
-  return 0.2126 * (r || 0) + 0.7152 * (g || 0) + 0.0722 * (b || 0);
-};
+// luminance + filmFinishParams live in ../filmFinish (pure, unit-tested); the backdrop and the
+// finishing pass both adapt to a light "paper" brand vs a dark neon one off theme.night.
 
 // Loads a downloaded registry TTF before rendering, under `family` (theme.font/theme.labelFont
 // reference "KinoBrandFont"/"KinoLabelFont" by name). No-op when using a system font. Two font
@@ -608,16 +601,15 @@ export const AppCutaway: React.FC<{
 // .kino-vignette utilities (motiongraphic.ts), so this global pass must not impose grain on them.
 export const FilmFinish: React.FC<{ t: Theme }> = ({ t }) => {
   const f = useCurrentFrame();
-  const light = luminance(t.night) > 0.5;
+  // Intensity from the spec (`film`, default 1); scales vignette + grain together.
+  const { vignette, grainOpacity } = filmFinishParams(t.night, t.film);
+  if ((t.film ?? 1) <= 0) return null; // clean video — no finishing pass at all
   // Per-frame jitter from a fixed 8-step cycle (≤7px) — grain shimmer with no noise recompute.
   const OX = [0, -6, 5, -3, 7, -5, 3, -7];
   const OY = [0, 5, -7, 4, -5, 7, -4, 6];
   const dx = OX[f % 8];
   const dy = OY[f % 8];
-  const grainOpacity = light ? 0.05 : 0.09;
-  const vignette = light
-    ? "radial-gradient(ellipse 88% 76% at 50% 45%, rgba(0,0,0,0) 55%, rgba(28,20,12,0.18) 100%)"
-    : "radial-gradient(ellipse 92% 80% at 50% 45%, rgba(0,0,0,0) 46%, rgba(0,0,0,0.46) 100%)";
+  const light = luminance(t.night) > 0.5;
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       <AbsoluteFill style={{ background: vignette }} />

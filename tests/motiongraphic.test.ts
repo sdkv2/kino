@@ -92,6 +92,16 @@ describe("lintMotionJs", () => {
     expect(lintMotionJs('return Date["now"]()')[0]).toMatch(/Date/i);
     expect(lintMotionJs('return Math["random"]()')[0]).toMatch(/Math/i);
   });
+  it("does not flag banned tokens that appear only inside comments (e.g. a filename ending in -window.png)", () => {
+    // The scanner matched `window.` inside "prompt-window.png" written in a comment. Comments don't execute.
+    expect(lintMotionJs("// field box matches frames/prompt-window.png\nreturn env.t;")).toEqual([]);
+    expect(lintMotionJs("/* uses Math.random elsewhere — see docs */\nreturn Math.sin(env.t);")).toEqual([]);
+    expect(lintMotionJs("return env.t; // window.location would be banned in code")).toEqual([]);
+  });
+  it("still flags banned tokens in real code even when comments are present", () => {
+    expect(lintMotionJs("// safe comment\nreturn window.location.href;").length).toBeGreaterThan(0);
+    expect(lintMotionJs("/* note */ return Math.random();")[0]).toMatch(/Math\.random/);
+  });
   it("still allows ordinary Math.* dotted geometry and user-defined functions", () => {
     expect(lintMotionJs("return Math.sin(env.t) * Math.PI")).toEqual([]);
     expect(lintMotionJs("const toBar = (v) => `<i style=height:${v}%></i>`; return toBar(env.params.v)")).toEqual([]);
@@ -246,6 +256,11 @@ describe("kino motion help", () => {
     expect(t).toMatch(/stagger/i); // staggering guidance
     expect(t).toMatch(/sibling-index/); // the auto-stagger recipe
     expect(t).toMatch(/--kino-caption-bottom/); // the caption-band var so authors avoid the caption
+    expect(t).toMatch(/--kino-words-shown/); // VO-locked typed UI
+    expect(t).toMatch(/env\.words/);
+    expect(t).toMatch(/speech-synced-ui/);
+    expect(t).toMatch(/--around/); // still/frames progression sheet loop
+    expect(t).toMatch(/under-animate|Make it move/i);
   });
   it("documents the CSS helper kit (reveals, pulse, fade-edges, easing tokens)", () => {
     const t = motionHelpText();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CAPTION_BOTTOM, captionBandBottom, isHeroCaption } from "../src/render/captionLayout.js";
+import { CAPTION_BOTTOM, captionBandBottom, hasCaptionContent, isHeroCaption } from "../src/render/captionLayout.js";
 import type { KinoSegment } from "../src/render/props.js";
 
 const seg = (o: Partial<KinoSegment>): KinoSegment => ({ kind: "motion", caption: "", startSec: 0, endSec: 2, ...o });
@@ -24,6 +24,17 @@ describe("captionBandBottom", () => {
   });
   it("returns the band for an app beat with a caption", () => {
     expect(captionBandBottom(seg({ kind: "app", asset: "x.png", caption: "look" }), true)).toBe(CAPTION_BOTTOM);
+  });
+});
+
+describe("hasCaptionContent", () => {
+  it("is false for an empty or whitespace caption with no word sync (render skips the caption)", () => {
+    expect(hasCaptionContent(seg({ caption: "" }))).toBe(false);
+    expect(hasCaptionContent(seg({ caption: "   " }))).toBe(false);
+  });
+  it("is true for caption text or word-synced words", () => {
+    expect(hasCaptionContent(seg({ caption: "hi" }))).toBe(true);
+    expect(hasCaptionContent(seg({ caption: "", captionMode: "words", words: [{ word: "hi", start: 0, end: 0.3 }] }))).toBe(true);
   });
 });
 

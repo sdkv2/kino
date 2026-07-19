@@ -16,6 +16,7 @@ export interface Theme {
   captionFontSize: number;
   captionStroke: number;
   captionBg?: { bg: string; appOnly: boolean } | null; // translucent plate behind lower-third captions (opt-in)
+  film?: number; // 0..1 cinematic-finish intensity (spec `film`, default 1); 0 = no vignette/grain
 }
 
 // One spoken word and its absolute on-timeline span (from the VO timestamps).
@@ -34,7 +35,7 @@ export interface AppFrame {
 export interface KinoSegment {
   kind: "avatar" | "app" | "motion";
   asset?: string;
-  caption: string;
+  caption: string; // "" = no caption for this beat (spec caption is optional; build coalesces)
   startSec: number;
   endSec: number;
   /** Faceless avatar beats (including cta:true end cards) use centered hero captions. */
@@ -101,6 +102,7 @@ export interface MotionGraphicProps {
   params: Record<string, BgParamValue>; // base CSS-variable values
   keyframes: BgKeyframe[]; // tween params over time (--<name>)
   triggers: BgTrigger[]; // one-shot pulses (--pulse)
+  words?: WordTiming[]; // beat-relative spoken-word spans, for typed-in-sync graphics (env.words + --kino-words-shown)
 }
 
 // The argument passed to a Tier-2 procedural graphic's render(env) every frame.
@@ -113,6 +115,7 @@ export interface MotionEnv {
   palette: { mint: string; green: string; night: string; white: string; gold: string; font: string };
   width: number; // canvas px (1080 for 9:16)
   height: number; // canvas px (1920 for 9:16)
+  words: WordTiming[]; // beat's spoken words, beat-relative (start/end in seconds from beat start); [] when none
 }
 
 // Brand mark overlay (faceless talking beats): resolved layout + an agent keyframe track.

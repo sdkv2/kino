@@ -13,10 +13,17 @@ import {
 } from "../src/config/skills.js";
 
 describe("bundled skills package", () => {
-  it("ships the three production skills with SKILL.md", () => {
+  it("ships the production skills with SKILL.md", () => {
     const names = listBundledSkills();
-    expect(names).toEqual(expect.arrayContaining(["video-production", "ad-voice", "adversarial-critique"]));
-    for (const n of ["video-production", "ad-voice", "adversarial-critique"]) {
+    const expected = [
+      "video-production",
+      "ad-voice",
+      "adversarial-critique",
+      "importing-footage",
+      "speech-synced-ui",
+    ];
+    expect(names).toEqual(expect.arrayContaining(expected));
+    for (const n of expected) {
       expect(existsSync(join(PACKAGE_SKILLS_DIR, n, "SKILL.md"))).toBe(true);
     }
   });

@@ -97,3 +97,21 @@ export function pickIntervalTimes(durationSec: number, opts: { count?: number; e
   }
   return [];
 }
+
+// N timestamps centered on `center`, spanning `span` seconds total (center ± span/2).
+// Used by `kino still --around` / `kino frames --around` to sheet a moment for QA.
+export function timesAround(
+  center: number,
+  opts: { count?: number; span?: number; min?: number; max?: number } = {},
+): number[] {
+  const count = Math.max(1, Math.round(opts.count ?? 5));
+  const span = Number.isFinite(opts.span) ? Number(opts.span) : 1;
+  const half = span / 2;
+  const raw =
+    count === 1
+      ? [center]
+      : Array.from({ length: count }, (_, i) => center - half + (span * i) / (count - 1));
+  const lo = opts.min ?? -Infinity;
+  const hi = opts.max ?? Infinity;
+  return raw.map((t) => round2(Math.min(hi, Math.max(lo, t))));
+}

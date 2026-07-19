@@ -53,9 +53,18 @@ const BANNED_JS: { re: RegExp; msg: string }[] = [
   { re: /\b(Date|Math)\s*\[/, msg: "computed access to Date/Math isn't allowed — use dotted Math.* geometry and env.t / env.frame" },
 ];
 
+// Strip JS comments before scanning so a banned token that appears only in a comment (e.g. the
+// filename "prompt-window.png" contains "window.") isn't flagged — comments don't execute. The `[^:]`
+// guard keeps `http://` and other `://` from being eaten as a line comment. Blanking (not deleting)
+// preserves offsets and can't fuse two lines into a spurious match.
+function stripJsComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 // Returns a list of human-readable violations for a Tier-2 procedural (JS) source (empty = clean).
 export function lintMotionJs(src: string): string[] {
-  return BANNED_JS.filter((b) => b.re.test(src)).map((b) => b.msg);
+  const code = stripJsComments(src);
+  return BANNED_JS.filter((b) => b.re.test(code)).map((b) => b.msg);
 }
 
 // Determinism/safety lint for a motion source, dispatched on the (lowercased) extension — the single
