@@ -278,7 +278,7 @@ export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number;
 
 // Word-synced caption: the spoken words, revealed + highlighted in time with the VO.
 // Typewriter reveal (pop/bounce) per word at its start; active word highlighted; emphasised
-// words glow + shake. Driven by absolute word timings, so it's frame-deterministic.
+// words glow. Driven by absolute word timings, so it's frame-deterministic.
 export const WordCaption: React.FC<{
   words: WordTiming[];
   emphasis?: string[];
@@ -316,8 +316,6 @@ export const WordCaption: React.FC<{
         const isEmph = emph.has(normWord(w.word));
         // Single accent: the spoken word and the brand name take the style's highlight treatment.
         const isHi = isHighlightWord(w.word, { isActive, brandName: t.brandName });
-        // Emphasised active words shake ±3px; 1.4 = rad/frame oscillation (~7 wobbles/sec at 30fps).
-        const shake = isActive && isEmph ? Math.sin(frame * 1.4) * 3 : 0;
         const ink = wordStyle(styleName, t, { highlight: isHi, emph: isActive && isEmph });
         let transform: string;
         let opacity: number;
@@ -325,7 +323,7 @@ export const WordCaption: React.FC<{
         if (!anim || anim === "pop") {
           // Native pop — exact legacy math: 0.6→1 grow-in, active word bumped 1.1x, unspoken hidden.
           const scale = (revealFrame <= 0 ? 0.6 : interpolate(s, [0, 1], [0.6, 1])) * (isActive ? 1.1 : 1);
-          transform = `translateX(${shake}px) scale(${scale})`;
+          transform = `scale(${scale})`;
           opacity = revealFrame <= 0 ? 0 : interpolate(s, [0, 1], [0, 1]);
           filter = composeFilters(ink.filter as string | undefined);
         } else {
@@ -333,7 +331,7 @@ export const WordCaption: React.FC<{
           // "none" is invalid inside a transform function list (Chromium drops the whole transform),
           // so substitute identity when the preset has no transform of its own.
           const baseT = a.transform === "none" ? "" : a.transform;
-          transform = `translateX(${shake}px) ${baseT} scale(${isActive ? 1.1 : 1})`.replace(/\s+/g, " ");
+          transform = `${baseT} scale(${isActive ? 1.1 : 1})`.trim().replace(/\s+/g, " ");
           opacity = a.opacity;
           filter = composeFilters(ink.filter as string | undefined, a.filter);
         }
@@ -389,33 +387,44 @@ export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?:
   // --- camera move (inner image) --- (pure math in motion.ts; includes scroll/scroll-up)
   const { scale, tx, ty } = shotTransform(shot, p);
 
-  // --- transition (outer layer), CapCut-style: spring "fly in" + settle, quick eased exit ---
+  // --- transition (outer layer), CapCut-style: spring "fly in" + settle, eased fade-out exit ---
   // ein = entrance spring over ~18 frames (damping 14 / stiffness 130 / mass 0.6 → fast settle with a
-  // small overshoot). eout = exit ramp 0→1 over the last 7 frames (dur-7 → dur), cubic-eased.
+  // small overshoot). eout = exit ramp 0→1 over the last 12 frames, cubic-eased. Every animated exit
+  // fades opacity out — motion without a fade snaps to the background and reads as a glitch.
   const { fps } = useVideoConfig();
   const ein = spring({ frame: f, fps, config: { damping: 14, stiffness: 130, mass: 0.6 }, durationInFrames: 18 });
   const eIO = Math.min(1, ein); // clamped (no overshoot) for opacity/scale
   const eout = Easing.in(Easing.cubic)(
-    interpolate(f, [dur - 7, dur], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+    interpolate(f, [dur - 12, dur], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
   );
   let opacity = 1;
   let otx = 0;
   let oty = 0;
   let oscale = 1;
   if (transition === "fly-left") {
-    // 120 = entry offset (% of frame) it flies in from; -130 = exit travel off the left edge.
-    otx = (1 - ein) * 120 + eout * -130; // springs in from the right (slight overshoot), eases off left
+    // 120 = entry offset (% of frame) it flies in from; -60 = exit drift while fading off left.
+    otx = (1 - ein) * 120 + eout * -60; // springs in from the right (slight overshoot), fades off left
     oscale = lerp(1.12, 1.0, eIO); // oversize 12% during entry so the slide never reveals an edge
+    opacity = 1 - eout;
   } else if (transition === "fly-up") {
-    oty = (1 - ein) * 120 + eout * -130;
+    oty = (1 - ein) * 120 + eout * -60;
     oscale = lerp(1.12, 1.0, eIO);
+    opacity = 1 - eout;
   } else if (transition === "pop") {
-    // Scale 0.72→1 on entry (28% punch-up), shrink 18% on exit. opacity fades in over the first half
+    // Scale 0.72→1 on entry (28% punch-up), shrink 12% on exit. opacity fades in over the first half
     // of the spring (ein*2 clamped) and out with eout.
-    oscale = (0.72 + 0.28 * ein) * (1 - 0.18 * eout); // zoom-punch in (spring overshoot), shrink out
+    oscale = (0.72 + 0.28 * ein) * (1 - 0.12 * eout); // zoom-punch in (spring overshoot), shrink out
     opacity = Math.min(1, ein * 2) * (1 - eout);
   } else if (transition === "fade") {
     opacity = eIO * (1 - eout);
+  } else if (transition === "dissolve") {
+    // Filmic crossfade for footage: no spring, no bounce — a 24-frame eased fade-in with a slow
+    // 1.05→1 scale settle, and a matching fade-out that drifts gently forward (1→1.03).
+    const din = Easing.out(Easing.cubic)(
+      interpolate(f, [0, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+    );
+    opacity = din * (1 - eout);
+    oscale = lerp(1.05, 1.0, din) * (1 + 0.03 * eout);
   }
   // "cut": no entrance/exit animation
 
