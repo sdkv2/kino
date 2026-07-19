@@ -9,4 +9,5 @@ brands/
 
 # macOS
 .DS_Store
-logo/
+logo/*
+!logo/kino-logo-web.png
