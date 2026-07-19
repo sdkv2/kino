@@ -22,6 +22,9 @@ export const DEFAULT_SETTINGS: VoiceSettings = {
   use_speaker_boost: true,
 };
 
+/** Default ElevenLabs TTS model_id when spec.voiceModel is omitted. */
+export const DEFAULT_VOICE_MODEL = "eleven_v3";
+
 export async function listVoices(
   apiKey: string,
 ): Promise<Array<{ id: string; name: string; gender?: string; accent?: string; age?: string }>> {
@@ -44,7 +47,7 @@ export async function ttsWithTimestamps(
   text: string,
   out: string,
   settings = DEFAULT_SETTINGS,
-  model = "eleven_multilingual_v2",
+  model = DEFAULT_VOICE_MODEL,
 ): Promise<WordTiming[]> {
   const r = await fetch(`${BASE}/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, {
     method: "POST",

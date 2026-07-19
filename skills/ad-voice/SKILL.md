@@ -46,7 +46,7 @@ Short-form cold traffic (TikTok / Reels / Shorts), 2025–2026 winners:
 | Lever | Default |
 |---|---|
 | Sound | Conversational, creator-native — friend explaining, not announcer |
-| Hook | Pattern interrupt in first 1–3s — problem, contrarian claim, or curiosity gap. **Never** brand-name opener |
+| Hook | Pattern interrupt in first 1–3s — problem, contrarian claim, or curiosity gap. **Never** brand-name opener. Pair the line with a visual cold open when footage exists (see `video-production` opener menu) — copy alone on a soft mesh rarely stops the scroll |
 | Body | Concrete demo / proof; one idea per beat |
 | CTA | Specific verb + outcome (`Try free — no card`, not `Learn more`) |
 | Length | ~15–30s; ~2–3 words/sec spoken; captions shorter than VO |
@@ -66,7 +66,7 @@ Frameworks (pick one; don't stack labels in the script):
 5. **Max one superlative per spec** unless the brand's proof style demands a named benchmark.
 6. **Could a competitor paste this?** If yes, add product-specific detail or kill the line.
 7. **Captions ≠ VO dump.** Caption = the one line a silent scroller needs; VO can carry the rest.
-8. **Respect kino compliance.** `bannedPhrases` + no guaranteed jobs/interviews still fail the build.
+8. **Respect brand `bannedPhrases`.** Brand bans still fail the build when set.
 
 ### Hard-banned vocabulary (house list)
 

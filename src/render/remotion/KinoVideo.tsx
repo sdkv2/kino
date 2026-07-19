@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
-import { captionBandBottom } from "../captionLayout";
+import { captionBandBottom, isHeroCaption } from "../captionLayout";
 import { musicVolumeAt } from "../audio";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
@@ -165,18 +165,21 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
 
       {segments.map((s, i) => {
         // words mode = synced spoken text; else faceless talking beats use hero text, app beats lower-third.
+        // CTA beats stay lower-third even when faceless (isHeroCaption) — don't float the end card mid-frame.
         const wordMode = s.captionMode === "words" && s.words && s.words.length > 0;
-        const hero = !avatar && s.kind === "avatar";
+        const hero = isHeroCaption(s, !!avatar);
         // Backplate behind the lower-third caption (legibility over light app screenshots). appOnly
         // (default) scopes it to app cut-ins; the hero text on faceless beats never gets a plate.
+        // CTA lower-thirds also get the plate when appOnly so the end line stays legible over aurora.
         const cbg = theme.captionBg;
-        const backplate = cbg && (!cbg.appOnly || s.kind === "app") ? { bg: cbg.bg } : null;
+        const backplate =
+          cbg && (!cbg.appOnly || s.kind === "app" || s.cta) ? { bg: cbg.bg } : null;
         return (
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
             <TweenOverlay keyframes={s.captionKeyframes ?? []}>
               {wordMode ? (
                 // Faceless talking beats (hero) centre their word caption so the text fills the frame;
-                // app cut-ins and on-camera avatar beats keep the lower-third band.
+                // app cut-ins, on-camera avatar, and CTA beats keep the lower-third band.
                 <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} styleName={s.captionStyle} anim={s.captionAnimation} reveal={s.captionReveal} placement={hero ? "center" : "lower"} />
               ) : hero ? (
                 <HeroCaption text={s.caption} t={theme} styleName={s.captionStyle} anim={s.captionAnimation} />

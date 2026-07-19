@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CAPTION_BOTTOM, captionBandBottom } from "../src/render/captionLayout.js";
+import { CAPTION_BOTTOM, captionBandBottom, isHeroCaption } from "../src/render/captionLayout.js";
 import type { KinoSegment } from "../src/render/props.js";
 
 const seg = (o: Partial<KinoSegment>): KinoSegment => ({ kind: "motion", caption: "", startSec: 0, endSec: 2, ...o });
@@ -13,13 +13,25 @@ describe("captionBandBottom", () => {
     expect(captionBandBottom(seg({ caption: "   " }), false)).toBe(0);
   });
   it("returns the band for a word-synced beat even when caption text is empty", () => {
-    const s = seg({ caption: "", captionMode: "words", words: [{ word: "hi", startSec: 0, endSec: 0.3 } as any] });
+    const s = seg({ caption: "", captionMode: "words", words: [{ word: "hi", start: 0, end: 0.3 }] });
     expect(captionBandBottom(s, false)).toBe(CAPTION_BOTTOM);
   });
   it("returns 0 for a faceless avatar beat (hero caption is centered, not in the bottom band)", () => {
     expect(captionBandBottom(seg({ kind: "avatar", caption: "hook" }), false)).toBe(0);
   });
+  it("returns the band for a faceless CTA beat (cta anchors lower-third, not hero center)", () => {
+    expect(captionBandBottom(seg({ kind: "avatar", caption: "download free", cta: true }), false)).toBe(CAPTION_BOTTOM);
+  });
   it("returns the band for an app beat with a caption", () => {
     expect(captionBandBottom(seg({ kind: "app", asset: "x.png", caption: "look" }), true)).toBe(CAPTION_BOTTOM);
+  });
+});
+
+describe("isHeroCaption", () => {
+  it("is true for faceless non-CTA avatar beats only", () => {
+    expect(isHeroCaption({ kind: "avatar" }, false)).toBe(true);
+    expect(isHeroCaption({ kind: "avatar", cta: true }, false)).toBe(false);
+    expect(isHeroCaption({ kind: "avatar" }, true)).toBe(false);
+    expect(isHeroCaption({ kind: "app" }, false)).toBe(false);
   });
 });

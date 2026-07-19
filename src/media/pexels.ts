@@ -1,6 +1,5 @@
-// Pexels stock-video search + download (pexels.com/api — free key, PEXELS_API_KEY in .env).
-// Search is a thin fetch; file selection is pure logic so it's testable: pickFile() chooses the
-// smallest mp4 that still covers the render width (1080), else the largest available.
+// Pexels stock search + download (pexels.com/api — free key, PEXELS_API_KEY in .env).
+// Videos: /videos/search. Photos: /v1/search. File/URL selection is pure + testable.
 import { download } from "./net.js";
 
 export interface PexelsVideoFile {
@@ -19,12 +18,41 @@ export interface PexelsVideo {
   video_files: PexelsVideoFile[];
 }
 
+export interface PexelsPhotoSrc {
+  original: string;
+  large2x: string;
+  large: string;
+  medium: string;
+  small: string;
+  portrait: string;
+  landscape: string;
+  tiny: string;
+}
+
+export interface PexelsPhoto {
+  id: number;
+  width: number;
+  height: number;
+  alt: string;
+  photographer: string;
+  src: PexelsPhotoSrc;
+}
+
 export type Orientation = "portrait" | "landscape";
 
-const API = "https://api.pexels.com/videos/search";
+const VIDEO_API = "https://api.pexels.com/videos/search";
+const PHOTO_API = "https://api.pexels.com/v1/search";
 
 export function searchUrl(query: string, orientation: Orientation, perPage: number): string {
-  const u = new URL(API);
+  const u = new URL(VIDEO_API);
+  u.searchParams.set("query", query);
+  u.searchParams.set("orientation", orientation);
+  u.searchParams.set("per_page", String(perPage));
+  return u.toString();
+}
+
+export function photoSearchUrl(query: string, orientation: Orientation, perPage: number): string {
+  const u = new URL(PHOTO_API);
   u.searchParams.set("query", query);
   u.searchParams.set("orientation", orientation);
   u.searchParams.set("per_page", String(perPage));
@@ -37,6 +65,12 @@ export function parseVideos(body: unknown): PexelsVideo[] {
   return videos as PexelsVideo[];
 }
 
+export function parsePhotos(body: unknown): PexelsPhoto[] {
+  const photos = (body as { photos?: unknown[] })?.photos;
+  if (!Array.isArray(photos)) throw new Error("Unexpected Pexels response (no photos array)");
+  return photos as PexelsPhoto[];
+}
+
 export async function searchVideos(
   query: string,
   opts: { apiKey: string; orientation?: Orientation; perPage?: number },
@@ -44,8 +78,19 @@ export async function searchVideos(
   const res = await fetch(searchUrl(query, opts.orientation ?? "portrait", opts.perPage ?? 8), {
     headers: { Authorization: opts.apiKey },
   });
-  if (!res.ok) throw new Error(`Pexels search failed: ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error(`Pexels video search failed: ${res.status} ${res.statusText}`);
   return parseVideos(await res.json());
+}
+
+export async function searchPhotos(
+  query: string,
+  opts: { apiKey: string; orientation?: Orientation; perPage?: number },
+): Promise<PexelsPhoto[]> {
+  const res = await fetch(photoSearchUrl(query, opts.orientation ?? "portrait", opts.perPage ?? 8), {
+    headers: { Authorization: opts.apiKey },
+  });
+  if (!res.ok) throw new Error(`Pexels photo search failed: ${res.status} ${res.statusText}`);
+  return parsePhotos(await res.json());
 }
 
 // The composition renders app cut-ins at width 1080 — pick the smallest mp4 that still covers it
@@ -57,8 +102,27 @@ export function pickFile(v: PexelsVideo, targetWidth = 1080): PexelsVideoFile | 
   return covering[0] ?? mp4s.sort((a, b) => b.width - a.width)[0];
 }
 
+/** Download URL for a still — orientation crop when present, else large2x, else original. */
+export function pickPhotoUrl(p: PexelsPhoto, orientation: Orientation = "portrait"): string {
+  const oriented = orientation === "landscape" ? p.src.landscape : p.src.portrait;
+  return oriented || p.src.large2x || p.src.large || p.src.original;
+}
+
+/** Tiny preview for agent screening (before downloading the full still). */
+export function pickPhotoThumb(p: PexelsPhoto): string {
+  return p.src.tiny || p.src.small || p.src.medium || p.src.large;
+}
+
 export async function downloadVideo(v: PexelsVideo, out: string): Promise<void> {
   const file = pickFile(v);
   if (!file) throw new Error(`Pexels video ${v.id} has no downloadable mp4`);
   await download(file.link, out);
+}
+
+export async function downloadPhoto(
+  p: PexelsPhoto,
+  out: string,
+  orientation: Orientation = "portrait",
+): Promise<void> {
+  await download(pickPhotoUrl(p, orientation), out);
 }

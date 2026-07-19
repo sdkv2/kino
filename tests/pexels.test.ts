@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { searchUrl, parseVideos, pickFile, type PexelsVideo } from "../src/media/pexels.js";
+import {
+  searchUrl,
+  photoSearchUrl,
+  parseVideos,
+  parsePhotos,
+  pickFile,
+  pickPhotoUrl,
+  pickPhotoThumb,
+  type PexelsVideo,
+  type PexelsPhoto,
+} from "../src/media/pexels.js";
 
 const file = (width: number, height: number, file_type = "video/mp4") => ({
   link: `https://cdn.example/${width}.mp4`,
@@ -12,8 +22,28 @@ const file = (width: number, height: number, file_type = "video/mp4") => ({
 const video = (files: ReturnType<typeof file>[]): PexelsVideo => ({
   id: 1,
   duration: 12,
+  image: "https://cdn.example/thumb.jpg",
   user: { name: "Test" },
   video_files: files,
+});
+
+const photo = (src: Partial<PexelsPhoto["src"]> = {}): PexelsPhoto => ({
+  id: 42,
+  width: 1080,
+  height: 1920,
+  alt: "desk",
+  photographer: "Ada",
+  src: {
+    original: "https://cdn.example/original.jpg",
+    large2x: "https://cdn.example/large2x.jpg",
+    large: "https://cdn.example/large.jpg",
+    medium: "https://cdn.example/medium.jpg",
+    small: "https://cdn.example/small.jpg",
+    portrait: "https://cdn.example/portrait.jpg",
+    landscape: "https://cdn.example/landscape.jpg",
+    tiny: "https://cdn.example/tiny.jpg",
+    ...src,
+  },
 });
 
 describe("searchUrl", () => {
@@ -26,12 +56,31 @@ describe("searchUrl", () => {
   });
 });
 
+describe("photoSearchUrl", () => {
+  it("hits the photos search endpoint", () => {
+    const u = new URL(photoSearchUrl("coffee desk", "portrait", 6));
+    expect(u.origin + u.pathname).toBe("https://api.pexels.com/v1/search");
+    expect(u.searchParams.get("query")).toBe("coffee desk");
+    expect(u.searchParams.get("orientation")).toBe("portrait");
+    expect(u.searchParams.get("per_page")).toBe("6");
+  });
+});
+
 describe("parseVideos", () => {
   it("returns the videos array", () => {
     expect(parseVideos({ videos: [video([file(1080, 1920)])] })).toHaveLength(1);
   });
   it("throws on an unexpected body", () => {
     expect(() => parseVideos({ error: "nope" })).toThrow(/no videos array/);
+  });
+});
+
+describe("parsePhotos", () => {
+  it("returns the photos array", () => {
+    expect(parsePhotos({ photos: [photo()] })).toHaveLength(1);
+  });
+  it("throws on an unexpected body", () => {
+    expect(() => parsePhotos({ videos: [] })).toThrow(/no photos array/);
   });
 });
 
@@ -50,5 +99,24 @@ describe("pickFile", () => {
   });
   it("returns null when there is no mp4 at all", () => {
     expect(pickFile(video([file(1080, 1920, "application/x-mpegURL")]))).toBeNull();
+  });
+});
+
+describe("pickPhotoUrl", () => {
+  it("prefers the oriented crop for portrait/landscape", () => {
+    expect(pickPhotoUrl(photo(), "portrait")).toContain("portrait.jpg");
+    expect(pickPhotoUrl(photo(), "landscape")).toContain("landscape.jpg");
+  });
+  it("falls back to large2x then original when oriented URL is empty", () => {
+    expect(pickPhotoUrl(photo({ portrait: "", landscape: "" }), "portrait")).toContain("large2x.jpg");
+    expect(
+      pickPhotoUrl(photo({ portrait: "", landscape: "", large2x: "", large: "" }), "portrait"),
+    ).toContain("original.jpg");
+  });
+});
+
+describe("pickPhotoThumb", () => {
+  it("prefers tiny for screening", () => {
+    expect(pickPhotoThumb(photo())).toContain("tiny.jpg");
   });
 });

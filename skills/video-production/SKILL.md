@@ -15,9 +15,9 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
    disclosure + a free-form guidelines body with a **Tone / Voice** section). Run `kino brand <name>` to
    read a brand's styling + tone rules; with no brand, kino uses its defaults. (Set the brand via
    `spec.brand` or a project's `project.json`.)
-2. Author a spec (schema below). **Copy:** read `ad-voice` skill before writing segment `text`/`caption`
-   — follow the brand's Tone / Voice dial, then the anti-slop rules. Keep captions short; never claim
-   guaranteed jobs/interviews.
+2. Author a spec (schema below). **Opener:** prefer a cold open on your strongest footage (see Trailer
+   shape) before a mesh caption card. **Copy:** read `ad-voice` skill before writing segment `text`/`caption`
+   — follow the brand's Tone / Voice dial, then the anti-slop rules. Keep captions short.
 3. **Iterate (fast, free):** `kino inspect specs/foo.json` to map the beats, then
    `kino still specs/foo.json --segment N` (one frame, ~1–2s) or `kino storyboard specs/foo.json`
    (each beat twice — composition + the **·full** reveal; check the ·full tile for captions that
@@ -54,18 +54,37 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
       "kicker": { "text": "86% match", "color": "mint" } } ] }
 ```
 
-**Trailer shape — adapt, don't stamp.** A ~20–30s / 7–9-beat trailer runs OPENER → a MIDDLE that shows the product → PAYOFF + CTA. The **opener is a menu**, not a fixed format: a caption-card hook (`avatar`), a cold open on your strongest footage (`app`), or a motion title card (`motion`) — pick what the brand wants. One proven layout for a footage-driven trailer:
+**Trailer shape — adapt, don't stamp.** A ~20–30s / 7–9-beat trailer runs OPENER → a MIDDLE that shows the product → PAYOFF + CTA.
+
+**Opener = scroll-stop first.** TikTok/Reels thumbs and the first ~1s decide whether anyone hears the VO. Prefer a
+**cold open on your strongest footage** (`app`: product screen, real-world b-roll, or the most kinetic clip you have)
+with a short hook caption over it. Mesh/glow/aurora caption cards (`avatar`) and motion title cards stay **valid** —
+use them when the brand is deliberately quiet/editorial, when you truly have no usable footage yet, or when a typographic
+cold open *is* the brand move — but do **not** default to a soft blurred mesh + centered line just because faceless
+trailers used to start that way. If the first still could be any SaaS ad after you squint, the opener is too weak.
+
+Opener menu (pick one; bias toward #1 for consumer/app ads):
+
+1. **Cold open (`app`)** — default lean. Strongest clip + one hook line (lower-third + backplate). Optional kicker.
+   `shot: "push-in"` + `transition: "cut"` reads as a thumb-stop. Caption stays short (`which hold?`, not the full VO).
+2. **Motion title (`motion`)** — brand-forward graphic cold open when the product truth *is* a number/diagram.
+3. **Caption card (`avatar`)** — faceless hero on `background` mesh/glow/aurora. Fine for quiet/luxury brands or
+   copy-led hooks; still compose it (big line, hot palette intensity, not a muddy mid-grey blur). Never open on the
+   brand name (ad-voice rule).
+
+One proven layout for a footage-driven trailer (cold-open first):
 
 ```
-0  avatar   hook — the problem/tension, one big line   (opener is a menu: or cold-open on app / a motion title)
-1  app      footage — establish the world
-2  app      footage — show the product truth      ← beats 1–3: sequence related shots; consecutive app
-3  app      footage — the payoff moment              beats auto-crossfade, so it reads as an edited montage
-4  motion   a data/feature beat (counter, timer…)  ← media ≈ half the runtime
-5  avatar   payoff — the emotional turn
+0  app      cold open — strongest footage + hook caption   ← scroll-stop; not a mesh card by default
+1  app      footage — establish the world / product surface
+2  app      footage — show the product truth          ← consecutive app beats auto-crossfade = montage
+3  app      footage — the payoff moment
+4  motion   a data/feature beat (counter, timer…)     ← media ≈ half the runtime
+5  avatar   payoff — the emotional turn (caption card OK here)
 6  avatar   CTA (cta: true) — brand name + URL, anchored low
 ```
-**Footage-cut rules:** match each clip's length to its beat's VO; vary the `shot` per cut-in to the action (push-in / pan / pull-out); keep related shots back-to-back for the auto-crossfade; set the brand's `captionStyle.background` backplate so captions stay legible over uncontrolled footage.
+
+**Footage-cut rules:** match each clip's length to its beat's VO; vary the `shot` per cut-in to the action (push-in / pan / pull-out); keep related shots back-to-back for the auto-crossfade; set the brand's `captionStyle.background` backplate so captions stay legible over uncontrolled footage. **Plan the opener clip before writing beat 0 copy** — pick the thumb-stopping frame, then write the one-line caption that rides it.
 
 ## Short-form layout defaults (TikTok / Reels / Shorts)
 
@@ -74,7 +93,8 @@ layout and crowd the top chrome — don't.
 
 | Layer | Default | Don't |
 |---|---|---|
-| Hook (`avatar`, faceless) | Centered hero caption — big, calm, no `captionKeyframes` | Pin to top edge; `y: -16` "for variety" |
+| Hook / cold open (`app`) | Strongest footage first; short lower-third caption + backplate; optional kicker | Soft mesh card as the default opener; brand-name first line |
+| Hook (`avatar`, faceless) | Centered hero caption — big, calm, no `captionKeyframes` (use when caption-card opener is intentional) | Pin to top edge; `y: -16` "for variety"; muddy low-contrast mesh behind a weak line |
 | App / footage captions | Lower-third (engine default) + brand backplate | Per-beat `y`/`scale` jitters |
 | CTA (`cta: true`) | Lower-third automatically — use `captionReveal: "all"` | Fake with `captionKeyframes` `y`; leave as centered hero |
 | Kickers | Top pill (engine default) — fine; not a CTA | Treat kicker as the end card |
@@ -125,7 +145,7 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
   where the beat earns one. Variety is the *result* of composing per beat, not the goal — two beats
   that genuinely want the same frame may share it. The failure is every beat defaulting to dead-center
   because none was composed for what it says (don't jitter position just to make cards differ — that
-  reads as noise, not design). B-roll sources: project assets, `kino pexels`, `assets-lib/lottie/`.
+  reads as noise, not design). B-roll sources: project assets, `kino pexels` / `kino photos`, `assets-lib/lottie/`.
   **Consecutive `app` beats crossfade shot-to-shot automatically** (the first holds under the next's
   fade-in — no background flash between them), so sequencing related footage back-to-back is
   encouraged: it reads as edited film, not a slideshow.
@@ -207,9 +227,24 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
   now (a beat, a slightly longer line, more breathing room on the hook/payoff) rather than shipping
   the edge and calling it a known weakness after the real build.
 
-## Stock b-roll (Pexels)
-When a beat needs real-world footage the brand assets can't provide — lifestyle shots, environments,
-hands-on-phone, city texture — pull licensed stock video instead of settling for a static screenshot:
+## Stock stills (Pexels photos)
+When a beat needs a **photograph** (lifestyle plate, texture, environment) and the brand has no
+asset — same key as video, separate command:
+`kino photos "coffee desk morning light"` lists portrait stills (size, author, alt + local thumb),
+then `kino photos "coffee desk morning light" --get 2 --project <name>` → `assets/pexels/<id>.jpg`.
+**Screen the local thumb before `--get`** (`thumb: $TMPDIR/kino-pexels-photo-thumbs/<id>.jpg` — Read
+it). Reference like any still: `"asset": "pexels/<id>.jpg"`. Prefer real product screenshots when
+they exist. Needs `PEXELS_API_KEY`.
+
+## Generated stills (image gen)
+When stock photos still won't fit (hero illustration, product mock, logo variant) — **use image gen
+if the session permits it** (image-gen skill / host image tool available and the user hasn't
+forbidden generated assets). Save into `assets/gen/…`. Don't invent UI chrome that misrepresents
+the app. Skip when the tool isn't available or the brand bans AI art.
+
+## Stock b-roll (Pexels video)
+When a beat needs real-world **footage** the brand assets can't provide — lifestyle shots,
+environments, hands-on-phone, city texture — pull licensed stock video:
 `kino pexels "city commute at night"` lists portrait clips (duration, size, author, thumbnail URL),
 then `kino pexels "city commute at night" --get 2 --project <name>` downloads into `assets/pexels/<id>.mp4`.
 **Screen the local thumb before downloading**: search prints `thumb: /tmp/kino-pexels-thumbs/<id>.jpg`
@@ -244,15 +279,16 @@ kino music "soft ambient pad loop"      # Freesound CC0 search (needs FREESOUND_
 kino music "soft ambient pad loop" --get 2 --project <name>
 # in the spec (short-form: quiet bed, hard duck — VO wins on TikTok/Reels/Shorts):
 "music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }
-"sfx": [ { "src": "whoosh", "at": 2.5, "volume": 0.35 } ]
+# SFX optional — omit by default. Soft pop/click only when a beat earns it (not every cut):
+# "sfx": [ { "src": "pop", "at": 10.1, "volume": 0.25 } ]
 ```
 
 - Bare ids resolve from `assets-lib/music/` / `assets-lib/sfx/` (`kino music`, `kino doctor`).
 - Freesound search is **CC0 + 15–90s** by default (fits a 15–30s cut). Catalog skews ambient/SFX —
   good beds, not chart songs. **Platform trending audio is not pullable** (copyright).
-- Short-form taste: sparse bed under VO; cut whooshes matter more than a busy track; avoid loud
-  drums fighting captions.
-- **Place SFX after the real VO exists**: `kino build` → `kino inspect --real` and/or
+- Short-form taste: sparse bed under VO; **no default cut whoosh** — silent cuts + ducked music
+  are enough. Skip `sfx` unless a reveal/CTA earns a soft `pop`/`click`. Avoid loud drums fighting captions.
+- **Place SFX after the real VO exists** (when used): `kino build` → `kino inspect --real` and/or
   `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not shipping.
 
 ## Hard rules (the CLI enforces these — don't fight them)
@@ -268,14 +304,14 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   `EXAVITQu4vr4xnSDxMaL` Sarah (soft, warm F) · `ErXwobaYiN019PkySvjV` Antoni (warm, easy M) ·
   `TxGEqnHWrfWFTfGW9XjX` Josh (deep, serious M) · `pNInz6obpgDQGcFmaJgB` Adam (broadcast M).
   Set it per spec (`"voice"`) or per brand (`defaultVoice`).
-- **Expressive VO (audio tags)**: set spec `"voiceModel": "eleven_v3"` and direct the read inline in
-  segment text with bracketed tags — `[excited]`, `[whispers]`, `[sighs]`, `[laughs]`, `[curious]`,
-  `[short pause]`. Tags are stripped from word-synced captions automatically. Use like emphasis: 1-2
-  tags per spec where the copy earns them (a hook, a reveal), not on every beat. v3 reads are less
-  timing-stable than v2 — keep it off metronome-critical specs. Faceless only for now: with an avatar
-  provider the tagged text also reaches lip-sync, untested.
+- **Expressive VO (audio tags)**: default TTS is `"voiceModel": "eleven_v3"`. Direct the read
+  inline in segment text with bracketed tags — `[excited]`, `[whispers]`, `[sighs]`, `[laughs]`,
+  `[curious]`, `[short pause]`. Tags are stripped from word-synced captions automatically. Use like
+  emphasis: 1-2 tags per spec where the copy earns them (a hook, a reveal), not on every beat. v3
+  reads are less timing-stable than v2 — set `"voiceModel": "eleven_multilingual_v2"` for
+  metronome-critical specs. Faceless only for now: with an avatar provider the tagged text also
+  reaches lip-sync, untested.
 - **Timing comes from the generated VO**, not your guesses — don't put timestamps in the spec.
-- Banned outcome phrases (get the job, guaranteed interview, …) fail the build — keep copy honest.
 - Use `--mock` while iterating to avoid avatar credit spend; real builds cache VO+avatar so edits to
   captions don't re-bill. Faceless real builds spend only ElevenLabs (no avatar credits at all).
 - **Suspect a rendering bug (not a spec mistake)? Stop and say so before patching render source.**

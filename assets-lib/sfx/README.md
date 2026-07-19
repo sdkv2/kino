@@ -1,15 +1,21 @@
 # Shared SFX library
 
-Brand-neutral sound effects resolvable from any spec by bare id: `"src": "whoosh"` →
-`assets-lib/sfx/whoosh.mp3` (`.mp3` preferred, `.wav` accepted). Path-like refs
+Brand-neutral sound effects resolvable from any spec by bare id: `"src": "pop"` →
+`assets-lib/sfx/pop.mp3` (`.mp3` preferred, `.wav` accepted). Path-like refs
 (`"sfx/hit.mp3"`) resolve from the project's own `assets/` instead.
 
 ## Naming
 
-One short kebab-case id per file, named for the sound, not the use: `whoosh.mp3`,
-`pop.mp3`, `ding.mp3`, `riser.mp3`, `impact.mp3`, `click.mp3`.
+One short kebab-case id per file, named for the sound, not the use: `pop.mp3`,
+`ding.mp3`, `riser.mp3`, `impact.mp3`, `click.mp3`.
 
-## Sourcing
+## Shipped ids
+
+`pop` · `ding` · `click` · `impact` · `riser` — CC0 procedural (ffmpeg-generated).
+**No bundled cut whoosh** — short-form defaults to silent cuts + ducked music; add SFX only
+when a beat earns it. List with `kino doctor` (sfx library line) or use a bare id in the spec.
+
+## Sourcing replacements
 
 Only CC0 / public-domain audio goes in this directory (it ships with the npm package):
 
@@ -22,6 +28,7 @@ sound's actual start), normalized to around −1 dBFS peak, 44.1 kHz.
 
 ## Placement workflow
 
-Run `kino audio-markers <file>` on the VO track or a music bed to get
-`<name>.markers.json` (onsets/peaks/silences) plus waveform + spectrogram PNGs, then
-author `sfx[].at` against those timestamps (whoosh in a silence, ding on an onset).
+SFX is optional. When you do use it: run `kino audio-markers <file>` on the VO track or a
+music bed to get `<name>.markers.json` (onsets/peaks/silences) plus waveform + spectrogram
+PNGs, then author `sfx[].at` against those timestamps (soft `pop`/`click` on a silence or
+onset — not a whoosh on every cut).

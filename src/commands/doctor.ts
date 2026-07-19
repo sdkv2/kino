@@ -2,6 +2,7 @@ import { execa } from "execa";
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
+import { listMusicIds, listSfxIds } from "../media/sfx.js";
 import { log } from "../log.js";
 
 async function has(cmd: string, args: string[]): Promise<boolean> {
@@ -25,8 +26,16 @@ export async function doctor(): Promise<void> {
     ["HEDRA_API_KEY (provider: hedra)", !!process.env.HEDRA_API_KEY],
     ["REPLICATE_API_TOKEN (provider: replicate)", !!process.env.REPLICATE_API_TOKEN],
     ["PEXELS_API_KEY (kino pexels — stock b-roll)", !!process.env.PEXELS_API_KEY],
+    ["FREESOUND_API_KEY (kino music search — optional)", !!process.env.FREESOUND_API_KEY],
   ];
   for (const [n, ok] of checks) ok ? log.ok(n) : log.warn(`${n} missing`);
+
+  const sfx = listSfxIds();
+  const music = listMusicIds();
+  if (sfx.length) log.ok(`assets-lib/sfx (${sfx.length}: ${sfx.join(", ")})`);
+  else log.warn("assets-lib/sfx empty — SFX bare ids won't resolve (see assets-lib/sfx/README.md)");
+  if (music.length) log.ok(`assets-lib/music (${music.length}: ${music.join(", ")})`);
+  else log.warn("assets-lib/music empty — run kino music; don't scrape random CDNs for beds");
 
   const { workspaceRoot } = resolveWorkspace();
   const bundled = listBundledSkills();
@@ -46,4 +55,5 @@ export async function doctor(): Promise<void> {
 
   log.info("Faceless (provider: none) needs only ffmpeg + ELEVENLABS_API_KEY — no avatar credits.");
   log.info("HeyGen lip-sync needs Avatar-IV photo looks (kino avatars); hedra/replicate need a portrait image (brand.avatarImage).");
+  log.info("Music/SFX: kino music · bare ids in the spec · kino audio-markers to place sfx[].at");
 }

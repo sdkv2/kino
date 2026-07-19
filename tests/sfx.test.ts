@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveAudioSource, SFX_LIB_DIR } from "../src/media/sfx.js";
+import { resolveAudioSource, SFX_LIB_DIR, MUSIC_LIB_DIR, listMusicIds, listSfxIds } from "../src/media/sfx.js";
 import { containedPath } from "../src/config/project.js";
 import { SpecSchema } from "../src/spec/schema.js";
 import { assertAudioSources } from "../src/spec/validate.js";
@@ -33,11 +33,21 @@ describe("resolveAudioSource", () => {
 
   it("throws listing available ids for an unknown bare id", () => {
     const p = fakeProject(mkdtempSync(join(tmpdir(), "kino-sfxr-")));
-    expect(() => resolveAudioSource("no-such-sound-xyz", p)).toThrow(/Unknown sfx id/);
+    expect(() => resolveAudioSource("no-such-sound-xyz", p)).toThrow(/Unknown audio id/);
   });
 
-  it("SFX_LIB_DIR points at assets-lib/sfx in the package", () => {
+  it("SFX_LIB_DIR / MUSIC_LIB_DIR point at assets-lib in the package", () => {
     expect(SFX_LIB_DIR.endsWith(join("assets-lib", "sfx"))).toBe(true);
+    expect(MUSIC_LIB_DIR.endsWith(join("assets-lib", "music"))).toBe(true);
+  });
+
+  it("resolves shipped sfx and music bare ids from the library", () => {
+    const p = fakeProject(mkdtempSync(join(tmpdir(), "kino-sfxr-")));
+    expect(listSfxIds()).toContain("pop");
+    expect(listSfxIds()).not.toContain("whoosh");
+    expect(listMusicIds()).toContain("ambient-night");
+    expect(resolveAudioSource("pop", p)).toBe(join(SFX_LIB_DIR, "pop.mp3"));
+    expect(resolveAudioSource("ambient-night", p)).toBe(join(MUSIC_LIB_DIR, "ambient-night.mp3"));
   });
 });
 
@@ -48,8 +58,8 @@ const baseSpec = {
 
 describe("spec sfx/music schema", () => {
   it("parses sfx events and applies the volume default", () => {
-    const s = SpecSchema.parse({ ...baseSpec, sfx: [{ src: "whoosh", at: 2.4 }] });
-    expect(s.sfx![0]).toEqual({ src: "whoosh", at: 2.4, volume: 1 });
+    const s = SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 2.4 }] });
+    expect(s.sfx![0]).toEqual({ src: "pop", at: 2.4, volume: 1 });
   });
 
   it("parses music with defaults", () => {

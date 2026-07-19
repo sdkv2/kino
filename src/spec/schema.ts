@@ -43,7 +43,7 @@ const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
 const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
 
 const SfxEvent = z.object({
-  src: z.string().min(1), // bare library id ("whoosh") or project asset path ("sfx/hit.mp3")
+  src: z.string().min(1), // bare library id ("pop") or project asset path ("sfx/hit.mp3")
   at: z.number().min(0), // seconds on the main timeline
   volume: z.number().min(0).max(1).default(1),
 });
@@ -108,9 +108,9 @@ export const SpecSchema = z.object({
   title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
   format: z.array(z.enum(["9:16", "3:4"])).default(["9:16"]),
   voice: z.string().optional(),
-  // TTS model override. Default is eleven_multilingual_v2; set "eleven_v3" to enable ElevenLabs
-  // audio tags ([excited], [whispers], …) in segment text — tags are stripped from captions.
-  voiceModel: z.string().optional(),
+  // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
+  // eleven_multilingual_v2 for metronome-critical / timing-stable reads.
+  voiceModel: z.string().default("eleven_v3"),
   avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
   provider: Provider.optional(), // overrides brand.defaultProvider
   background: Background.optional(), // overrides brand.background (faceless beats)
