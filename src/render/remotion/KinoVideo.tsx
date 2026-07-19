@@ -3,6 +3,7 @@ import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile,
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
 import { captionBandBottom } from "../captionLayout";
+import { musicVolumeAt } from "../audio";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
 
@@ -11,8 +12,9 @@ import type { Shot, Transition } from "../motion";
 //   4. app cut-ins (each with its own kicker overlay)     5. full-screen motion-graphic beats
 //   6. motion-graphic overlays   7. standalone text overlays (spec `texts[]`)
 //   8. logo (faceless beats only)   9. captions (word/hero/lower-third)   10. AI disclosure
-// (Audio and FontLoader sit at the top but paint nothing.) Anything added must be slotted into this
-// stack deliberately. `f` below converts seconds→frames (sec * fps).
+// (Audio — VO, SFX events, ducked music bed — and FontLoader sit at the top but paint nothing.)
+// Anything added must be slotted into this stack deliberately. `f` below converts seconds→frames
+// (sec * fps).
 
 // One placement of the (trimmed) avatar clip, with a gentle push-in so the shot breathes.
 const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number }> = ({ src, trimFrames, durFrames }) => {
@@ -30,13 +32,40 @@ const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number 
   );
 };
 
-export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, background, disclosure, segments }) => {
+export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, background, disclosure, segments, sfx, music }) => {
   const f = (s: number) => Math.round(s * fps);
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
       <FontLoader url={theme.fontUrl} />
       {/* Continuous voiceover — covers every segment, including the app cut-ins where the avatar is trimmed out. */}
       {voTrack ? <Audio src={staticFile(voTrack)} /> : null}
+
+      {/* Free-placed SFX events — each mounts at its own timestamp; Remotion mixes all audio layers. */}
+      {(sfx ?? []).map((s, i) => {
+        const endSec = segments.length ? Math.max(...segments.map((x) => x.endSec)) : 0;
+        const dur = Math.max(1, f(endSec) - f(s.at));
+        return s.at < endSec ? (
+          <Sequence key={`sfx${i}`} from={f(s.at)} durationInFrames={dur}>
+            <Audio src={staticFile(s.src)} volume={s.volume} />
+          </Sequence>
+        ) : null;
+      })}
+
+      {/* Music bed under everything — ducked while VO segments speak, faded out at the end. */}
+      {music ? (
+        <Audio
+          src={staticFile(music.src)}
+          volume={(frame) =>
+            musicVolumeAt(frame / fps, {
+              duckSpans: music.duckSpans,
+              volume: music.volume,
+              duck: music.duck,
+              fadeOutSec: music.fadeOutSec,
+              endSec: segments.length ? Math.max(...segments.map((x) => x.endSec)) : 0,
+            })
+          }
+        />
+      ) : null}
 
       {/* Living brand backdrop, always the base layer: faceless beats aren't empty, and app cut-in
           transitions reveal the brand background instead of raw black (the avatar covers it on camera). */}
