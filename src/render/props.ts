@@ -107,6 +107,23 @@ export interface LogoProps {
   keyframes: BgKeyframe[]; // tween x/y/scale/opacity over time
 }
 
+// A staged sound-effect event (staticFile-relative src, absolute timeline seconds).
+export interface SfxProps {
+  src: string;
+  at: number;
+  volume: number;
+}
+
+// Music bed under the VO. duckSpans = the per-segment VO-active spans the bed ducks under
+// (segment-level, not word-level — word gaps would make the bed flutter).
+export interface MusicProps {
+  src: string;
+  volume: number;
+  duck: number;
+  fadeOutSec: number;
+  duckSpans: Array<{ from: number; to: number }>;
+}
+
 export interface KinoProps {
   theme: Theme;
   fps: number;
@@ -116,5 +133,7 @@ export interface KinoProps {
   logo: LogoProps | null; // brand mark shown on faceless talking beats
   background: BackgroundProps; // faceless background engine selection
   disclosure: string;
+  sfx?: SfxProps[]; // free-placed sound effects
+  music?: MusicProps | null; // music bed, ducked while VO speaks
   segments: KinoSegment[];
 }
