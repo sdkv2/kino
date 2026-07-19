@@ -48,6 +48,7 @@ const MotionFadeIn: React.FC<{ fadeIn: boolean; children: React.ReactNode }> = (
 
 export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, background, disclosure, segments, sfx, music, platformGuide }) => {
   const f = (s: number) => Math.round(s * fps);
+  const endSec = segments.length ? Math.max(...segments.map((x) => x.endSec)) : 0;
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
       <FontLoader url={theme.fontUrl} />
@@ -57,7 +58,6 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
 
       {/* Free-placed SFX events — each mounts at its own timestamp; Remotion mixes all audio layers. */}
       {(sfx ?? []).map((s, i) => {
-        const endSec = segments.length ? Math.max(...segments.map((x) => x.endSec)) : 0;
         const dur = Math.max(1, f(endSec) - f(s.at));
         return s.at < endSec ? (
           <Sequence key={`sfx${i}`} from={f(s.at)} durationInFrames={dur}>
@@ -77,7 +77,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               duck: music.duck,
               fadeInSec: music.fadeInSec,
               fadeOutSec: music.fadeOutSec,
-              endSec: segments.length ? Math.max(...segments.map((x) => x.endSec)) : 0,
+              endSec,
             })
           }
         />
