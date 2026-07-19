@@ -3,10 +3,16 @@
 var LINES = [
   '{',
   '  "brand": "kino",',
+  '  "format": ["9:16"],',
+  '  "voice": "rachel",',
   '  "provider": "none",',
   '  "segments": [',
   '    { "kind": "motion", "source": "prompt-window' + '.js",',
-  '      "text": "Kino, make me an advert" }',
+  '      "text": "Kino, make me an advert" },',
+  '    { "kind": "motion", "source": "spec-editor.js",',
+  '      "text": "Your agent writes the spec" },',
+  '    { "kind": "motion", "source": "build-terminal.js",',
+  '      "text": "One command builds it" }',
   '  ]',
   '}'
 ];
