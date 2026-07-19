@@ -14,6 +14,7 @@ export interface PexelsVideoFile {
 export interface PexelsVideo {
   id: number;
   duration: number; // seconds
+  image: string; // static thumbnail JPG — screen composition/mood before downloading the mp4
   user: { name: string };
   video_files: PexelsVideoFile[];
 }

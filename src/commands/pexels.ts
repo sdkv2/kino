@@ -29,9 +29,10 @@ export async function pexels(
     videos.forEach((v, i) => {
       const f = pickFile(v);
       const size = f ? `${f.width}x${f.height}` : "no mp4";
-      process.stdout.write(`  ${String(i + 1).padStart(2)}. #${v.id}  ${String(v.duration).padStart(3)}s  ${size.padEnd(10)} by ${v.user.name}\n`);
+      process.stdout.write(`  ${String(i + 1).padStart(2)}. #${v.id}  ${String(v.duration).padStart(3)}s  ${size.padEnd(10)} by ${v.user.name}\n      ${v.image}\n`);
     });
-    process.stdout.write(`\nDownload one:  kino pexels "${query}" --get <n> --project <name>\n`);
+    process.stdout.write(`\nScreen a thumbnail above before downloading — cheaper than pulling the mp4 to preview.\n`);
+    process.stdout.write(`Download one:  kino pexels "${query}" --get <n> --project <name>\n`);
     process.stdout.write("Videos provided by Pexels (pexels.com) — free to use.\n");
     return;
   }
