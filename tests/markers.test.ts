@@ -74,3 +74,40 @@ describe("computeMarkers", () => {
     expect(m.silences).toEqual([{ from: 0, to: 2 }]);
   });
 });
+
+import { analyzeAudio, decodePcm } from "../src/media/markers.js";
+import { execa } from "execa";
+import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+describe("analyzeAudio (ffmpeg integration)", () => {
+  it("decodes, detects the burst, and writes json + wave + spectrum artifacts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-mk-"));
+    const f = join(dir, "burst.mp3");
+    // 1s silence, 1s 440Hz tone, 1s silence
+    await execa("ffmpeg", ["-y", "-loglevel", "error",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+      "-af", "adelay=1000:all=1,apad=pad_dur=1", f]);
+    const { markers, jsonPath, wavePath, spectrumPath } = await analyzeAudio(f, dir);
+    expect(markers.durationSec).toBeCloseTo(3.0, 0);
+    expect(markers.onsets.length).toBeGreaterThanOrEqual(1);
+    expect(markers.onsets[0]).toBeGreaterThan(0.7);
+    expect(markers.onsets[0]).toBeLessThan(1.3);
+    expect(markers.silences.length).toBeGreaterThanOrEqual(2);
+    expect(existsSync(wavePath)).toBe(true);
+    expect(existsSync(spectrumPath)).toBe(true);
+    const parsed = JSON.parse(readFileSync(jsonPath, "utf8"));
+    expect(parsed.onsets).toEqual(markers.onsets);
+  });
+
+  it("decodePcm returns normalized samples at the requested rate", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-pcm-"));
+    const f = join(dir, "t.mp3");
+    await execa("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", f]);
+    const s = await decodePcm(f, 16000);
+    expect(s.length).toBeGreaterThan(15000);
+    expect(s.length).toBeLessThan(18000);
+    expect(Math.max(...Array.from(s.slice(0, 1000)))).toBeLessThanOrEqual(1.0);
+  });
+});

@@ -4,6 +4,11 @@
 // ponytail: energy-delta onsets, no BPM grid — swap in a real DSP dep if music-video beat
 // tracking is ever needed.
 
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, extname, join } from "node:path";
+import { decodeRawPcm, waveformPng, spectrumPng } from "./ffmpeg.js";
+
 export interface AudioMarkers {
   durationSec: number;
   rms: Array<{ t: number; v: number }>; // 10 Hz envelope, v normalized 0..1
@@ -71,4 +76,44 @@ export function computeMarkers(samples: Float32Array, sampleRate: number): Audio
   }
 
   return { durationSec: r2(durationSec), rms, onsets, peaks, silences };
+}
+
+const ANALYSIS_RATE = 16000;
+
+// Decode a file to normalized mono Float32 samples via ffmpeg (s16le → /32768).
+export async function decodePcm(file: string, sampleRate: number = ANALYSIS_RATE): Promise<Float32Array> {
+  const raw = join(mkdtempSync(join(tmpdir(), "kino-pcm-")), "a.raw");
+  await decodeRawPcm(file, raw, sampleRate);
+  const buf = readFileSync(raw);
+  const ints = new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 2));
+  const out = new Float32Array(ints.length);
+  for (let i = 0; i < ints.length; i++) out[i] = ints[i] / 32768;
+  return out;
+}
+
+export interface AnalyzeResult {
+  markers: AudioMarkers;
+  jsonPath: string;
+  wavePath: string;
+  spectrumPath: string;
+}
+
+/**
+ * Analyze any audio/video file: decode PCM, compute markers, and write three artifacts —
+ * <name>.markers.json, <name>.wave.png, <name>.spectrum.png — into outDir (default: next
+ * to the input file).
+ */
+export async function analyzeAudio(file: string, outDir?: string): Promise<AnalyzeResult> {
+  const dir = outDir ?? dirname(file);
+  mkdirSync(dir, { recursive: true });
+  const name = basename(file, extname(file));
+  const samples = await decodePcm(file);
+  const markers = computeMarkers(samples, ANALYSIS_RATE);
+  const jsonPath = join(dir, `${name}.markers.json`);
+  const wavePath = join(dir, `${name}.wave.png`);
+  const spectrumPath = join(dir, `${name}.spectrum.png`);
+  writeFileSync(jsonPath, JSON.stringify(markers, null, 2));
+  await waveformPng(file, wavePath);
+  await spectrumPng(file, spectrumPath);
+  return { markers, jsonPath, wavePath, spectrumPath };
 }

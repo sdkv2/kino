@@ -46,3 +46,21 @@ export async function extractAudio(video: string, out: string): Promise<void> {
 export async function extractFrame(video: string, sec: number, out: string): Promise<void> {
   await execa("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(sec), "-i", video, "-frames:v", "1", out]);
 }
+
+// Decode any audio/video file to raw mono s16le PCM at `rate` Hz (for marker analysis).
+export async function decodeRawPcm(file: string, out: string, rate: number): Promise<void> {
+  await execa("ffmpeg", ["-y", "-loglevel", "error", "-i", file,
+    "-vn", "-ac", "1", "-ar", String(rate), "-f", "s16le", "-acodec", "pcm_s16le", out]);
+}
+
+// Waveform overview PNG (agent eyeballs the track's shape).
+export async function waveformPng(file: string, out: string): Promise<void> {
+  await execa("ffmpeg", ["-y", "-loglevel", "error", "-i", file,
+    "-filter_complex", "showwavespic=s=1200x300:colors=white", "-frames:v", "1", out]);
+}
+
+// Spectrogram PNG (frequency content over time).
+export async function spectrumPng(file: string, out: string): Promise<void> {
+  await execa("ffmpeg", ["-y", "-loglevel", "error", "-i", file,
+    "-lavfi", "showspectrumpic=s=1200x400:legend=1", out]);
+}
