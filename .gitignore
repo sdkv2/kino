@@ -7,6 +7,17 @@ dist/
 projects/
 brands/
 
+# Demo workspace is tracked; keep heavy regenerable artifacts out
+demos/**/out/
+demos/**/.kino-cache/
+demos/**/assets/pexels/
+demos/**/assets/music/
+demos/**/assets/recordings/
+
+# Lottie templates adapted from LottieFiles — untracked pending license verification
+# (see docs/motion-graphics.md#sourcing-from-lottiefiles). Kept on disk, kept out of git/npm.
+assets-lib/lottie/*.json
+
 # macOS
 .DS_Store
 logo/*

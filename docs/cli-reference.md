@@ -7,8 +7,8 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 **Commands**
 
 - Build & preview — [`build`](#build) · [`still`](#still) · [`storyboard`](#storyboard) · [`batch`](#batch) · [`inspect`](#inspect)
-- Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor)
-- Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion)
+- Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor) · [`skills`](#skills)
+- Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion) · [`pexels`](#pexels) · [`photos`](#photos) · [`music`](#music)
 - Reference-video analysis (research only) — [`transcribe`](#transcribe) · [`scan`](#scan) · [`frames`](#frames)
 - Audio analysis — [`audio-markers`](#audio-markers)
 
@@ -72,6 +72,7 @@ kino storyboard <spec> [options]
 | Option | Value | Meaning |
 |---|---|---|
 | `--format <fmt>` | `9:16\|3:4` | Output format. |
+| `--frames <n>` | number | Frames per beat (default `2`: composition + fully-revealed end-state; a 3rd/4th `·full` tile surfaces overflow/overlaps). |
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Real VO/avatar + true timing (default: mock, free). |
@@ -262,6 +263,23 @@ kino photos "coffee desk morning light" --get 2 --project x  # → assets/pexels
 | `--project <name>` | project whose `assets/` receives the download (required for `--get`) |
 
 Screen local thumbs under `$TMPDIR/kino-pexels-photo-thumbs/` before `--get` (same habit as video).
+
+### `music`
+List bundled music beds (`assets-lib/music/`), or search Freesound CC0 tracks (15–90s, short-form
+length). Bare bed ids (e.g. `"ambient-night"`) resolve straight from a spec's `music.src` — no
+copy needed; `--get` is only for pulling a bed into a project or downloading a Freesound match.
+
+```bash
+kino music                                  # list bundled beds
+kino music "lofi piano" --get 2 --project x # search Freesound, download match 2
+kino music ambient-night --get --project x  # copy a bundled bed into the project
+```
+
+| Flag | Meaning |
+|---|---|
+| `--get [n]` | Copy a bundled bed (bare id, no query needed), or download Freesound result `n`. |
+| `--count <n>` | Freesound results to list (default 8). |
+| `--project <name>` | Project whose `assets/` receives the download/copy (required for `--get`). |
 
 ---
 

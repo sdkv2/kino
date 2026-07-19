@@ -13,6 +13,10 @@ Companion to `video-production`. That skill owns beats, build, and render.
 
 ## Before writing any copy
 
+**New brand (no `brands/<name>/brand.md` yet)?** Run **Brand discovery** first (see `video-production`) —
+reuse an existing brand or gather palette, voice, and assets from `brands/*`, the app's real screens, and
+the owner before you write a personality. Then:
+
 1. `kino brand <name>` — read the brand's **Tone / Voice** section (see template below).
 2. If that section is empty or still scaffold text, **fill it with the brand owner** (or draft from product truth + ask for approval) before mass-producing specs.
 3. Apply **brand tone first**, then the house rules in this skill. Brand bans win over house defaults.

@@ -10,8 +10,21 @@ describe("computeTimings", () => {
   });
 });
 
-import { stripTagWords } from "../src/vo/vo.js";
+import { stripTagWords, splitWordsBySegment } from "../src/vo/vo.js";
 import { describe as d2, it as it2, expect as ex2 } from "vitest";
+
+d2("splitWordsBySegment", () => {
+  const w = (word: string, i: number) => ({ word, start: i, end: i + 1 });
+  it2("consumes each segment's token count in order, keeping timings", () => {
+    const all = ["Hello", "world.", "[wry]", "Dig", "deeper.", "Go."].map(w);
+    const split = splitWordsBySegment(["Hello world.", "[wry] Dig deeper.", "Go."], all);
+    ex2(split.map((s) => s.map((x) => x.word))).toEqual([["Hello", "world."], ["[wry]", "Dig", "deeper."], ["Go."]]);
+    ex2(split[1][0].start).toBe(2);
+  });
+  it2("throws on a token count mismatch instead of desyncing", () => {
+    ex2(() => splitWordsBySegment(["one two"], [w("one", 0)])).toThrow(/word mismatch/);
+  });
+});
 
 d2("stripTagWords", () => {
   it2("drops single and multiword bracket tags, keeps real words and their timings", () => {

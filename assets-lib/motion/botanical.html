@@ -1,0 +1,58 @@
+<style>
+  /* A sprig drawn in ink. Each path carries pathLength="1", so stroke-dashoffset is a plain
+     0..1 knob driven straight off --progress: the stem inks first, then leaf by leaf, then a single
+     amber seed settles at the apex. Draw resolves in the first ~40% of the beat and holds. No
+     @keyframes, no timers — pure function of the frame. A sub-degree sway breathes off --t. Sits
+     above the lower-third caption band. */
+  .wrap {
+    position: absolute; left: 0; right: 0; top: 0;
+    bottom: calc(var(--kino-caption-bottom) + 48px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wrap svg { height: 82%; width: auto; overflow: visible; }
+  .sway { transform-origin: 120px 372px; transform: rotate(calc((var(--t) - 2.4) * 0.26deg)); }
+  .ink  { fill: none; stroke: var(--kino-white); stroke-linecap: round; stroke-linejoin: round; }
+  /* drawn strokes: dasharray=1 (whole path), offset retracts to 0 as this path's slice of --progress fills */
+  .draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: calc(1 - clamp(0, (var(--progress) - var(--s, 0)) * 4.2, 1));
+  }
+  /* leaves: an inked outline that fills with a faint olive wash a beat after its stroke lands */
+  .leaf {
+    stroke: var(--kino-white); stroke-linecap: round; stroke-linejoin: round;
+    fill: var(--kino-green);
+    fill-opacity: calc(clamp(0, (var(--progress) - var(--s, 0) - 0.1) * 3, 1) * 0.2);
+  }
+  .seed {
+    fill: var(--kino-mint);
+    transform-box: fill-box; transform-origin: center;
+    transform: scale(calc(clamp(0, (var(--progress) - 0.44) * 4, 1)));
+    opacity: calc(clamp(0, (var(--progress) - 0.42) * 5, 1));
+  }
+</style>
+<div class="wrap">
+  <svg viewBox="0 0 240 384">
+    <g class="sway">
+      <!-- main stem -->
+      <path class="ink draw"  style="--s:0"   stroke-width="1.7" pathLength="1"
+            d="M120 374 C 108 322 132 288 120 246 C 108 204 132 170 120 122 C 112 88 124 58 120 30"/>
+      <!-- lower-left leaf -->
+      <path class="leaf draw" style="--s:.07" stroke-width="1.5" pathLength="1"
+            d="M120 300 C 88 302 68 280 58 248 C 92 258 116 272 120 300 Z"/>
+      <!-- mid-right leaf -->
+      <path class="leaf draw" style="--s:.13" stroke-width="1.5" pathLength="1"
+            d="M120 224 C 152 226 172 204 182 172 C 148 182 124 196 120 224 Z"/>
+      <!-- upper-left leaf -->
+      <path class="leaf draw" style="--s:.2"  stroke-width="1.4" pathLength="1"
+            d="M120 154 C 94 156 78 138 70 112 C 98 122 116 134 120 154 Z"/>
+      <!-- upper-right leaf -->
+      <path class="leaf draw" style="--s:.27" stroke-width="1.3" pathLength="1"
+            d="M120 100 C 142 102 154 86 160 66 C 137 75 124 86 120 100 Z"/>
+      <!-- short pedicel to the seed -->
+      <path class="ink draw"  style="--s:.34" stroke-width="1.3" pathLength="1"
+            d="M120 44 L 120 30"/>
+      <!-- amber seed head -->
+      <circle class="seed" cx="120" cy="24" r="7.4"/>
+    </g>
+  </svg>
+</div>

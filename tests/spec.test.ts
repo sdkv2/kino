@@ -46,3 +46,86 @@ describe("SpecSchema stylised text", () => {
     ).toThrow();
   });
 });
+
+describe("SpecSchema app footage fields", () => {
+  it("accepts clip/speed/pauseAt/frame and defaults speed to 1", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [
+        {
+          kind: "app",
+          asset: "recordings/scroll.mp4",
+          text: "x",
+          caption: "y",
+          clipFrom: 4.2,
+          clipTo: 8,
+          pauseAt: 1.5,
+          frame: { src: "frames/chrome.png", inset: { x: 8, y: 10, w: 84, h: 78 } },
+        },
+      ],
+    });
+    const app = s.segments[0];
+    expect(app).toMatchObject({
+      kind: "app",
+      clipFrom: 4.2,
+      clipTo: 8,
+      speed: 1,
+      pauseAt: 1.5,
+      frame: { src: "frames/chrome.png", inset: { x: 8, y: 10, w: 84, h: 78 } },
+    });
+  });
+
+  it("accepts a zoomKeyframes camera track on app segments", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [
+        {
+          kind: "app",
+          asset: "recordings/scroll.mp4",
+          text: "x",
+          caption: "y",
+          frame: { src: "frames/iphone.png", inset: { x: 18, y: 11, w: 64, h: 78 } },
+          zoomKeyframes: [
+            { at: 6.86, params: { scale: 1 } },
+            { at: 11.12, params: { scale: 1.18, y: -4 } },
+          ],
+        },
+      ],
+    });
+    expect(s.segments[0]).toMatchObject({
+      zoomKeyframes: [
+        { at: 6.86, params: { scale: 1 } },
+        { at: 11.12, params: { scale: 1.18, y: -4 } },
+      ],
+    });
+  });
+
+  it("rejects clipTo <= clipFrom, non-positive speed, and inset overflow", () => {
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [{ kind: "app", asset: "a.mp4", text: "x", caption: "y", clipFrom: 5, clipTo: 5 }],
+      }),
+    ).toThrow();
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [{ kind: "app", asset: "a.mp4", text: "x", caption: "y", speed: 0 }],
+      }),
+    ).toThrow();
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [
+          {
+            kind: "app",
+            asset: "a.mp4",
+            text: "x",
+            caption: "y",
+            frame: { src: "f.png", inset: { x: 40, y: 0, w: 70, h: 100 } },
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+});

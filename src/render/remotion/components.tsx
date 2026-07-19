@@ -1,5 +1,7 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, OffthreadVideo, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, Freeze, Img, OffthreadVideo, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { appFreezeFrame, appTrimFrames } from "../appMedia";
+import type { AppFrame } from "../props";
 import type { Theme, BackgroundProps, WordTiming, BgKeyframe } from "../props";
 import { shotTransform, type Shot, type Transition } from "../motion";
 import { activeWordIndex, isHighlightWord, normWord } from "../captions";
@@ -337,7 +339,10 @@ export const WordCaption: React.FC<{
         display: "flex",
         flexWrap: "wrap",
         justifyContent: "center",
-        columnGap: center ? 22 : 18,
+        // The active word bumps scale(1.1) (a transform → no layout reserved) and every word carries a
+        // stroke outline; too tight a gap and the popped word's glyph + outline weld onto its neighbour
+        // ("NOTBETWEEN"). Keep the gap wide enough to swallow the ~5%/side pop plus both outlines.
+        columnGap: center ? 34 : 24,
         rowGap: center ? 8 : 4,
         maxWidth: "100%",
       }}
@@ -427,12 +432,38 @@ export const AppCutaway: React.FC<{
   shot?: Shot;
   transition?: Transition;
   holdExit?: boolean; // next beat is also media — hold at full opacity, the successor fades in on top
-}> = ({ asset, dur, t, shot = "static", transition = "fade", holdExit = false }) => {
+  clipFrom?: number;
+  clipTo?: number;
+  speed?: number;
+  pauseAt?: number;
+  frame?: AppFrame;
+  // Camera push/pan on the whole footage+chrome group (not the inner image). Beat-relative keyframe
+  // track — `at` is seconds from THIS beat's start (like captionKeyframes/kickerKeyframes), so the move
+  // rides the beat when VO timing shifts; no absolute video times to re-sync. The inner `shot` is
+  // disabled for framed beats, so this is the way to move the camera on inset device footage; captions,
+  // background and logo stay put (separate layers).
+  zoomKeyframes?: BgKeyframe[];
+}> = ({
+  asset,
+  dur,
+  t,
+  shot = "static",
+  transition = "fade",
+  holdExit = false,
+  clipFrom,
+  clipTo,
+  speed = 1,
+  pauseAt,
+  frame,
+  zoomKeyframes,
+}) => {
   const f = useCurrentFrame();
   const p = Math.min(1, f / dur);
 
+  // Framed chrome: never push-in / pan — camera moves fight the inset and look broken.
+  const effectiveShot: Shot = frame ? "static" : shot;
   // --- camera move (inner image) --- (pure math in motion.ts; includes scroll/scroll-up)
-  const { scale, tx, ty } = shotTransform(shot, p);
+  const { scale, tx, ty } = shotTransform(effectiveShot, p);
 
   // --- transition (outer layer), CapCut-style: spring "fly in" + settle, eased fade-out exit ---
   // ein = entrance spring over ~18 frames (damping 14 / stiffness 130 / mass 0.6 → fast settle with a
@@ -477,15 +508,85 @@ export const AppCutaway: React.FC<{
   }
   // "cut": no entrance/exit animation
 
+  // --- canvas zoom (footage+chrome group) --- beat-relative keyframe track (`at` = seconds from this
+  // beat's start, resolved off the local frame exactly like TweenOverlay does for captions/kickers), so
+  // it rides the beat when VO timing shifts. Scales/pans the whole phone unit about its centre; captions,
+  // kicker, logo and the ground are separate layers, so they stay anchored. Identity when absent.
+  const zoom = zoomKeyframes?.length
+    ? paramsAt({ x: 0, y: 0, scale: 1, opacity: 1 }, zoomKeyframes, f / fps)
+    : null;
+  const zoomStyle: React.CSSProperties = zoom
+    ? { transform: `translate(${zoom.x}%, ${zoom.y}%) scale(${zoom.scale})`, transformOrigin: "center", opacity: zoom.opacity as number }
+    : {};
+
   const isVideo = asset.toLowerCase().endsWith(".mp4") || asset.toLowerCase().endsWith(".mov");
+  // clipTo → freeze hold (not Remotion trimAfter — that Sequence ends in source frames and
+  // drops the video under slow-mo / long VO). See appTrimFrames.
+  const { trimBefore } = appTrimFrames(fps, clipFrom, clipTo);
+  const freezeAt = isVideo
+    ? appFreezeFrame({ localFrame: f, fps, pauseAt, clipFrom, clipTo, speed })
+    : null;
+
+  // Framed: size media to the inset box and clip overflow so shot transforms can't spill the hole.
+  // Slight brightness lift — floating device on night + FilmFinish vignette otherwise reads crushed.
+  const mediaStyle: React.CSSProperties = frame
+    ? {
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        transform: `translate(${tx}%, ${ty}%) scale(${scale})`,
+        filter: "brightness(1.08) contrast(1.04) saturate(1.05)",
+      }
+    : { width: 1080, height: "100%", objectFit: "cover", transform: `translate(${tx}%, ${ty}%) scale(${scale})` };
+
+  const media = isVideo ? (
+    <Freeze frame={freezeAt ?? 0} active={freezeAt != null}>
+      <OffthreadVideo
+        src={staticFile(asset)}
+        muted
+        volume={0}
+        trimBefore={trimBefore || undefined}
+        playbackRate={speed}
+        style={mediaStyle}
+      />
+    </Freeze>
+  ) : (
+    <Img src={staticFile(asset)} style={mediaStyle} />
+  );
+
+  const mediaLayer = frame ? (
+    <div
+      style={{
+        position: "absolute",
+        left: `${frame.inset.x}%`,
+        top: `${frame.inset.y}%`,
+        width: `${frame.inset.w}%`,
+        height: `${frame.inset.h}%`,
+        overflow: "hidden",
+        borderRadius: 48, // matches ~device screen radius at 1080-wide
+      }}
+    >
+      {media}
+    </div>
+  ) : (
+    media
+  );
+
+  // Framed: lifted radial ground so the device isn't a black rectangle in a black void.
+  const ground = frame
+    ? `radial-gradient(ellipse 82% 68% at 50% 42%, ${t.mint}55 0%, ${t.gold}28 36%, ${t.night} 70%)`
+    : t.night;
+
   return (
-    <AbsoluteFill style={{ backgroundColor: t.night, opacity, transform: `translate(${otx}%, ${oty}%) scale(${oscale})` }}>
-      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
-        {isVideo ? (
-          <OffthreadVideo src={staticFile(asset)} style={{ width: 1080, transform: `translate(${tx}%, ${ty}%) scale(${scale})` }} />
-        ) : (
-          <Img src={staticFile(asset)} style={{ width: 1080, transform: `translate(${tx}%, ${ty}%) scale(${scale})` }} />
-        )}
+    <AbsoluteFill style={{ background: ground, opacity, transform: `translate(${otx}%, ${oty}%) scale(${oscale})` }}>
+      <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", overflow: "hidden", ...zoomStyle }}>
+        {mediaLayer}
+        {frame ? (
+          <Img
+            src={staticFile(frame.src)}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill", pointerEvents: "none" }}
+          />
+        ) : null}
       </AbsoluteFill>
     </AbsoluteFill>
   );

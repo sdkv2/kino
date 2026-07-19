@@ -25,17 +25,28 @@ export interface WordTiming {
   end: number;
 }
 
+/** Chrome overlay for an app cut-in: footage sits in inset (% of composition), src is full-bleed on top. */
+export interface AppFrame {
+  src: string; // staticFile-relative
+  inset: { x: number; y: number; w: number; h: number }; // % of composition
+}
+
 export interface KinoSegment {
   kind: "avatar" | "app" | "motion";
   asset?: string;
   caption: string;
   startSec: number;
   endSec: number;
-  /** Faceless avatar beats with cta:true sit in the lower-third (not centered hero). */
+  /** Faceless avatar beats (including cta:true end cards) use centered hero captions. */
   cta?: boolean;
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
   transition?: string; // resolved in/out transition for app cut-ins
+  clipFrom?: number; // seconds into source asset
+  clipTo?: number;
+  speed?: number; // playbackRate; default 1
+  pauseAt?: number; // seconds from segment start → freeze for rest of beat
+  frame?: AppFrame;
   captionMode?: "phrase" | "words"; // "words" = spoken text revealed word-by-word, synced to VO
   words?: WordTiming[]; // absolute word timings (present for captionMode "words")
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
@@ -45,6 +56,7 @@ export interface KinoSegment {
   texts?: ResolvedText[]; // standalone stylised text overlays, absolute-timed
   captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)
   kickerKeyframes?: BgKeyframe[]; // tween the kicker (app segments)
+  zoomKeyframes?: BgKeyframe[]; // camera push/pan on the footage+chrome group (beat-relative: at = sec from beat start)
   motion?: MotionGraphicProps; // resolved graphic for kind === "motion"
   motionOverlay?: MotionGraphicProps; // resolved overlay graphic layered on this beat
 }
