@@ -119,6 +119,12 @@ Drop a PNG/WebP with a transparent “screen” hole into `assets/frames/`. Foot
 beats. Measure inset from the chrome asset (screen hole), not by eye on a wrong aspect. Preview
 with `kino still --segment N`.
 
+**Hole radius:** renderer clips framed footage at **48px** corner radius. Match (or exceed) that in
+the PNG hole — a tighter radius leaves dark gradient leaks at the four corners. For portrait device
+UI / portrait stock, prefer a **portrait inset** (~9:16); a wide hole cover-crops headers and slices
+glyph tops. Typed prompt *inside* chrome that must also zoom → `speech-synced-ui` (one motion graphic),
+not a zooming overlay on this PNG.
+
 **Camera move on framed footage → `zoomKeyframes`.** The inner `shot` is disabled inside a frame (it
 fights the inset), so a push-in comes from a `zoomKeyframes` track that scales/pans the footage **and**
 chrome together — the phone grows in frame while captions, kicker, logo and the ground stay anchored

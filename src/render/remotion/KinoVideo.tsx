@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
-import { captionBandBottom, isHeroCaption } from "../captionLayout";
+import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../captionLayout";
 import { musicVolumeAt } from "../audio";
 import type { KinoProps } from "../props";
 import type { Shot, Transition } from "../motion";
@@ -170,6 +170,9 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         : null}
 
       {segments.map((s, i) => {
+        // Captions are optional: a beat with no words and no caption text mounts nothing (an empty
+        // Caption span would still paint its backplate pill).
+        if (!hasCaptionContent(s)) return null;
         // words mode = synced spoken text; else faceless talking beats use hero text, app beats lower-third.
         // Faceless CTA end cards are hero-centered too (isHeroCaption) — not a lower-third subtitle.
         const wordMode = s.captionMode === "words" && s.words && s.words.length > 0;

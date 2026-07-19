@@ -24,10 +24,15 @@ Do **not** self-review the contact sheet alone.
 
 1. **Produce per-frame stills** (not only the montage):
    - Pre-build: `kino storyboard <spec>` → `out/<title>/stills/sb-*.png` (+ `storyboard.png`)
-   - Post-build: `kino frames <mp4> --count <N>` (or `--every 1`) → `…/frames/*.png`
+   - **Motion / Lottie / typed-UI beats:** also `kino still <spec> --around <t>` per animated beat
+     (sheet of N frames around the interesting moment). Storyboard midpoints miss typewriter grain,
+     Lottie phase, and camera push — attach those `*-around-*.png` sheets to the critique.
+   - Post-build: `kino frames <mp4> --count <N>` (or `--every 1`) → `…/frames/*.png`, **plus**
+     `kino frames <mp4> --around <t>` on each motion/Lottie/typed beat after real VO
 2. **Spin a read-only subagent** (`generalPurpose` — no file edits). Give it:
    - Absolute path to the spec
-   - Absolute paths to **every** still (prefer `sb-*.png` / frame PNGs over tiled `storyboard.png`)
+   - Absolute paths to **every** still (prefer `sb-*.png` / frame PNGs **and** `--around` sheets;
+     tiled `storyboard.png` alone is not enough)
    - The subagent brief below (paste verbatim, fill paths)
 3. **Fix the spec** from findings (layout/copy/position only). Do **not** patch `src/render/**`
    unless the user confirms a renderer bug.
@@ -38,7 +43,10 @@ Do **not** self-review the contact sheet alone.
 
 - Storyboard default = **2 stills per beat** (composition + **·full**). Critique **·full** hardest —
   overflow and `texts` collisions show there.
-- Post-build: `--count` ≈ 2× beat count, or `--every 1`, so mid-beat states aren't skipped.
+- Animated beats: critique the `--around` sheet as a sequence (does text type? does Lottie move?
+  does the camera push?). Flag 🟠 if motion was only checked at a single midpoint.
+- Post-build: `--count` ≈ 2× beat count, or `--every 1`, so mid-beat states aren't skipped —
+  still run `--around` on motion/typed beats.
 - Never rely on eyeballing only `storyboard.png` at thumbnail size — open each still at full size
   via the image Read tool.
 
@@ -58,6 +66,11 @@ Task:
 2. Hunt major layout defects. Priority order:
    🔴 Overlap / collision — caption vs texts overlay, kicker, logo, CTA, motion graphic, or subject
    🔴 Overflow — text clipped by frame edge, wrapping into unreadability, cut off at sides
+   🔴 Frozen motion — on an --around sheet, typed UI / Lottie / counter / camera looks identical
+      across tiles (animation not driving, wrong stretch, opaque Lottie covering the beat)
+   🟠 Under-animated motion — sheet changes only via a single opacity fade, or entrance finishes
+      early then holds dead; no stagger / idle life / speech punch / camera (see video-production
+      § Make motion graphics move — need ≥3 motion layers)
    🟠 Bad positioning — caption pinned to top edge; CTA left as a tiny lower-third subtitle on empty
       mesh (should be centered end card with `cta: true`); elements stacked in the same band;
       unsafe margin to TikTok/Reels UI (top/right/bottom)
@@ -78,13 +91,16 @@ If truly clean: `OK — no major layout issues.`
 |---|---|
 | 🔴 | Caption overlapping `texts` / kicker / logo / CTA / motion |
 | 🔴 | Text cut off at frame edge or crushed by wrap |
+| 🔴 | Frozen motion on `--around` sheet (typed UI / Lottie / counter / camera identical across tiles) |
+| 🟠 | Under-animated motion (opacity-only / early freeze / no stagger / no idle life / no VO punch) |
 | 🟠 | CTA as tiny lower-third on empty mesh (should be centered end card with `cta: true`) |
 | 🟠 | Caption glued to top edge; stacked bands; platform UI collision zone |
 | 🟠 | Unreadable over bright footage / no backplate |
+| 🟠 | Motion/Lottie beat only reviewed at a single midpoint (no `--around` sheet) |
 | 🟡 | Too many text layers; multi-word emphasis; position jitter across beats |
 
 ## After findings
 
 Parent maps each line → spec edit (`caption` length, `texts` position/size, `cta: true`,
 `captionKeyframes` only when dodging a bright subject, `captionStyle.background`, drop competing
-overlays). Then re-run storyboard + this skill.
+overlays). Motion/typed fixes → re-run `kino still --around` on that beat, then storyboard + this skill.

@@ -29,6 +29,7 @@ import type { KinoProps, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic } from "../render/motiongraphic.js";
+import { beatRelativeWords } from "../render/motionVars.js";
 import { log } from "../log.js";
 
 // Foreground (text) colour for a kicker pill, keyed by the kicker's brand background colour: a
@@ -267,6 +268,9 @@ export async function prepare(
     // hold visuals to the next beat's start so nothing blinks off during the inter-beat VO gap
     const endSec = i + 1 < spec.segments.length ? vo.timings[i + 1].startSec : vo.timings[i].endSec;
     const look = resolveCaptionLook(seg, spec, brand.captionStyle);
+    // Beat's spoken words, beat-relative — every motion graphic (beat or overlay) gets them so it can
+    // type text in sync with the VO. Independent of captionMode: the words exist even with captions off.
+    const motionWords = beatRelativeWords(vo.words[i], startSec);
     const base = {
       kind: seg.kind,
       asset: seg.kind === "app" ? seg.asset : undefined,
@@ -301,7 +305,7 @@ export async function prepare(
         kicker: seg.kicker
           ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
           : undefined,
-        motionOverlay: seg.motionOverlay ? resolveMotionGraphic(seg.motionOverlay, project) : undefined,
+        motionOverlay: seg.motionOverlay ? { ...resolveMotionGraphic(seg.motionOverlay, project), words: motionWords } : undefined,
       };
     }
     if (seg.kind === "avatar") {
@@ -309,13 +313,13 @@ export async function prepare(
         ...base,
         cta: seg.cta || undefined,
         shot: seg.shot as Shot | undefined,
-        motionOverlay: seg.motionOverlay ? resolveMotionGraphic(seg.motionOverlay, project) : undefined,
+        motionOverlay: seg.motionOverlay ? { ...resolveMotionGraphic(seg.motionOverlay, project), words: motionWords } : undefined,
       };
     }
     // motion segment: resolve the full-screen graphic; VO drives its duration like other beats.
     return {
       ...base,
-      motion: resolveMotionGraphic({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, project),
+      motion: { ...resolveMotionGraphic({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, project), words: motionWords },
     };
   });
 
@@ -334,6 +338,7 @@ export async function prepare(
       captionFontSize: brand.captionStyle.fontSize,
       captionStroke: brand.captionStyle.strokeWidth,
       captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
+      film: spec.film,
     },
     fps: 30,
     avatar: avatarRel,

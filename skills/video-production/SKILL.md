@@ -41,13 +41,22 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
 2. Author a spec (schema below). **Opener:** prefer a cold open on your strongest footage (see Trailer
    shape) before a mesh caption card. **Copy:** read `ad-voice` skill before writing segment `text`/`caption`
    — follow the brand's Tone / Voice dial, then the anti-slop rules. Keep captions short.
-3. **Iterate (fast, free):** `kino inspect specs/foo.json` to map the beats, then
-   `kino still specs/foo.json --segment N` (one frame, ~1–2s) or `kino storyboard specs/foo.json`
-   (each beat twice — composition + the **·full** reveal; check the ·full tile for captions that
-   overflow the frame or collide with a `texts` overlay). Edit the spec, re-preview. These default to mock (zero spend).
-   **Before shipping a storyboard as "done":** run the `adversarial-critique` skill (subagent frame QA).
-4. `kino build specs/foo.json` — real render → `out/<title>/`. (`kino frames <mp4> --at …` for post-build QA.)
-   Re-run `adversarial-critique` on post-build frames when layout could have shifted with real VO timing.
+   **Typed UI / caption-free montage / spoof chat window:** read `speech-synced-ui` — captions are optional;
+   stylised speech-locked typing lives in motion graphics (`env.words`), not the caption engine.
+3. **Iterate (fast, free):** `kino inspect specs/foo.json` to map the beats, then **look at pixels** —
+   never trust the JSON alone for motion/Lottie. Defaults are mock (zero spend).
+   - `kino still specs/foo.json --segment N` — layout / composition of one beat (~1–2s)
+   - `kino still specs/foo.json --around <sec>` — **required for any animated beat** (typewriter,
+     counters, Lottie, camera push): sheets N frames around a moment so progression is visible in
+     one image (default 5 frames / 1s window; tune `--span` / `--count`)
+   - `kino storyboard specs/foo.json` — every beat twice (composition + **·full**); check ·full for
+     caption overflow / `texts` collisions
+   Edit → still/`--around` again → repeat. **Before shipping a storyboard as "done":** run
+   `adversarial-critique` (subagent frame QA) — include `--around` sheets for motion/Lottie beats.
+4. `kino build specs/foo.json` — real render → `out/<title>/`. Post-build: `kino inspect --real` for
+   word times, then `kino frames <mp4> --around <sec>` (or `kino still … --around <sec> --real`) on
+   every motion/Lottie/typed beat — mock timing lies; retune triggers / KEY_MS / camera from the sheet.
+   Re-run `adversarial-critique` when layout could have shifted with real VO.
 
 **Projects** keep campaigns tidy: `projects/<name>/{specs,assets,out}` + a `project.json` that assigns a
 shared brand and default overrides. Run any command on a spec inside a project (kino infers it from the
@@ -71,11 +80,15 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   "provider": "none",            // none | heygen | hedra | replicate (else brand.defaultProvider)
   "background": "mesh",          // faceless bg: glow|image|mesh|aurora|particles|grid|custom (else brand.background)
   "segments": [
-    { "kind": "avatar", "text": "spoken (+ lip-synced if an avatar provider is set)", "caption": "on-screen text", "cta": true },
+    { "kind": "avatar", "text": "spoken (+ lip-synced if an avatar provider is set)", "caption": "on-screen text (optional — omit on any kind for a caption-free beat)", "cta": true },
     { "kind": "app", "asset": "screens/x.png", "text": "spoken (avatar hidden)", "caption": "...",
       "captionMode": "words", "emphasis": ["claim"],  // optional: spoken text, word-synced + highlighted
       "kicker": { "text": "86% match", "color": "mint" } } ] }
 ```
+
+**Caption-free beats:** omit `caption` → no caption node. Under a **words-mode brand**, also set
+`"captionMode": "phrase"` on that beat or synced spoken words still paint. Stylised typed prompts
+(terminal/chat) → `speech-synced-ui`, not a caption with fancy `captionStyle`.
 
 **Trailer shape — adapt, don't stamp.** A ~20–30s / 7–9-beat trailer runs OPENER → a MIDDLE that shows the product → PAYOFF + CTA.
 
@@ -141,7 +154,8 @@ one poster, not a word drip. Wire `brand.logo` and put it mid/top so the frame i
 Stronger: end on an `app` still of the product, then a short hero CTA beat — never a lone lower-third
 pill on blank mesh.
 
-**Motion-beat recipe** (counters, timers, big numbers):
+**Motion-beat recipe** (counters, timers, big numbers): layout mid-frame, then **animate** — see
+[Make motion graphics move](#make-motion-graphics-move) (≥3 layers: entrance + life + speech/camera).
 
 ```css
 /* assets/motion/*.html — short-form safe */
@@ -153,8 +167,9 @@ pill on blank mesh.
 /* Keep the stack ≤ ~50vw tall so it doesn't collide with the caption band (~CAPTION_BOTTOM). */
 ```
 
-Preview motion with `kino still --segment <n>` before the real build. If the graphic kisses the
-caption or sits under the top UI, nudge `top` — don't reintroduce per-caption `y` offsets to compensate.
+Preview with `kino still --segment <n>` (layout) **and** `kino still --around <t>` (motion richness)
+before the real build. If the graphic kisses the caption or sits under the top UI, nudge `top` —
+don't reintroduce per-caption `y` offsets to compensate.
 
 - `avatar` segments are the on-camera/hook/payoff beats; `app` segments show the screenshot/recording while the VO continues. (Faceless still uses these kinds — `avatar` beats become branded caption cards.)
 - **Emphasis is a spice, not a sauce** — `emphasis` adds a glow to the marked word while it's spoken.
@@ -204,7 +219,9 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
   the beat's start, `0` = beat start — it rides the beat, so re-timing the video never desyncs it), params
   `scale`/`x`/`y`/`opacity`; one keyframe = static hold, two = animated push. A `frame` disables the inner
   `shot`, so `shot:"static"` + `zoomKeyframes` is the way to move the camera on device footage. See
-  `importing-footage`.
+  `importing-footage`. **Motion graphics** do **not** use `zoomKeyframes` — zoom/pan there is a CSS
+  `transform` on a wrapper driven by `--progress` / a keyframed param / typed fraction (`speech-synced-ui`).
+  A zooming `motionOverlay` on a static PNG frame desyncs text from chrome; put chrome+text in one motion beat.
 - **Stylised captions**: `captionStyle` (`stroke`/`highlight`/`gradient`/`minimal`, default `stroke`) and
   `captionAnimation` (`pop`/`rise`/`typewriter`/`wave`/`blur-in`/`none`, default = the surface's native
   entrance) set top-level or per-segment (segment overrides spec overrides brand). **`captionReveal`**
@@ -224,7 +241,10 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
   see [Short-form layout defaults](#short-form-layout-defaults-tiktok--reels--shorts). A
   `translateY(20–28vw)` from the top lands under TikTok/Reels chrome; don't ship that. Animate by
   reading kino-set CSS variables — `--progress` (0→1 over the beat), `--t`, `--frame`, `--pulse`,
-  your `params` (e.g. `--pct`, tweened by `keyframes`), and the brand palette (`--kino-mint` etc.).
+  your `params` (e.g. `--pct`, tweened by `keyframes`), the brand palette (`--kino-mint` etc.),
+  and **`--kino-words-shown` / `--kino-word-count`** (VO-locked typed UI). Tier-2 `.js` also gets
+  **`env.words`** — beat-relative `{ word, start, end }[]` from the same TTS timings the caption
+  engine uses. Use that for terminal/chat typing the caption presets can't style (`speech-synced-ui`).
   Two font vars are available too: `--kino-font` (the caption font) and `--kino-label-font`
   (`brand.labelFont`, falls back to `--kino-font` if the brand sets none) — pair a display face on
   the hero number with a mono/label face on a supporting chip instead of reusing one font
@@ -238,8 +258,9 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
   determinism-linted) instead of a `.html` file. **Stagger reveals** so things don't all land at once — auto-stagger a
   list with `sibling-index()` (`--d: calc((sibling-index() - 1) * .08)`), give each element its own
   slice of `--progress`, or use a param-per-element with offset keyframe `at` times for spring/ease
-  control. Run `kino motion` for the full contract, the stagger recipes, and a copyable example;
-  preview with `kino still`/`storyboard` like any other beat.
+  control. Run `kino motion` for the full contract, the stagger recipes, and a copyable example.
+  **Preview is not optional** — see [Make motion graphics move](#make-motion-graphics-move) and
+  [Motion / Lottie visual loop](#motion--lottie-visual-loop-use-still--around) below.
   **Tier-3 Lottie (`.json`):** point `source` at a designer-authored Bodymovin/LottieFiles `.json` file
   to embed organic illustrated motion or AE-produced animations that an agent can't hand-author. kino
   plays it deterministically via `@remotion/lottie`. Key rule: for a `motionOverlay`, the asset **must
@@ -256,6 +277,98 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
   docs/motion-graphics.md — notably: strip the `fh`/`fs`/`fb` block creator exports stamp on text
   animators (renders all text red in lottie-web), delete the near-universal opaque `Background` layer,
   and don't rewrite template text (glyphs are baked; only exported characters render).
+  **After any Lottie adapt/rebrand:** `kino still --segment N` (layout + transparency) **and**
+  `kino still --around <mid>` (stretch/loop/word-fire actually moves) before calling it done.
+
+## Make motion graphics move
+
+**Agents under-animate.** Default failure mode: a static card that only fades `opacity` with
+`--progress`, then holds dead for half the beat. A motion beat should feel like **edited film**, not a
+poster with a dissolve. Prefer **too much intentional motion** (then dial back) over a freeze.
+
+### Minimum motion budget (every `kind:"motion"` / rich overlay)
+
+Ship **at least 3 simultaneous layers** of motion on the beat (pick from the menu). Opacity-only
+entrance counts as **one** — not enough by itself.
+
+| Layer | Examples (use the toolkit) |
+|---|---|
+| **Entrance** | Staggered `kino-rise` / `kino-pop` / `kino-blur-rise`; scrubbed `@keyframes`; param tween with `overshoot`/`spring` |
+| **Continuous life** | Slow drift/rotate/breathe off `--t` (`rotate(calc(var(--t)*12deg))`, subtle scale pulse); looping Lottie ornament; blinking caret |
+| **Speech lock** | `env.words` / `--kino-words-shown` typing; Lottie `triggers` / `kino-pulse` on word times; counter `params` keyed to VO |
+| **Camera / settle** | CSS `.cam` push-in or pan across the beat; end settle (scale back / opacity hold) so the last third isn't frozen |
+
+### Design rules
+
+1. **Stagger is mandatory** when ≥2 elements share the frame — `sibling-index()` + `--kino-delay`, or
+   offset `--progress` slices. Everything landing on the same frame = slideshow.
+2. **Something must keep moving after the entrance** — idle life (`--t`), looping Lottie, caret,
+   shimmer, or a slow camera. A beat that finishes its reveal at `--progress:0.3` and sits still
+   until the end is unfinished.
+3. **Drive numbers/bars with `params` + `keyframes`**, not a static label. Prefer `ease: "overshoot"`
+   or `"spring"` on the money moment; linear only for clocks/meters that should feel mechanical.
+4. **Punch the VO** — at least one visual accent on a spoken word (`triggers` → `kino-pulse`, word-fire
+   Lottie, or a param jump). Silent motion + talking VO = disconnected.
+5. **Prefer Lottie for organic loops/bursts** (dots, confetti, sparkle) over reinventing them in CSS —
+   but don't bake headline copy into Lottie glyphs.
+6. **Brand calm ≠ motionless.** Quiet brands still get soft continuous life + one clear entrance;
+   loud brands get harder pops and word-fire. Match Tone/Voice amplitude, don't delete motion.
+
+### Anti-patterns (reject on `--around` sheet)
+
+- Only `opacity: var(--progress)` on one block
+- All chips/words appear on the same tile of an `--around` sheet
+- Counter/label never changes across the sheet
+- End card wordmark static for the whole beat (no scale/fade/pan)
+- Lottie stretched once with no loop and no triggers when the beat is >1.5s of “thinking”/ornament
+
+### Quick stack (copyable instincts)
+
+```html
+<!-- entrance + stagger -->
+<div class="chip kino-pop" style="--kino-delay:calc((sibling-index()-1)*.08)">…</div>
+<!-- continuous life -->
+.orb { transform: rotate(calc(var(--t) * 25deg)) scale(calc(1 + 0.03*sin(var(--t)))); }
+<!-- camera -->
+.cam { transform: scale(calc(1 + 0.06*var(--progress))); transform-origin:50% 45%; }
+```
+
+```json
+"params": { "pct": 0 },
+"keyframes": [{ "at": 0.15, "params": { "pct": 86 }, "ease": "overshoot" }],
+"triggers": [{ "at": 0.4, "action": "pulse" }]
+```
+
+Verify richness with `--around` — tiles should **look different** in a way that reads as craft, not
+noise. See `kino motion` + `docs/motion-graphics.md` for the full contract.
+
+## Motion / Lottie visual loop (use still + --around)
+
+**Agents under-preview motion.** Treat every HTML/CSS/JS graphic and every Lottie as unfinished until
+you have **Read** pixel stills at multiple stages — not just `inspect` JSON or one midpoint frame.
+
+| Stage | Command | What you're checking |
+|---|---|---|
+| Scaffold / first paint | `kino still <spec> --segment N` | Layout, palette, caption clearance, opaque Lottie bg, chrome geometry |
+| While tuning animation | `kino still <spec> --around <t>` (repeat often) | Progression **and** richness: typewriter, counter, camera, Lottie phase, stagger, idle life |
+| Dense / short beats | `--around <t> --span 0.6 --count 7` | Sub-second motion that a 1s/5-frame sheet smears |
+| Whole-cut layout | `kino storyboard <spec>` | Beat-to-beat jumps; ·full overflow/collisions |
+| After real VO | `kino still … --around <t> --real` **or** `kino frames <mp4> --around <t>` | Speech lock (mock word times ≠ real); retune `triggers` / KEY_MS / params |
+| Critique | `adversarial-critique` on stills **plus** `--around` sheets for motion/Lottie beats | Overlap + frozen + **under-animated** |
+
+**Hard rules:**
+
+1. **After every non-trivial edit** to a motion file, Lottie JSON, `keyframes`/`triggers`/`params`, or
+   typed-UI proc → run `--around` on that beat (pick `t` near the interesting moment from
+   `kino inspect`) and **Read the sheet image** before the next edit.
+2. **Do not ship** a motion/Lottie beat that you have only seen as a single `still --segment` or
+   storyboard midpoint — that frame can look fine while the animation is wrong **or missing**.
+3. Prefer `--around` over hand-listing `--at a,b,c` unless you need uneven sample times; use
+   `--montage` when you already have an `--at` list and want one sheet.
+4. Typed UI / speech-locked surfaces → also follow `speech-synced-ui` (same still loop, stricter).
+5. If the `--around` sheet barely changes → add layers from [Make motion graphics move](#make-motion-graphics-move),
+   don't declare victory.
+
 - **Check copy for cross-beat redundancy before the first preview**: a `motion` beat's on-screen
   label/dial text and the VO caption for that beat (or the one next to it) can end up saying the same
   thing twice (a timer graphic labelled "START TO FINISH" under a caption reading "start to finish,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inspectPlan, parseTimes, pickFrames, pickIntervalTimes } from "../src/render/preview.js";
+import { inspectPlan, parseTimes, pickFrames, pickIntervalTimes, timesAround } from "../src/render/preview.js";
 import type { KinoProps } from "../src/render/props.js";
 
 const props = {
@@ -77,5 +77,20 @@ describe("pickIntervalTimes", () => {
   });
   it("returns [] when neither is set", () => {
     expect(pickIntervalTimes(10, {})).toEqual([]);
+  });
+});
+
+describe("timesAround", () => {
+  it("defaults to 5 samples across a 1s window centered on the point", () => {
+    expect(timesAround(2)).toEqual([1.5, 1.75, 2, 2.25, 2.5]);
+  });
+  it("count 1 returns just the center", () => {
+    expect(timesAround(3.2, { count: 1 })).toEqual([3.2]);
+  });
+  it("respects span and count", () => {
+    expect(timesAround(5, { count: 3, span: 2 })).toEqual([4, 5, 6]);
+  });
+  it("clamps to [min, max]", () => {
+    expect(timesAround(0.2, { count: 3, span: 1, min: 0, max: 10 })).toEqual([0, 0.2, 0.7]);
   });
 });
