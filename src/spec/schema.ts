@@ -41,6 +41,18 @@ const MotionGraphicRef = z.object(motionFields);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
 const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
 
+const SfxEvent = z.object({
+  src: z.string().min(1), // bare library id ("whoosh") or project asset path ("sfx/hit.mp3")
+  at: z.number().min(0), // seconds on the main timeline
+  volume: z.number().min(0).max(1).default(1),
+});
+const Music = z.object({
+  src: z.string().min(1), // same resolution as sfx.src
+  volume: z.number().min(0).max(1).default(0.18), // bed level
+  duck: z.number().min(0).max(1).default(0.06), // level while VO is speaking
+  fadeOutSec: z.number().min(0).default(2),
+});
+
 const Segment = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("avatar"),
@@ -106,6 +118,8 @@ export const SpecSchema = z.object({
   logoKeyframes: z.array(BgKeyframe).optional(), // tween logo x/y/scale/opacity over time
   captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)
   captionAnimation: CaptionAnimation.optional(), // caption entrance preset (overrides brand.captionStyle.animation)
+  sfx: z.array(SfxEvent).optional(), // free-placed sound effects (place with `kino audio-markers`)
+  music: Music.optional(), // music bed under the VO, auto-ducked while segments speak
   segments: z.array(Segment).min(1),
 });
 
