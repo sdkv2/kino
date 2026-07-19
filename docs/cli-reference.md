@@ -10,6 +10,7 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 - Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor)
 - Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion)
 - Reference-video analysis (research only) — [`transcribe`](#transcribe) · [`scan`](#scan) · [`frames`](#frames)
+- Audio analysis — [`audio-markers`](#audio-markers)
 
 ---
 
@@ -275,4 +276,28 @@ kino frames <video> [options]
 ```bash
 kino frames reference.mp4 --count 12 --montage
 kino frames reference.mp4 --at 0,3.5,10
+```
+
+---
+
+## Audio analysis
+
+### `audio-markers`
+Analyze any audio or video file and write three artifacts: `<name>.markers.json` —
+`{ durationSec, rms[], onsets[], peaks[], silences[] }` timestamps to author `sfx[].at` and
+cuts against — plus `<name>.wave.png` (waveform) and `<name>.spectrum.png` (spectrogram) for
+an at-a-glance read of the track. Works on the VO track in `.kino-cache`, an imported music
+bed, or an external reference video.
+
+```
+kino audio-markers <file> [options]
+```
+
+| Option | Value | Meaning |
+|---|---|---|
+| `--out <dir>` | dir | Output directory (default: next to the input file). |
+
+```bash
+kino audio-markers .kino-cache/lie-test/vo-0.mp3
+kino audio-markers assets/music/bed.mp3 --out markers/
 ```

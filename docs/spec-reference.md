@@ -10,6 +10,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Text overlays](#text-overlays)
 - [Keyframes & triggers](#keyframes--triggers)
 - [Backgrounds](#backgrounds), [logo & overlays](#logo--overlay-tweening)
+- [Sound effects & music](#sound-effects--music)
 - [brand.md](#brandmd) · [project.json](#projectjson)
 - [Examples](#examples)
 
@@ -34,6 +35,8 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `logoKeyframes` | [BgKeyframe](#keyframes--triggers)[] | — | Tween logo `x/y/scale/opacity`. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset; overrides `brand.captionStyle.style`. Default `stroke`. See [Captions](#captions). |
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Unset = the surface's native entrance (`pop`; `rise` for faceless hero text). See [Captions](#captions). |
+| `sfx` | [SfxEvent](#sound-effects--music)[] | — | Free-placed sound effects. See [Sound effects & music](#sound-effects--music). |
+| `music` | [Music](#sound-effects--music) | — | Music bed under the VO, auto-ducked while segments speak. See [Sound effects & music](#sound-effects--music). |
 
 ## Segments
 
@@ -176,6 +179,29 @@ BgTrigger  = { at: number, action: string }   // e.g. { at: 1.2, action: "pulse"
 ## Logo & overlay tweening
 
 `logoSize`/`logoPosition` place the brand mark on faceless talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions and kickers tween the same way via `captionKeyframes`/`kickerKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
+
+## Sound effects & music
+
+Free-placed SFX events and an auto-ducked music bed. Place timestamps against real audio
+structure: run `kino audio-markers <file>` on the VO track or the music file to get JSON
+markers (onsets, peaks, silences) plus waveform/spectrogram PNGs.
+
+```json
+"sfx": [
+  { "src": "whoosh", "at": 2.4 },
+  { "src": "sfx/impact.mp3", "at": 7.9, "volume": 0.7 }
+],
+"music": { "src": "music/bed.mp3", "volume": 0.18, "duck": 0.06, "fadeOutSec": 2 }
+```
+
+- `src` (both `sfx[]` and `music`) — a bare id (`"whoosh"`, no slash/extension) resolves from
+  the shared library (`assets-lib/sfx/<id>.mp3|.wav`); a path resolves from the project's
+  `assets/`.
+- `sfx[].at` — seconds on the main timeline. `volume` 0–1 (default `1`).
+- `music` plays under the VO for the whole video: `volume` is the bed level (default `0.18`),
+  `duck` the level while a segment is speaking (default `0.06`, with 0.3s linear ramps in/out
+  of each VO span), `fadeOutSec` the linear tail fade to silence at the end of the video
+  (default `2`).
 
 ## brand.md
 
