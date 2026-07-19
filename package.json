@@ -18,7 +18,8 @@
     "dist",
     "bin",
     "src/render/remotion",
-    "skills"
+    "skills",
+    "assets-lib"
   ],
   "engines": {
     "node": ">=18"
