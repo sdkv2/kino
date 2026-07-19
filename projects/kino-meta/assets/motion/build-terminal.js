@@ -5,14 +5,17 @@ var n = Math.min(CMD.length, Math.floor(env.t / KEY));
 var typed = CMD.slice(0, n);
 var cmdDone = n >= CMD.length;
 var caretOn = !cmdDone || Math.floor(env.frame / 15) % 2 === 0;
-// pipeline steps light up on a schedule after the command finishes typing (~1.1s)
+// pipeline steps light up as each VO word is spoken (env.words = beat-relative {word,start,end}[])
 var steps = ["voiceover", "motion", "render", "mp4"];
-var t0 = 1.1, per = 0.45;
+var w = env.words || [], n = w.length;
+// NB: named `sched` (not `st`) — the loop below reuses `st` as a per-iteration var, and since JS
+// `var` is function-scoped, reusing this name here would clobber the schedule array after k=0.
+var sched = (n >= 3) ? [w[n-3].start, w[n-2].start, w[n-1].start, w[n-1].start + 0.5]
+                     : [1.1, 1.55, 2.0, 2.45];   // fallback if no VO words
 function state(k){
-  var s = t0 + k * per;                 // when this step activates
-  if (env.t < s) return 0;              // pending
-  if (env.t < s + per) return 1;        // active (glowing)
-  return 2;                             // done (checked)
+  if (env.t < sched[k]) return 0;                    // pending
+  var next = (k < 3) ? sched[k+1] : sched[3] + 0.35; // mp4 has no next word
+  return env.t < next ? 1 : 2;                        // active : done
 }
 var rows = "";
 for (var k = 0; k < steps.length; k++){

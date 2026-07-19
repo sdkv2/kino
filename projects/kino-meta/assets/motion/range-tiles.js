@@ -5,12 +5,15 @@ var tiles = [
   { label: "footage", body: '<div class="phone"></div>' }
 ];
 var html = "";
+var w = env.words || [];
 for (var i = 0; i < tiles.length; i++){
-  var start = 0.1 + i * 0.18;                       // stagger
-  var a = Math.max(0, Math.min(1, (env.progress - start) * 6));
-  var y = (1 - a) * 6;                              // rise vw
+  var start = w[i] ? w[i].start : (0.2 + i * 0.7);          // gate on Captions/motion/footage
+  var a = Math.max(0, Math.min(1, (env.t - start) / 0.35)); // rise over 0.35s
+  var y = (1 - a) * 6;
+  var breathe = 1 + 0.015 * Math.sin(env.t * 2.5 + i * 1.3);// subtle idle breathe
+  var sc = (0.96 + 0.04 * a) * breathe;
   html += '<div class="tile" style="opacity:' + a.toFixed(3)
-    + ';transform:translateY(' + y.toFixed(2) + 'vw) scale(' + (0.96 + 0.04*a).toFixed(3) + ')">'
+    + ';transform:translateY(' + y.toFixed(2) + 'vw) scale(' + sc.toFixed(3) + ')">'
     + '<div class="inner">' + tiles[i].body + '</div>'
     + '<div class="cap">' + tiles[i].label + '</div></div>';
 }
