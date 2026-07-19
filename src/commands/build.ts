@@ -5,7 +5,7 @@
 // variant-tagging on top.
 import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, isAbsolute } from "node:path";
+import { dirname, extname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
@@ -23,6 +23,7 @@ import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
 import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
 import { stitchAudio } from "../media/ffmpeg.js";
+import { resolveAudioSource } from "../media/sfx.js";
 import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
@@ -150,6 +151,29 @@ export async function prepare(
   }
   if (avatarRel && avatarPath) copyFileSync(avatarPath, join(publicDir, avatarRel));
   copyFileSync(vo.trackPath, join(publicDir, "vo.mp3"));
+  // SFX + music bed: resolve (library id or project asset), stage into _public, warn on
+  // placements the mix can't honour. duckSpans = per-segment VO spans (see MusicProps).
+  const sfx = (spec.sfx ?? []).map((s, i) => {
+    const abs = resolveAudioSource(s.src, project);
+    const rel = `sfx-${i}${extname(abs)}`;
+    copyFileSync(abs, join(publicDir, rel));
+    if (s.at > vo.totalSec) log.warn(`sfx[${i}] at=${s.at}s is past the end of the VO (${vo.totalSec}s) — it will never play`);
+    return { src: rel, at: s.at, volume: s.volume };
+  });
+  let music: KinoProps["music"] = null;
+  if (spec.music) {
+    const abs = resolveAudioSource(spec.music.src, project);
+    const rel = `music${extname(abs)}`;
+    copyFileSync(abs, join(publicDir, rel));
+    if (spec.music.duck > spec.music.volume) log.warn(`music.duck (${spec.music.duck}) > music.volume (${spec.music.volume}) — ducking would boost the bed; check the values`);
+    music = {
+      src: rel,
+      volume: spec.music.volume,
+      duck: spec.music.duck,
+      fadeOutSec: spec.music.fadeOutSec,
+      duckSpans: vo.timings.map((t) => ({ from: t.startSec, to: t.endSec })),
+    };
+  }
   const logoAbs = resolveBrandFile(brand.logo, project);
   if (logoAbs) copyFileSync(logoAbs, join(publicDir, "logo.png"));
   const logoPos = resolveLogoPosition(spec.logoPosition ?? brand.logoPosition);
@@ -287,6 +311,8 @@ export async function prepare(
     logo,
     background,
     disclosure: avatarRel ? brand.disclosure : (brand.facelessDisclosure ?? brand.disclosure),
+    sfx,
+    music,
     segments: renderSegments,
   };
 
