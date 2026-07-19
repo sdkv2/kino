@@ -91,7 +91,21 @@ const particles: DrawFn = (ctx, e) => {
   const cols = [col(e, "colorA"), col(e, "colorB"), col(e, "colorC")];
   const boost = 1 + 1.2 * e.pulse;
   ctx.globalCompositeOperation = "lighter";
-  for (let i = 0; i < 46; i++) {
+  // Nebula wash: three big, slow, drifting brand-colour clouds UNDER the particle field so a dark
+  // frame reads as coloured deep-space with depth, not a flat black void. Pure fn of frame, so it
+  // stays frame-deterministic. Kept low-alpha (additive) so it never blows out or fights captions.
+  for (let i = 0; i < 3; i++) {
+    const c = cols[i % cols.length];
+    const cx = width * (0.28 + 0.44 * (0.5 + 0.5 * Math.sin(frame / (170 + i * 46) + i * 2.2)));
+    const cy = height * (0.26 + 0.5 * (0.5 + 0.5 * Math.cos(frame / (200 + i * 42) + i * 1.5)));
+    const r = Math.max(width, height) * (0.52 + 0.1 * Math.sin(frame / 120 + i));
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, withAlpha(c, (0.1 + 0.07 * intensity) * boost));
+    g.addColorStop(1, withAlpha(c, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, width, height);
+  }
+  for (let i = 0; i < 68; i++) {
     const c = cols[i % cols.length];
     const sx = ((i * 73) % 100) / 100;
     const sy = ((i * 137) % 100) / 100;
@@ -99,8 +113,8 @@ const particles: DrawFn = (ctx, e) => {
     const speed = (0.15 + depth * 0.5) * (0.5 + intensity);
     const x = width * sx + Math.sin(frame / 90 + i) * width * 0.015 * depth;
     const y = height * (1 - ((sy + (frame / 300) * speed) % 1));
-    const r = (4 + depth * 14) * (1 + 0.3 * e.pulse);
-    const tw = (0.18 + 0.22 * (0.5 + 0.5 * Math.sin(frame / 22 + i * 1.7))) * boost;
+    const r = (5 + depth * 15) * (1 + 0.3 * e.pulse);
+    const tw = (0.22 + 0.26 * (0.5 + 0.5 * Math.sin(frame / 22 + i * 1.7))) * boost;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, withAlpha(c, tw));
     g.addColorStop(1, withAlpha(c, 0));

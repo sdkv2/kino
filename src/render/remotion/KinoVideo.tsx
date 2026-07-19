@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
-import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
+import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
 import { captionBandBottom } from "../captionLayout";
 import type { KinoProps } from "../props";
@@ -17,7 +17,7 @@ import type { Shot, Transition } from "../motion";
 // One placement of the (trimmed) avatar clip, with a gentle push-in so the shot breathes.
 const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number }> = ({ src, trimFrames, durFrames }) => {
   const f = useCurrentFrame();
-  const scale = interpolate(f, [0, durFrames], [1.0, 1.06], { extrapolateRight: "clamp" });
+  const scale = interpolate(f, [0, durFrames], [1.0, 1.08], { extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <OffthreadVideo
@@ -85,6 +85,12 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         );
       })}
 
+      {/* Cinematic finishing pass (vignette + grain) — grades the photographic layers above
+          (backdrop, avatar, app cut-ins) into one film. Sits BELOW the motion-graphic beats/overlays
+          (which own their finish via the opt-in .kino-grain/.kino-vignette utilities) and below the
+          text/logo/caption layers, so designed graphics and type stay crisp. */}
+      <FilmFinish t={theme} />
+
       {/* Full-screen motion-graphic beats. */}
       {segments
         .filter((s) => s.kind === "motion" && s.motion)
@@ -139,7 +145,9 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
             <TweenOverlay keyframes={s.captionKeyframes ?? []}>
               {wordMode ? (
-                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} styleName={s.captionStyle} anim={s.captionAnimation} />
+                // Faceless talking beats (hero) centre their word caption so the text fills the frame;
+                // app cut-ins and on-camera avatar beats keep the lower-third band.
+                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} styleName={s.captionStyle} anim={s.captionAnimation} placement={hero ? "center" : "lower"} />
               ) : hero ? (
                 <HeroCaption text={s.caption} t={theme} styleName={s.captionStyle} anim={s.captionAnimation} />
               ) : (
