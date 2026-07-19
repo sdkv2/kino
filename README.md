@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo/kino-logo.png" alt="kino — /ˈkiːnoʊ/ n. German: cinema, from Greek kīnēma: motion" width="560">
+  <img src="logo/kino-logo-web.png" alt="kino — /ˈkiːnoʊ/ n. German: cinema, from Greek kīnēma: motion" width="560">
 </p>
 
 <p align="center"><em>Agent-driven short-form video production</em></p>

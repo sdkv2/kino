@@ -1,6 +1,13 @@
 {
-  "name": "kino",
-  "version": "1.17.1",
+  "name": "@sdkv2/kino",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "1.18.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sdkv2/kino.git"
+  },
   "description": "Agent-driven short-form video production CLI",
   "license": "MIT",
   "type": "module",
