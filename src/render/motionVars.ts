@@ -27,6 +27,9 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     "--kino-gold": t.gold,
     "--gold": t.gold, // legacy alias used by examples/motion-flex/*.html
     "--kino-font": t.font,
+    // Second typeface for label/mono-style text inside a motion beat, distinct from the caption
+    // font — falls back to --kino-font so it's never invalid when the brand sets no labelFont.
+    "--kino-label-font": t.labelFont ?? t.font,
     // The caption band bottom (px from frame bottom; 0 when this beat has no caption) so authors can
     // position their own text clear of kino's auto caption, e.g. bottom: calc(var(--kino-caption-bottom) + 24px).
     "--kino-caption-bottom": `${dyn.captionBottom ?? 0}px`,
