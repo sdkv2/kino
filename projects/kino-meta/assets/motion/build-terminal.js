@@ -6,7 +6,7 @@ var typed = CMD.slice(0, n);
 var cmdDone = n >= CMD.length;
 var caretOn = !cmdDone || Math.floor(env.frame / 15) % 2 === 0;
 // pipeline steps light up on a schedule after the command finishes typing (~1.1s)
-var steps = ["voiceover", "compose", "render", "mp4"];
+var steps = ["voiceover", "motion", "render", "mp4"];
 var t0 = 1.1, per = 0.45;
 function state(k){
   var s = t0 + k * per;                 // when this step activates

@@ -41,7 +41,7 @@ function WIN(fieldHtml, caretOn, camStyle, ctaHtml) {
 var fade = Math.min(1, env.progress / 0.6);                          // lockup in
 var clear = Math.min(1, Math.max(0, (env.progress - 0.7) / 0.25));   // lockup out + field empties by 0.95
 var showFull = clear < 1;
-var field = showFull ? "Kino, make me an advert" : "";
+var field = showFull ? "Kino, make me an advert." : "";
 // caret solid for the final stretch (loop seam — matches beat-0's t=0 solid caret);
 // no env.duration field exists, so gate off env.progress instead of a frame count
 var caretOn = env.progress > 0.95 || Math.floor(env.frame / 15) % 2 === 0;
