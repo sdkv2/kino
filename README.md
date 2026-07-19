@@ -2,7 +2,7 @@
   <img src="logo/kino-logo.png" alt="kino — /ˈkiːnoʊ/ n. German: cinema, from Greek kīnēma: motion" width="560">
 </p>
 
-<p align="center"><em>Agent-driven short-form video production — spec in, video out.</em></p>
+<p align="center"><em>Agent-driven short-form video production</em></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
