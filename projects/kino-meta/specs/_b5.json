@@ -1,0 +1,3 @@
+{ "brand": "kino", "title": "b5", "format": ["9:16"], "provider": "none", "film": 0,
+  "segments": [ { "kind": "motion", "source": "motion/close-window.js",
+    "text": "Kino. Tell your agent to make it.", "transition": "cut" } ] }
