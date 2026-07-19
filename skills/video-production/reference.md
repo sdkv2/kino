@@ -128,7 +128,12 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   and per-segment `emphasis: ["word", …]` (glow + shake on those words while active).
 - **Highlight colour:** the currently-spoken (active) word and the **brand name** (`brand.name`,
   matched case/punctuation-insensitively) render in brand green (`colors.mint`) — one highlight state,
-  no other colours. So the brand name pops green wherever it's spoken, in any project.
+  no other colours. So the brand name pops green wherever it's spoken, in any project. **Choose
+  `colors.mint` for contrast against the background:** a bright accent over a dark `night`, a deep one
+  over a light ground. A dark saturated `mint` (deep red, navy) on a near-black background renders
+  dimmer than the white body text — the highlight, the one thing meant to pop, recedes. If the brand's
+  signature colour is dark, keep `mint` bright and express the brand colour through the background /
+  `texts` overlays instead.
 - **Tween captions/kickers** over time: per-segment `captionKeyframes` (and `kickerKeyframes` on app
   segments) `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame), and `at`
   is **relative to the segment start** (`at: 0` = the caption's entrance). Logo + background keyframes are
