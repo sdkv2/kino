@@ -44,11 +44,12 @@ export async function ttsWithTimestamps(
   text: string,
   out: string,
   settings = DEFAULT_SETTINGS,
+  model = "eleven_multilingual_v2",
 ): Promise<WordTiming[]> {
   const r = await fetch(`${BASE}/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, {
     method: "POST",
     headers: { "xi-api-key": apiKey, "content-type": "application/json" },
-    body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: settings }),
+    body: JSON.stringify({ text, model_id: model, voice_settings: settings }),
   });
   if (!r.ok) throw new Error(`ElevenLabs TTS(timestamps) ${r.status}: ${await r.text()}`);
   const d = (await r.json()) as {
