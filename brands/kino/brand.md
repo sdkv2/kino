@@ -11,7 +11,7 @@ colors:
   green: "#0c8d64"
   white: "#ffffff"
   gold: "#d99a20"
-logo: projects/kino-meta/assets/gen/04-cta-endcard.png
+logo: logo/kino-logo-web.png
 ---
 
 # kino
