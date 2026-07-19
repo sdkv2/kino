@@ -1,0 +1,46 @@
+{
+  "title": "stylised-text",
+  "brand": "kino-dark",
+  "format": ["9:16"],
+  "segments": [
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "Stylised text. New in kino." },
+    {
+      "kind": "avatar",
+      "text": "The spoken word gets boxed, live, as I say it.",
+      "caption": "boxed live",
+      "captionMode": "words",
+      "emphasis": ["boxed"],
+      "captionStyle": "highlight",
+      "captionAnimation": "wave"
+    },
+    {
+      "kind": "avatar",
+      "text": "Headlines blur in, with a gradient fill.",
+      "caption": "gradient fill,\nblurred in",
+      "captionStyle": "gradient",
+      "captionAnimation": "blur-in",
+      "texts": [
+        { "text": "NEW", "at": 0.4, "position": "top", "size": "small", "style": "highlight", "animation": "pop" }
+      ]
+    },
+    {
+      "kind": "avatar",
+      "text": "Or go minimal, with a typewriter reveal.",
+      "caption": "minimal typewriter",
+      "captionMode": "words",
+      "emphasis": ["minimal"],
+      "captionStyle": "minimal",
+      "captionAnimation": "typewriter"
+    },
+    {
+      "kind": "avatar",
+      "text": "And standalone overlays land anywhere, on cue.",
+      "caption": "overlays,\non cue",
+      "texts": [
+        { "text": "top slot", "at": 0.3, "position": "top", "size": "medium", "style": "highlight", "animation": "pop" },
+        { "text": "bottom slot", "at": 1.2, "position": "bottom", "size": "medium", "style": "gradient", "animation": "blur-in" }
+      ]
+    },
+    { "kind": "motion", "source": "motion/wordmark.html", "text": "Spec in. Style out." }
+  ]
+}
