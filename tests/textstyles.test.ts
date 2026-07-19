@@ -25,7 +25,7 @@ describe("wordStyle", () => {
     const on = wordStyle("highlight", t, { highlight: true });
     expect(on.backgroundColor).toBe("#80e2b4");
     expect(on.color).toBe("#0b1020");
-    expect(on.borderRadius).toBe(14);
+    expect(on.borderRadius).toBe(6);
     const off = wordStyle("highlight", t);
     expect(off.backgroundColor).toBeUndefined();
     expect(off.color).toBe("#ffffff");
@@ -59,11 +59,11 @@ describe("wordStyle", () => {
 
 describe("lineBoxStyle", () => {
   it("highlight gets an opaque night line box", () => {
-    expect(lineBoxStyle("highlight", t)).toEqual({ display: "inline-block", backgroundColor: "#0b1020", padding: "12px 32px", borderRadius: 30 });
+    expect(lineBoxStyle("highlight", t)).toEqual({ display: "inline-block", backgroundColor: "#0b1020", padding: "12px 32px", borderRadius: 12 });
   });
   it("other styles box only when a backplate colour is supplied (legacy plateStyle)", () => {
     expect(lineBoxStyle("stroke", t)).toEqual({});
-    expect(lineBoxStyle("stroke", t, "#0b1020d1")).toEqual({ display: "inline-block", backgroundColor: "#0b1020d1", padding: "12px 32px", borderRadius: 30 });
+    expect(lineBoxStyle("stroke", t, "#0b1020d1")).toEqual({ display: "inline-block", backgroundColor: "#0b1020d1", padding: "12px 32px", borderRadius: 12 });
   });
 });
 

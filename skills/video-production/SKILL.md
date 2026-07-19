@@ -48,12 +48,23 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
       "kicker": { "text": "86% match", "color": "mint" } } ] }
 ```
 - `avatar` segments are the on-camera/hook/payoff beats; `app` segments show the screenshot/recording while the VO continues. (Faceless still uses these kinds — `avatar` beats become branded caption cards.)
+- **Emphasis is a spice, not a sauce** — `emphasis` adds a glow to the marked word while it's spoken.
+  Cap it at one word (max two) per beat, on the single word carrying the claim; several emphasised
+  words per beat reads as noise and devalues all of them. Beats can (and often should) have none.
 - Open with an `avatar` hook, cut to `app` for the demo, return to `avatar` for the payoff + `cta`.
+- **Media density**: caption cards are connective tissue, not the show — viewers stay for footage,
+  screenshots, and motion. Target roughly **half the runtime on media** (`app` cut-ins, `motion`
+  beats, motionOverlays): in a ~20s spec that's 2-3 `app` beats + at least one `motion`/Lottie
+  moment. Never run more than two plain caption-card beats back-to-back; break the pattern with a
+  cut-in or overlay. B-roll sources: project assets, `kino pexels`, `assets-lib/lottie/`.
 - **Camera/transitions auto-vary** — omit and `kino` picks a varied shot + transition per cut-in.
   Override per segment with `"shot"` (`push-in`/`pull-out`/`pan-left`/`pan-right`/`tilt-up`/`static`,
   plus `scroll`/`scroll-up` to pan vertically through a **tall** app still — a simulated scroll that
   reveals content below the frame; opt-in, so it's never auto-picked)
-  and, on `app` segments, `"transition"` (`fly-left`/`fly-up`/`pop`/`fade`/`cut` — spring/CapCut-style).
+  and, on `app` segments, `"transition"` (`fade`/`dissolve`/`fly-left`/`fly-up`/`pop`/`cut`).
+  Auto-vary is asset-aware: video b-roll defaults to the soft pair (`dissolve`/`fade`) and UI stills
+  to the punchy rotation — match that instinct when overriding (footage wants a natural fade, not a
+  spring fly-in).
 - **Faceless backgrounds animate**: `kino backgrounds` lists each preset's params (colours/intensity) +
   actions (pulse). Tween them over time with `backgroundKeyframes` and fire `backgroundTriggers` at
   timestamps; sync to the VO using per-word times from `kino inspect`.
@@ -93,6 +104,13 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   fresh one-shot burst in sync with the words (use a short, transparent burst asset; triggers override
   stretch/loop). Assets must embed images (base64 `data:` URIs) and outline/embed fonts (no system fonts,
   no AE expressions). Works in all three motion slots (`kind:"motion"`, `motionOverlay` on `avatar` or `app`).
+  **Ready-made library:** `assets-lib/lottie/` (repo root) holds pre-cleaned, brand-neutral LottieFiles
+  templates (wave background, card carousels, logo reveal) — copy into the project's `assets/motion/`
+  and reference directly. Rebrand a logo/image slot by replacing the image asset's base64 `p` payload.
+  When adapting fresh LottieFiles downloads yourself, see "Sourcing from LottieFiles" in
+  docs/motion-graphics.md — notably: strip the `fh`/`fs`/`fb` block creator exports stamp on text
+  animators (renders all text red in lottie-web), delete the near-universal opaque `Background` layer,
+  and don't rewrite template text (glyphs are baked; only exported characters render).
 
 ## Stock b-roll (Pexels)
 When a beat needs real-world footage the brand assets can't provide — lifestyle shots, environments,
@@ -112,7 +130,19 @@ brand chip contrasts with the footage (preview with `kino still --segment <n>` b
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars --gender male`.
   Brand `lookAliases` map a friendly name → look id. For `hedra`/`replicate`, set `brand.avatarImage`
   (a portrait file) instead — those engines lip-sync a source image, not a hosted id.
-- Voices: `kino voices --gender male`. Match voice age/gender to the avatar.
+- Voices: `kino voices --gender male`. Match voice age/gender to the avatar — and to the **brand's
+  personality**: don't leave every brand on the same default voice. If `kino voices` 401s (a scoped
+  key without voices_read), these premade ElevenLabs voices work on every account — pick by character:
+  `21m00Tcm4TlvDq8ikWAM` Rachel (calm narrative F) · `AZnzlk1XvdvUeBnXmlld` Domi (confident, punchy F) ·
+  `EXAVITQu4vr4xnSDxMaL` Sarah (soft, warm F) · `ErXwobaYiN019PkySvjV` Antoni (warm, easy M) ·
+  `TxGEqnHWrfWFTfGW9XjX` Josh (deep, serious M) · `pNInz6obpgDQGcFmaJgB` Adam (broadcast M).
+  Set it per spec (`"voice"`) or per brand (`defaultVoice`).
+- **Expressive VO (audio tags)**: set spec `"voiceModel": "eleven_v3"` and direct the read inline in
+  segment text with bracketed tags — `[excited]`, `[whispers]`, `[sighs]`, `[laughs]`, `[curious]`,
+  `[short pause]`. Tags are stripped from word-synced captions automatically. Use like emphasis: 1-2
+  tags per spec where the copy earns them (a hook, a reveal), not on every beat. v3 reads are less
+  timing-stable than v2 — keep it off metronome-critical specs. Faceless only for now: with an avatar
+  provider the tagged text also reaches lip-sync, untested.
 - **Timing comes from the generated VO**, not your guesses — don't put timestamps in the spec.
 - **AI disclosure** is added automatically from the brand when it sets one (`disclosure` /
   `facelessDisclosure`, the latter for faceless — no "avatar" claim); with no brand or none set, none is shown.

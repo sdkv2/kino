@@ -35,6 +35,21 @@ export interface BuildVOOpts {
   cache: Cache;
   apiKey?: string;
   mock: boolean;
+  model?: string; // TTS model_id; default eleven_multilingual_v2 (eleven_v3 enables audio tags)
+}
+
+// ElevenLabs v3 audio tags ([excited], [short pause], …) are spoken direction, not caption copy —
+// the alignment includes their characters, so drop tag tokens (from a [-starting word through the
+// ]-ending word) before captions see them.
+export function stripTagWords(words: WordTiming[]): WordTiming[] {
+  const out: WordTiming[] = [];
+  let inTag = false;
+  for (const w of words) {
+    if (!inTag && w.word.startsWith("[")) inTag = true;
+    if (!inTag) out.push(w);
+    if (inTag && w.word.endsWith("]")) inTag = false;
+  }
+  return out;
 }
 
 /**
@@ -47,17 +62,20 @@ export interface BuildVOOpts {
  * into the Cache dir and a temp dir. Returns the stitched track path, per-clip paths, timings, and
  * timeline-absolute word timings.
  */
-export async function buildVO({ spec, voiceId, cache, apiKey, mock }: BuildVOOpts): Promise<VOResult> {
+export async function buildVO({ spec, voiceId, cache, apiKey, mock, model }: BuildVOOpts): Promise<VOResult> {
   const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
   const clips: string[] = [];
   const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
   for (const [i, seg] of spec.segments.entries()) {
-    const key = contentHash({ text: seg.text, voiceId, settings: DEFAULT_SETTINGS, mock, v: "ts" });
+    // model joins the key only when set — existing v2 caches stay valid.
+    const key = contentHash({ text: seg.text, voiceId, settings: DEFAULT_SETTINGS, mock, v: "ts", ...(model ? { model } : {}) });
     let clip = cache.get(key, "mp3");
     let wordsFile = cache.get(key, "json");
     if (!clip || !wordsFile) {
       const tmp = join(dir, `seg${i}.mp3`);
-      const words = mock ? await ttsMockWithTimestamps(seg.text, tmp) : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp);
+      const words = stripTagWords(
+        mock ? await ttsMockWithTimestamps(seg.text, tmp) : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp, DEFAULT_SETTINGS, model),
+      );
       clip = cache.put(key, "mp3", tmp);
       const tmpJson = join(dir, `seg${i}.json`);
       writeFileSync(tmpJson, JSON.stringify(words));

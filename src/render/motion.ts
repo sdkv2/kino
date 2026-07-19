@@ -3,18 +3,22 @@
 // `scroll`/`scroll-up` traverse a tall app still vertically (simulated scroll) — opt-in only, so
 // they're excluded from the auto-vary rotation below.
 export type Shot = "push-in" | "pull-out" | "pan-left" | "pan-right" | "tilt-up" | "scroll" | "scroll-up" | "static";
-export type Transition = "fade" | "fly-left" | "fly-up" | "pop" | "cut";
+export type Transition = "fade" | "dissolve" | "fly-left" | "fly-up" | "pop" | "cut";
 
 export const SHOTS: readonly Shot[] = ["push-in", "pan-right", "pull-out", "pan-left", "tilt-up"];
-// Punchy CapCut-style rotation: spring fly-ins + a zoom pop, with fade as a breather.
+// Punchy CapCut-style rotation for UI stills: spring fly-ins + a zoom pop, with fade as a breather.
 export const TRANSITIONS: readonly Transition[] = ["fly-left", "fly-up", "pop", "fade"];
+// Video b-roll reads as footage, not UI — punchy fly/pop entrances feel wrong on it, so real
+// clips rotate through the two soft transitions instead (override still wins).
+export const VIDEO_TRANSITIONS: readonly Transition[] = ["dissolve", "fade"];
 
 export function pickShot(appIndex: number, override?: Shot): Shot {
   return override ?? SHOTS[appIndex % SHOTS.length];
 }
 
-export function pickTransition(appIndex: number, override?: Transition): Transition {
-  return override ?? TRANSITIONS[appIndex % TRANSITIONS.length];
+export function pickTransition(appIndex: number, override?: Transition, isVideo = false): Transition {
+  const rotation = isVideo ? VIDEO_TRANSITIONS : TRANSITIONS;
+  return override ?? rotation[appIndex % rotation.length];
 }
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;

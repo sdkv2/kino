@@ -9,3 +9,15 @@ describe("computeTimings", () => {
     expect(t[2]).toMatchObject({ index: 2, startSec: 5.64, endSec: 6.64 });
   });
 });
+
+import { stripTagWords } from "../src/vo/vo.js";
+import { describe as d2, it as it2, expect as ex2 } from "vitest";
+
+d2("stripTagWords", () => {
+  it2("drops single and multiword bracket tags, keeps real words and their timings", () => {
+    const w = (word: string, i: number) => ({ word, start: i, end: i + 1 });
+    const words = ["[excited]", "Hello", "world.", "[short", "pause]", "Bye."].map(w);
+    ex2(stripTagWords(words).map((x) => x.word)).toEqual(["Hello", "world.", "Bye."]);
+    ex2(stripTagWords(words)[0].start).toBe(1);
+  });
+});

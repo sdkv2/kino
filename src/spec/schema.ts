@@ -20,7 +20,7 @@ const TextOverlaySpec = z.object({
 
 const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });
 const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "scroll", "scroll-up", "static"]);
-const Transition = z.enum(["fade", "fly-left", "fly-up", "pop", "cut"]);
+const Transition = z.enum(["fade", "dissolve", "fly-left", "fly-up", "pop", "cut"]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
 const CaptionMode = z.enum(["phrase", "words"]);
@@ -92,6 +92,9 @@ export const SpecSchema = z.object({
   title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
   format: z.array(z.enum(["9:16", "3:4"])).default(["9:16"]),
   voice: z.string().optional(),
+  // TTS model override. Default is eleven_multilingual_v2; set "eleven_v3" to enable ElevenLabs
+  // audio tags ([excited], [whispers], …) in segment text — tags are stripped from captions.
+  voiceModel: z.string().optional(),
   avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
   provider: Provider.optional(), // overrides brand.defaultProvider
   background: Background.optional(), // overrides brand.background (faceless beats)

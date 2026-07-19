@@ -1,0 +1,99 @@
+{
+  "title": "fizznik-blastoff",
+  "brand": "fizznik",
+  "format": ["9:16"],
+  "provider": "none",
+  "voice": "AZnzlk1XvdvUeBnXmlld",
+  "voiceModel": "eleven_v3",
+  "background": "mesh",
+  "backgroundIntensity": 0.7,
+  "backgroundKeyframes": [
+    { "at": 0, "params": { "colorA": "#FFF3D6", "colorB": "#FF4E6A", "colorC": "#FFB000", "intensity": 0.5 } },
+    { "at": 3, "params": { "intensity": 0.85 }, "ease": "overshoot" },
+    { "at": 10, "params": { "colorA": "#FFB000", "colorB": "#00B7A6", "colorC": "#FF4E6A" }, "ease": "easeInOut" },
+    { "at": 18, "params": { "colorA": "#FFF3D6", "colorB": "#FF4E6A", "colorC": "#FFB000" }, "ease": "easeInOut" }
+  ],
+  "backgroundTriggers": [
+    { "at": 0.5, "action": "pulse" },
+    { "at": 3, "action": "pulse" }
+  ],
+  "captionStyle": "highlight",
+  "captionAnimation": "pop",
+  "segments": [
+    {
+      "kind": "avatar",
+      "text": "[excited] Three, two, one... pop the cap!",
+      "caption": "POP THE CAP!",
+      "captionMode": "words",
+      "emphasis": ["pop"],
+      "captionAnimation": "wave",
+      "motionOverlay": { "source": "motion/gradient-wave.json", "loop": true },
+      "texts": [
+        { "text": "FIZZNIK", "at": 0.2, "position": "top", "size": "big", "style": "gradient", "animation": "blur-in" }
+      ]
+    },
+    {
+      "kind": "avatar",
+      "text": "The space-age fruit soda from nineteen sixty-two.",
+      "caption": "space-age soda",
+      "captionMode": "words",
+      "emphasis": ["space-age"],
+      "captionStyle": "gradient",
+      "captionAnimation": "rise"
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/5538296.mp4",
+      "text": "Cherry, tangerine, and cosmic turquoise zing.",
+      "caption": "three big flavours",
+      "captionMode": "words",
+      "emphasis": ["zing"],
+      "kicker": { "text": "3 FLAVOURS", "color": "gold" },
+      "captionAnimation": "wave"
+    },
+    {
+      "kind": "avatar",
+      "text": "One sip and you blast clean off the couch.",
+      "caption": "BLAST OFF",
+      "captionMode": "words",
+      "emphasis": ["blast"],
+      "captionAnimation": "wave",
+      "motionOverlay": { "source": "motion/gradient-wave.json", "loop": true }
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/36951567.mp4",
+      "text": "Bubbles so bold they practically wink at you. [laughs]",
+      "caption": "bold bubbles",
+      "captionMode": "words",
+      "emphasis": ["bold"],
+      "kicker": { "text": "REAL FIZZ", "color": "mint" },
+      "captionAnimation": "wave"
+    },
+    {
+      "kind": "avatar",
+      "text": "Fizznik. Zing in every single sip.",
+      "caption": "zing in every sip",
+      "captionMode": "words",
+      "emphasis": ["zing"],
+      "captionStyle": "gradient",
+      "captionAnimation": "blur-in",
+      "texts": [
+        { "text": "★ NEW ★", "at": 0.3, "position": "top", "size": "medium", "style": "highlight", "animation": "pop" }
+      ]
+    },
+    {
+      "kind": "avatar",
+      "text": "Grab a bottle. Blast off today.",
+      "caption": "grab a bottle!",
+      "cta": true,
+      "captionMode": "words",
+      "emphasis": ["Blast"],
+      "captionAnimation": "pop",
+      "motionOverlay": { "source": "motion/gradient-wave.json", "loop": true },
+      "texts": [
+        { "text": "fizznik.pop", "at": 0.8, "position": "top", "size": "medium", "style": "gradient", "animation": "rise" }
+      ]
+    }
+  ]
+}
