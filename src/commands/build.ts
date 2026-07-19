@@ -22,7 +22,7 @@ import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntens
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
 import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
-import { stitchAudio } from "../media/ffmpeg.js";
+import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent } from "../media/backgroundLib.js";
 import { renderVideo, variantName } from "../render/render.js";
@@ -178,6 +178,8 @@ export async function prepare(
     const rel = `music${extname(abs)}`;
     copyFileSync(abs, join(publicDir, rel));
     if (spec.music.duck > spec.music.volume) log.warn(`music.duck (${spec.music.duck}) > music.volume (${spec.music.volume}) — ducking would boost the bed; check the values`);
+    const musicSec = await probeDuration(abs);
+    if (musicSec < vo.totalSec) log.warn(`music is ${musicSec.toFixed(1)}s but the video runs ${vo.totalSec.toFixed(1)}s — the bed plays once and goes silent after it ends`);
     music = {
       src: rel,
       volume: spec.music.volume,
