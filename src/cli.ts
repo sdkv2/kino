@@ -90,6 +90,12 @@ program
   });
 
 program
+  .command("audio-markers <file>")
+  .description("Analyze any audio/video file: JSON markers (onsets, peaks, silences, RMS) + waveform/spectrogram PNGs")
+  .option("--out <dir>", "output directory (default: next to the input file)")
+  .action(async (f, o) => (await import("./commands/audiomarkers.js")).audioMarkers(f, o));
+
+program
   .command("batch <input>")
   .description("Render many specs (JSON array of spec paths)")
   .option("--mock")
