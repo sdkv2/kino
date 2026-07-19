@@ -4,10 +4,11 @@
 // Exports the Spec type used throughout the pipeline. Note: keyframe/trigger `at` is in seconds
 // (resolved against frame/fps in the render layer).
 import { z } from "zod";
-import { CAPTION_STYLES, CAPTION_ANIMATIONS } from "../render/textStyles.js";
+import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS } from "../render/textStyles.js";
 
 const CaptionStyle = z.enum(CAPTION_STYLES);
 const CaptionAnimation = z.enum(CAPTION_ANIMATIONS);
+const CaptionReveal = z.enum(CAPTION_REVEALS);
 const TextOverlaySpec = z.object({
   text: z.string().min(1),
   at: z.number().min(0),
@@ -66,6 +67,7 @@ const Segment = z.discriminatedUnion("kind", [
     motionOverlay: MotionGraphicRef.optional(),
     captionStyle: CaptionStyle.optional(),
     captionAnimation: CaptionAnimation.optional(),
+    captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
   }),
   z.object({
@@ -83,6 +85,7 @@ const Segment = z.discriminatedUnion("kind", [
     motionOverlay: MotionGraphicRef.optional(),
     captionStyle: CaptionStyle.optional(),
     captionAnimation: CaptionAnimation.optional(),
+    captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
   }),
   z.object({
@@ -95,6 +98,7 @@ const Segment = z.discriminatedUnion("kind", [
     captionKeyframes: z.array(BgKeyframe).optional(),
     captionStyle: CaptionStyle.optional(),
     captionAnimation: CaptionAnimation.optional(),
+    captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
   }),
 ]);
@@ -118,6 +122,7 @@ export const SpecSchema = z.object({
   logoKeyframes: z.array(BgKeyframe).optional(), // tween logo x/y/scale/opacity over time
   captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)
   captionAnimation: CaptionAnimation.optional(), // caption entrance preset (overrides brand.captionStyle.animation)
+  captionReveal: CaptionReveal.optional(), // words-mode reveal: "word" (default) | "all" (whole line laid out, highlight tracks VO)
   sfx: z.array(SfxEvent).optional(), // free-placed sound effects (place with `kino audio-markers`)
   music: Music.optional(), // music bed under the VO, auto-ducked while segments speak
   segments: z.array(Segment).min(1),

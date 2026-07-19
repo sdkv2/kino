@@ -14,7 +14,7 @@ export async function montage(tiles: Tile[], out: string, opts: { cols?: number;
   const args: string[] = [];
   if (opts.font) args.push("-font", opts.font); // crisp labels in a known TTF
   for (const t of tiles) args.push("-label", t.label, t.path);
-  args.push("-tile", `${cols}x`, "-geometry", "300x+10+8", "-background", opts.bg ?? "#0b1020", "-fill", "#cbd5e1", "-pointsize", "20", out);
+  args.push("-tile", `${cols}x`, "-geometry", "380x+12+10", "-background", opts.bg ?? "#0b1020", "-fill", "#cbd5e1", "-pointsize", "20", out);
 
   for (const [bin, a] of [["montage", args], ["magick", ["montage", ...args]]] as const) {
     try {

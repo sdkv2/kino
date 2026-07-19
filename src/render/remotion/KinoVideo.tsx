@@ -37,6 +37,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
       <FontLoader url={theme.fontUrl} />
+      <FontLoader url={theme.labelFontUrl} family="KinoLabelFont" />
       {/* Continuous voiceover — covers every segment, including the app cut-ins where the avatar is trimmed out. */}
       {voTrack ? <Audio src={staticFile(voTrack)} /> : null}
 
@@ -176,7 +177,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               {wordMode ? (
                 // Faceless talking beats (hero) centre their word caption so the text fills the frame;
                 // app cut-ins and on-camera avatar beats keep the lower-third band.
-                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} styleName={s.captionStyle} anim={s.captionAnimation} placement={hero ? "center" : "lower"} />
+                <WordCaption words={s.words!} emphasis={s.emphasis} startSec={s.startSec} t={theme} backplate={backplate} styleName={s.captionStyle} anim={s.captionAnimation} reveal={s.captionReveal} placement={hero ? "center" : "lower"} />
               ) : hero ? (
                 <HeroCaption text={s.caption} t={theme} styleName={s.captionStyle} anim={s.captionAnimation} />
               ) : (

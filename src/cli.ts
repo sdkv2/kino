@@ -51,8 +51,9 @@ program
 
 program
   .command("storyboard <spec>")
-  .description("Render one still per beat, tiled into a labeled contact sheet")
+  .description("Render per-beat stills (composition + full reveal), tiled into a labeled contact sheet")
   .option("--format <fmt>", "9:16 or 3:4")
+  .option("--frames <n>", "frames per beat (default 2: composition + fully-revealed end-state; the ·full tile shows overflow/overlaps)")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")

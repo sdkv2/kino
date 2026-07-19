@@ -6,7 +6,7 @@
 - `kino backgrounds` — list animated backgrounds + their agent-controllable params/actions
 - `kino elements` — list overlay elements (logo …) + their layout/tween controls
 - `kino still <spec> [--at <s,…> | --segment <n>] [--real] [--format]` — render one frame fast (no encode)
-- `kino storyboard <spec> [--real] [--format]` — one still per beat tiled into a labeled contact sheet
+- `kino storyboard <spec> [--frames <n>] [--real] [--format]` — per-beat stills (default 2: composition + the fully-revealed end-state) tiled into a labeled contact sheet; the **·full** tile is where a caption overflows the frame or collides with a `texts` overlay
 - `kino frames <video> [--at|--count|--every] [--montage]` — extract stills from any video
 - `kino transcribe <video> [--format …] [--out …]` — **(reference videos only)** speech → timestamped transcript
 - `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
@@ -19,7 +19,7 @@
 ## Analysing reference videos (research only)
 
 `transcribe` and `scan` exist to study **other people's** videos — competitor ads, trending /
-reference clips (e.g. what `using-spider` downloads). They are a **research tool, not a production
+reference clips (e.g. downloaded reference footage). They are a **research tool, not a production
 step.**
 
 - `kino transcribe <video> [--format json|srt|vtt|text] [--out <file>]` — speech → timestamped
@@ -53,10 +53,16 @@ only avatar+VO timing differ). Loop: `kino inspect` (map the beats) → `kino st
 beat in ~1–2s) → edit the spec → `kino still` again → `kino build` for the real render. Add `--real` for
 true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
 
-## Brand config (`brands/<name>/brand.json`)
-`name, colors{night,mint,green,white,gold}, font, captionStyle{fontSize,strokeWidth,background?,style?,animation?},
+## Brand config (`brands/<name>/brand.md` YAML frontmatter)
+`name, colors{night,mint,green,white,gold}, font, labelFont?, captionStyle{fontSize,strokeWidth,background?,style?,animation?},
 disclosure, facelessDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
-defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}`.
+defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}` (+ the logo/background/provider fields below).
+
+Frontmatter is validated **strict** — an unknown key throws at parse, not silently ignored. The
+tell: `voiceModel` (expressive-VO model, see Hard rules in `SKILL.md`) looks brand-like but is
+**spec-only**, there's no brand default for it. `provider`/`background`/`captionMode` exist at both
+levels but mean "default" on the brand and "override" on the spec — same key, different file, don't
+confuse setting the default with setting this video's value.
 
 Faceless branding (optional):
 - `logo` — transparent brand mark (PNG); shown on faceless talking beats.
@@ -118,14 +124,21 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - `brand.font` is either a **registry font name** (`kino fonts` — e.g. `"Anton"`, `"Poppins"`) or a raw
   CSS family string (back-compat). A registry name is **downloaded on demand** (Google Fonts → real TTF,
   cached globally in `~/.kino/fonts/`) and loaded into the render via `FontFace`; offline → system fallback.
-- `brand.labelFont` (registry name) sets the storyboard/montage label font (defaults to the caption font).
+- `brand.labelFont` (registry name) sets the storyboard/montage label font (defaults to the caption
+  font) **and** is staged as a second Remotion typeface motion beats can reach via `--kino-label-font`
+  (falls back to `--kino-font` when unset) — use it for a mono/label face that shouldn't inherit the
+  caption font's display weight (e.g. a boarding-pass-style chip inside a `kind:"motion"` beat).
 
 ## Captions
 - `captionMode` (brand default or per-segment): `phrase` (short editorial caption, block animation —
-  default) or `words` (the **spoken `text`** revealed word-by-word, synced to the VO).
+  default, renders the `caption` field) or `words` (renders the **spoken `text`**, word-by-word, synced
+  to the VO — `caption` is ignored in this mode).
 - `words` mode uses real word timings from ElevenLabs `…/with-timestamps` (faked evenly under `--mock`),
-  so the on-screen words are the spoken words. Effects: typewriter reveal + pop, active-word highlight,
-  and per-segment `emphasis: ["word", …]` (glow + shake on those words while active).
+  so the on-screen words are the spoken words. **Words accumulate, they don't scroll or replace** —
+  each word fades in at its spoken time and stays on screen, so by the end of the beat the full
+  sentence is visible, wrapped across lines. Keep `words`-mode `text` short (roughly 5-7 words per
+  beat) — a longer line wraps 3+ lines and crowds the frame. Effects: typewriter reveal + pop,
+  active-word highlight, and per-segment `emphasis: ["word", …]` (glow + shake on those words while active).
 - **Highlight colour:** the currently-spoken (active) word and the **brand name** (`brand.name`,
   matched case/punctuation-insensitively) render in brand green (`colors.mint`) — one highlight state,
   no other colours. So the brand name pops green wherever it's spoken, in any project. **Choose
@@ -137,7 +150,14 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - **Tween captions/kickers** over time: per-segment `captionKeyframes` (and `kickerKeyframes` on app
   segments) `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame), and `at`
   is **relative to the segment start** (`at: 0` = the caption's entrance). Logo + background keyframes are
-  spec-level so their `at` is absolute on the main timeline. `kino elements`.
+  spec-level so their `at` is absolute on the main timeline. `kino elements`. **This absolute timing is
+  authored against whatever duration is current when you preview** — under `--mock` that's faked evenly
+  and can diverge from the real VO's pacing (a beat can run longer or shorter for real than its mock
+  estimate), so a background pulse or color shift timed to land on a specific beat can drift into the
+  wrong beat once real VO timing is in. If a spec times `backgroundKeyframes`/`backgroundTriggers`/
+  `logoKeyframes` to a specific beat boundary, re-check that beat with `kino still --real` (VO is
+  content-hash cached, so this doesn't add spend beyond the real build) before calling it done — don't
+  reason your way past a mock/real duration mismatch you already noticed.
 - **Caption backplate** (legibility over light app screenshots): set brand
   `captionStyle.background { color?, opacity?, appOnly? }` to draw a translucent rounded panel behind the
   lower-third caption. Defaults: `color` = brand `night`, `opacity` = 0.82, `appOnly` = true (only behind
@@ -153,6 +173,11 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   per-word sine bob) · `blur-in` (blur→0 + fade) · `none` (static). Unset = the surface's native entrance
   (`pop`; `rise` for faceless hero text) — word-reveal *timing* in `words` mode always stays VO-driven,
   the preset only shapes each word's entrance motion.
+- **Caption reveal** (`captionReveal`, `words` mode only; layered `segment ?? spec ?? brand.captionStyle.reveal`,
+  default `word`): `word` reveals each word at its VO time (per-word pop); `all` lays the whole caption out
+  and fades it in together, the active word still highlighting as the VO reaches it. Reach for `all` (or
+  `phrase` mode) on a **CTA or any long line** — a word-by-word reveal of a long caption reserves a big
+  multi-line block and strands its first word at a wrapped corner during the VO pause before the next word.
 - **Standalone text overlays**: per-segment `texts: [{ text, at, dur?, position?, size?, style?, animation? }]`
   drops a headline anywhere on the frame, independent of the segment's own caption. `at` is seconds from
   segment start; `dur` defaults to the segment end. `position` ∈ `top|center|bottom|left|right` (default
