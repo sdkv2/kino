@@ -10,6 +10,7 @@ SHARED = r"""
 function WIN(fieldHtml, caretOn, camStyle, ctaHtml) {
   var caret = '<b class="crt" style="opacity:' + (caretOn ? 1 : 0) + '">█</b>';
   return ''
+  + '<div class="bg"></div>'
   + '<div class="cam" style="transform:' + camStyle + '">'
   +   '<div class="win">'
   +     '<div class="bar"><span class="mark">kino</span><span class="dot"></span></div>'
@@ -20,6 +21,10 @@ function WIN(fieldHtml, caretOn, camStyle, ctaHtml) {
   + '</div>'
   + '<div class="kino-grain"></div><div class="kino-vignette"></div>'
   + '<style>'
+  + '.bg{position:absolute;inset:0;background:'
+  +   'radial-gradient(130% 90% at 50% 118%, rgba(128,226,180,.20), rgba(128,226,180,0) 58%),'
+  +   'radial-gradient(110% 75% at 22% -12%, rgba(217,154,32,.12), rgba(217,154,32,0) 55%),'
+  +   '#0b1020}'
   + '.cam{position:absolute;inset:0;transform-origin:50% 62%}'
   + '.win{position:absolute;left:9%;right:9%;top:24%;bottom:24%;border-radius:3vw;'
   +   'background:rgba(9,14,28,.72);border:0.18vw solid var(--kino-mint);'

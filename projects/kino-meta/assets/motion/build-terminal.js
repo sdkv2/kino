@@ -28,6 +28,7 @@ for (var k = 0; k < steps.length; k++){
     + steps[k] + '</span></div>';
 }
 return ''
++ '<div class="bg"></div>'
 + '<div class="term">'
 +   '<div class="cmd"><span class="pr">›</span> ' + typed
 +   '<b class="crt" style="opacity:' + (caretOn?1:0) + '">█</b></div>'
@@ -35,6 +36,10 @@ return ''
 + '</div>'
 + '<div class="kino-grain"></div><div class="kino-vignette"></div>'
 + '<style>'
++ '.bg{position:absolute;inset:0;background:'
++   'radial-gradient(130% 90% at 50% 118%, rgba(128,226,180,.20), rgba(128,226,180,0) 58%),'
++   'radial-gradient(110% 75% at 22% -12%, rgba(217,154,32,.12), rgba(217,154,32,0) 55%),'
++   '#0b1020}'
 + '.term{position:absolute;left:7%;right:7%;top:18%;bottom:18%;border-radius:2.5vw;'
 +   'background:rgba(6,10,22,.9);border:0.12vw solid rgba(128,226,180,.2);padding:5vw}'
 + '.cmd{font-family:var(--kino-label-font);color:var(--kino-white);font-size:4vw}'

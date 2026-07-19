@@ -26,6 +26,7 @@ for (i = 0; i < vis.length; i++) gutter += (i + 1) + "\n";
 // gentle downward pan as more lines fill
 var panY = -6 * env.progress; // vw
 return ''
++ '<div class="bg"></div>'
 + '<div class="cam" style="transform:translateY(' + panY.toFixed(2) + 'vw)">'
 +   '<div class="ed">'
 +     '<div class="top"><span class="d r"></span><span class="d y"></span><span class="d g"></span>'
@@ -36,6 +37,10 @@ return ''
 + '</div>'
 + '<div class="kino-grain"></div><div class="kino-vignette"></div>'
 + '<style>'
++ '.bg{position:absolute;inset:0;background:'
++   'radial-gradient(130% 90% at 50% 118%, rgba(128,226,180,.20), rgba(128,226,180,0) 58%),'
++   'radial-gradient(110% 75% at 22% -12%, rgba(217,154,32,.12), rgba(217,154,32,0) 55%),'
++   '#0b1020}'
 + '.cam{position:absolute;inset:0;transform-origin:50% 40%}'
 + '.ed{position:absolute;left:6%;right:6%;top:16%;bottom:16%;border-radius:2.5vw;'
 +   'background:rgba(9,14,28,.85);border:0.12vw solid rgba(128,226,180,.25);overflow:hidden}'
