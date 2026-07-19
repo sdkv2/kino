@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { FONTS, lookupFont } from "../src/fonts/registry.js";
 
 describe("font registry", () => {
-  it("lists 12 fonts, each with a name, family, description, and weight", () => {
-    expect(FONTS).toHaveLength(12);
+  it("lists 14 fonts, each with a name, family, description, and weight", () => {
+    expect(FONTS).toHaveLength(14);
     for (const f of FONTS) {
       expect(f.name).toBeTruthy();
       expect(f.family).toBeTruthy();
