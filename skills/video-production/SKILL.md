@@ -8,13 +8,36 @@ description: Use when producing short-form vertical marketing videos for an app 
 `kino` turns a JSON **spec you author** into a finished 9:16 (and optional 3:4) video.
 You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) → composite (Remotion).
 
+## Brand discovery (before creating a new brand)
+
+**Don't scaffold an empty brand and invent a personality.** When a spec needs a brand that doesn't exist yet:
+
+1. **Reuse first.** `kino brand` lists existing brands — if one fits, use it (`spec.brand`/`project.json`)
+   or copy the nearest `brands/<name>/brand.md` as a starting point. A new brand is for a genuinely new
+   product, not a variation you can express per spec.
+2. **Ask the owner** for what only they hold: product truth (what it does, who it's for), real palette +
+   fonts, logo file, platform, tone, and any legal/disclosure constraints or banned phrases. Draft from
+   product truth and get approval — never fabricate a look or voice.
+3. **Gather from what's already here** (don't invent what the repo can show you):
+   - `brands/*/brand.md` — the nearest brand as the pattern for frontmatter + guidelines shape
+   - `projects/<name>/assets/{screens,recordings}` — real app stills: read the **actual** palette + type
+     off the product, don't guess hex codes
+   - the logo / brand kit the user drops in → `brands/<name>/assets/`
+   - `kino fonts` · `kino voices` · `kino backgrounds` — what's settable (font/labelFont, defaultVoice, background)
+   - `assets-lib/` — shared music/sfx/lottie the brand can lean on
+   - **or more** (with permission): the app's App Store listing / site / press kit for public brand assets;
+     `kino pexels` / `kino photos` / image-gen for stills the brand lacks
+4. **Then scaffold** `kino init <brand>` and fill `brands/<brand>/brand.md` from what you discovered —
+   frontmatter (palette/font/voice/disclosure) + a real **Tone / Voice** body (read `ad-voice`), not the
+   placeholder scaffold. Confirm palette + Tone/Voice with the owner before mass-producing specs.
+
 ## Workflow
 1. `kino doctor` — confirm ffmpeg and the keys for your chosen provider are present.
    (`kino fonts` lists fonts settable as `brand.font`/`brand.labelFont` — downloaded on demand.)
    Brands are **optional markdown** — `brands/<name>/brand.md` (YAML frontmatter for palette/font/voice/
    disclosure + a free-form guidelines body with a **Tone / Voice** section). Run `kino brand <name>` to
    read a brand's styling + tone rules; with no brand, kino uses its defaults. (Set the brand via
-   `spec.brand` or a project's `project.json`.)
+   `spec.brand` or a project's `project.json`.) **New brand? Do Brand discovery (above) first.**
 2. Author a spec (schema below). **Opener:** prefer a cold open on your strongest footage (see Trailer
    shape) before a mesh caption card. **Copy:** read `ad-voice` skill before writing segment `text`/`caption`
    — follow the brand's Tone / Voice dial, then the anti-slop rules. Keep captions short.
@@ -81,10 +104,15 @@ One proven layout for a footage-driven trailer (cold-open first):
 3  app      footage — the payoff moment
 4  motion   a data/feature beat (counter, timer…)     ← media ≈ half the runtime
 5  avatar   payoff — the emotional turn (caption card OK here)
-6  avatar   CTA (cta: true) — brand name + URL, anchored low
+6  avatar   CTA (cta: true) — brand name + action as a **centered end card** (hero), not a lower-third subtitle
 ```
 
 **Footage-cut rules:** match each clip's length to its beat's VO; vary the `shot` per cut-in to the action (push-in / pan / pull-out); keep related shots back-to-back for the auto-crossfade; set the brand's `captionStyle.background` backplate so captions stay legible over uncontrolled footage. **Plan the opener clip before writing beat 0 copy** — pick the thumb-stopping frame, then write the one-line caption that rides it.
+
+**Source recordings (long captures):** when slicing a screen recording / imported clip into multiple
+beats, or seating footage in custom chrome, follow the `importing-footage` skill (`clipFrom` /
+`clipTo` / `speed` / `pauseAt` / `frame`) — don't guess timestamps without reading stills.
+**Framed beats:** `shot: "static"` only (no push-in / pan) — renderer enforces this.
 
 ## Short-form layout defaults (TikTok / Reels / Shorts)
 
@@ -96,18 +124,22 @@ layout and crowd the top chrome — don't.
 | Hook / cold open (`app`) | Strongest footage first; short lower-third caption + backplate; optional kicker | Soft mesh card as the default opener; brand-name first line |
 | Hook (`avatar`, faceless) | Centered hero caption — big, calm, no `captionKeyframes` (use when caption-card opener is intentional) | Pin to top edge; `y: -16` "for variety"; muddy low-contrast mesh behind a weak line |
 | App / footage captions | Lower-third (engine default) + brand backplate | Per-beat `y`/`scale` jitters |
-| CTA (`cta: true`) | Lower-third automatically — use `captionReveal: "all"` | Fake with `captionKeyframes` `y`; leave as centered hero |
+| CTA (`cta: true`) | **Centered end card** (hero) — short brand + action; `captionReveal: "all"` or `captionMode: "phrase"` | Park the CTA in the lower-third caption gutter; word-by-word drip on a long App Store line; empty mesh with no brand mark |
 | Kickers | Top pill (engine default) — fine; not a CTA | Treat kicker as the end card |
-| `texts[]` labels | Small, `position: "top"` (or clear of caption band) | Drop a second headline into the lower-third on CTA |
+| `texts[]` labels | Small, `position: "top"` (or clear of caption band) | Second headline fighting the CTA end card |
 | Motion / counters | Stack **mid-frame**: CSS `.wrap { top: 38%–42%; }` (no tiny `translateY(20vw)`), clear of caption band + top UI | Park the graphic in the top ~20% (Following/For You chrome) |
 | Music | Quiet bed `"volume": 0.10–0.14`, `"duck": 0.04`, short `fadeOutSec` | Loud beds fighting VO/captions |
-| Logo | `logoPosition: top`, simple fade-in — hold steady | Tween logo `y` on the CTA beat |
+| Logo | `logoPosition: top` on talking runs; on CTA prefer `center` (or a mid-frame mark) so the end card has a brand anchor | Omit the mark and leave a tiny lower-third line as the whole ending |
 
 **Caption stability is the default.** Omit `captionKeyframes` on a first pass. Add one only when a
 single beat must dodge a bright subject (check that still) — never a different `y` on every beat.
 
-**CTA placement:** `cta: true` on a faceless avatar beat forces the **lower-third** band (not the
-centered hero). The flag is wired through the renderer — trust it.
+**CTA = end card, not a subtitle.** `cta: true` on a faceless avatar beat uses the **centered hero**
+surface (same as other faceless talking beats). Write a short caption (`Cadence · free to try`, not a
+full spoken sentence). Prefer `captionMode: "phrase"` or `captionReveal: "all"` so the line lands as
+one poster, not a word drip. Wire `brand.logo` and put it mid/top so the frame isn't empty mesh + type.
+Stronger: end on an `app` still of the product, then a short hero CTA beat — never a lone lower-third
+pill on blank mesh.
 
 **Motion-beat recipe** (counters, timers, big numbers):
 
@@ -141,7 +173,7 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
   cut-in or overlay. **Compose each caption card for what its beat says, not to a template** — the
   monotony that reads as a slideshow comes from framing every beat as the same centered line. Fit the
   frame to the content: a short hook can go big (centered, or only slightly raised — never pinned to the top edge), a full sentence sits calmer and centered, a
-  two-part contrast can split, the CTA anchors low with the wordmark/URL; add a `texts` label only
+  two-part contrast can split, the CTA is a **centered end card** with the wordmark/action; add a `texts` label only
   where the beat earns one. Variety is the *result* of composing per beat, not the goal — two beats
   that genuinely want the same frame may share it. The failure is every beat defaulting to dead-center
   because none was composed for what it says (don't jitter position just to make cards differ — that
@@ -166,6 +198,13 @@ caption or sits under the top UI, nudge `top` — don't reintroduce per-caption 
 - **Overlay elements tween** (`kino elements`): the logo has `logoSize` (small/medium/big/px) +
   `logoPosition` (top/bottom/left/right/center/{x,y}%) and `logoKeyframes`; captions + kickers tween via
   per-segment `captionKeyframes` / `kickerKeyframes` — all x/y/scale/opacity over time, same keyframe system.
+- **Camera push on app footage** (`zoomKeyframes`, per `app` segment): scales/pans the footage **+ frame
+  chrome** as one group about centre — the "canvas zoom" for inset iPhone footage. The phone grows/pushes
+  in; captions, kicker, logo and the background stay anchored. **Beat-relative** track (`at` = seconds from
+  the beat's start, `0` = beat start — it rides the beat, so re-timing the video never desyncs it), params
+  `scale`/`x`/`y`/`opacity`; one keyframe = static hold, two = animated push. A `frame` disables the inner
+  `shot`, so `shot:"static"` + `zoomKeyframes` is the way to move the camera on device footage. See
+  `importing-footage`.
 - **Stylised captions**: `captionStyle` (`stroke`/`highlight`/`gradient`/`minimal`, default `stroke`) and
   `captionAnimation` (`pop`/`rise`/`typewriter`/`wave`/`blur-in`/`none`, default = the surface's native
   entrance) set top-level or per-segment (segment overrides spec overrides brand). **`captionReveal`**

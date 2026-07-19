@@ -1,0 +1,64 @@
+<style>
+  .stage{position:absolute;inset:0;overflow:hidden;font-family:var(--kino-font);color:var(--kino-white);
+         background:radial-gradient(ellipse at 50% 35%, #1a2230 0%, var(--kino-night) 72%)}
+  .wrap{position:absolute;left:0;right:0;top:40%;display:flex;flex-direction:column;align-items:center;
+        transform:translateY(-50%)}
+  .chip{font-family:var(--kino-label-font, var(--kino-font));font-size:2.8vw;letter-spacing:.36em;
+        text-transform:uppercase;color:var(--kino-gold);margin-bottom:5vw;
+        opacity:clamp(0, calc(var(--progress) * 8), 1)}
+  .row{display:flex;gap:3vw;align-items:center;justify-content:center}
+  .hold{width:11vw;height:11vw;border-radius:50%;border:.45vw solid rgba(244,241,236,.25);
+        display:flex;align-items:center;justify-content:center;font-size:4vw;font-weight:700;
+        color:rgba(244,241,236,.4);background:rgba(244,241,236,.05);
+        --d:calc((sibling-index() - 1) * .09);
+        opacity:clamp(0, calc((var(--progress) - .05 - var(--d)) * 10), 1);
+        transform:scale(calc(.75 + clamp(0, calc((var(--progress) - .05 - var(--d)) * 10), 1) * .25))}
+  /* light each hold when --n crosses its index (params.n tweened 0→6) */
+  .h1{border-color:rgba(184,255,60, calc(.25 + min(1, max(0, var(--n))) * .75));
+      background:rgba(184,255,60, calc(min(1, max(0, var(--n))) * .92));
+      color:rgba(18,21,28, calc(.4 + min(1, max(0, var(--n))) * .6));
+      box-shadow:0 0 calc(min(1, max(0, var(--n))) * 2.2vw) rgba(184,255,60,.55)}
+  .h2{border-color:rgba(184,255,60, calc(.25 + min(1, max(0, calc(var(--n) - 1))) * .75));
+      background:rgba(184,255,60, calc(min(1, max(0, calc(var(--n) - 1))) * .92));
+      color:rgba(18,21,28, calc(.4 + min(1, max(0, calc(var(--n) - 1))) * .6));
+      box-shadow:0 0 calc(min(1, max(0, calc(var(--n) - 1))) * 2.2vw) rgba(184,255,60,.55)}
+  .h3{border-color:rgba(184,255,60, calc(.25 + min(1, max(0, calc(var(--n) - 2))) * .75));
+      background:rgba(184,255,60, calc(min(1, max(0, calc(var(--n) - 2))) * .92));
+      color:rgba(18,21,28, calc(.4 + min(1, max(0, calc(var(--n) - 2))) * .6));
+      box-shadow:0 0 calc(min(1, max(0, calc(var(--n) - 2))) * 2.2vw) rgba(184,255,60,.55)}
+  .h4{border-color:rgba(184,255,60, calc(.25 + min(1, max(0, calc(var(--n) - 3))) * .75));
+      background:rgba(184,255,60, calc(min(1, max(0, calc(var(--n) - 3))) * .92));
+      color:rgba(18,21,28, calc(.4 + min(1, max(0, calc(var(--n) - 3))) * .6));
+      box-shadow:0 0 calc(min(1, max(0, calc(var(--n) - 3))) * 2.2vw) rgba(184,255,60,.55)}
+  .h5{border-color:rgba(184,255,60, calc(.25 + min(1, max(0, calc(var(--n) - 4))) * .75));
+      background:rgba(184,255,60, calc(min(1, max(0, calc(var(--n) - 4))) * .92));
+      color:rgba(18,21,28, calc(.4 + min(1, max(0, calc(var(--n) - 4))) * .6));
+      box-shadow:0 0 calc(min(1, max(0, calc(var(--n) - 4))) * 2.2vw) rgba(184,255,60,.55)}
+  .h6{border-color:rgba(184,255,60, calc(.25 + min(1, max(0, calc(var(--n) - 5))) * .75));
+      background:rgba(184,255,60, calc(min(1, max(0, calc(var(--n) - 5))) * .92));
+      color:rgba(18,21,28, calc(.4 + min(1, max(0, calc(var(--n) - 5))) * .6));
+      box-shadow:0 0 calc(min(1, max(0, calc(var(--n) - 5))) * 2.2vw) rgba(184,255,60,.55)}
+  .line{height:.55vw;width:62vw;margin-top:5.5vw;border-radius:999px;background:rgba(244,241,236,.12);
+        overflow:hidden;opacity:clamp(0, calc((var(--progress) - .1) * 8), 1)}
+  .fill{height:100%;width:calc(var(--n) / 6 * 100%);
+        background:linear-gradient(90deg, var(--kino-mint), var(--kino-green))}
+  .sub{margin-top:4vw;font-size:5.2vw;font-weight:700;letter-spacing:.02em;
+       opacity:clamp(0, calc((var(--progress) - .4) * 6), 1);
+       color:#F4F1EC}
+  .sub b{color:var(--kino-mint)}
+</style>
+<div class="stage">
+  <div class="wrap">
+    <div class="chip">V4 · beta timeline</div>
+    <div class="row">
+      <div class="hold h1">1</div>
+      <div class="hold h2">2</div>
+      <div class="hold h3">3</div>
+      <div class="hold h4">4</div>
+      <div class="hold h5">5</div>
+      <div class="hold h6">6</div>
+    </div>
+    <div class="line"><div class="fill"></div></div>
+    <div class="sub"><b>6</b> holds · one timeline</div>
+  </div>
+</div>

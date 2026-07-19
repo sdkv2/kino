@@ -66,6 +66,21 @@ describe("resolveProject", () => {
     expect(() => p.assetPath("../../../../etc/passwd")).toThrow(/escape/i);
     expect(() => p.assetPath("motion/../../../secret.js")).toThrow(/escape/i);
   });
+  it("prefers a nested demos workspace brands/ over a parent brands/ when resolving via spec path", () => {
+    const root = mkdtempSync(join(tmpdir(), "kino-nested-"));
+    mkdirSync(join(root, "brands", "parentbrand"), { recursive: true });
+    const demos = join(root, "demos");
+    mkdirSync(join(demos, "brands", "hold"), { recursive: true });
+    mkdirSync(join(demos, "projects", "hold", "specs"), { recursive: true });
+    writeFileSync(join(demos, "projects", "hold", "project.json"), JSON.stringify({ brand: "hold" }));
+    const p = resolveProject({
+      specPath: join(demos, "projects", "hold", "specs", "trailer.json"),
+      cwd: root, // parent also has brands/ — must not latch onto it
+    });
+    expect(p.workspaceRoot).toBe(demos);
+    expect(p.brandDir("hold")).toBe(join(demos, "brands", "hold"));
+    expect(p.projectRoot).toBe(join(demos, "projects", "hold"));
+  });
 });
 
 describe("ProjectConfigSchema", () => {

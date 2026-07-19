@@ -45,6 +45,8 @@ export function shotTransform(shot: Shot, p: number): { scale: number; tx: numbe
       return { scale: 1.06, tx: 0, ty: lerp(-10, 10, p) };
     case "static":
     default:
-      return { scale: 1.1, tx: 0, ty: 0 };
+      // Truly locked: no zoom, so framed footage fills its inset 1:1 and edge-of-screen UI
+      // (left-aligned labels, status bar) is never cropped. Any scale >1 silently crops the edges.
+      return { scale: 1.0, tx: 0, ty: 0 };
   }
 }

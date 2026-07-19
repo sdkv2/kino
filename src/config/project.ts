@@ -53,11 +53,18 @@ export function resolveWorkspace(cwd: string = process.cwd()): Workspace {
 //   - project name → workspaceRoot/projects/<name>   (must contain project.json)
 //   - spec path    → nearest ancestor that contains project.json
 export function resolveProject(opts: { specPath?: string; project?: string; cwd?: string } = {}): Project {
-  const ws = resolveWorkspace(opts.cwd ?? process.cwd());
-
+  const cwd = opts.cwd ?? process.cwd();
+  // Resolve project first so a nested demos/ workspace (with its own brands/) wins over a parent
+  // repo that also has brands/ — findUp from cwd alone would latch onto the parent.
   let projectRoot: string | null;
   if (opts.project) {
-    projectRoot = join(ws.workspaceRoot, "projects", opts.project);
+    // Named project: search workspace from cwd, then look under that workspace's projects/
+    const wsFromCwd = resolveWorkspace(cwd);
+    projectRoot = join(wsFromCwd.workspaceRoot, "projects", opts.project);
+    // If missing, also try cwd/projects/<name> when cwd itself is a demos-style root
+    if (!existsSync(join(projectRoot, "project.json")) && existsSync(join(cwd, "projects", opts.project, "project.json"))) {
+      projectRoot = join(cwd, "projects", opts.project);
+    }
   } else if (opts.specPath) {
     projectRoot = findUp(resolve(dirname(opts.specPath)), "project.json");
   } else {
@@ -79,6 +86,8 @@ export function resolveProject(opts: { specPath?: string; project?: string; cwd?
   }
 
   const pr = projectRoot; // narrowed to string
+  // Nearest brands/ to the project (demos/… → demos; repo root projects → repo root)
+  const ws = resolveWorkspace(pr);
   return {
     ...ws,
     projectRoot: pr,

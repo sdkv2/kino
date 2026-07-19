@@ -40,6 +40,8 @@ describe("shotTransform", () => {
     expect(shotTransform("push-in", 1).scale).toBeCloseTo(1.2);
     expect(shotTransform("pan-left", 0)).toEqual({ scale: 1.14, tx: 5, ty: 0 });
     expect(shotTransform("tilt-up", 1)).toEqual({ scale: 1.14, tx: 0, ty: -5 });
-    expect(shotTransform("static", 0.5)).toEqual({ scale: 1.1, tx: 0, ty: 0 });
+    // "static" is a true no-op transform (scale 1) so framed footage fills its inset 1:1 and
+    // edge-of-screen UI is never cropped — any scale >1 would silently crop the edges.
+    expect(shotTransform("static", 0.5)).toEqual({ scale: 1.0, tx: 0, ty: 0 });
   });
 });

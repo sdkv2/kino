@@ -7,6 +7,7 @@ This directory is the **only** source of truth for kino’s agent playbooks. It 
 | `video-production` | Specs, build, media, sound |
 | `ad-voice` | VO/caption language + brand Tone/Voice |
 | `adversarial-critique` | Subagent frame QA (overlap / layout) |
+| `importing-footage` | Source recordings → beat map, clip windows, chrome frame, speed/pause |
 
 ## Install into a workspace (any machine)
 

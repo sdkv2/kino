@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderVideo, renderStills } from "../src/render/render.js";
 import { probeDuration } from "../src/media/ffmpeg.js";
 import { generateMock } from "../src/avatar/heygen.js";
-import { mkdtempSync, existsSync } from "node:fs";
+import { mkdtempSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
@@ -78,6 +78,49 @@ describe("renderVideo", () => {
       ],
     };
     const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "app" });
+    expect(outs).toHaveLength(1);
+    expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
+  }, 180000);
+
+  it("renders an app cut-in with clip window, speed, pauseAt, and chrome frame", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-rclip-"));
+    await generateMock(join(outDir, "app.mp4"));
+    mkdirSync(join(outDir, "frames"), { recursive: true });
+    // 1×1 transparent PNG
+    writeFileSync(
+      join(outDir, "frames/chrome.png"),
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const props: KinoProps = {
+      theme,
+      fps: 30,
+      avatar: null,
+      avatarWindows: [],
+      voTrack: null,
+      logo: null,
+      background: { kind: "glow", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
+      disclosure: "test",
+      segments: [
+        {
+          kind: "app",
+          asset: "app.mp4",
+          caption: "sliced",
+          startSec: 0,
+          endSec: 2,
+          shot: "static",
+          transition: "cut",
+          clipFrom: 0,
+          clipTo: 1,
+          speed: 0.5,
+          pauseAt: 1.2,
+          frame: { src: "frames/chrome.png", inset: { x: 10, y: 10, w: 80, h: 80 } },
+        },
+      ],
+    };
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "clip" });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);

@@ -78,10 +78,31 @@ const Segment = z.discriminatedUnion("kind", [
     kicker: Kicker.optional(),
     shot: Shot.optional(),
     transition: Transition.optional(),
+    // Source-footage slice + retiming (importing-footage skill). Seconds into the asset.
+    clipFrom: z.number().min(0).optional(),
+    clipTo: z.number().min(0).optional(),
+    speed: z.number().positive().default(1), // OffthreadVideo playbackRate; tune after beats exist
+    pauseAt: z.number().min(0).optional(), // seconds from segment start → freeze for rest of beat
+    // Optional chrome: footage draws in inset (% of composition); src is a full-bleed PNG/WebP on top.
+    frame: z
+      .object({
+        src: z.string().min(1),
+        inset: z.object({
+          x: z.number().min(0).max(100),
+          y: z.number().min(0).max(100),
+          w: z.number().positive().max(100),
+          h: z.number().positive().max(100),
+        }),
+      })
+      .optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
     captionKeyframes: z.array(BgKeyframe).optional(),
     kickerKeyframes: z.array(BgKeyframe).optional(),
+    // Camera push/pan on the whole footage+chrome group (the "canvas zoom" for inset device footage).
+    // Beat-relative track — `at` is seconds from THIS segment's start (like captionKeyframes), so it
+    // rides the beat when VO timing shifts; params x/y/scale/opacity.
+    zoomKeyframes: z.array(BgKeyframe).optional(),
     motionOverlay: MotionGraphicRef.optional(),
     captionStyle: CaptionStyle.optional(),
     captionAnimation: CaptionAnimation.optional(),
@@ -103,30 +124,55 @@ const Segment = z.discriminatedUnion("kind", [
   }),
 ]);
 
-export const SpecSchema = z.object({
-  brand: z.string().optional(), // falls back to the project's project.json brand
-  title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
-  format: z.array(z.enum(["9:16", "3:4"])).default(["9:16"]),
-  voice: z.string().optional(),
-  // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
-  // eleven_multilingual_v2 for metronome-critical / timing-stable reads.
-  voiceModel: z.string().default("eleven_v3"),
-  avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
-  provider: Provider.optional(), // overrides brand.defaultProvider
-  background: Background.optional(), // overrides brand.background (faceless beats)
-  backgroundIntensity: z.number().optional(), // 0..1 motion strength override
-  backgroundKeyframes: z.array(BgKeyframe).optional(), // agent-driven param tweens over time
-  backgroundTriggers: z.array(BgTrigger).optional(), // agent-driven one-shot actions (e.g. pulse)
-  logoSize: LogoSize.optional(), // small|medium|big or px (overrides brand.logoSize)
-  logoPosition: LogoPosition.optional(), // top|bottom|left|right|center or {x,y}% (overrides brand)
-  logoKeyframes: z.array(BgKeyframe).optional(), // tween logo x/y/scale/opacity over time
-  captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)
-  captionAnimation: CaptionAnimation.optional(), // caption entrance preset (overrides brand.captionStyle.animation)
-  captionReveal: CaptionReveal.optional(), // words-mode reveal: "word" (default) | "all" (whole line laid out, highlight tracks VO)
-  sfx: z.array(SfxEvent).optional(), // free-placed sound effects (place with `kino audio-markers`)
-  music: Music.optional(), // music bed under the VO, auto-ducked while segments speak
-  segments: z.array(Segment).min(1),
-});
+export const SpecSchema = z
+  .object({
+    brand: z.string().optional(), // falls back to the project's project.json brand
+    title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
+    format: z.array(z.enum(["9:16", "3:4"])).default(["9:16"]),
+    voice: z.string().optional(),
+    // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
+    // eleven_multilingual_v2 for metronome-critical / timing-stable reads.
+    voiceModel: z.string().default("eleven_v3"),
+    avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
+    provider: Provider.optional(), // overrides brand.defaultProvider
+    background: Background.optional(), // overrides brand.background (faceless beats)
+    backgroundIntensity: z.number().min(0).max(1).optional(), // 0..1 motion strength override
+    backgroundKeyframes: z.array(BgKeyframe).optional(), // agent-driven param tweens over time
+    backgroundTriggers: z.array(BgTrigger).optional(), // agent-driven one-shot actions (e.g. pulse)
+    logoSize: LogoSize.optional(), // small|medium|big or px (overrides brand.logoSize)
+    logoPosition: LogoPosition.optional(), // top|bottom|left|right|center or {x,y}% (overrides brand)
+    logoKeyframes: z.array(BgKeyframe).optional(), // tween logo x/y/scale/opacity over time
+    captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)
+    captionAnimation: CaptionAnimation.optional(), // caption entrance preset (overrides brand.captionStyle.animation)
+    captionReveal: CaptionReveal.optional(), // words-mode reveal: "word" (default) | "all" (whole line laid out, highlight tracks VO)
+    sfx: z.array(SfxEvent).optional(), // free-placed sound effects (place with `kino audio-markers`)
+    music: Music.optional(), // music bed under the VO, auto-ducked while segments speak
+    segments: z.array(Segment).min(1),
+  })
+  .superRefine((spec, ctx) => {
+    // Kept off the app object so discriminatedUnion stays a plain ZodObject (ZodEffects breaks it).
+    spec.segments.forEach((seg, i) => {
+      if (seg.kind !== "app") return;
+      if (seg.clipTo != null && seg.clipFrom != null && !(seg.clipTo > seg.clipFrom)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "clipTo must be > clipFrom", path: ["segments", i, "clipTo"] });
+      }
+      if (seg.clipTo != null && seg.clipFrom == null && seg.clipTo <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "clipTo must be > 0 when clipFrom is omitted",
+          path: ["segments", i, "clipTo"],
+        });
+      }
+      const inset = seg.frame?.inset;
+      if (inset && (inset.x + inset.w > 100 || inset.y + inset.h > 100)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "frame.inset x+w and y+h must be ≤ 100",
+          path: ["segments", i, "frame", "inset"],
+        });
+      }
+    });
+  });
 
 export type Spec = z.infer<typeof SpecSchema>;
 export type Segment = z.infer<typeof Segment>;

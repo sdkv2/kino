@@ -2,7 +2,7 @@
 
 **kino** turns an agent-authored JSON **spec** into a finished vertical video: ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** animated background → Remotion composite → 9:16 / 3:4 MP4. You (or a driving agent) supply the creative as JSON; kino handles deterministic production.
 
-This guide takes you from a clean checkout to your first rendered video. For every command see the [CLI reference](cli-reference.md); for the JSON format see the [Spec reference](spec-reference.md).
+This guide takes you from a clean checkout to your first rendered video. For the full command list see the [CLI reference](cli-reference.md); for the JSON format see the [Spec reference](spec-reference.md).
 
 ## Prerequisites
 
@@ -11,10 +11,13 @@ This guide takes you from a clean checkout to your first rendered video. For eve
 | **Node 18+** | runtime (the CLI is ESM) |
 | **ffmpeg / ffprobe** | audio muxing, frame extraction |
 | **ImageMagick** (`magick`) | storyboard contact sheets + frame montages |
-| **ElevenLabs API key** | voiceover (required for real renders) |
+| **ElevenLabs API key** | voiceover (required for real renders — faceless and most avatar setups) |
 | HeyGen / Hedra / Replicate key | only if you use an AI avatar (optional) |
 
-Faceless videos (no avatar) need only the ElevenLabs key. With `--mock` you can preview structure and timing with **no API keys at all** (silent VO + placeholder visuals).
+Faceless needs only ElevenLabs. Avatar builds usually need it too (kino VO → lip-sync), plus the
+avatar provider. Get a key via [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) (referral —
+supports the project). With `--mock` you can preview structure and timing with **no API keys at all**
+(silent VO + placeholder visuals).
 
 ## Install
 
