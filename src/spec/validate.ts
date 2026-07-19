@@ -4,6 +4,7 @@ import type { Spec } from "./schema.js";
 import type { Project } from "../config/project.js";
 import type { Provider } from "../avatar/provider.js";
 import { lintMotionSource } from "../render/motiongraphic.js";
+import { resolveAudioSource } from "../media/sfx.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -85,6 +86,24 @@ export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: strin
   }
 }
 
+// SFX/music sources: every ref must resolve (library id or project asset) before any API spend.
+export function assertAudioSources(spec: Spec, project: { assetPath(rel: string): string }): void {
+  (spec.sfx ?? []).forEach((s, i) => {
+    try {
+      resolveAudioSource(s.src, project);
+    } catch (e) {
+      throw new Error(`sfx[${i}]: ${(e as Error).message}`);
+    }
+  });
+  if (spec.music) {
+    try {
+      resolveAudioSource(spec.music.src, project);
+    } catch (e) {
+      throw new Error(`music: ${(e as Error).message}`);
+    }
+  }
+}
+
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   const hits = complianceScan(spec, brand);
   if (hits.length) {
@@ -92,4 +111,5 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   }
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
+  assertAudioSources(spec, project);
 }
