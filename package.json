@@ -1,5 +1,8 @@
 {
-  "name": "kino",
+  "name": "@sdkv2/kino",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "1.18.0",
   "description": "Agent-driven short-form video production CLI",
   "license": "MIT",
