@@ -4,6 +4,7 @@ out/
 .env
 *.log
 dist/
+scratchpad/
 projects/
 brands/
 

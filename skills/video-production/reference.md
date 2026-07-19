@@ -5,9 +5,9 @@
 - `kino inspect <spec> [--real]` — resolved plan as JSON: beats, timings, modes + per-segment **word timestamps**
 - `kino backgrounds` — list animated backgrounds + their agent-controllable params/actions
 - `kino elements` — list overlay elements (logo …) + their layout/tween controls
-- `kino still <spec> [--at <s,…> | --segment <n>] [--real] [--format]` — render one frame fast (no encode)
+- `kino still <spec> [--at <s,…> | --segment <n> | --around <s>] [--span] [--count] [--montage] [--real] [--format]` — render still(s) fast; **`--around` is the default QA tool for motion/Lottie/typed beats** (sheets N frames around a point — use after every edit)
 - `kino storyboard <spec> [--frames <n>] [--real] [--format]` — per-beat stills (default 2: composition + the fully-revealed end-state) tiled into a labeled contact sheet; the **·full** tile is where a caption overflows the frame or collides with a `texts` overlay
-- `kino frames <video> [--at|--count|--every] [--montage]` — extract stills from any video
+- `kino frames <video> [--at|--around|--count|--every] [--montage]` — extract stills from any video; `--around` sheets a moment (post-build twin of `still --around`)
 - `kino transcribe <video> [--format …] [--out …]` — **(reference videos only)** speech → timestamped transcript
 - `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
 - `kino batch <input.json>` — input is a JSON array of spec paths
@@ -142,6 +142,9 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   caption font's display weight (e.g. a boarding-pass-style chip inside a `kind:"motion"` beat).
 
 ## Captions
+- `caption` is **optional** on every kind — omit it for a caption-free beat (no caption node mounts).
+  Under a **words-mode brand**, also set per-beat `"captionMode": "phrase"` or synced spoken words still
+  paint. Stylised typed UI (terminal/chat) → `speech-synced-ui` + motion `env.words`, not a fancy caption.
 - `captionMode` (brand default or per-segment): `phrase` (short editorial caption, block animation —
   default, renders the `caption` field) or `words` (renders the **spoken `text`**, word-by-word, synced
   to the VO — `caption` is ignored in this mode).

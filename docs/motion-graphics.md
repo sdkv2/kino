@@ -40,9 +40,67 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 | `--<param>` | every key in the spec's `params`, tweened by `keyframes` (e.g. `--pct`) |
 | `--kino-mint` `--kino-green` `--kino-night` `--kino-white` `--kino-gold` | brand palette |
 | `--kino-font` | brand font family |
+| `--kino-label-font` | brand `labelFont` (falls back to `--kino-font`) |
 | `--kino-caption-bottom` | px from the frame bottom where kino's caption band sits (`0px` when this beat has no caption) — keep your own text clear of it, e.g. `bottom:calc(var(--kino-caption-bottom) + 24px)` |
+| `--kino-words-shown` | count of the beat's spoken words whose start has been reached at this frame — reveal the first N words to type text **in sync with the VO** (no hand-placed keyframes) |
+| `--kino-word-count` | total spoken words in this beat |
 
 > The gold accent **is** auto-injected as `--kino-gold` (with a legacy `--gold` alias the shipped `examples/motion-flex/*` files use). You don't need to pass it as a param.
+
+### Typed-in-sync text (the caption engine can't style; this can)
+
+kino computes the beat's per-word VO timings and hands them to the motion graphic, so a **stylised**
+surface (terminal, code editor, chat bubble, monospace prompt with a block caret — anything the caption
+presets can't express) can type text locked to the speech, with zero drift.
+
+Agent playbook for recipes (caption-free montage, spoof chat window, camera-follows-typing):
+**`skills/speech-synced-ui/SKILL.md`**.
+
+- **CSS-only (word grain)** — reveal per-word by comparing each word's index to `--kino-words-shown`. Word `i` (0-based):
+  `opacity: clamp(0, calc(var(--kino-words-shown) - <i>), 1)`. Reads like caption drip — fine for chips, weak for "being typed".
+- **JS `render(env)`** — `env.words` is the beat's `{ word, start, end }[]` (times are **beat-relative** seconds,
+  matching `env.t`). Prefer a **burst typewriter** (chars land ~45ms apart at the front of each word span, then hold)
+  over joining whole words at `start <= t` (word blocks) or metering evenly across the whole span (metronome feel):
+
+  ```js
+  var KEY = 0.045, words = env.words || [], out = "", typing = false;
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (env.t < w.start) break;
+    var n = Math.min(w.word.length, Math.floor((env.t - w.start) / KEY) + 1);
+    out += w.word.slice(0, n) + (i < words.length - 1 ? " " : "");
+    typing = n < w.word.length;
+  }
+  var caretOn = typing || Math.floor(env.frame / 15) % 2 === 0;
+  return '<span style="font-family:var(--kino-label-font);color:var(--kino-night)">' + out +
+    '<b style="opacity:' + (caretOn ? 1 : 0) + '">█</b></span>';
+  ```
+
+  Works in a full-screen `kind:"motion"` beat **and** as a `motionOverlay` on an `app`/`avatar` beat (the
+  overlay gets its host beat's words).
+
+### Camera zoom / pan inside a motion graphic
+
+Motion beats/overlays do **not** read `zoomKeyframes` (that track is for `app` footage + frame chrome).
+Drive a wrapper with CSS:
+
+```css
+.cam {
+  transform: scale(calc(1 + 0.08 * var(--progress)))
+             translateY(calc(-2% * var(--progress)));
+  transform-origin: 50% 46%;
+}
+```
+
+Or set a custom `--typed` / `--cam` from JS (typed-char fraction) or a keyframed `params` value for eased holds.
+**If typed text is a `motionOverlay` on a static PNG window**, zooming the overlay alone desyncs text from
+chrome — draw chrome + text in **one** motion graphic and transform that unit.
+
+### Overlay + host fade
+
+Overlays paint at full opacity from frame 0. If the host `app`/`frame` fades in (default transition),
+typed text can float over the blurred ground. Use `"transition": "cut"` on that beat, or fade the overlay
+with the same envelope.
 
 ## Driving it from the spec
 
@@ -222,11 +280,14 @@ return data.map((h, i) =>
   transform-origin:bottom;transform:scaleY(var(--progress))}</style>`;
 ```
 
-`env = { frame, t, progress, pulse, params, palette:{mint,green,night,white,gold,font}, width, height }`.
+`env = { frame, t, progress, pulse, params, palette:{mint,green,night,white,gold,font}, width, height, words? }`.
+`words` is the beat-relative VO timing array (same as the caption engine); omit/empty when the beat has no speech.
 
 It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
 the build lints the source and rejects `Date.now`/`Math.random`/timers/`fetch`/`import`/`require`/`process`
-and direct `document`/`window` access. Reference it from the spec exactly like a `.html` graphic.
+and direct `document`/`window` access. **Comments are stripped before the scan**, so a banned token that
+appears only in a comment (e.g. a filename containing `window.`) is not flagged — keep those tokens out of
+executable code. Reference it from the spec exactly like a `.html` graphic.
 
 ## Embedded Lottie (Tier 3)
 
@@ -325,10 +386,23 @@ The build **rejects** a graphic that contains any of the following (each error t
 
 ## Authoring tips
 
+- **Make it move — default to richer animation.** Agents under-animate: a card that only fades
+  `opacity` with `--progress` then holds is unfinished. Target **≥3 layers**: entrance (staggered
+  `kino-pop` / scrubbed `@keyframes` / overshoot params) + **continuous life** off `--t` or a looping
+  Lottie + speech lock (`triggers` / `env.words` / `kino-pulse`) and/or a CSS camera push. Stagger
+  whenever ≥2 elements share the frame. Brand calm ≠ motionless — soft idle life still counts.
+  Playbook: `skills/video-production` § Make motion graphics move.
+- **Preview in a loop — `kino still` + `--around` are the main tools.** A midpoint still hides
+  typewriter grain, Lottie phase, and camera push. After every non-trivial edit:
+  `kino still <spec> --segment N` (layout) then `kino still <spec> --around <t>` (progression sheet;
+  tune `--span` / `--count`). **Read the sheet** — tiles should look meaningfully different. After real VO:
+  `kino still … --around <t> --real` or `kino frames <mp4> --around <t>`. Typed UI: `skills/speech-synced-ui`.
 - **Use `vw` units for resolution independence.** The render canvas is 1080px wide, so `1vw = 10.8px`; sizing everything in `vw` makes the graphic render pixel-identical in the video *and* scale cleanly when the raw file is previewed at any width (a fixed-px graphic overflows a narrow preview pane).
-- **Prefer `easeInOut`** (or a smoothstep ramp) over `spring` for calm, premium motion; let entrances last ~1s and add slow continuous life off `--t` (e.g. `transform:rotate(calc(var(--t) * 20deg))`).
+- **Match brand amplitude, not "no motion".** Quiet brands: soft `easeInOut`, long entrances (~1s),
+  slow `--t` life. Punchy brands: `overshoot`/`spring`, word-fire Lottie, harder pops. Either way,
+  something should still be alive after the entrance settles.
 - **Inline images as `data:` URIs** — external/relative `url()` won't resolve in the render.
-- **Sync to the voiceover** — read per-word start/end with `kino inspect` and place your keyframe `at` times on the words.
+- **Sync to the voiceover** — read per-word start/end with `kino inspect` and place your keyframe `at` times on the words; verify with `--around` at those times, not inspect alone.
 
 ## Shared library
 

@@ -10,11 +10,16 @@ export function isHeroCaption(s: Pick<KinoSegment, "kind" | "cta">, hasAvatar: b
   return !hasAvatar && s.kind === "avatar";
 }
 
+/** Whether this beat draws any caption at all: word-synced words, or non-blank caption text.
+ *  Single guard shared by layout (band reservation) and render (mounting the caption node). */
+export function hasCaptionContent(s: KinoSegment): boolean {
+  const wordMode = s.captionMode === "words" && !!s.words && s.words.length > 0;
+  return wordMode || !!(s.caption && s.caption.trim());
+}
+
 // The caption band bottom (px) a motion beat should reserve, or 0 when nothing sits in the bottom band
 // for this beat: an empty caption, or a faceless avatar beat whose caption is the centered hero text.
 export function captionBandBottom(s: KinoSegment, hasAvatar: boolean): number {
   if (isHeroCaption(s, hasAvatar)) return 0;
-  const wordMode = s.captionMode === "words" && !!s.words && s.words.length > 0;
-  const hasCaption = wordMode || !!(s.caption && s.caption.trim());
-  return hasCaption ? CAPTION_BOTTOM : 0;
+  return hasCaptionContent(s) ? CAPTION_BOTTOM : 0;
 }

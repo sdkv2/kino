@@ -51,6 +51,10 @@ kino still <spec> [options]
 | Option | Value | Meaning |
 |---|---|---|
 | `--at <list>` | seconds | Comma-separated timestamps to render. |
+| `--around <sec>` | seconds | Sample N frames in a window around this point and tile them into one sheet (implies montage). |
+| `--span <sec>` | seconds | Window width for `--around` (default `1`). |
+| `--count <n>` | n | Frames in the `--around` window (default `5`). |
+| `--montage` | — | Tile multiple stills into one contact sheet (also implied by `--around`). |
 | `--segment <n>` | index | Render the midpoint of segment `n`. |
 | `--format <fmt>` | `9:16\|3:4` | Output format. |
 | `--font <name>` | font name | Override `brand.font`. |
@@ -60,6 +64,9 @@ kino still <spec> [options]
 ```bash
 kino still specs/lie-test.json --segment 0
 kino still specs/lie-test.json --at 2.5,7
+kino still specs/lie-test.json --around 1.5            # 5 frames ±0.5s → one sheet
+kino still specs/lie-test.json --around 1.5 --span 2 --count 7
+kino still specs/lie-test.json --at 1,1.5,2 --montage
 ```
 
 ### `storyboard`
@@ -315,7 +322,7 @@ kino scan <video> [options]
 | `--mock` | — | Offline canned transcript. |
 
 ### `frames`
-Extract frames from any video — explicit timestamps, or evenly.
+Extract frames from any video — explicit timestamps, around a point, or evenly.
 
 ```
 kino frames <video> [options]
@@ -324,14 +331,19 @@ kino frames <video> [options]
 | Option | Value | Meaning |
 |---|---|---|
 | `--at <list>` | seconds | Comma-separated timestamps. |
+| `--around <sec>` | seconds | Sample N frames in a window around this point and tile them (implies montage). |
+| `--span <sec>` | seconds | Window width for `--around` (default `1`). |
 | `--out <dir>` | dir | Output directory. |
-| `--montage` | — | Also tile the frames into one image. |
-| `--every <sec>` | seconds | A frame every N seconds (when `--at` is omitted). |
-| `--count <n>` | n | N frames spaced evenly (when `--at` is omitted). |
+| `--montage` | — | Also tile the frames into one image (also implied by `--around`). |
+| `--every <sec>` | seconds | A frame every N seconds (when `--at`/`--around` is omitted). |
+| `--count <n>` | n | With `--around`: frames in the window (default `5`). Else N frames spaced evenly. |
+
+Precedence: `--at` > `--around` > `--count` > `--every`.
 
 ```bash
 kino frames reference.mp4 --count 12 --montage
 kino frames reference.mp4 --at 0,3.5,10
+kino frames out/ad.mp4 --around 1.5 --span 1 --count 5   # QA a moment as one sheet
 ```
 
 ---
