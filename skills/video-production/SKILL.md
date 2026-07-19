@@ -51,12 +51,25 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 - **Emphasis is a spice, not a sauce** — `emphasis` adds a glow to the marked word while it's spoken.
   Cap it at one word (max two) per beat, on the single word carrying the claim; several emphasised
   words per beat reads as noise and devalues all of them. Beats can (and often should) have none.
+- **Key the highlight colour for contrast** — the active (spoken) word and the brand name render in
+  `colors.mint`. Choose it to pop against the background luminance: a *bright* accent over a dark
+  ground, a deep one over a light ground. A dark saturated accent (deep red, navy) on a near-black
+  background reads dimmer than the white body text, so the one word meant to pop recedes — if the
+  brand's signature colour is dark, keep the active word bright and carry that colour in the background
+  or `texts` overlays instead.
 - Open with an `avatar` hook, cut to `app` for the demo, return to `avatar` for the payoff + `cta`.
 - **Media density**: caption cards are connective tissue, not the show — viewers stay for footage,
   screenshots, and motion. Target roughly **half the runtime on media** (`app` cut-ins, `motion`
   beats, motionOverlays): in a ~20s spec that's 2-3 `app` beats + at least one `motion`/Lottie
   moment. Never run more than two plain caption-card beats back-to-back; break the pattern with a
-  cut-in or overlay. B-roll sources: project assets, `kino pexels`, `assets-lib/lottie/`.
+  cut-in or overlay. **Compose each caption card for what its beat says, not to a template** — the
+  monotony that reads as a slideshow comes from framing every beat as the same centered line. Fit the
+  frame to the content: a one-word hook can sit big and high, a full sentence calmer and centered, a
+  two-part contrast can split, the CTA anchors low with the wordmark/URL; add a `texts` label only
+  where the beat earns one. Variety is the *result* of composing per beat, not the goal — two beats
+  that genuinely want the same frame may share it. The failure is every beat defaulting to dead-center
+  because none was composed for what it says (don't jitter position just to make cards differ — that
+  reads as noise, not design). B-roll sources: project assets, `kino pexels`, `assets-lib/lottie/`.
   **Consecutive `app` beats crossfade shot-to-shot automatically** (the first holds under the next's
   fade-in — no background flash between them), so sequencing related footage back-to-back is
   encouraged: it reads as edited film, not a slideshow.
