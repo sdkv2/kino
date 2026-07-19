@@ -34,7 +34,7 @@ function WIN(fieldHtml, caretOn, camStyle, ctaHtml) {
   + '</style>';
 }
 
-var full = "Kino, make me an advert";
+var full = "Kino, make me an advert.";
 // start zoomed (match beat-0 end S=1.14), pull back to native across the beat
 var S = 1.14 - 0.14 * (env.progress * (2 - env.progress));
 var cam = "scale(" + S.toFixed(4) + ")";
