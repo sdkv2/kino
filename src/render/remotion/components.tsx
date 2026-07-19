@@ -374,13 +374,14 @@ export const Kicker: React.FC<{ text: string; color: string; fg: string; t: Them
   );
 };
 
-export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?: Shot; transition?: Transition }> = ({
-  asset,
-  dur,
-  t,
-  shot = "static",
-  transition = "fade",
-}) => {
+export const AppCutaway: React.FC<{
+  asset: string;
+  dur: number;
+  t: Theme;
+  shot?: Shot;
+  transition?: Transition;
+  holdExit?: boolean; // next beat is also media — hold at full opacity, the successor fades in on top
+}> = ({ asset, dur, t, shot = "static", transition = "fade", holdExit = false }) => {
   const f = useCurrentFrame();
   const p = Math.min(1, f / dur);
 
@@ -394,9 +395,11 @@ export const AppCutaway: React.FC<{ asset: string; dur: number; t: Theme; shot?:
   const { fps } = useVideoConfig();
   const ein = spring({ frame: f, fps, config: { damping: 14, stiffness: 130, mass: 0.6 }, durationInFrames: 18 });
   const eIO = Math.min(1, ein); // clamped (no overshoot) for opacity/scale
-  const eout = Easing.in(Easing.cubic)(
-    interpolate(f, [dur - 12, dur], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
-  );
+  const eout = holdExit
+    ? 0
+    : Easing.in(Easing.cubic)(
+        interpolate(f, [dur - 12, dur], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+      );
   let opacity = 1;
   let otx = 0;
   let oty = 0;

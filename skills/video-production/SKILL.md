@@ -57,6 +57,9 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   beats, motionOverlays): in a ~20s spec that's 2-3 `app` beats + at least one `motion`/Lottie
   moment. Never run more than two plain caption-card beats back-to-back; break the pattern with a
   cut-in or overlay. B-roll sources: project assets, `kino pexels`, `assets-lib/lottie/`.
+  **Consecutive `app` beats crossfade shot-to-shot automatically** (the first holds under the next's
+  fade-in — no background flash between them), so sequencing related footage back-to-back is
+  encouraged: it reads as edited film, not a slideshow.
 - **Camera/transitions auto-vary** — omit and `kino` picks a varied shot + transition per cut-in.
   Override per segment with `"shot"` (`push-in`/`pull-out`/`pan-left`/`pan-right`/`tilt-up`/`static`,
   plus `scroll`/`scroll-up` to pan vertically through a **tall** app still — a simulated scroll that

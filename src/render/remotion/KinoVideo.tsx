@@ -54,24 +54,36 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           })
         : null}
 
-      {segments
-        .filter((s) => s.kind === "app")
-        .map((s, i) => (
-          <Sequence key={`a${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
+      {segments.map((s, i) => {
+        if (s.kind !== "app") return null;
+        // Media-to-media handoff: when the NEXT beat is also an app cut-in, hold this clip (no exit
+        // animation) through the VO gap and 12 frames into the successor, which mounts above it and
+        // fades in — a crossfade between shots instead of a flash of bare background between them.
+        const next = segments[i + 1];
+        const chained = next?.kind === "app";
+        const beatDur = f(s.endSec) - f(s.startSec);
+        const seqDur = chained ? f(next.startSec) - f(s.startSec) + 12 : beatDur;
+        return (
+          <Sequence key={`a${i}`} from={f(s.startSec)} durationInFrames={seqDur}>
             <AppCutaway
               asset={s.asset!}
-              dur={f(s.endSec) - f(s.startSec)}
+              dur={seqDur}
               t={theme}
               shot={s.shot as Shot | undefined}
               transition={s.transition as Transition | undefined}
+              holdExit={chained}
             />
             {s.kicker ? (
-              <TweenOverlay keyframes={s.kickerKeyframes ?? []}>
-                <Kicker text={s.kicker.text} color={s.kicker.color} fg={s.kicker.fg} t={theme} />
-              </TweenOverlay>
+              // Kicker stays scoped to its own beat — it must not bleed over the next clip.
+              <Sequence durationInFrames={beatDur}>
+                <TweenOverlay keyframes={s.kickerKeyframes ?? []}>
+                  <Kicker text={s.kicker.text} color={s.kicker.color} fg={s.kicker.fg} t={theme} />
+                </TweenOverlay>
+              </Sequence>
             ) : null}
           </Sequence>
-        ))}
+        );
+      })}
 
       {/* Full-screen motion-graphic beats. */}
       {segments
