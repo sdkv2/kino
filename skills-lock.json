@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "ad-voice": {
+      "source": "skills/ad-voice",
+      "sourceType": "local",
+      "computedHash": "40a1fb8e3510aa08a0d4cbb8ff5a3590856c3b3dedb46a591eebe0e2874a72e0"
+    },
+    "adversarial-critique": {
+      "source": "skills/adversarial-critique",
+      "sourceType": "local",
+      "computedHash": "873ee7312308a18ee2bd8f7081cca88f1d14a08131fc0ecaddc17a9aa507624f"
+    },
+    "video-production": {
+      "source": "skills/video-production",
+      "sourceType": "local",
+      "computedHash": "0065188c80ae654cdd4607c870dbff43eadeccecbbab22d94e348f1c943dca84"
+    }
+  }
+}

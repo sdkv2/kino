@@ -217,9 +217,30 @@ bannedPhrases: [get the job, guaranteed interview, land more interviews]
 ---
 # evidentcv — brand guidelines
 
-- Voice: (describe tone — e.g. confident, plain-spoken, short sentences)
-- Look: (palette usage, gradients, what to avoid)
-- Captions: (phrase vs word-by-word; what to emphasise)
+## Tone / Voice
+
+- **Register:** plain
+- **Person:** you
+- **Pace:** punchy
+- **Energy:** medium
+- **Proof style:** specific numbers
+- **CTA style:** direct
+- **Say like this:**
+  - "Paste the job post. We'll rebuild the bullets that actually match."
+- **Never say like this:**
+  - "Unlock your career potential with our innovative platform."
+- **Banned (brand):** passionate, journey, dream job
+- **Preferred words:** match, paste, rebuild, callbacks, bullets
+
+_Tone / Voice is agent guidance (see `skills/ad-voice`). Not parsed by the renderer._
+
+## Look
+
+- Palette usage, gradients, what to avoid
+
+## Captions
+
+- Phrase vs word-by-word; what to emphasise
 
 _All frontmatter is optional; anything omitted uses kino defaults._
 ```

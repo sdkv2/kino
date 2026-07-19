@@ -12,14 +12,19 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
 1. `kino doctor` — confirm ffmpeg and the keys for your chosen provider are present.
    (`kino fonts` lists fonts settable as `brand.font`/`brand.labelFont` — downloaded on demand.)
    Brands are **optional markdown** — `brands/<name>/brand.md` (YAML frontmatter for palette/font/voice/
-   disclosure + a free-form guidelines body). Run `kino brand <name>` to read a brand's styling rules;
-   with no brand, kino uses its defaults. (Set the brand via `spec.brand` or a project's `project.json`.)
-2. Author a spec (schema below). Keep captions short; never claim guaranteed jobs/interviews.
+   disclosure + a free-form guidelines body with a **Tone / Voice** section). Run `kino brand <name>` to
+   read a brand's styling + tone rules; with no brand, kino uses its defaults. (Set the brand via
+   `spec.brand` or a project's `project.json`.)
+2. Author a spec (schema below). **Copy:** read `ad-voice` skill before writing segment `text`/`caption`
+   — follow the brand's Tone / Voice dial, then the anti-slop rules. Keep captions short; never claim
+   guaranteed jobs/interviews.
 3. **Iterate (fast, free):** `kino inspect specs/foo.json` to map the beats, then
    `kino still specs/foo.json --segment N` (one frame, ~1–2s) or `kino storyboard specs/foo.json`
    (each beat twice — composition + the **·full** reveal; check the ·full tile for captions that
    overflow the frame or collide with a `texts` overlay). Edit the spec, re-preview. These default to mock (zero spend).
+   **Before shipping a storyboard as "done":** run the `adversarial-critique` skill (subagent frame QA).
 4. `kino build specs/foo.json` — real render → `out/<title>/`. (`kino frames <mp4> --at …` for post-build QA.)
+   Re-run `adversarial-critique` on post-build frames when layout could have shifted with real VO timing.
 
 **Projects** keep campaigns tidy: `projects/<name>/{specs,assets,out}` + a `project.json` that assigns a
 shared brand and default overrides. Run any command on a spec inside a project (kino infers it from the
@@ -61,6 +66,43 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
 6  avatar   CTA (cta: true) — brand name + URL, anchored low
 ```
 **Footage-cut rules:** match each clip's length to its beat's VO; vary the `shot` per cut-in to the action (push-in / pan / pull-out); keep related shots back-to-back for the auto-crossfade; set the brand's `captionStyle.background` backplate so captions stay legible over uncontrolled footage.
+
+## Short-form layout defaults (TikTok / Reels / Shorts)
+
+**Default to this composition unless the brand guidelines explicitly ask otherwise.** Agents over-tween
+layout and crowd the top chrome — don't.
+
+| Layer | Default | Don't |
+|---|---|---|
+| Hook (`avatar`, faceless) | Centered hero caption — big, calm, no `captionKeyframes` | Pin to top edge; `y: -16` "for variety" |
+| App / footage captions | Lower-third (engine default) + brand backplate | Per-beat `y`/`scale` jitters |
+| CTA (`cta: true`) | Lower-third automatically — use `captionReveal: "all"` | Fake with `captionKeyframes` `y`; leave as centered hero |
+| Kickers | Top pill (engine default) — fine; not a CTA | Treat kicker as the end card |
+| `texts[]` labels | Small, `position: "top"` (or clear of caption band) | Drop a second headline into the lower-third on CTA |
+| Motion / counters | Stack **mid-frame**: CSS `.wrap { top: 38%–42%; }` (no tiny `translateY(20vw)`), clear of caption band + top UI | Park the graphic in the top ~20% (Following/For You chrome) |
+| Music | Quiet bed `"volume": 0.10–0.14`, `"duck": 0.04`, short `fadeOutSec` | Loud beds fighting VO/captions |
+| Logo | `logoPosition: top`, simple fade-in — hold steady | Tween logo `y` on the CTA beat |
+
+**Caption stability is the default.** Omit `captionKeyframes` on a first pass. Add one only when a
+single beat must dodge a bright subject (check that still) — never a different `y` on every beat.
+
+**CTA placement:** `cta: true` on a faceless avatar beat forces the **lower-third** band (not the
+centered hero). The flag is wired through the renderer — trust it.
+
+**Motion-beat recipe** (counters, timers, big numbers):
+
+```css
+/* assets/motion/*.html — short-form safe */
+.wrap {
+  position: absolute; left: 0; right: 0;
+  top: 40%;                          /* below platform chrome; above lower-third caption */
+  display: flex; flex-direction: column; align-items: center;
+}
+/* Keep the stack ≤ ~50vw tall so it doesn't collide with the caption band (~CAPTION_BOTTOM). */
+```
+
+Preview motion with `kino still --segment <n>` before the real build. If the graphic kisses the
+caption or sits under the top UI, nudge `top` — don't reintroduce per-caption `y` offsets to compensate.
 
 - `avatar` segments are the on-camera/hook/payoff beats; `app` segments show the screenshot/recording while the VO continues. (Faceless still uses these kinds — `avatar` beats become branded caption cards.)
 - **Emphasis is a spice, not a sauce** — `emphasis` adds a glow to the marked word while it's spoken.
@@ -119,15 +161,18 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   self-contained HTML/CSS file in `assets/motion/` and reference it from the spec — a full-screen
   beat (`{ "kind": "motion", "source": "motion/x.html", "text": "spoken VO" }`) or an overlay on an
   app/avatar beat (`"motionOverlay": { "source": "motion/x.html" }`). **You write the HTML/CSS; the
-  JSON owns timing.** Animate by reading kino-set CSS variables — `--progress` (0→1 over the beat),
-  `--t`, `--frame`, `--pulse`, your `params` (e.g. `--pct`, tweened by `keyframes`), and the brand
-  palette (`--kino-mint` etc.). Two font vars are available too: `--kino-font` (the caption font) and
-  `--kino-label-font` (`brand.labelFont`, falls back to `--kino-font` if the brand sets none) — pair a
-  display face on the hero number with a mono/label face on a supporting chip instead of reusing one
-  font everywhere. You can also use real **`@keyframes`** — add `class="kino-anim"` and
-  kino force-pauses + scrubs them across the beat deterministically (sub-timing in the `%` stops,
-  stagger via `--kino-delay`). **No CSS `transition`/JS and don't set `animation-play-state`** — motion
-  is always frame-driven (CSS variables or scrubbed `@keyframes`). For gradient-filled text
+  JSON owns timing.** **Layout first (short-form):** put the stack mid-frame (`.wrap { top: 40%; }`) —
+  see [Short-form layout defaults](#short-form-layout-defaults-tiktok--reels--shorts). A
+  `translateY(20–28vw)` from the top lands under TikTok/Reels chrome; don't ship that. Animate by
+  reading kino-set CSS variables — `--progress` (0→1 over the beat), `--t`, `--frame`, `--pulse`,
+  your `params` (e.g. `--pct`, tweened by `keyframes`), and the brand palette (`--kino-mint` etc.).
+  Two font vars are available too: `--kino-font` (the caption font) and `--kino-label-font`
+  (`brand.labelFont`, falls back to `--kino-font` if the brand sets none) — pair a display face on
+  the hero number with a mono/label face on a supporting chip instead of reusing one font
+  everywhere. You can also use real **`@keyframes`** — add `class="kino-anim"` and kino force-pauses
+  + scrubs them across the beat deterministically (sub-timing in the `%` stops, stagger via
+  `--kino-delay`). **No CSS `transition`/JS and don't set `animation-play-state`** — motion is
+  always frame-driven (CSS variables or scrubbed `@keyframes`). For gradient-filled text
   (`background-clip:text`) with tight/negative `letter-spacing`, add `class="kino-cliptext"` so the
   last glyph's edge keeps its gradient instead of being clipped. For loops/computed geometry, point
   `source` at a `.js` file whose body is `render(env)` returning an HTML string (evaluated per frame,
@@ -167,9 +212,10 @@ When a beat needs real-world footage the brand assets can't provide — lifestyl
 hands-on-phone, city texture — pull licensed stock video instead of settling for a static screenshot:
 `kino pexels "city commute at night"` lists portrait clips (duration, size, author, thumbnail URL),
 then `kino pexels "city commute at night" --get 2 --project <name>` downloads into `assets/pexels/<id>.mp4`.
-**Screen the thumbnail before downloading**: open the listed thumbnail URL for your shortlist and
-reject on composition/mood there — downloading full clips just to preview burns bandwidth for
-candidates you were never going to use. Only `--get` the ones you'd plausibly cut in.
+**Screen the local thumb before downloading**: search prints `thumb: /tmp/kino-pexels-thumbs/<id>.jpg`
+— Read that file and reject on composition/mood there. Don't curl the remote URL by hand.
+Downloading full clips just to preview burns bandwidth for candidates you were never going to use.
+Only `--get` the ones you'd plausibly cut in.
 Reference it from an `app` segment like any asset (`"asset": "pexels/<id>.mp4"` — .mp4 assets play
 with the same shots/transitions as stills). Prefer real product footage when it exists; match the
 clip's duration to the beat's VO length (durations are listed). Needs `PEXELS_API_KEY` (free — pexels.com/api).
@@ -185,6 +231,29 @@ the caption, not just "is there a backplate": if it's still weak, reposition the
 area (`captionKeyframes`) rather than only raising opacity.
 No repo example currently sequences real Pexels footage end-to-end across a full spec — don't burn
 time searching `projects/*/specs/` for one; build the beat sequencing straight from this schema.
+Search caches local thumbs under `$TMPDIR/kino-pexels-thumbs/<id>.jpg` — **Read those paths** to
+screen composition/mood (don't curl the remote URL by hand).
+
+## Sound (music + SFX)
+Every production-ready trailer needs a ducked music bed. **Do not scrape Mixkit / Pixabay /
+Bensound / random CDNs** — they 403, return empty bodies, or waste the run.
+
+```
+kino music                              # bundled beds + short-form Freesound query ideas
+kino music "soft ambient pad loop"      # Freesound CC0 search (needs FREESOUND_API_KEY)
+kino music "soft ambient pad loop" --get 2 --project <name>
+# in the spec (short-form: quiet bed, hard duck — VO wins on TikTok/Reels/Shorts):
+"music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }
+"sfx": [ { "src": "whoosh", "at": 2.5, "volume": 0.35 } ]
+```
+
+- Bare ids resolve from `assets-lib/music/` / `assets-lib/sfx/` (`kino music`, `kino doctor`).
+- Freesound search is **CC0 + 15–90s** by default (fits a 15–30s cut). Catalog skews ambient/SFX —
+  good beds, not chart songs. **Platform trending audio is not pullable** (copyright).
+- Short-form taste: sparse bed under VO; cut whooshes matter more than a busy track; avoid loud
+  drums fighting captions.
+- **Place SFX after the real VO exists**: `kino build` → `kino inspect --real` and/or
+  `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not shipping.
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars` (add
@@ -215,6 +284,11 @@ time searching `projects/*/specs/` for one; build the beat sequencing straight f
   Report what you saw (still/frame + what's wrong) and the suspected file/line, and confirm before
   editing it. Don't reason your way to "this falls within scope" solo on a task that was to produce a
   video, not patch the renderer.
+
+## Adversarial visual critique
+
+Layout QA is a **separate skill** — read and follow `adversarial-critique` after storyboard (and after
+real-build frames when timing can shift layout). Do not inline a self-check of `storyboard.png` instead.
 
 ## Analysing reference videos (research only)
 

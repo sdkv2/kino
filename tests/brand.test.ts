@@ -116,6 +116,11 @@ describe("kino init scaffolds brand.md", () => {
       expect(exists(md)).toBe(true);
       expect(rfs(md, "utf8")).toMatch(/^---/);
       expect(loadBrand(join(cwd, "brands", "acme")).name).toBe("acme");
+      // init fans skills out to popular agent dirs
+      expect(exists(join(cwd, ".agents", "skills", "video-production", "SKILL.md"))).toBe(true);
+      expect(exists(join(cwd, ".cursor", "skills", "ad-voice", "SKILL.md"))).toBe(true);
+      expect(exists(join(cwd, ".claude", "skills", "adversarial-critique", "SKILL.md"))).toBe(true);
+      expect(exists(join(cwd, ".codex", "skills", "video-production", "SKILL.md"))).toBe(true);
     } finally {
       process.chdir(prev);
     }

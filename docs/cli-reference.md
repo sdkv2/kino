@@ -141,11 +141,30 @@ kino projects --new evidentcv --brand evidentcv
 ```
 
 ### `doctor`
-Check the environment (dependencies + API keys).
+Check the environment (dependencies + API keys) and whether agent skills are installed
+for Cursor / Claude / Codex / `.agents`.
 
 ```
 kino doctor
 ```
+
+### `skills`
+List bundled agent skills (`skills/` in the package), or install them for popular agents.
+
+```
+kino skills
+kino skills --install
+kino skills --install --agents cursor,claude
+```
+
+| Option | Meaning |
+|---|---|
+| `--install` | Symlink (or copy) each package `skills/<name>` into each agent’s project skill dir. |
+| `--agents <list>` | `agents`, `cursor`, `claude` (`claude-code` alias), `codex`, or `all` (default). |
+
+Default fan-out: `.agents/skills/`, `.cursor/skills/`, `.claude/skills/`, `.codex/skills/`.
+`kino init` runs the full install. Canonical source remains `skills/` in the package (npm + git).
+Browse the open directory via [skills.sh](https://skills.sh) after `npx skills add sdkv2/kino`.
 
 ---
 

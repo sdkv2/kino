@@ -124,6 +124,7 @@ program
   .option("--project <name>", "target project whose assets/ receives the download (required for --get)")
   .action(async (q, o) => (await import("./commands/pexels.js")).pexels(q, o));
 
+
 program
   .command("fonts")
   .description("List the curated fonts (downloaded on demand) with descriptions + cache status")
@@ -158,6 +159,16 @@ program
   .command("doctor")
   .description("Check environment (deps + keys)")
   .action(async () => (await import("./commands/doctor.js")).doctor());
+
+program
+  .command("skills")
+  .description("List bundled agent skills, or install them for Cursor / Claude / Codex / .agents")
+  .option("--install", "symlink (or copy) package skills/ into each agent’s project skill dir")
+  .option(
+    "--agents <list>",
+    "comma-separated targets: agents,cursor,claude,codex (default: all). Alias: claude-code→claude",
+  )
+  .action(async (o) => (await import("./commands/skills.js")).skills(o));
 
 program.parseAsync(process.argv).catch((err) => {
   // One clean line instead of an uncaught stack dump on every expected failure (bad spec, missing
