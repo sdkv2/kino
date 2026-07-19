@@ -15,6 +15,12 @@ describe("auto-vary motion picker", () => {
     expect(pickShot(0, "tilt-up")).toBe("tilt-up");
     expect(pickTransition(0, "cut")).toBe("cut");
   });
+  it("video assets rotate through the soft transitions; override still wins", () => {
+    expect(pickTransition(0, undefined, true)).toBe("dissolve");
+    expect(pickTransition(1, undefined, true)).toBe("fade");
+    expect(pickTransition(2, undefined, true)).toBe("dissolve"); // wraps
+    expect(pickTransition(0, "pop", true)).toBe("pop");
+  });
 });
 
 describe("shotTransform", () => {

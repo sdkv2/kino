@@ -1,0 +1,13 @@
+{
+  "title": "lottie-check",
+  "brand": "kino-dark",
+  "format": ["9:16"],
+  "provider": "none",
+  "background": "glow",
+  "segments": [
+    { "kind": "motion", "source": "motion/gradient-wave.json", "text": "Gradient wave check." },
+    { "kind": "motion", "source": "motion/event-card-carousel.json", "text": "Event card carousel check." },
+    { "kind": "motion", "source": "motion/product-card-carousel.json", "text": "Product card carousel check." },
+    { "kind": "motion", "source": "motion/logo-reveal.json", "text": "Logo reveal check." }
+  ]
+}

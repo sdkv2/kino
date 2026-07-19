@@ -1,0 +1,217 @@
+{
+  "title": "synaptix-trailer",
+  "brand": "synaptix",
+  "format": [
+    "9:16"
+  ],
+  "provider": "none",
+  "voice": "TxGEqnHWrfWFTfGW9XjX",
+  "voiceModel": "eleven_v3",
+  "background": "particles",
+  "backgroundIntensity": 0.8,
+  "backgroundKeyframes": [
+    {
+      "at": 0,
+      "params": {
+        "intensity": 0.6,
+        "colorA": "#00F0FF",
+        "colorB": "#FF1FA8"
+      }
+    },
+    {
+      "at": 8,
+      "params": {
+        "intensity": 0.9,
+        "colorC": "#B026FF"
+      },
+      "ease": "easeInOut"
+    },
+    {
+      "at": 18,
+      "params": {
+        "intensity": 1
+      },
+      "ease": "overshoot"
+    }
+  ],
+  "backgroundTriggers": [
+    {
+      "at": 0.2,
+      "action": "pulse"
+    },
+    {
+      "at": 8,
+      "action": "pulse"
+    },
+    {
+      "at": 18,
+      "action": "pulse"
+    }
+  ],
+  "segments": [
+    {
+      "kind": "avatar",
+      "text": "[whispers] Your focus is throttled. Capped. Running at half power.",
+      "caption": "focus,\nthrottled",
+      "captionMode": "words",
+      "emphasis": [
+        "throttled",
+        "capped",
+        "half"
+      ],
+      "captionStyle": "gradient",
+      "captionAnimation": "blur-in",
+      "motionOverlay": {
+        "source": "motion/gradient-wave.json",
+        "loop": true
+      },
+      "texts": [
+        {
+          "text": "SYS.STATUS: SLOW",
+          "at": 0.3,
+          "position": "top",
+          "size": "medium",
+          "style": "minimal",
+          "animation": "typewriter"
+        }
+      ]
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/16148130.mp4",
+      "text": "The world already runs at full speed.",
+      "caption": "full speed",
+      "captionMode": "words",
+      "emphasis": [
+        "full",
+        "speed"
+      ],
+      "captionStyle": "highlight",
+      "kicker": {
+        "text": "FEED: LIVE",
+        "color": "mint"
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "Synaptix jacks straight into your flow state.",
+      "caption": "jack in",
+      "captionMode": "words",
+      "emphasis": [
+        "Synaptix",
+        "jacks",
+        "flow"
+      ],
+      "captionStyle": "highlight",
+      "captionAnimation": "pop"
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/13555319.mp4",
+      "text": "One tap, and your brainwaves lock on.",
+      "caption": "brainwaves,\nlocked",
+      "captionMode": "words",
+      "emphasis": [
+        "One",
+        "lock"
+      ],
+      "captionStyle": "highlight",
+      "kicker": {
+        "text": "SYNCED",
+        "color": "mint"
+      },
+      "texts": [
+        {
+          "text": "SYNCED",
+          "at": 0.6,
+          "position": "top",
+          "size": "big",
+          "style": "highlight",
+          "animation": "pop"
+        }
+      ]
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/14862376.mp4",
+      "text": "Distraction? Filtered. Silenced. Gone.",
+      "caption": "distraction,\ngone",
+      "captionMode": "words",
+      "emphasis": [
+        "Filtered",
+        "Silenced",
+        "Gone"
+      ],
+      "captionStyle": "highlight",
+      "kicker": {
+        "text": "SIGNAL: NOISE",
+        "color": "green"
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "Deep work, on demand, every single session.",
+      "caption": "deep work,\non demand",
+      "captionMode": "words",
+      "emphasis": [
+        "Deep",
+        "demand"
+      ],
+      "captionStyle": "highlight",
+      "captionAnimation": "rise",
+      "texts": [
+        {
+          "text": "OVERDRIVE ENGAGED",
+          "at": 0.4,
+          "position": "top",
+          "size": "big",
+          "style": "minimal",
+          "animation": "typewriter"
+        }
+      ]
+    },
+    {
+      "kind": "avatar",
+      "text": "[excited] Overclock your mind.",
+      "caption": "overclock\nyour mind",
+      "captionMode": "words",
+      "emphasis": [
+        "Overclock",
+        "mind"
+      ],
+      "captionStyle": "gradient",
+      "captionAnimation": "pop",
+      "cta": true,
+      "motionOverlay": {
+        "source": "motion/gradient-wave.json",
+        "loop": true
+      }
+    },
+    {
+      "kind": "avatar",
+      "text": "Synaptix. Jack in.",
+      "caption": "SYNAPTIX",
+      "captionMode": "words",
+      "emphasis": [
+        "Synaptix"
+      ],
+      "captionStyle": "highlight",
+      "captionAnimation": "pop",
+      "cta": true,
+      "motionOverlay": {
+        "source": "motion/gradient-wave.json",
+        "loop": true
+      },
+      "texts": [
+        {
+          "text": "synaptix.app",
+          "at": 0.8,
+          "position": "bottom",
+          "size": "medium",
+          "style": "minimal",
+          "animation": "blur-in"
+        }
+      ]
+    }
+  ]
+}

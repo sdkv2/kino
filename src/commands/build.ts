@@ -120,6 +120,7 @@ export async function prepare(
     cache,
     apiKey: mock ? undefined : requireKey("ELEVENLABS_API_KEY"),
     mock,
+    model: spec.voiceModel,
   });
 
   log.step("avatar");
@@ -237,7 +238,8 @@ export async function prepare(
     };
     if (seg.kind === "app") {
       const shot = pickShot(appIdx, seg.shot as Shot | undefined);
-      const transition = pickTransition(appIdx, seg.transition as Transition | undefined);
+      const isVideo = /\.(mp4|mov)$/i.test(seg.asset ?? "");
+      const transition = pickTransition(appIdx, seg.transition as Transition | undefined, isVideo);
       appIdx++;
       return {
         ...base,

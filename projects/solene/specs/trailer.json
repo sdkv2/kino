@@ -1,0 +1,103 @@
+{
+  "title": "solene-trailer",
+  "brand": "solene",
+  "format": [
+    "9:16"
+  ],
+  "provider": "none",
+  "voice": "EXAVITQu4vr4xnSDxMaL",
+  "voiceModel": "eleven_v3",
+  "background": "glow",
+  "backgroundIntensity": 0.18,
+  "backgroundKeyframes": [
+    {
+      "at": 0,
+      "params": {
+        "intensity": 0.12
+      }
+    },
+    {
+      "at": 6,
+      "params": {
+        "intensity": 0.24
+      },
+      "ease": "easeInOut"
+    },
+    {
+      "at": 14,
+      "params": {
+        "intensity": 0.16
+      },
+      "ease": "easeInOut"
+    }
+  ],
+  "captionStyle": "minimal",
+  "captionAnimation": "blur-in",
+  "segments": [
+    {
+      "kind": "avatar",
+      "text": "Some things are not made quickly.",
+      "caption": "not made\nquickly"
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/7255134.mp4",
+      "text": "One scent, aged in silence.",
+      "caption": "aged in silence",
+      "shot": "push-in"
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/7677808.mp4",
+      "text": "Distilled in small batches, and never hurried.",
+      "caption": "small\nbatches",
+      "shot": "static",
+      "captionAnimation": "rise",
+      "captionKeyframes": [
+        {
+          "at": 0,
+          "params": {
+            "x": -16,
+            "y": -8
+          }
+        }
+      ]
+    },
+    {
+      "kind": "avatar",
+      "text": "A single note of amber, and patience.",
+      "caption": "amber, and patience",
+      "captionMode": "words",
+      "emphasis": [
+        "patience"
+      ],
+      "captionAnimation": "rise",
+      "motionOverlay": {
+        "source": "motion/gradient-wave.json",
+        "loop": true
+      }
+    },
+    {
+      "kind": "app",
+      "asset": "pexels/8676998.mp4",
+      "text": "Nothing added. Nothing loud.",
+      "caption": "nothing loud",
+      "shot": "static"
+    },
+    {
+      "kind": "motion",
+      "source": "motion/logo-reveal.json",
+      "text": "[short pause] Solène. [whispers] Worn slowly.",
+      "caption": "worn slowly",
+      "texts": [
+        {
+          "text": "SOLÈNE",
+          "at": 0.4,
+          "position": "top",
+          "size": "medium",
+          "animation": "blur-in"
+        }
+      ]
+    }
+  ]
+}

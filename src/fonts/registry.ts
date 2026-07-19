@@ -19,6 +19,8 @@ export const FONTS: FontDef[] = [
   { name: "Anton", family: "Anton", description: "Ultra-bold display — huge, punchy TikTok-style captions.", weight: 400 },
   { name: "Archivo Black", family: "Archivo Black", description: "Heavy grotesque display — high-impact headlines.", weight: 400 },
   { name: "Space Grotesk", family: "Space Grotesk", description: "Technical geometric sans — engineered, spec-sheet feel.", weight: 700 },
+  { name: "Playfair Display", family: "Playfair Display", description: "High-contrast editorial serif — luxury titles and fashion headlines.", weight: 700 },
+  { name: "Cormorant Garamond", family: "Cormorant Garamond", description: "Refined garamond serif — quiet, premium elegance.", weight: 600 },
   { name: "IBM Plex Mono", family: "IBM Plex Mono", description: "Editorial monospace — labels, data, terminal aesthetics.", weight: 600 },
 ];
 
