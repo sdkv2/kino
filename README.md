@@ -45,7 +45,27 @@ kino doctor                             # preflight: API keys, ffmpeg/ffprobe, h
 kino build specs/lie-test.json --mock   # free structural preview (no API spend)
 kino build specs/lie-test.json          # real render → out/lie-test/
 ```
-The driving agent authors specs — see [`skills/video-production`](skills/video-production/SKILL.md).
+
+## Agent skills
+
+Playbooks live in [`skills/`](skills/) (`video-production`, `ad-voice`, `adversarial-critique`).
+Canonical source in this repo; agents discover them via their usual skill dirs.
+
+**From any project** (Cursor / Claude Code / Codex / …):
+
+```bash
+npx skills add sdkv2/kino
+# or one skill:  npx skills add sdkv2/kino@ad-voice
+```
+
+**Inside a kino workspace** (after clone / `npm link`):
+
+```bash
+kino skills --install                 # → .agents .cursor .claude .codex (also run by kino init)
+kino skills --install --agents cursor,claude
+```
+
+Browse / leaderboard: [skills.sh](https://skills.sh) (appears after installs). Details: [`skills/README.md`](skills/README.md).
 
 ## Features
 - **Avatar engines** — `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3),

@@ -1,6 +1,7 @@
 import { execa } from "execa";
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
+import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
 import { log } from "../log.js";
 
 async function has(cmd: string, args: string[]): Promise<boolean> {
@@ -26,6 +27,23 @@ export async function doctor(): Promise<void> {
     ["PEXELS_API_KEY (kino pexels — stock b-roll)", !!process.env.PEXELS_API_KEY],
   ];
   for (const [n, ok] of checks) ok ? log.ok(n) : log.warn(`${n} missing`);
+
+  const { workspaceRoot } = resolveWorkspace();
+  const bundled = listBundledSkills();
+  if (!bundled.length) log.warn("package skills/ empty — agent playbooks missing from this install");
+  else {
+    const gaps = bundled.flatMap((n) =>
+      missingSkillAgents(workspaceRoot, n).map((a) => `${n}[${a}]`),
+    );
+    if (gaps.length) {
+      log.warn(`agent skills missing: ${gaps.join(", ")} — run: kino skills --install`);
+    } else {
+      log.ok(
+        `agent skills (${bundled.join(", ")} → ${DEFAULT_SKILL_AGENTS.join(", ")})`,
+      );
+    }
+  }
+
   log.info("Faceless (provider: none) needs only ffmpeg + ELEVENLABS_API_KEY — no avatar credits.");
   log.info("HeyGen lip-sync needs Avatar-IV photo looks (kino avatars); hedra/replicate need a portrait image (brand.avatarImage).");
 }

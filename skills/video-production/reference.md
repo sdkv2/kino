@@ -14,6 +14,9 @@
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
 - `kino fonts` — list curated fonts (with descriptions + cache status)
 - `kino projects [--new <name> --brand <brand>]` — list or scaffold projects
+- `kino pexels "<query>" [--get n --project]` — stock b-roll (local thumbs cached on search)
+- `kino music [query] [--get n --project]` — bundled beds or Freesound CC0 search (15–90s short-form)
+- `kino audio-markers <file>` — onsets/peaks/silences for `sfx[].at`
 - `kino init [brand]` · `kino doctor`
 
 ## Analysing reference videos (research only)
@@ -50,8 +53,9 @@ that assigns a brand and optional default overrides:
 ## Iterative design loop (agents)
 `still`/`storyboard`/`inspect` default to **mock** (fast, $0; captions/background/layout render identically —
 only avatar+VO timing differ). Loop: `kino inspect` (map the beats) → `kino still --segment N` (preview one
-beat in ~1–2s) → edit the spec → `kino still` again → `kino build` for the real render. Add `--real` for
-true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
+beat in ~1–2s) → edit the spec → `kino still` again → **`adversarial-critique` skill** (subagent on
+`out/<title>/stills/sb-*.png`) → `kino build` for the real render. Add `--real`
+for true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
 
 ## Brand config (`brands/<name>/brand.md` YAML frontmatter)
 `name, colors{night,mint,green,white,gold}, font, labelFont?, captionStyle{fontSize,strokeWidth,background?,style?,animation?},
@@ -63,6 +67,10 @@ tell: `voiceModel` (expressive-VO model, see Hard rules in `SKILL.md`) looks bra
 **spec-only**, there's no brand default for it. `provider`/`background`/`captionMode` exist at both
 levels but mean "default" on the brand and "override" on the spec — same key, different file, don't
 confuse setting the default with setting this video's value.
+
+**Tone / Voice** lives in the markdown **guidelines body** (not frontmatter) — register, person, pace,
+say/never-say examples, brand bans. Agents read it via `kino brand <name>` and apply `ad-voice` when
+writing copy. The renderer ignores the body.
 
 Faceless branding (optional):
 - `logo` — transparent brand mark (PNG); shown on faceless talking beats.
@@ -150,7 +158,9 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - **Tween captions/kickers** over time: per-segment `captionKeyframes` (and `kickerKeyframes` on app
   segments) `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame), and `at`
   is **relative to the segment start** (`at: 0` = the caption's entrance). Logo + background keyframes are
-  spec-level so their `at` is absolute on the main timeline. `kino elements`. **This absolute timing is
+  spec-level so their `at` is absolute on the main timeline. `kino elements`. **Default: omit
+  `captionKeyframes`.** Per-beat `y`/`scale` variety reads as captions jumping; use only to dodge a
+  bright subject on one beat. CTA lower-third is `cta: true`, not a `y` offset. **Keyframe timing is
   authored against whatever duration is current when you preview** — under `--mock` that's faked evenly
   and can diverge from the real VO's pacing (a beat can run longer or shorter for real than its mock
   estimate), so a background pulse or color shift timed to land on a specific beat can drift into the
@@ -158,6 +168,9 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   `logoKeyframes` to a specific beat boundary, re-check that beat with `kino still --real` (VO is
   content-hash cached, so this doesn't add spend beyond the real build) before calling it done — don't
   reason your way past a mock/real duration mismatch you already noticed.
+- **Motion layout (short-form):** author stacks mid-frame (`.wrap { top: 38%–42%; }`), not
+  `translateY(20–28vw)` from the top — that sits under TikTok/Reels chrome. Keep the stack clear of
+  the lower-third caption band; check with `kino still --segment <n>`. See SKILL.md § Short-form layout defaults.
 - **Caption backplate** (legibility over light app screenshots): set brand
   `captionStyle.background { color?, opacity?, appOnly? }` to draw a translucent rounded panel behind the
   lower-third caption. Defaults: `color` = brand `night`, `opacity` = 0.82, `appOnly` = true (only behind
