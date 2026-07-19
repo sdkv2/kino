@@ -4,8 +4,9 @@ out/
 .env
 *.log
 dist/
-projects/*/assets/broll/
-projects/*/assets/pexels/
+projects/
+brands/
 
 # macOS
 .DS_Store
+logo/
