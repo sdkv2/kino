@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/884f7ee6-592b-4483-b17c-09fcc87bf30f" alt="kino — /ˈkiːnoʊ/ n. German: cinema, from Greek kīnēma: motion" width="560">
+  <img src="logo/kino-logo-web.png" alt="kino — /ˈkiːnoʊ/ n. German: cinema, from Greek kīnēma: motion" width="560">
 </p>
 
 <p align="center"><em>Agent-driven short-form video production — spec in, video out.</em></p>
