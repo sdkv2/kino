@@ -1,0 +1,3 @@
+{ "brand": "kino", "title": "b0", "format": ["9:16"], "provider": "none", "film": 0,
+  "segments": [ { "kind": "motion", "source": "motion/prompt-window.js",
+    "text": "Kino, make me an advert", "transition": "cut" } ] }
