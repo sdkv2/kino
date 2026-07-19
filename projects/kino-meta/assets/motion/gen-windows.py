@@ -67,7 +67,7 @@ return WIN(out, caretOn, cam, "");
 
 # --- beat 1: prompt already there; PULL BACK to native; thinking dots pulse ---
 THINKING = SHARED + r"""
-var full = "Kino, make me an advert";
+var full = "Kino, make me an advert.";
 // start zoomed (match beat-0 end S=1.14), pull back to native across the beat
 var S = 1.14 - 0.14 * (env.progress * (2 - env.progress));
 var cam = "scale(" + S.toFixed(4) + ")";
@@ -92,7 +92,7 @@ CLOSE = SHARED + r"""
 var fade = Math.min(1, env.progress / 0.6);                          // lockup in
 var clear = Math.min(1, Math.max(0, (env.progress - 0.7) / 0.25));   // lockup out + field empties by 0.95
 var showFull = clear < 1;
-var field = showFull ? "Kino, make me an advert" : "";
+var field = showFull ? "Kino, make me an advert." : "";
 // caret solid for the final stretch (loop seam — matches beat-0's t=0 solid caret);
 // no env.duration field exists, so gate off env.progress instead of a frame count
 var caretOn = env.progress > 0.95 || Math.floor(env.frame / 15) % 2 === 0;
