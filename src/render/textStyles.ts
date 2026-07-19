@@ -37,8 +37,8 @@ export function wordStyle(style: CaptionStyle, t: TextTheme, flags: WordFlags = 
       // padding so the box is paint-only: a padding delta on just the active word moves the
       // flex wrap point and makes words jump between rows as the highlight travels.
       return highlight
-        ? { color: t.night, backgroundColor: t.mint, borderRadius: 14, padding: "0px 16px", fontWeight: 900 }
-        : { color: t.white, borderRadius: 14, padding: "0px 16px", fontWeight: 900, textShadow: shadow };
+        ? { color: t.night, backgroundColor: t.mint, borderRadius: 6, padding: "0px 16px", fontWeight: 900 }
+        : { color: t.white, borderRadius: 6, padding: "0px 16px", fontWeight: 900, textShadow: shadow };
     case "gradient":
       // background-clip fill conflicts with text stroke and textShadow — legibility comes from a
       // drop-shadow filter instead.
@@ -66,8 +66,8 @@ export function wordStyle(style: CaptionStyle, t: TextTheme, flags: WordFlags = 
 // Whole-line box: highlight style gets an opaque night plate; otherwise the legacy translucent
 // backplate when configured (absorbs components.tsx plateStyle). {} = unchanged look.
 export function lineBoxStyle(style: CaptionStyle, t: TextTheme, backplateBg?: string | null): CSSProperties {
-  if (style === "highlight") return { display: "inline-block", backgroundColor: t.night, padding: "12px 32px", borderRadius: 30 };
-  if (backplateBg) return { display: "inline-block", backgroundColor: backplateBg, padding: "12px 32px", borderRadius: 30 };
+  if (style === "highlight") return { display: "inline-block", backgroundColor: t.night, padding: "12px 32px", borderRadius: 12 };
+  if (backplateBg) return { display: "inline-block", backgroundColor: backplateBg, padding: "12px 32px", borderRadius: 12 };
   return {};
 }
 
