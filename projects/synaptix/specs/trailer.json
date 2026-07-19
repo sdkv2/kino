@@ -61,10 +61,6 @@
       ],
       "captionStyle": "gradient",
       "captionAnimation": "blur-in",
-      "motionOverlay": {
-        "source": "motion/gradient-wave.json",
-        "loop": true
-      },
       "texts": [
         {
           "text": "SYS.STATUS: SLOW",
@@ -181,11 +177,7 @@
       ],
       "captionStyle": "gradient",
       "captionAnimation": "pop",
-      "cta": true,
-      "motionOverlay": {
-        "source": "motion/gradient-wave.json",
-        "loop": true
-      }
+      "cta": true
     },
     {
       "kind": "avatar",
@@ -198,10 +190,6 @@
       "captionStyle": "highlight",
       "captionAnimation": "pop",
       "cta": true,
-      "motionOverlay": {
-        "source": "motion/gradient-wave.json",
-        "loop": true
-      },
       "texts": [
         {
           "text": "synaptix.app",

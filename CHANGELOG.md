@@ -3,6 +3,22 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.18.0] — Cinematic finish + full-frame caption cards
+- **Film-finish pass**: every render gets a luminance-adaptive vignette + deterministic grain that
+  grades footage, backgrounds and the avatar into one cohesive image — paper texture on light brands,
+  film grain on dark, never a glow. Frame-deterministic (fixed-seed `feTurbulence` + per-frame
+  translate, painted at half res) so it's cache-safe and fast, and it sits *below* the motion-graphic
+  and caption layers so designed graphics and type stay crisp (motion beats keep managing their own
+  finish via the opt-in `.kino-grain` / `.kino-vignette` utilities).
+- **Faceless talking beats now center their captions** at optical centre (hero scale) instead of the
+  lower-third band — the text fills the frame instead of floating over an empty top two-thirds.
+- **Richer backgrounds**: `particles` gains drifting brand-colour nebula clouds + more density; the
+  default `glow` is a brighter three-glow on a graded base; the centre scrim is now luminance-adaptive
+  (fixes both the dark-brand black-holes and the light-brand washout).
+- Tighter caption/hero kerning; slightly deeper avatar push-in.
+- Showcase `synaptix` trailer: dropped an un-recolored grey placeholder Lottie overlay (off-brand and
+  non-transparent — violated the overlay transparency rule).
+
 ## [1.17.1] — Typeface + caption legibility
 - Font registry: **Space Grotesk** (technical geometric sans) and **IBM Plex Mono** (editorial
   monospace) — the kino/kino-dark brands now use them (captions/labels) instead of Inter.

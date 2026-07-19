@@ -13,6 +13,17 @@ import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionSty
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
 
+// Relative luminance (0 dark → 1 light) of a #hex, so the finish/backdrop can adapt to a light
+// "paper" brand vs a dark neon one without any schema change (reads theme.night directly).
+const luminance = (hex: string): number => {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16) / 255;
+  const g = parseInt(full.slice(2, 4), 16) / 255;
+  const b = parseInt(full.slice(4, 6), 16) / 255;
+  return 0.2126 * (r || 0) + 0.7152 * (g || 0) + 0.0722 * (b || 0);
+};
+
 // Loads the brand TTF (a downloaded registry font) before rendering, under the family
 // "KinoBrandFont" that theme.font references. No-op when using a system font.
 export const FontLoader: React.FC<{ url?: string | null }> = ({ url }) => {
@@ -53,7 +64,8 @@ export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: strin
           fontFamily: t.font,
           fontSize: t.captionFontSize,
           textAlign: "center",
-          lineHeight: 1.04,
+          lineHeight: 1.03,
+          letterSpacing: "-0.01em",
           whiteSpace: "pre-line",
           ...ink,
           ...lineBoxStyle(styleName, t, backplate?.bg),
@@ -129,7 +141,8 @@ export const HeroCaption: React.FC<{ text: string; t: Theme; styleName?: Caption
                 display: "inline-block",
                 fontFamily: t.font,
                 fontSize: Math.round(t.captionFontSize * 1.42),
-                lineHeight: 1.06,
+                lineHeight: 1.04,
+                letterSpacing: "-0.015em",
                 ...ink,
                 transform: a.transform,
                 opacity: a.opacity,
@@ -146,19 +159,30 @@ export const HeroCaption: React.FC<{ text: string; t: Theme; styleName?: Caption
 };
 
 // Center scrim that keeps hero text legible over a busy background (derived from the brand night).
-const Scrim: React.FC<{ t: Theme }> = ({ t }) => (
-  <AbsoluteFill style={{ background: `radial-gradient(ellipse 72% 46% at 50% 50%, ${t.night}bd, ${t.night}38 68%, ${t.night}00)` }} />
-);
+// Luminance-adaptive: on a dark brand it's a gentle centre-darken for legibility (not the old
+// near-opaque black hole that hollowed out sparse backgrounds); on a light "paper" brand it's a
+// whisper so it stops pouring paper over the centre and washing the background out.
+const Scrim: React.FC<{ t: Theme }> = ({ t }) => {
+  const light = luminance(t.night) > 0.5;
+  const a0 = light ? "33" : "9c"; // centre alpha (hex): paper barely touches, night darkens gently
+  const a1 = light ? "14" : "2e";
+  return <AbsoluteFill style={{ background: `radial-gradient(ellipse 76% 50% at 50% 48%, ${t.night}${a0}, ${t.night}${a1} 66%, ${t.night}00)` }} />;
+};
 
-// Two soft brand glows drifting over night (the zero-config default).
+// Three soft brand glows drifting over night (the zero-config default), on a subtle graded base so
+// the frame has vertical depth instead of one flat fill. Richer + brighter than a bare two-blob glow.
 const GlowBg: React.FC<{ t: Theme }> = ({ t }) => {
   const f = useCurrentFrame();
   const dx = Math.sin(f / 60) * 6;
   const dy = Math.cos(f / 80) * 8;
+  const dx2 = Math.cos(f / 52) * 5;
+  const base = `linear-gradient(160deg, ${t.night} 0%, ${t.green}1e 55%, ${t.night} 100%)`;
   return (
     <AbsoluteFill style={{ backgroundColor: t.night, overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: `${18 + dy}%`, left: `${12 + dx}%`, width: 920, height: 920, borderRadius: "50%", background: `radial-gradient(circle, ${t.green}55, transparent 62%)`, filter: "blur(46px)" }} />
-      <div style={{ position: "absolute", bottom: `${8 - dy}%`, right: `${8 + dx}%`, width: 760, height: 760, borderRadius: "50%", background: `radial-gradient(circle, ${t.mint}30, transparent 62%)`, filter: "blur(54px)" }} />
+      <AbsoluteFill style={{ background: base }} />
+      <div style={{ position: "absolute", top: `${16 + dy}%`, left: `${10 + dx}%`, width: 980, height: 980, borderRadius: "50%", background: `radial-gradient(circle, ${t.green}66, transparent 62%)`, filter: "blur(44px)" }} />
+      <div style={{ position: "absolute", bottom: `${6 - dy}%`, right: `${6 + dx}%`, width: 820, height: 820, borderRadius: "50%", background: `radial-gradient(circle, ${t.mint}3d, transparent 62%)`, filter: "blur(52px)" }} />
+      <div style={{ position: "absolute", top: `${52 + dy}%`, left: `${58 + dx2}%`, width: 560, height: 560, borderRadius: "50%", background: `radial-gradient(circle, ${t.gold}24, transparent 64%)`, filter: "blur(58px)" }} />
     </AbsoluteFill>
   );
 };
@@ -287,20 +311,26 @@ export const WordCaption: React.FC<{
   backplate?: { bg: string } | null;
   styleName?: CaptionStyle;
   anim?: CaptionAnimation;
-}> = ({ words, emphasis = [], startSec, t, backplate, styleName = "stroke", anim }) => {
+  // "lower" = the lower-third band (default; app cut-ins + on-camera avatar beats). "center" =
+  // optical-centre hero placement at a larger size — used on faceless talking beats so the text
+  // IS the frame instead of a lone line stranded under an empty top two-thirds.
+  placement?: "lower" | "center";
+}> = ({ words, emphasis = [], startSec, t, backplate, styleName = "stroke", anim, placement = "lower" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const tAbs = startSec + frame / fps;
   const active = activeWordIndex(words, tAbs);
   const emph = new Set(emphasis.map(normWord));
+  const center = placement === "center";
+  const sizeMul = center ? 1.42 : 0.92; // hero scale centred; legacy 0.92 in the lower band
   const row = (
     <div
       style={{
         display: "flex",
         flexWrap: "wrap",
         justifyContent: "center",
-        columnGap: 18,
-        rowGap: 4,
+        columnGap: center ? 22 : 18,
+        rowGap: center ? 8 : 4,
         maxWidth: "100%",
         // words mode never takes the whole-line highlight box (words box individually) — only the
         // legacy backplate applies here.
@@ -341,8 +371,9 @@ export const WordCaption: React.FC<{
             style={{
               display: "inline-block",
               fontFamily: t.font,
-              fontSize: Math.round(t.captionFontSize * 0.92),
+              fontSize: Math.round(t.captionFontSize * sizeMul),
               lineHeight: 1.05,
+              letterSpacing: center ? "-0.01em" : undefined,
               ...ink,
               transform,
               opacity,
@@ -355,6 +386,9 @@ export const WordCaption: React.FC<{
       })}
     </div>
   );
+  if (center) {
+    return <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: "0 72px" }}>{row}</AbsoluteFill>;
+  }
   return (
     <div style={{ position: "absolute", left: 56, right: 56, bottom: CAPTION_BOTTOM, display: "flex", justifyContent: "center" }}>{row}</div>
   );
@@ -440,6 +474,53 @@ export const AppCutaway: React.FC<{
         ) : (
           <Img src={staticFile(asset)} style={{ width: 1080, transform: `translate(${tx}%, ${ty}%) scale(${scale})` }} />
         )}
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+// Cinematic finishing pass — the single layer that unifies footage, backgrounds and the avatar into
+// one graded "film" instead of flat composited layers. Two deterministic effects, both adaptive to
+// the base luminance so a light paper brand reads as printed stock and a dark neon brand reads as
+// film — neither ever glows (kino brand rule):
+//   • vignette  — a soft edge falloff that adds depth and pulls the eye to centre.
+//   • grain     — a single fixed-seed fractal-noise tile TRANSLATED on an 8-frame cycle, so it
+//                 shimmers like real emulsion without strobing. Crucially the (expensive) noise
+//                 rasterises ONCE — only a cheap transform changes per frame — so full video encodes
+//                 stay fast, and it's frame-deterministic (offset is a pure fn of frame → cache-safe,
+//                 identical across Remotion's parallel workers). Painted at half res for coarser,
+//                 more filmic grain at ~4x less cost.
+// Mounted ABOVE the photographic layers (backdrop/avatar/app) but BELOW the motion-graphic beats,
+// captions, logo and disclosure. Motion graphics own their finish via the opt-in .kino-grain /
+// .kino-vignette utilities (motiongraphic.ts), so this global pass must not impose grain on them.
+export const FilmFinish: React.FC<{ t: Theme }> = ({ t }) => {
+  const f = useCurrentFrame();
+  const light = luminance(t.night) > 0.5;
+  // Per-frame jitter from a fixed 8-step cycle (≤7px) — grain shimmer with no noise recompute.
+  const OX = [0, -6, 5, -3, 7, -5, 3, -7];
+  const OY = [0, 5, -7, 4, -5, 7, -4, 6];
+  const dx = OX[f % 8];
+  const dy = OY[f % 8];
+  const grainOpacity = light ? 0.05 : 0.09;
+  const vignette = light
+    ? "radial-gradient(ellipse 88% 76% at 50% 45%, rgba(0,0,0,0) 55%, rgba(28,20,12,0.18) 100%)"
+    : "radial-gradient(ellipse 92% 80% at 50% 45%, rgba(0,0,0,0) 46%, rgba(0,0,0,0.46) 100%)";
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      <AbsoluteFill style={{ background: vignette }} />
+      <AbsoluteFill style={{ opacity: grainOpacity, mixBlendMode: light ? "multiply" : "soft-light", overflow: "hidden" }}>
+        <svg
+          width="540"
+          height="960"
+          preserveAspectRatio="none"
+          style={{ position: "absolute", top: -16, left: -16, width: "calc(100% + 32px)", height: "calc(100% + 32px)", transform: `translate(${dx}px, ${dy}px)` }}
+        >
+          <filter id="kino-film-grain" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves={2} seed={7} stitchTiles="stitch" />
+            <feColorMatrix type="saturate" values="0" />
+          </filter>
+          <rect width="540" height="960" filter="url(#kino-film-grain)" />
+        </svg>
       </AbsoluteFill>
     </AbsoluteFill>
   );
