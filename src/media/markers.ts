@@ -1,6 +1,7 @@
 // Audio marker analysis for agents: a coarse RMS envelope plus onsets (energy jumps), peaks
 // (loud local maxima), and silences, computed from raw PCM. Pure math — deterministic and
-// unit-tested against synthetic buffers. ffmpeg decode + chart rendering live in Task 2.
+// unit-tested against synthetic buffers. The ffmpeg-backed decode/analyze helpers live below
+// in this file.
 // ponytail: energy-delta onsets, no BPM grid — swap in a real DSP dep if music-video beat
 // tracking is ever needed.
 
@@ -39,7 +40,8 @@ export function computeMarkers(samples: Float32Array, sampleRate: number): Audio
     for (let j = i * hop; j < (i + 1) * hop; j++) sum += samples[j] * samples[j];
     env.push(Math.sqrt(sum / hop));
   }
-  const maxV = Math.max(0, ...env);
+  let maxV = 0;
+  for (const v of env) if (v > maxV) maxV = v;
 
   const rms = env.map((v, i) => ({ t: r2(i * HOP_SEC), v: r3(v) }));
 
