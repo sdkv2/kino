@@ -81,10 +81,24 @@ Task:
       active-word colour that disappears into the ground
    🟠 Loop seam — for looping ads: first≠last ready-state, fade-from/to black, or animated mesh
       bg drift between ends (see video-production § Seamless loops)
+   🟠 Dead zone — overlay a 3×3 grid on the frame; name which cells hold real content. If a full
+      row or column of cells is empty AND it isn't a deliberate rest plane (background wash,
+      safe-zone margin), flag it. A contiguous background band ≥25% of frame height inside the
+      content area is a dead zone (e.g. gap between a title bar and a checklist that sank to the
+      lower half). Fix: center the content group in its container, or shrink the container to fit.
+   🟠 Off-balance — estimate the optical center of mass of all non-background content. If it sits
+      outside the middle 40% band (bottom-heavy, top-glued, dumped to one side) with no
+      counterweight (kicker, mark, deliberate negative space), flag it.
+   🟠 Misalignment — sibling elements (list rows, chips, steps, icon+label pairs) whose left/center
+      edges or baselines don't share one axis; ragged indents. Fix: one shared alignment axis per
+      repeated group.
+   🟠 Container void — a card/window whose content fills <50% of its own area; the shell is
+      oversized for its contents. Fix: size the shell to the content, or fill it.
    🟡 Hierarchy noise — too many competing text layers; emphasis glow on many words; jittery
       per-beat y/scale that would read as "jumping" across adjacent stills
-3. Ignore taste/brand vibes unless they cause a defect above. Ignore audio (except note if a
-   looping cut has an obvious bed fade-to-silence at the end).
+3. Framing — dead space, imbalance, misalignment, container void — is a DEFECT, not taste; hunt
+   it with the grid procedure above. Ignore only palette/vibe preferences that cause no measurable
+   defect. Ignore audio (except note if a looping cut has an obvious bed fade-to-silence at the end).
 
 Return ONLY a finding list, one line each:
 `file:beat: <emoji> <severity>: <what's wrong>. <concrete fix hint for the spec>.`
@@ -105,6 +119,10 @@ If truly clean: `OK — no major layout issues.`
 | 🟠 | Unreadable over bright footage / no backplate |
 | 🟠 | Motion/Lottie beat only reviewed at a single midpoint (no `--around` sheet) |
 | 🟠 | Loop seam broken (fade ends, mesh drift, first≠last ready poster) |
+| 🟠 | Dead zone (empty grid row/col; background band ≥25% frame height inside content area) |
+| 🟠 | Off-balance (center of mass outside middle 40%; bottom-heavy / top-glued / one-side dump) |
+| 🟠 | Misalignment (list rows / chips / icon+label off a shared axis; ragged indent) |
+| 🟠 | Container void (card/window content fills <50% of its own area) |
 | 🟡 | Too many text layers; multi-word emphasis; position jitter across beats |
 
 ## After findings

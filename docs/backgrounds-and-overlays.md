@@ -15,11 +15,12 @@ Select the engine with `background` (spec) / `--background` (CLI) / `brand.backg
 |---|---|---|
 | `glow` | — | Soft CSS radial glow (calm, cheap). |
 | `image` | — | A static backdrop image (`brand.facelessBackdrop`). |
-| `mesh` | ✅ | Flowing gradient mesh. |
+| `mesh` | ✅ | Flowing gradient mesh (**draft default — easy generic tell**). |
 | `aurora` | ✅ | Drifting aurora ribbons. |
 | `particles` | ✅ | Floating brand-coloured particles. |
 | `grid` | ✅ | Perspective/▦ grid motion. |
-| `custom` | ✅ | Your own Canvas2D draw fn (`brand.backgroundComponent`). |
+| `solid` | — | Static night + glow (**loop-safe**; ignores frame drift). |
+| `custom` | ✅ | Your own Canvas2D draw fn (`backgroundComponent` on spec or brand). |
 
 The four animated presets (`mesh`, `aurora`, `particles`, `grid`) share the same controllable params and one action:
 
@@ -54,7 +55,42 @@ Tween params over time with `backgroundKeyframes` and fire one-shot `backgroundT
 
 ## Custom backgrounds
 
-Set `background: "custom"` and point `brand.backgroundComponent` at a Canvas2D draw function. It is called per frame and receives an `env` carrying the resolved params (`env.params`, e.g. your `colorA`/`intensity`) and the live trigger envelope (`env.pulse`), so it animates off the same `backgroundKeyframes`/`backgroundTriggers` as the built-in presets. Like every kino visual it must be **deterministic** — derive all motion from the frame/params/pulse it's given, never from the wall clock or randomness. (For richer agent-authored visuals, prefer [motion graphics](motion-graphics.md), which run in a sandboxed Shadow DOM with a full CSS-variable contract.)
+**Prefer `custom` over stock `mesh`/`aurora` when the brand should feel authored.** Mesh is a fine
+draft preset and an easy “AI ad” tell. Custom draw fns use the same `backgroundKeyframes` /
+`backgroundTriggers` surface as presets.
+
+1. Set `"background": "custom"`.
+2. Point `backgroundComponent` at a draw fn — **spec overrides brand**:
+   - Bare id → `assets-lib/backgrounds/<id>.js` (start with `"brand-wash"`)
+   - Project path → `assets/backgrounds/my-wash.js`
+   - Brand path → workspace-relative file from `brand.md` frontmatter
+3. Animate with the same params (`colorA`/`B`/`C`, `intensity`) + `pulse` triggers.
+
+```json
+{
+  "background": "custom",
+  "backgroundComponent": "brand-wash",
+  "backgroundKeyframes": [
+    { "at": 0, "params": { "intensity": 0.35 } },
+    { "at": 3, "params": { "intensity": 0.75 }, "ease": "easeInOut" }
+  ],
+  "backgroundTriggers": [{ "at": 1.4, "action": "pulse" }]
+}
+```
+
+The file body **is** `draw(ctx, env)` (kino wraps it). It must be **deterministic** — derive motion
+from `env.frame` / `env.params` / `env.pulse`, never `Date.now()` or unseeded `Math.random()`.
+Run `kino backgrounds` for the picker + library ids.
+
+For richer full-screen UI (typed terminals, pipelines), prefer [motion graphics](motion-graphics.md)
+and paint a full-bleed `.bg` inside the graphic — that occludes the faceless layer entirely.
+
+| When | Use |
+|---|---|
+| Brand identity on faceless / caption cards | `custom` + `backgroundComponent` |
+| Seamless loop / settle | `solid` (or custom that ignores `env.frame` at edges) + motion `.bg` |
+| Real photo backdrop | `image` + `facelessBackdrop` |
+| Quick draft | `glow` / `mesh` / `aurora` — replace before ship if the frame is the brand |
 
 ## Overlay elements
 

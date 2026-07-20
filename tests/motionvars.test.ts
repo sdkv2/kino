@@ -14,12 +14,17 @@ describe("buildMotionVars", () => {
     expect(v["--kino-gold"]).toBe("#d99a20");
     expect(v["--kino-font"]).toBe("Arial");
   });
-  it("sets the frame-driven vars", () => {
+  it("sets the frame-driven vars including eased progress curves", () => {
     const v = buildMotionVars(theme, dyn);
     expect(v["--frame"]).toBe("12");
     expect(v["--t"]).toBe("0.4000");
     expect(v["--progress"]).toBe("0.5000");
     expect(v["--pulse"]).toBe("0.2500");
+    expect(Number(v["--kino-out"])).toBeGreaterThan(0.5);
+    expect(Number(v["--kino-edge"])).toBeCloseTo(1, 3); // sin(π/2) at progress 0.5
+    expect(v["--kino-inout"]).toBeDefined();
+    expect(v["--kino-overshoot"]).toBeDefined();
+    expect(v["--kino-spring"]).toBeDefined();
   });
   it("maps each resolved param to a --<key> var, stringified", () => {
     const v = buildMotionVars(theme, { ...dyn, params: { pct: 86, label: "hi" } });

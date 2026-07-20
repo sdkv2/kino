@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { pickShot, pickTransition, shotTransform, SHOTS, TRANSITIONS } from "../src/render/motion.js";
+import {
+  pickShot,
+  pickTransition,
+  shotTransform,
+  motionHandoff,
+  MOTION_XFADE_FRAMES,
+  SHOTS,
+  TRANSITIONS,
+} from "../src/render/motion.js";
 
 describe("auto-vary motion picker", () => {
   it("cycles shots so consecutive app cut-ins differ", () => {
@@ -43,5 +51,44 @@ describe("shotTransform", () => {
     // "static" is a true no-op transform (scale 1) so framed footage fills its inset 1:1 and
     // edge-of-screen UI is never cropped — any scale >1 would silently crop the edges.
     expect(shotTransform("static", 0.5)).toEqual({ scale: 1.0, tx: 0, ty: 0 });
+  });
+});
+
+describe("motionHandoff", () => {
+  it("last motion beat matches VO end (no extension, no fade-in)", () => {
+    const h = motionHandoff({
+      startSec: 10,
+      endSec: 12,
+      nextMotionStartSec: null,
+      prevIsMotion: true,
+      fps: 30,
+    });
+    expect(h).toEqual({ from: 300, seqDur: 60, beatDur: 60, fadeIn: true });
+  });
+
+  it("holds through a VO gap and overlaps the next motion beat", () => {
+    // beat 0→2s, gap, next starts 2.32s → hold to 2.32s + xfade
+    const h = motionHandoff({
+      startSec: 0,
+      endSec: 2,
+      nextMotionStartSec: 2.32,
+      prevIsMotion: false,
+      fps: 30,
+    });
+    expect(h.from).toBe(0);
+    expect(h.beatDur).toBe(60);
+    expect(h.fadeIn).toBe(false); // opener — loop-safe
+    expect(h.seqDur).toBe(Math.round(2.32 * 30) + MOTION_XFADE_FRAMES);
+  });
+
+  it("incoming beat after another motion fades in", () => {
+    const h = motionHandoff({
+      startSec: 2.32,
+      endSec: 5,
+      nextMotionStartSec: 5.3,
+      prevIsMotion: true,
+      fps: 30,
+    });
+    expect(h.fadeIn).toBe(true);
   });
 });

@@ -1,12 +1,18 @@
 // Post-build seamlessLoop check: extract first + last frame as raw RGB24 and compare.
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
 import { SEAM_OK_MEAN, seamDiff } from "./seam.js";
 import { log } from "../log.js";
 
-async function extractRawRgb(video: string, out: string, seek: { ss?: number; sseof?: number }): Promise<void> {
+async function extractRawRgb(
+  video: string,
+  out: string,
+  seek: { ss?: number; sseof?: number },
+): Promise<void> {
+  // Input seeks (-ss / -sseof before -i) are reliable for container EOF; output seeks near
+  // the end often yield an empty rawvideo dump.
   const args = ["-y", "-loglevel", "error"];
   if (seek.sseof != null) args.push("-sseof", String(seek.sseof));
   if (seek.ss != null) args.push("-ss", String(seek.ss));
@@ -21,17 +27,11 @@ export async function checkLoopSeam(videoPath: string): Promise<number> {
   const last = join(dir, "last.rgb");
   try {
     await extractRawRgb(videoPath, first, { ss: 0 });
-    // Seek near end; -sseof is relative to EOF
-    try {
-      await extractRawRgb(videoPath, last, { sseof: -0.04 });
-    } catch {
-      // Some builds reject sseof with certain containers — fall back to duration seek via ffprobe
-      const { stdout } = await execa("ffprobe", [
-        "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", videoPath,
-      ]);
-      const dur = parseFloat(stdout.trim());
-      await extractRawRgb(videoPath, last, { ss: Math.max(0, dur - 0.05) });
+    // ~3 frames before EOF — tiny sseof windows sometimes decode to empty on short packs
+    await extractRawRgb(videoPath, last, { sseof: -0.1 });
+    if (!statSync(first).size || !statSync(last).size) {
+      log.warn("seamlessLoop seam: could not extract first/last frame — skip");
+      return -1;
     }
     const a = readFileSync(first);
     const b = readFileSync(last);

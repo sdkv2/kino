@@ -48,16 +48,16 @@ function WIN(fieldHtml, caretOn, camStyle, extraHtml) {
 var KEY = 0.045, words = env.words || [], out = "", typing = false;
 for (var i = 0; i < words.length; i++) {
   var w = words[i];
-  if (env.t <= w.start) break;
+  if (env.t < w.start) break;
   var n = Math.min(w.word.length, Math.floor((env.t - w.start) / KEY) + 1);
   out += w.word.slice(0, n) + (i < words.length - 1 ? " " : "");
   typing = n < w.word.length;
 }
 var caretOn = typing || env.frame < 5 || Math.floor(env.frame / 15) % 2 === 0;
-var pin = env.progress;
-var ease = 1 - (1 - pin) * (1 - pin);
-var S = 1 + 0.22 * ease;
-var panY = -3.5 * ease;
-var panX = 1.2 * Math.sin(pin * Math.PI);
-var cam = "translate(" + panX.toFixed(2) + "vw," + panY.toFixed(2) + "vw) scale(" + S.toFixed(4) + ")";
+// Camera: seam-safe breath — native scale at BOTH beat edges (env.edge = sin(π·progress)), so a
+// multi-beat reel doesn't zoom-pop at the cuts and a loop seam stays S=1. For a single hero beat you
+// can swap to a one-shot punch-then-hold (see skills/speech-synced-ui § Camera) — never per beat.
+var S = 1 + 0.06 * env.edge;
+var panY = -1.2 * env.edge;
+var cam = "translateY(" + panY.toFixed(2) + "vw) scale(" + S.toFixed(4) + ")";
 return WIN(out, caretOn, cam, "");
