@@ -375,7 +375,8 @@ export async function build(
   // Tag variant renders (explicit --tag, else a --background/--font override) so they don't overwrite the default.
   const autoTag = opts.tag ?? opts.background ?? (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined);
   const outName = variantName(spec.title, autoTag);
-  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName });
+  // Mock builds are previews — take the fast encode preset; real builds keep the final quality.
+  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: opts.mock ? "veryfast" : "medium" });
   for (const o of outs) {
     // AAC pad past the last video frame → players flash black at EOF (and break seamless loops).
     try {

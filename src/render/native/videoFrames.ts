@@ -179,11 +179,20 @@ async function extractIndices(
   const uniq = [...wanted.keys()].sort((a, b) => a - b);
   if (!uniq.length) return { dir: job.key, byFrame: {}, maxFrame: 0 };
 
-  const select = `select='${uniq.map((i) => `eq(n\\,${i})`).join("+")}'`;
+  // Select by presentation TIME (±2ms window around each wanted pts — comfortably under any real
+  // inter-frame gap), not by frame index: with an input pre-seek the index counter restarts, but
+  // -copyts keeps `t` equal to the probed pts. Pre-seek to ~1s before the first wanted frame
+  // (-noaccurate_seek lands on the prior keyframe) so a deep clipFrom into a long source doesn't
+  // decode the whole head of the file.
+  const terms = uniq.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
+  const select = `select='${terms.join("+")}'`;
   const hdr = await hdrChain(transfer);
   const vf = hdr ? `${select},${hdr}` : select;
+  const firstPts = pts[uniq[0]];
+  const preseek = firstPts > 2 ? ["-ss", Math.max(0, firstPts - 1).toFixed(3), "-noaccurate_seek", "-copyts"] : [];
   await execa("ffmpeg", [
     "-y", "-loglevel", "error",
+    ...preseek,
     "-i", assetAbs,
     "-vf", vf,
     "-fps_mode", "passthrough",
