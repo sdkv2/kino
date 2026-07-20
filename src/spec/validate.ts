@@ -139,7 +139,7 @@ function motionBaseName(source: string): string {
 }
 
 /** Soft guidance when seamlessLoop is set — throws only on hard structural mistakes. */
-export function assertSeamlessLoop(spec: Spec): void {
+export function assertSeamlessLoop(spec: Spec, brand?: Brand): void {
   if (!spec.seamlessLoop) return;
   const last = spec.segments[spec.segments.length - 1];
   if (!last || last.kind !== "motion") {
@@ -160,6 +160,46 @@ export function assertSeamlessLoop(spec: Spec): void {
       log.warn(`seamlessLoop: first is "${a}" but last is "${b}" — pair with "${expect}" for a clean loop seam`);
     }
   }
+  const bg = spec.background ?? brand?.background;
+  if (bg === "mesh" || bg === "aurora" || bg === "particles" || bg === "grid") {
+    log.warn(
+      `seamlessLoop: background "${bg}" drifts on the global frame — prefer "solid" or "custom" ` +
+        '(e.g. backgroundComponent: "brand-wash") and paint a static .bg in every motion beat',
+    );
+  }
+}
+
+/** Soft nudge when faceless work is about to ship on stock mesh with no custom stage. */
+export function assertBackgroundChoice(spec: Spec, brand: Brand): void {
+  const bg = spec.background ?? brand.background ?? "glow";
+  if (bg !== "mesh" && bg !== "aurora") return;
+  const hasCustom = !!(spec.backgroundComponent ?? brand.backgroundComponent);
+  if (hasCustom) return;
+  const facelessHeavy =
+    spec.segments.filter((s) => s.kind === "avatar" || s.kind === "motion").length >= 2;
+  if (!facelessHeavy) return;
+  log.warn(
+    `background "${bg}" is a stock preset — for brand identity prefer ` +
+      `"background": "custom", "backgroundComponent": "brand-wash" (or your own draw fn). ` +
+      "`kino backgrounds` lists options.",
+  );
+}
+
+// Bracket audio tags ([short pause], [softly], …) only work on eleven_v3 — other models speak them.
+const AUDIO_TAG_RE = /\[[a-z][a-z0-9 \-]{0,40}\]/i;
+
+export function assertVoiceTags(spec: Spec, brand: Brand): void {
+  const model = resolveVoiceModel(spec, brand);
+  if (model.startsWith("eleven_v3")) return;
+  const hits: string[] = [];
+  spec.segments.forEach((seg, i) => {
+    if (AUDIO_TAG_RE.test(seg.text)) hits.push(`segment[${i}]`);
+  });
+  if (!hits.length) return;
+  log.warn(
+    `Audio tags in ${hits.join(", ")} but voiceModel is "${model}" — non-v3 reads tags aloud ` +
+      `("short pause", …). Switch to eleven_v3, or drop [brackets] and pause with punctuation.`,
+  );
 }
 
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
@@ -170,5 +210,7 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
   assertAudioSources(spec, project);
-  assertSeamlessLoop(spec);
+  assertSeamlessLoop(spec, brand);
+  assertBackgroundChoice(spec, brand);
+  assertVoiceTags(spec, brand);
 }

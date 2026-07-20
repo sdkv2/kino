@@ -109,8 +109,18 @@ export interface MotionGraphicProps {
 export interface MotionEnv {
   frame: number; // integer frame within the beat
   t: number; // seconds within the beat
-  progress: number; // 0 → 1 across the beat
-  pulse: number; // 0 → 1 trigger envelope
+  progress: number; // 0 → 1 across the beat (linear)
+  /** Ease-out cubic of progress — soft landings without hand-rolled (1-p)^n. */
+  out: number;
+  /** Smoothstep of progress. */
+  inout: number;
+  /** Back-out of progress (may exceed 1 mid-way). */
+  overshoot: number;
+  /** Elastic-out of progress (may exceed 1 mid-way). */
+  spring: number;
+  /** sin(progress·π) — 0 at beat edges, 1 mid (seam-safe life). */
+  edge: number;
+  pulse: number; // 0 → 1 trigger envelope (fast attack, exponential decay)
   params: Record<string, BgParamValue>; // resolved spec params at this frame
   palette: { mint: string; green: string; night: string; white: string; gold: string; font: string };
   width: number; // canvas px (1080 for 9:16)

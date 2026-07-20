@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { build } from "./build.js";
 import { applySets } from "../media/batchSet.js";
-import { SpecSchema } from "../spec/schema.js";
+import { parseSpec } from "../spec/schema.js";
 import { resolveProject } from "../config/project.js";
 import { log } from "../log.js";
 
@@ -52,7 +52,7 @@ export async function batch(
   }
 
   const basePath = resolveBeside(absInput, file.base);
-  const baseSpec = SpecSchema.parse(JSON.parse(readFileSync(basePath, "utf8")));
+  const baseSpec = parseSpec(JSON.parse(readFileSync(basePath, "utf8")));
   const project = resolveProject({
     specPath: basePath,
     project: opts.project,
@@ -69,7 +69,7 @@ export async function batch(
     if (!v.set || !("title" in v.set)) {
       clone.title = `${baseSpec.title}-${v.tag}`.replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "");
     }
-    const parsed = SpecSchema.parse(clone);
+    const parsed = parseSpec(clone);
     const outSpec = join(batchDir, `${parsed.title}.json`);
     writeFileSync(outSpec, JSON.stringify(parsed, null, 2) + "\n");
     log.info(`batch variant ${v.tag} → ${outSpec}`);
