@@ -34,6 +34,36 @@ export async function init(brand = "default"): Promise<void> {
   }
   const cfg = join(projectRoot, "project.json");
   if (!existsSync(cfg)) writeFileSync(cfg, JSON.stringify({ brand }, null, 2) + "\n");
+  // A ready-to-build sample so the quickstart's first `kino build` works with no editing:
+  // faceless (provider none → no avatar spend), builds free with --mock.
+  const specf = join(projectRoot, "specs", "lie-test.json");
+  if (!existsSync(specf)) {
+    writeFileSync(
+      specf,
+      JSON.stringify(
+        {
+          title: "lie-test",
+          provider: "none",
+          background: "glow",
+          segments: [
+            {
+              kind: "avatar",
+              text: "This is a faceless kino build — no avatar, and no API spend in mock mode.",
+              caption: "faceless build",
+            },
+            {
+              kind: "avatar",
+              text: "Edit this spec, then run kino build to render your first video.",
+              caption: "edit, then render",
+              cta: true,
+            },
+          ],
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+  }
   const bf = join(ws.brandDir(brand), "brand.md");
   if (!existsSync(bf)) {
     writeFileSync(
@@ -87,7 +117,7 @@ export async function init(brand = "default"): Promise<void> {
   }
 
   log.ok(
-    `Initialised project '${brand}'. Fill .env + brands/${brand}/brand.md, add specs under ` +
-      `projects/${brand}/specs/, then: kino build projects/${brand}/specs/<spec>.json`,
+    `Initialised project '${brand}'. Fill .env + brands/${brand}/brand.md, then build the sample: ` +
+      `kino build projects/${brand}/specs/lie-test.json --mock`,
   );
 }
