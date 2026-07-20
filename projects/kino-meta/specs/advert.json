@@ -6,7 +6,7 @@
   "film": 0,
   "seamlessLoop": true,
   "voiceModel": "eleven_multilingual_v2",
-  "music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeInSec": 0.8, "fadeOutSec": 1.5 },
+  "music": { "src": "music/ambient-night.mp3", "volume": 0.12, "duck": 0.04, "fadeInSec": 0.8, "fadeOutSec": 1.5 },
   "segments": [
     { "kind": "motion", "source": "motion/prompt-window.js",
       "text": "Kino, make me an advert." },

@@ -35,7 +35,7 @@ export async function doctor(): Promise<void> {
   if (sfx.length) log.ok(`assets-lib/sfx (${sfx.length}: ${sfx.join(", ")})`);
   else log.warn("assets-lib/sfx empty — SFX bare ids won't resolve (see assets-lib/sfx/README.md)");
   if (music.length) log.ok(`assets-lib/music (${music.length}: ${music.join(", ")})`);
-  else log.warn("assets-lib/music empty — run kino music; don't scrape random CDNs for beds");
+  else log.info("assets-lib/music empty (ships empty) — bare ids need beds dropped there; project paths & Freesound unaffected");
 
   const { workspaceRoot } = resolveWorkspace();
   const bundled = listBundledSkills();

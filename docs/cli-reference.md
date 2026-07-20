@@ -315,20 +315,20 @@ kino photos "coffee desk morning light" --get 2 --project x  # → assets/pexels
 Screen local thumbs under `$TMPDIR/kino-pexels-photo-thumbs/` before `--get` (same habit as video).
 
 ### `music`
-List bundled music beds (`assets-lib/music/`), or search Freesound CC0 tracks (15–90s, short-form
-length). Bare bed ids (e.g. `"ambient-night"`) resolve straight from a spec's `music.src` — no
-copy needed; `--get` is only for pulling a bed into a project or downloading a Freesound match.
-See [Audio](audio.md#music-beds).
+List library music beds (`assets-lib/music/` — ships empty; drop CC0 `.mp3`s there for bare ids),
+or search Freesound CC0 tracks (15–90s, short-form length). A library bed's bare id resolves
+straight from a spec's `music.src` — no copy needed; `--get` is only for pulling a bed into a
+project or downloading a Freesound match. See [Audio](audio.md#music-beds).
 
 ```bash
-kino music                                  # list bundled beds
+kino music                                  # list library beds
 kino music "lofi piano" --get 2 --project x # search Freesound, download match 2
-kino music ambient-night --get --project x  # copy a bundled bed into the project
+kino music <id> --get --project x           # copy a library bed into the project
 ```
 
 | Flag | Meaning |
 |---|---|
-| `--get [n]` | Copy a bundled bed (bare id, no query needed), or download Freesound result `n`. |
+| `--get [n]` | Copy a library bed (bare id, no query needed), or download Freesound result `n`. |
 | `--count <n>` | Freesound results to list (default 8). |
 | `--project <name>` | Project whose `assets/` receives the download/copy (required for `--get`). |
 
