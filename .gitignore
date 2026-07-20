@@ -34,3 +34,6 @@ assets-lib/lottie/*.json
 logo/*
 !logo/kino-logo-web.png
 examples/**/out/
+
+# Local self-demo render (served from R2)
+kino-meta.mp4
