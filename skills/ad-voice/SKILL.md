@@ -109,6 +109,40 @@ line names an observable act, not a promised outcome.
 7. **Captions ≠ VO dump.** Caption = the one line a silent scroller needs; VO can carry the rest.
 8. **Respect brand `bannedPhrases`.** Brand bans still fail the build when set.
 
+## The AI-cadence tells (rhythm, not vocabulary)
+
+The banned list kills *corporate* slop. The tell that still reads "AI" after that is **cadence** — copy
+that's grammatically clean but where every line is a balanced, polished tagline. Real speech is lumpy.
+A script can pass every rule above and still sound like a machine wrote it. Hunt these:
+
+1. **Rule of three.** AI reaches for tricolons and triplet lists — "Nail a lesson, bank the XP, level up",
+   "upload, build, boot, live", "Tabata, EMOM, AMRAP", "No ads. No login. Nothing between you and X."
+   **Max one triplet per script**; usually cut it to two. Three balanced items in a row is the loudest tell.
+2. **The em-dash drumroll.** "Real talk — nobody…", "push your repo — that's the whole deploy." The
+   em-dash-as-pause-before-the-punchline is an AI signature. Use a period, or just say the thing.
+3. **Relentless parallelism.** Every line the same shape ("press the seed, and steep the leaf" / "made for
+   the skin, and for the mind" / "warmed in the hands, and drawn in slowly") reads machine-generated even
+   when each line is pretty. **Vary the shape** — a run-on next to a two-word line; one flat plain statement
+   among the crafted ones.
+4. **Every line a tagline.** Real talk has filler, asymmetry, an unfinished thought, a plain fact stated
+   plainly. If all N lines could be posters, none sound spoken. Let at least one just *say the thing*.
+5. **Forced cleverness.** Similes and rhyme-y pairs you'd never say out loud — "hits your thirst like
+   thunder", "recycle the corpse", "sip like a menace". Edge is not writing a riddle; blunter is more human.
+6. **UGC-cliché openers.** "Real talk", "Let's be honest", "POV:", "Nobody talks about…" — the TikTok
+   version of throat-clearing (rule 4 above). Open on the actual thing.
+
+**The test that catches all of it:** read the script aloud as a **voice memo to one friend** about the app —
+not a pitch, not a caption. Any line that snaps back into ad-copy is the tell; rewrite it the way you'd
+actually say it. (This is stronger than "read aloud" — the *friend* frame is what exposes the polish.)
+
+| AI cadence | Said like a human |
+|---|---|
+| Nail a lesson, bank the XP, level up. | Do one lesson. Watch the streak climb. |
+| It hits your thirst like thunder. | Tastes kind of violent. You'll like it. |
+| Real talk — nobody sits down for a language class anymore. | Who's actually sitting down for a language class? |
+| Press the seed, and steep the leaf. | It starts with a seed. |
+| No ads. No login wall. Nothing between you and the next round. | No ads, no login. Just the timer. |
+
 ### Hard-banned vocabulary (house list)
 
 Never in VO, captions, kickers, or `texts` overlays unless the brand explicitly overrides:
