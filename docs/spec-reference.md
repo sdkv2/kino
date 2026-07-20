@@ -1,6 +1,6 @@
 # Spec reference
 
-A **spec** is the JSON file an agent authors to describe one video. kino validates it, generates voiceover, optionally renders an avatar, and composites everything with Remotion. This page documents every field of the spec, plus the `brand.md` and `project.json` configs it resolves against.
+A **spec** is the JSON file an agent authors to describe one video. kino validates it, generates voiceover, optionally renders an avatar, and composites everything with its deterministic frame engine. This page documents every field of the spec, plus the `brand.md` and `project.json` configs it resolves against.
 
 The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) — invalid specs fail the build with a precise error.
 

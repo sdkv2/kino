@@ -1,5 +1,5 @@
-// Discoverable param/action schema for the animated backgrounds. Lives in compiled-land (not under
-// remotion/) so the CLI (`kino backgrounds`) can import it. The presets render from these param names.
+// Discoverable param/action schema for the animated backgrounds. Lives in compiled-land so the
+// CLI (`kino backgrounds`) can import it. The presets render from these param names.
 export type ParamValue = number | string;
 
 export interface ParamDef {

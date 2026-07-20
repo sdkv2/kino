@@ -1,4 +1,4 @@
-// Pipeline backbone: spec → VO → avatar plan/trim → faceless background → fonts → Remotion render.
+// Pipeline backbone: spec → VO → avatar plan/trim → faceless background → fonts → frame render.
 // prepare() is the shared resolver that does everything up to (but not including) the final encode;
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
@@ -144,7 +144,7 @@ export async function prepare(
     log.info(`  · ${plan.avatarIndices.length}/${spec.segments.length} segments on camera (trimmed)`);
   }
 
-  // Stage everything Remotion reads via staticFile(): app assets, the avatar clip, and the VO track.
+  // Stage everything the render page reads via staticFile(): app assets, the avatar clip, and the VO track.
   const publicDir = join(project.outDir(spec.title), "_public");
   mkdirSync(publicDir, { recursive: true });
   const staged = new Set<string>();
@@ -254,7 +254,7 @@ export async function prepare(
     }
   }
   // Label font for storyboard/montage labels (defaults to the caption font); also staged as a
-  // second Remotion typeface (themeLabelFont/labelFontUrl below) so motion beats can reach it via
+  // second render-page typeface (themeLabelFont/labelFontUrl below) so motion beats can reach it via
   // --kino-label-font without re-resolving the brand's font choice.
   const labelDef = lookupFont(brand.labelFont ?? fontName);
   const labelFont = labelDef ? await ensureFont(labelDef.name) : null;

@@ -355,7 +355,7 @@ punchy = UI pops / pulses, not a 1.25× zoom every cut).
 
 Do **not** author from `inspect` alone. Motion that "types" or "blinks" only proves itself in
 pixels across time. Use `kino still` / `--around` at **every** stage (mock is free). Prefer
-**per-beat harness specs** so you aren't waiting on a full Remotion encode each tweak.
+**per-beat harness specs** so you aren't waiting on a full video encode each tweak.
 
 ```
 1. Scaffold chrome / proc / Lottie

@@ -1,6 +1,6 @@
 # Getting started
 
-**kino** turns an agent-authored JSON **spec** into a finished vertical video: ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** animated background → Remotion composite → 9:16 / 3:4 MP4. You (or a driving agent) supply the creative as JSON; kino handles deterministic production.
+**kino** turns an agent-authored JSON **spec** into a finished vertical video: ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** animated background → deterministic frame composite → 9:16 / 3:4 MP4. You (or a driving agent) supply the creative as JSON; kino handles deterministic production.
 
 This guide takes you from a clean checkout to your first rendered video. For the full command list see the [CLI reference](cli-reference.md); for the JSON format see the [Spec reference](spec-reference.md).
 

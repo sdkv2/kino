@@ -104,7 +104,7 @@ Same `asset`, different windows:
 | `zoomKeyframes` | Camera push/pan on the **whole phone unit** (footage + chrome). See §6 |
 
 VO still drives beat duration. If the clip (at `speed`) ends early, the last frame holds
-(via freeze — do not rely on Remotion `trimAfter`; it unmounts early under slow-mo).
+(via freeze — do not rely on a source-frame `trimAfter` cutoff; it unmounts early under slow-mo).
 
 **`clipTo` is a soft freeze-ceiling, not a trim.** The beat plays `clipFrom → min(clipTo, clipFrom +
 beatLen·speed)`: VO *longer* than the window freezes on the `clipTo` frame; VO *shorter* cuts

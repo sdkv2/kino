@@ -1,5 +1,5 @@
-// Shared prop types for the Remotion composition. Lives in compiled-land so both the
-// CLI (render.ts, build.ts) and the Remotion .tsx (bundled by esbuild) can import it.
+// Shared prop types for the render composition. Lives in compiled-land so both the
+// CLI (render.ts, build.ts) and the render page .tsx (bundled by esbuild) can import it.
 import type { CaptionStyle, CaptionAnimation, CaptionReveal, ResolvedText } from "./textStyles.js";
 
 export interface Theme {
@@ -90,7 +90,7 @@ export interface BackgroundProps {
 }
 
 // A parsed Lottie (Bodymovin) animation document. Structurally JSON, so it serializes cleanly
-// through Remotion inputProps. Validated + linted at resolve time (src/render/lottie.ts).
+// through the render-page config. Validated + linted at resolve time (src/render/lottie.ts).
 export type LottieData = Record<string, unknown>;
 
 // A resolved motion graphic: the sanitized HTML plus the JSON-owned timing controls.

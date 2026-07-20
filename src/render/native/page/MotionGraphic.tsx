@@ -12,8 +12,8 @@ import { LottieFrame, lottieMeta } from "./lottie";
 
 // Trusted stylesheet injected into every motion-graphic shadow root. All of it is determinism-safe:
 // animations are force-paused and scrubbed by --progress (no wall clock), helpers read frame-driven
-// vars only, and there are no transitions / external url()s. See src/render/remotion/MotionGraphic.tsx
-// provenance; this must stay byte-identical to the legacy injection (same contract, same pixels).
+// vars only, and there are no transitions / external url()s. This is the canonical injection the
+// motion-graphic contract (docs/motion-graphics.md, `kino motion`) documents — same bytes, same pixels.
 const KINO_SCRUB_STYLE =
   "<style>*{animation-play-state:paused !important;transition:none !important}" +
   ":host{--kino-ease-out:cubic-bezier(.22,1,.36,1);--kino-ease-in-out:cubic-bezier(.65,0,.35,1);" +

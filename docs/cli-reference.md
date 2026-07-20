@@ -17,7 +17,7 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 ## Build & preview
 
 ### `build`
-Generate a video from a spec: voiceover → optional avatar → Remotion composite → MP4. See [Build & preview](build-and-preview.md).
+Generate a video from a spec: voiceover → optional avatar → frame composite → MP4. See [Build & preview](build-and-preview.md).
 
 ```
 kino build <spec> [options]

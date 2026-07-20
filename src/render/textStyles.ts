@@ -1,5 +1,5 @@
 // Text preset library + build-time resolvers for stylised captions and overlays. Pure module
-// (compiled-land, like captionLayout.ts): the CLI resolves specs through it and the Remotion
+// (compiled-land, like captionLayout.ts): the CLI resolves specs through it and the render-page
 // components style words with it. Presets draw only from the resolved brand palette.
 import type { CSSProperties } from "react";
 

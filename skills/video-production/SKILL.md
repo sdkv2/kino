@@ -6,7 +6,7 @@ description: Use when producing short-form vertical marketing videos for an app 
 # Producing videos with kino
 
 `kino` turns a JSON **spec you author** into a finished 9:16 (and optional 3:4) video.
-You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) → composite (Remotion).
+You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) → composite (kino's frame engine).
 
 ## Brand discovery (before creating a new brand)
 
@@ -307,7 +307,7 @@ don't reintroduce per-caption `y` offsets to compensate.
   [Motion / Lottie visual loop](#motion--lottie-visual-loop-use-still--around) below.
   **Tier-3 Lottie (`.json`):** point `source` at a designer-authored Bodymovin/LottieFiles `.json` file
   to embed organic illustrated motion or AE-produced animations that an agent can't hand-author. kino
-  plays it deterministically via `@remotion/lottie`. Key rule: for a `motionOverlay`, the asset **must
+  plays it deterministically with a frame-seeked Lottie player. Key rule: for a `motionOverlay`, the asset **must
   have a transparent background** — an opaque export occludes the avatar or app screenshot. Add
   `"loop": true` (sibling of `source`) to loop at native speed; default plays once stretched across the
   beat. **Word-fire:** give the Lottie `triggers` at VO word times (from `kino inspect`) and each fires a
@@ -420,7 +420,7 @@ you have **Read** pixel stills at multiple stages — not just `inspect` JSON or
 6. **`--segment N` is the beat midpoint, not t=0.** Loop posters / seam frames need
    `kino still … --at 0` (and `--at <beatEnd>` for the last frame). Midpoint stills lie about empty
    ready-states and end-of-beat clears.
-7. **Preview before the expensive rebuild.** A full Remotion encode of a motion-heavy cut can take
+7. **Preview before the expensive rebuild.** A full encode of a motion-heavy cut can take
    many minutes (~tens of minutes for ~20s @ 30fps of Tier-2 graphics). Keep **per-beat harness
    specs** (`specs/_b0.json` …) that render one motion source so you can `kino still --around`
    in seconds. Only `kino build` the assembled spec after harness sheets pass.
