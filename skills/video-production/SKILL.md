@@ -220,7 +220,7 @@ don't reintroduce per-caption `y` offsets to compensate.
   where the beat earns one. Variety is the *result* of composing per beat, not the goal — two beats
   that genuinely want the same frame may share it. The failure is every beat defaulting to dead-center
   because none was composed for what it says (don't jitter position just to make cards differ — that
-  reads as noise, not design). B-roll sources: project assets, `kino pexels` / `kino photos`, `assets-lib/lottie/`.
+  reads as noise, not design). B-roll sources: project assets, `kino pexels` / `kino photos`.
   **Consecutive `app` beats crossfade shot-to-shot automatically** (the first holds under the next's
   fade-in — no background flash between them), so sequencing related footage back-to-back is
   encouraged: it reads as edited film, not a slideshow. **Consecutive `motion` beats dissolve the
@@ -314,10 +314,8 @@ don't reintroduce per-caption `y` offsets to compensate.
   fresh one-shot burst in sync with the words (use a short, transparent burst asset; triggers override
   stretch/loop). Assets must embed images (base64 `data:` URIs) and outline/embed fonts (no system fonts,
   no AE expressions). Works in all three motion slots (`kind:"motion"`, `motionOverlay` on `avatar` or `app`).
-  **Ready-made library:** `assets-lib/lottie/` (repo root) holds pre-cleaned, brand-neutral LottieFiles
-  templates (wave background, card carousels, logo reveal) — copy into the project's `assets/motion/`
-  and reference directly. Rebrand a logo/image slot by replacing the image asset's base64 `p` payload.
-  When adapting fresh LottieFiles downloads yourself, see "Sourcing from LottieFiles" in
+  Rebrand a template's logo/image slot by replacing the image asset's base64 `p` payload.
+  When adapting LottieFiles downloads, see "Sourcing from LottieFiles" in
   docs/motion-graphics.md — notably: strip the `fh`/`fs`/`fb` block creator exports stamp on text
   animators (renders all text red in lottie-web), delete the near-universal opaque `Background` layer,
   and don't rewrite template text (glyphs are baked; only exported characters render).
