@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/node-%E2%89%A518-brightgreen.svg" alt="Node ≥18">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/output-9%3A16%20MP4-black.svg" alt="9:16 MP4 output">
+  <a href="https://try.elevenlabs.io/7t4pgbmyxq67" title="Referral — supports the project"><img src="https://img.shields.io/badge/voiceover-ElevenLabs-000?logo=elevenlabs&logoColor=fff" alt="Voiceover by ElevenLabs"></a>
 </p>
 
 ---
@@ -37,7 +38,7 @@ the creative; kino handles deterministic production: ElevenLabs voiceover, an op
 ## Pipeline at a glance
 ```
 spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ avatar plan + trim
-          ─▶ avatar (HeyGen/Hedra/Replicate) or faceless background
+          ─▶ avatar (HeyGen/Hedra/Replicate) or faceless background / motion graphics
           ─▶ Remotion composite ─▶ ffmpeg ─▶ out/<title>/…mp4
 ```
 The agent authors specs; kino performs every step deterministically (no LLM inside the CLI).
