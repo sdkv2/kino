@@ -1,6 +1,6 @@
 // Tier-3 Lottie support: parse + validate + lint + playback math for embedded Bodymovin (.json)
 // animations. fs-free and pure (deterministic) so it runs node-side (resolveMotionGraphic) AND in the
-// Remotion bundle (MotionGraphic.tsx). See docs/superpowers/specs/2026-06-19-lottie-tier3-design.md.
+// Remotion bundle (MotionGraphic.tsx).
 
 export type LottieData = Record<string, unknown>;
 
