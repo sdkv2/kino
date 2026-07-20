@@ -36,13 +36,13 @@ export async function init(brand = "default"): Promise<void> {
   if (!existsSync(cfg)) writeFileSync(cfg, JSON.stringify({ brand }, null, 2) + "\n");
   // A ready-to-build sample so the quickstart's first `kino build` works with no editing:
   // faceless (provider none → no avatar spend), builds free with --mock.
-  const specf = join(projectRoot, "specs", "lie-test.json");
+  const specf = join(projectRoot, "specs", "sample.json");
   if (!existsSync(specf)) {
     writeFileSync(
       specf,
       JSON.stringify(
         {
-          title: "lie-test",
+          title: "sample",
           provider: "none",
           background: "glow",
           segments: [
@@ -118,6 +118,6 @@ export async function init(brand = "default"): Promise<void> {
 
   log.ok(
     `Initialised project '${brand}'. Fill .env + brands/${brand}/brand.md, then build the sample: ` +
-      `kino build projects/${brand}/specs/lie-test.json --mock`,
+      `kino build projects/${brand}/specs/sample.json --mock`,
   );
 }

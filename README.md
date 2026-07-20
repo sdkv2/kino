@@ -61,11 +61,13 @@ faceless builds need only that; avatar builds need it too whenever kino drives t
 
 ## Quickstart
 ```bash
-cd <project> && kino init acme     # scaffold .env, brand.md, dirs + a sample spec
-kino doctor                             # preflight: API keys, ffmpeg/ffprobe, heygen CLI
-kino build projects/acme/specs/lie-test.json --mock   # free structural preview (no API spend)
-kino build projects/acme/specs/lie-test.json          # real render → projects/acme/out/lie-test/
+cd <project> && kino init acme                       # scaffold .env, brand.md, dirs + a sample spec
+kino doctor                                          # preflight: API keys, ffmpeg/ffprobe, heygen CLI
+kino build projects/acme/specs/sample.json --mock    # free structural preview (no API spend)
+kino build projects/acme/specs/sample.json           # real render → projects/acme/out/sample/
 ```
+`kino init` writes a ready-to-build faceless sample (provider `none`, $0), so the first
+`kino build` works with no editing — swap in your own spec once the preview looks right.
 
 ## Agent skills
 
