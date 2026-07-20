@@ -126,8 +126,10 @@ return ''
 + '.fn{margin-left:2vw;font-family:var(--kino-label-font);color:rgba(255,255,255,.6);font-size:2.4vw;flex:1}'
 + '.live{font-family:var(--kino-label-font);color:var(--kino-mint);font-size:2vw}'
 + '.body{display:flex;padding:3vw}'
+// width:2ch reserves 2 monospace digits so the gutter doesn't widen (pushing code right) when
+// line numbers cross 9→10. ponytail: 2ch fits the 19-line spec; widen if it ever exceeds 99 lines.
 + '.gut{margin:0;color:rgba(128,226,180,.4);font-family:var(--kino-label-font);font-size:2.2vw;'
-+   'line-height:3.1vw;text-align:right;padding-right:2vw}'
++   'line-height:3.1vw;text-align:right;width:2ch;flex:none;padding-right:2vw}'
 + '.code{margin:0;color:var(--kino-white);font-family:var(--kino-label-font);font-size:2.2vw;'
 +   'line-height:3.1vw;white-space:pre}'
 + '.crt{color:var(--kino-mint)}'
