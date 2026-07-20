@@ -17,6 +17,23 @@
 the creative; kino handles deterministic production: ElevenLabs voiceover, an optional AI avatar
 (HeyGen / Hedra / Replicate) or a **faceless** background, composited in Remotion to a 9:16 / 3:4 MP4.
 
+## Showcase
+
+<table>
+<tr>
+<td width="33%" align="center"><img src="demos/kino-meta.gif" width="240" alt="kino writing its own advert.json spec, live"></td>
+<td width="33%" align="center"><img src="demos/canned-doom.gif" width="240" alt="Canned Doom — all-motion spoof product ad"></td>
+<td width="33%" align="center"><img src="demos/lunara.gif" width="240" alt="Lunara — quiet mood piece"></td>
+</tr>
+<tr>
+<td align="center"><b>The self-demo</b><br><sub>kino types its own <code>advert.json</code> and builds the ad you're watching</sub></td>
+<td align="center"><b>Canned Doom</b><br><sub>all authored motion graphics — no footage, word-synced typing</sub></td>
+<td align="center"><b>Lunara</b><br><sub>stock b-roll + a quiet mood read — the calm end of the range</sub></td>
+</tr>
+</table>
+
+<sub>Fictional sample brands. Each clip is a real, deterministic <code>kino build</code> — faceless, 9:16, ElevenLabs voiceover (previews are silent, trimmed GIFs).</sub>
+
 ## Pipeline at a glance
 ```
 spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ avatar plan + trim
