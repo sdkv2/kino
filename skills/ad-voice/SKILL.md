@@ -101,6 +101,8 @@ Full patterns + rewrites → [reference.md](reference.md).
 ```
 
 Cross-beat check (from video-production) still applies: motion labels and captions must not repeat the same phrase.
+When VO enumerates on-screen steps (pipeline chips, tiles), **speak the same nouns the UI shows** —
+mismatched pairs (`compose` on screen / "motion" spoken) read as bugs, not style.
 
 ## Quick rewrites
 

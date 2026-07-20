@@ -149,6 +149,8 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       width,
       height,
       words,
+      durationFrames,
+      duration: fps > 0 ? durationFrames / fps : 0,
     };
     try {
       // Sanitize the per-frame procedural output: it goes straight to innerHTML, so unlike the static

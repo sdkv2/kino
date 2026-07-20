@@ -23,7 +23,7 @@ const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gol
 const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "scroll", "scroll-up", "static"]);
 const Transition = z.enum(["fade", "dissolve", "fly-left", "fly-up", "pop", "cut"]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
-const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
+const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "solid", "custom"]);
 const CaptionMode = z.enum(["phrase", "words"]);
 const BgKeyframe = z.object({
   at: z.number(),
@@ -42,17 +42,22 @@ const MotionGraphicRef = z.object(motionFields);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
 const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
 
-const SfxEvent = z.object({
-  src: z.string().min(1), // bare library id ("pop") or project asset path ("sfx/hit.mp3")
-  at: z.number().min(0), // seconds on the main timeline
-  volume: z.number().min(0).max(1).default(1),
-});
-const Music = z.object({
-  src: z.string().min(1), // same resolution as sfx.src
-  volume: z.number().min(0).max(1).default(0.18), // bed level
-  duck: z.number().min(0).max(1).default(0.06), // level while VO is speaking
-  fadeOutSec: z.number().min(0).default(2),
-});
+const SfxEvent = z
+  .object({
+    src: z.string().min(1), // bare library id ("pop") or project asset path ("sfx/hit.mp3")
+    at: z.number().min(0), // seconds on the main timeline
+    volume: z.number().min(0).max(1).default(1),
+  })
+  .strict();
+const Music = z
+  .object({
+    src: z.string().min(1), // same resolution as sfx.src
+    volume: z.number().min(0).max(1).default(0.12), // bed level (short-form: quiet under VO)
+    duck: z.number().min(0).max(1).default(0.04), // level while VO is speaking
+    fadeInSec: z.number().min(0).default(0), // head fade (avoids a click on loop-audio starts)
+    fadeOutSec: z.number().min(0).default(2),
+  })
+  .strict();
 
 const Segment = z.discriminatedUnion("kind", [
   z.object({
@@ -69,7 +74,8 @@ const Segment = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
-  }),
+  })
+  .strict(),
   z.object({
     kind: z.literal("app"),
     asset: z.string().min(1),
@@ -108,7 +114,8 @@ const Segment = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
-  }),
+  })
+  .strict(),
   z.object({
     kind: z.literal("motion"),
     ...motionFields,
@@ -121,7 +128,8 @@ const Segment = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
-  }),
+  })
+  .strict(),
 ]);
 
 export const SpecSchema = z
@@ -132,7 +140,7 @@ export const SpecSchema = z
     voice: z.string().optional(),
     // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
     // eleven_multilingual_v2 for metronome-critical / timing-stable reads.
-    voiceModel: z.string().default("eleven_v3"),
+    voiceModel: z.string().optional(),
     // Cinematic-finish intensity (vignette + grain over photographic/app beats), 0..1. Default 1
     // (graded film look). Set 0 for a clean, flat video — e.g. a light "paper" brand where the edge
     // vignette reads as a dark border. Motion-graphic beats are never graded (they own their finish).

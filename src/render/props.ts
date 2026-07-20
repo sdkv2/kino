@@ -81,7 +81,7 @@ export interface BgTrigger {
   action: string;
 }
 export interface BackgroundProps {
-  kind: "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "custom";
+  kind: "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "solid" | "custom";
   image: string | null; // staticFile-relative path, for kind="image"
   customCode: string | null; // draw-fn source, for kind="custom"
   params: Record<string, BgParamValue>; // base param values (tweened by keyframes)
@@ -116,6 +116,8 @@ export interface MotionEnv {
   width: number; // canvas px (1080 for 9:16)
   height: number; // canvas px (1920 for 9:16)
   words: WordTiming[]; // beat's spoken words, beat-relative (start/end in seconds from beat start); [] when none
+  durationFrames: number; // total frames in the beat; last frame index = durationFrames - 1
+  duration: number; // beat length in seconds
 }
 
 // Brand mark overlay (faceless talking beats): resolved layout + an agent keyframe track.
@@ -140,6 +142,7 @@ export interface MusicProps {
   src: string;
   volume: number;
   duck: number;
+  fadeInSec: number;
   fadeOutSec: number;
   duckSpans: Array<{ from: number; to: number }>;
 }

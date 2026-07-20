@@ -3,6 +3,7 @@ import { renderVideo, renderStills } from "../src/render/render.js";
 import { probeDuration } from "../src/media/ffmpeg.js";
 import { generateMock } from "../src/avatar/heygen.js";
 import { mkdtempSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
@@ -169,6 +170,25 @@ describe("renderVideo", () => {
     const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "wc" });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
+  }, 180000);
+
+  it("renders a loop-safe solid background — identical pixels at two different frames", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-rsolid-"));
+    const props: KinoProps = {
+      theme: { ...theme, film: 0 }, // no grain/vignette finishing pass — isolate the background layer
+      fps: 30,
+      avatar: null,
+      avatarWindows: [],
+      voTrack: null,
+      logo: null,
+      background: { kind: "solid", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
+      disclosure: "",
+      segments: [{ kind: "avatar", caption: "", startSec: 0, endSec: 2 }], // no caption: isolate the background layer
+    };
+    const outs = await renderStills({ props, publicDir: outDir, format: "9:16", frames: [{ frame: 5, name: "s1" }, { frame: 55, name: "s2" }], outDir });
+    // top-left corner, well clear of any centred content: pixel is driven only by the background draw.
+    const sample = (png: string) => execSync(`magick "${png}" -format "%[pixel:p{40,60}]" info:`).toString().trim();
+    expect(sample(outs[0])).toBe(sample(outs[1])); // static: frame doesn't move it
   }, 180000);
 
   it("renders individual still frames (no encode)", async () => {

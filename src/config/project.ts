@@ -37,10 +37,19 @@ export function findUp(startDir: string, marker: string, existsFn: (p: string) =
   }
 }
 
-// Resolve the shared workspace: the nearest ancestor of cwd containing a brands/ dir (else cwd),
-// which holds shared brands/ and the .kino-cache. Use this for commands that don't need a project.
-export function resolveWorkspace(cwd: string = process.cwd()): Workspace {
-  const workspaceRoot = findUp(cwd, "brands") ?? cwd;
+// Resolve the shared workspace: nearest ancestor of cwd that contains brands/.
+// Throws when none exists — silent cwd fallback hid "not in a workspace" mistakes.
+// Pass `{ create: true }` when scaffolding (kino init) so a new root can be born at cwd.
+export function resolveWorkspace(
+  cwd: string = process.cwd(),
+  opts: { create?: boolean } = {},
+): Workspace {
+  const workspaceRoot = findUp(cwd, "brands") ?? (opts.create ? cwd : null);
+  if (!workspaceRoot) {
+    throw new Error(
+      `No brands/ found above ${cwd}. Run from a kino workspace, or scaffold one with: kino init <brand>`,
+    );
+  }
   return {
     workspaceRoot,
     cache: join(workspaceRoot, ".kino-cache"),

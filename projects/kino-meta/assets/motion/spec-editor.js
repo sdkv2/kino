@@ -7,7 +7,7 @@ var LINES = [
   '  "voice": "rachel",',
   '  "provider": "none",',
   '  "segments": [',
-  '    { "kind": "motion", "source": "prompt-window' + '.js",',
+  '    { "kind": "motion", "source": "prompt-window.js",',
   '      "text": "Kino, make me an advert" },',
   '    { "kind": "motion", "source": "spec-editor.js",',
   '      "text": "Your agent writes the spec" },',

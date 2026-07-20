@@ -53,17 +53,145 @@ const BANNED_JS: { re: RegExp; msg: string }[] = [
   { re: /\b(Date|Math)\s*\[/, msg: "computed access to Date/Math isn't allowed — use dotted Math.* geometry and env.t / env.frame" },
 ];
 
-// Strip JS comments before scanning so a banned token that appears only in a comment (e.g. the
-// filename "prompt-window.png" contains "window.") isn't flagged — comments don't execute. The `[^:]`
-// guard keeps `http://` and other `://` from being eaten as a line comment. Blanking (not deleting)
-// preserves offsets and can't fuse two lines into a spurious match.
-function stripJsComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+// Blank comments + string/template literal *contents* before scanning so banned access patterns that
+// appear only in non-executable text aren't flagged (e.g. the filename "prompt-window.js" contains
+// "window."). Real code in `${…}` template expressions is kept. Blanking (not deleting) preserves
+// offsets and can't fuse two tokens into a spurious match. The `[^:]` guard keeps `http://` from
+// being eaten as a line comment.
+function stripJsNoise(src: string): string {
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  const pushBlank = (from: number, to: number) => {
+    out += src.slice(from, to).replace(/[^\n]/g, " ");
+  };
+  while (i < n) {
+    // Block comment
+    if (src[i] === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i + 2);
+      const to = end < 0 ? n : end + 2;
+      pushBlank(i, to);
+      i = to;
+      continue;
+    }
+    // Line comment (not part of `://`)
+    if (src[i] === "/" && src[i + 1] === "/" && (i === 0 || src[i - 1] !== ":")) {
+      const end = src.indexOf("\n", i);
+      const to = end < 0 ? n : end;
+      pushBlank(i, to);
+      i = to;
+      continue;
+    }
+    // Single- or double-quoted string
+    if (src[i] === '"' || src[i] === "'") {
+      const q = src[i];
+      out += q;
+      i++;
+      while (i < n) {
+        if (src[i] === "\\") {
+          out += "  ";
+          i += 2;
+          continue;
+        }
+        if (src[i] === q) {
+          out += q;
+          i++;
+          break;
+        }
+        out += src[i] === "\n" ? "\n" : " ";
+        i++;
+      }
+      continue;
+    }
+    // Template literal — blank static parts, keep ${expr} for scanning
+    if (src[i] === "`") {
+      out += "`";
+      i++;
+      while (i < n) {
+        if (src[i] === "\\") {
+          out += "  ";
+          i += 2;
+          continue;
+        }
+        if (src[i] === "`") {
+          out += "`";
+          i++;
+          break;
+        }
+        if (src[i] === "$" && src[i + 1] === "{") {
+          out += "${";
+          i += 2;
+          let depth = 1;
+          while (i < n && depth > 0) {
+            // Nested strings / templates inside ${} — recurse via nested strip is heavy;
+            // motion procs rarely nest. Scan braces, still blank quoted spans inside.
+            if (src[i] === '"' || src[i] === "'") {
+              const q = src[i];
+              out += q;
+              i++;
+              while (i < n) {
+                if (src[i] === "\\") {
+                  out += "  ";
+                  i += 2;
+                  continue;
+                }
+                if (src[i] === q) {
+                  out += q;
+                  i++;
+                  break;
+                }
+                out += src[i] === "\n" ? "\n" : " ";
+                i++;
+              }
+              continue;
+            }
+            if (src[i] === "`") {
+              // Nested template inside ${} — blank its static parts too (one level is enough for procs).
+              out += "`";
+              i++;
+              while (i < n && src[i] !== "`") {
+                if (src[i] === "\\") {
+                  out += "  ";
+                  i += 2;
+                  continue;
+                }
+                out += src[i] === "\n" ? "\n" : " ";
+                i++;
+              }
+              if (i < n && src[i] === "`") {
+                out += "`";
+                i++;
+              }
+              continue;
+            }
+            if (src[i] === "{") depth++;
+            else if (src[i] === "}") {
+              depth--;
+              if (depth === 0) {
+                out += "}";
+                i++;
+                break;
+              }
+            }
+            out += src[i];
+            i++;
+          }
+          continue;
+        }
+        out += src[i] === "\n" ? "\n" : " ";
+        i++;
+      }
+      continue;
+    }
+    out += src[i];
+    i++;
+  }
+  return out;
 }
 
 // Returns a list of human-readable violations for a Tier-2 procedural (JS) source (empty = clean).
 export function lintMotionJs(src: string): string[] {
-  const code = stripJsComments(src);
+  const code = stripJsNoise(src);
   return BANNED_JS.filter((b) => b.re.test(code)).map((b) => b.msg);
 }
 

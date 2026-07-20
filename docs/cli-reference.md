@@ -128,7 +128,7 @@ kino init [brand]
 ```
 
 ```bash
-kino init evidentcv
+kino init acme
 ```
 
 ### `projects`
@@ -145,7 +145,7 @@ kino projects [--new <name> --brand <brand>]
 
 ```bash
 kino projects                               # list
-kino projects --new evidentcv --brand evidentcv
+kino projects --new acme --brand acme
 ```
 
 ### `doctor`
@@ -170,8 +170,8 @@ kino skills --install --agents cursor,claude
 | `--install` | Symlink (or copy) each package `skills/<name>` into each agent’s project skill dir. |
 | `--agents <list>` | `agents`, `cursor`, `claude` (`claude-code` alias), `codex`, or `all` (default). |
 
-Default fan-out: `.agents/skills/`, `.cursor/skills/`, `.claude/skills/`, `.codex/skills/`.
-`kino init` runs the full install. Canonical source remains `skills/` in the package (npm + git).
+Default fan-out (local only, gitignored): `.agents/skills/`, `.cursor/skills/`, `.claude/skills/`, `.codex/skills/`.
+`kino init` runs the full install. Canonical source remains `skills/` in the package (npm + git) — do not commit the agent dirs.
 Browse the open directory via [skills.sh](https://skills.sh) after `npx skills add sdkv2/kino`.
 
 ---
@@ -189,7 +189,7 @@ kino brand [name]
 
 ```bash
 kino brand                # list available brands
-kino brand evidentcv      # resolved styling values + guidelines
+kino brand acme      # resolved styling values + guidelines
 ```
 
 ### `voices`

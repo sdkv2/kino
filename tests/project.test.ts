@@ -17,20 +17,25 @@ describe("findUp", () => {
 
 function makeWorkspace() {
   const ws = mkdtempSync(join(tmpdir(), "kino-ws-"));
-  mkdirSync(join(ws, "brands", "evidentcv"), { recursive: true });
+  mkdirSync(join(ws, "brands", "acme"), { recursive: true });
   mkdirSync(join(ws, "projects", "launch", "specs"), { recursive: true });
-  writeFileSync(join(ws, "projects", "launch", "project.json"), JSON.stringify({ brand: "evidentcv" }));
+  writeFileSync(join(ws, "projects", "launch", "project.json"), JSON.stringify({ brand: "acme" }));
   return ws;
 }
 
 describe("resolveWorkspace", () => {
   it("resolves the shared workspace root, cache, and brand dir", () => {
     const ws = mkdtempSync(join(tmpdir(), "kino-ws-only-"));
-    mkdirSync(join(ws, "brands", "evidentcv"), { recursive: true });
+    mkdirSync(join(ws, "brands", "acme"), { recursive: true });
     const w = resolveWorkspace(ws);
     expect(w.workspaceRoot).toBe(ws);
     expect(w.cache).toBe(join(ws, ".kino-cache"));
-    expect(w.brandDir("evidentcv")).toBe(join(ws, "brands", "evidentcv"));
+    expect(w.brandDir("acme")).toBe(join(ws, "brands", "acme"));
+  });
+  it("throws when no brands/ exists (unless create: true)", () => {
+    const empty = mkdtempSync(join(tmpdir(), "kino-no-brands-"));
+    expect(() => resolveWorkspace(empty)).toThrow(/No brands\//);
+    expect(resolveWorkspace(empty, { create: true }).workspaceRoot).toBe(empty);
   });
 });
 
@@ -41,7 +46,7 @@ describe("resolveProject", () => {
     expect(p.projectRoot).toBe(join(ws, "projects", "launch"));
     expect(p.assetPath("a.png")).toBe(join(ws, "projects", "launch", "assets", "a.png"));
     expect(p.outDir("t")).toBe(join(ws, "projects", "launch", "out", "t"));
-    expect(p.brandDir("evidentcv")).toBe(join(ws, "brands", "evidentcv"));
+    expect(p.brandDir("acme")).toBe(join(ws, "brands", "acme"));
     expect(p.projectConfigPath).toBe(join(ws, "projects", "launch", "project.json"));
   });
   it("resolves a project by name under projects/", () => {
@@ -85,7 +90,7 @@ describe("resolveProject", () => {
 
 describe("ProjectConfigSchema", () => {
   it("requires a brand and accepts optional default overrides", () => {
-    expect(ProjectConfigSchema.parse({ brand: "evidentcv", background: "mesh" })).toMatchObject({ brand: "evidentcv", background: "mesh" });
+    expect(ProjectConfigSchema.parse({ brand: "acme", background: "mesh" })).toMatchObject({ brand: "acme", background: "mesh" });
     expect(ProjectConfigSchema.safeParse({}).success).toBe(false);
   });
 });

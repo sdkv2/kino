@@ -45,7 +45,7 @@ describe("offsetWords", () => {
 
 describe("normWord", () => {
   it("lowercases and strips non-alphanumerics", () => {
-    expect(normWord("EvidentCV.")).toBe("evidentcv");
+    expect(normWord("Acme.")).toBe("acme");
     expect(normWord("“really!”")).toBe("really");
   });
 });
@@ -58,14 +58,14 @@ describe("isHighlightWord", () => {
     expect(isHighlightWord("anything", { isActive: false })).toBe(false);
   });
   it("always highlights the brand name (case/punctuation-insensitive), even when inactive", () => {
-    expect(isHighlightWord("EvidentCV", { isActive: false, brandName: "EvidentCV" })).toBe(true);
-    expect(isHighlightWord("evidentcv.", { isActive: false, brandName: "EvidentCV" })).toBe(true);
+    expect(isHighlightWord("Acme", { isActive: false, brandName: "Acme" })).toBe(true);
+    expect(isHighlightWord("acme.", { isActive: false, brandName: "Acme" })).toBe(true);
   });
   it("leaves non-brand words alone when a brand name is set", () => {
-    expect(isHighlightWord("really", { isActive: false, brandName: "EvidentCV" })).toBe(false);
+    expect(isHighlightWord("really", { isActive: false, brandName: "Acme" })).toBe(false);
   });
   it("treats an empty/absent brand name as no brand match", () => {
-    expect(isHighlightWord("evidentcv", { isActive: false, brandName: "" })).toBe(false);
-    expect(isHighlightWord("evidentcv", { isActive: false })).toBe(false);
+    expect(isHighlightWord("acme", { isActive: false, brandName: "" })).toBe(false);
+    expect(isHighlightWord("acme", { isActive: false })).toBe(false);
   });
 });

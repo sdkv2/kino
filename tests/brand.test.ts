@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadBrand, loadBrandDoc, DEFAULT_BRAND, parseBrandMd } from "../src/config/brand.js";
-import { resolveVoice, validateSpec, resolveProvider } from "../src/spec/validate.js";
+import { resolveVoice, validateSpec, resolveProvider, resolveVoiceModel, resolveFilm } from "../src/spec/validate.js";
 import type { Spec } from "../src/spec/schema.js";
 import { brandText, listBrands } from "../src/commands/brand.js";
 import { init } from "../src/commands/init.js";
@@ -102,6 +102,19 @@ describe("kino brand", () => {
 describe("resolveProvider default", () => {
   it("defaults to faceless (none) when nothing sets a provider — a brandless build just works", () => {
     expect(resolveProvider({} as Spec, DEFAULT_BRAND)).toBe("none");
+  });
+});
+
+describe("resolveVoiceModel / resolveFilm (brand-level defaults)", () => {
+  it("resolveVoiceModel: spec wins, else brand default, else eleven_v3", () => {
+    expect(resolveVoiceModel({ voiceModel: "eleven_multilingual_v2" } as Spec, DEFAULT_BRAND)).toBe("eleven_multilingual_v2");
+    expect(resolveVoiceModel({} as Spec, { ...DEFAULT_BRAND, voiceModel: "eleven_multilingual_v2" })).toBe("eleven_multilingual_v2");
+    expect(resolveVoiceModel({} as Spec, DEFAULT_BRAND)).toBe("eleven_v3");
+  });
+  it("resolveFilm: spec wins, else brand default, else undefined (renderer defaults to 1)", () => {
+    expect(resolveFilm({ film: 0 } as Spec, { ...DEFAULT_BRAND, film: 0.6 })).toBe(0);
+    expect(resolveFilm({} as Spec, { ...DEFAULT_BRAND, film: 0.6 })).toBe(0.6);
+    expect(resolveFilm({} as Spec, DEFAULT_BRAND)).toBeUndefined();
   });
 });
 

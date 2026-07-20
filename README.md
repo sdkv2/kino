@@ -43,7 +43,7 @@ faceless builds need only that; avatar builds need it too whenever kino drives t
 
 ## Quickstart
 ```bash
-cd <project> && kino init evidentcv     # scaffold .env, brand.md, dirs
+cd <project> && kino init acme     # scaffold .env, brand.md, dirs
 kino doctor                             # preflight: API keys, ffmpeg/ffprobe, heygen CLI
 kino build specs/lie-test.json --mock   # free structural preview (no API spend)
 kino build specs/lie-test.json          # real render → out/lie-test/
@@ -51,8 +51,8 @@ kino build specs/lie-test.json          # real render → out/lie-test/
 
 ## Agent skills
 
-Playbooks live in [`skills/`](skills/) (`video-production`, `ad-voice`, `adversarial-critique`).
-Canonical source in this repo; agents discover them via their usual skill dirs.
+Playbooks live only in [`skills/`](skills/) (`video-production`, `ad-voice`, `adversarial-critique`, …).
+That directory is the sole source of truth in the repo.
 
 **From any project** (Cursor / Claude Code / Codex / …):
 
@@ -64,11 +64,11 @@ npx skills add sdkv2/kino
 **Inside a kino workspace** (after clone / `npm link`):
 
 ```bash
-kino skills --install                 # → .agents .cursor .claude .codex (also run by kino init)
+kino skills --install                 # local symlinks → .agents .cursor .claude .codex (gitignored; also run by kino init)
 kino skills --install --agents cursor,claude
 ```
 
-Browse / leaderboard: [skills.sh](https://skills.sh) (appears after installs). Details: [`skills/README.md`](skills/README.md).
+Agent fan-out dirs stay off git so they do not clutter the tree. Details: [`skills/README.md`](skills/README.md).
 
 ## Features
 - **Avatar engines** — `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3),
