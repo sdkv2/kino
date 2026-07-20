@@ -3,6 +3,11 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.20.0] — project-local music beds
+- **Project-local audio**: the shared music library ships empty (matching SFX). Source beds
+  per-project — asset paths (`music/bed.mp3`), drop-in CC0 beds in `assets-lib/music/` for bare
+  ids, or `kino music "<query>"` Freesound search.
+
 ## [1.19.0] — retune, seamless loops, platform safe-zones, and batch variants
 - **Motion bare ids**: `"source": "prompt-type"` resolves from `assets-lib/motion/` (like SFX).
 - **`kino retune`**: rewrite motion/`backgroundTriggers` `at` times from real VO word timings.
