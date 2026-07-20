@@ -3,7 +3,7 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
-## Unreleased
+## [1.19.0] — retune, seamless loops, platform safe-zones, and batch variants
 - **Motion bare ids**: `"source": "prompt-type"` resolves from `assets-lib/motion/` (like SFX).
 - **`kino retune`**: rewrite motion/`backgroundTriggers` `at` times from real VO word timings.
 - **`seamlessLoop`**: spec flag + validate guidance + post-build first/last-frame seam warn.
