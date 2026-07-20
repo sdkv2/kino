@@ -357,14 +357,11 @@ The build **rejects** assets that violate kino's determinism/safety contract:
 > **Licensing** — LottieFiles templates carry the original creator's license (free-tier templates
 > are typically free for personal/commercial use with restrictions that vary by creator; some
 > require attribution, some are paid-tier only). Cleaning a template (removing the background layer,
-> fixing the HSB artifact) does **not** change its license. Before adding a new template to the
-> shared `assets-lib/lottie/` library — which ships inside the published npm package — verify the
-> source template's license permits redistribution as-is. When in doubt, prefer CC0 sources or
-> author the animation from scratch.
+> fixing the HSB artifact) does **not** change its license. Adapted templates stay in your
+> project's `assets/` — verify the source template's license before redistributing one anywhere
+> public. When in doubt, prefer CC0 sources or author the animation from scratch.
 
-A shared library of pre-cleaned, brand-neutral animations lives in `assets-lib/lottie/` — copy a file
-into a project's `assets/motion/` and reference it like any Lottie. When adapting new downloads
-(download as **Lottie JSON**, not `.lottie`), templates from the LottieFiles creator
+When adapting downloads (download as **Lottie JSON**, not `.lottie`), templates from the LottieFiles creator
 (`meta.g: @lottiefiles/creator`) are the best-behaved family: no expressions, fonts embedded as
 `data:` TTFs, glyph outlines baked in `chars`, and customization slots named in layer names
 (`Edit_*`, `Replace_Background`, `Logo_Here`, `Click_*`). Four gotchas found the hard way:

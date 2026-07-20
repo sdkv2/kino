@@ -284,7 +284,7 @@ ends — key reveals to *earlier* word starts, not to the tail.
    Match the PNG window geometry to the CSS window (same card/viewport/field coords)
    so the CSS→PNG cut doesn't shift. Native scale on both = seamless.
 5. **End card** — motion beat (HTML wordmark + CTA `texts[]`). Prefer **hand-authored
-   HTML** over `assets-lib/lottie/logo-reveal.json` on a paper brand: the template's
+   HTML** over an adapted logo-reveal Lottie on a paper brand: its
    near-white AE wipe shapes recolor to black masks on light ground. CSS camera push OK.
 
 **`film: 0` for paper / light windows.** kino's cinematic finish lays a vignette + grain

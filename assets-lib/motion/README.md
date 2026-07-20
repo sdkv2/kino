@@ -9,8 +9,8 @@ pattern as SFX:
 
 resolves to `assets-lib/motion/prompt-type.js` (tries `.js`, `.html`, `.json`).
 Or copy into a project's `assets/motion/` and use a path (`motion/prompt-type.js`).
-See [Motion graphics](../../docs/motion-graphics.md). Unlike `assets-lib/lottie/`,
-everything here is original work (not adapted from a third-party template).
+See [Motion graphics](../../docs/motion-graphics.md). Everything here is
+original work (not adapted from a third-party template).
 
 `kino motion` lists bundled ids.
 
