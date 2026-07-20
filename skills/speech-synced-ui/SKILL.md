@@ -221,6 +221,21 @@ Consecutive `kind:"motion"` beats **auto-dissolve** (~15 frames / 0.5s at 30fps)
 You do **not** set `"transition"` on motion (schema rejects it — that field is app-only).
 Handoff is automatic when the next segment is also `motion`.
 
+**⚠ Clear the hero before the beat ends, or the two graphics overlap.** Because the outgoing beat is
+held **opaque at `--progress: 1`** while the incoming fades in over it, any hero still at full opacity at
+its own beat end **collides** with the next beat's hero for the whole ~0.5s dissolve (two skulls/cans/
+wordmarks on screen at once — a montage of full-frame graphics reads as "overlap near every cut"). Give
+each **non-final** motion beat an **exit-fade** on its root wrapper so the held frame is an empty ground:
+
+```css
+/* fades the hero out over the last ~15% of the beat; full opacity until then */
+.wrap { opacity: clamp(0, calc((1 - var(--progress)) * 7), 1); }
+```
+
+The **last** beat does **not** exit (it's the final poster / loop seam — hold it). Verify on the encoded
+mp4 with `kino frames <mp4> --at <endA-0.1>,<endA>,<startB+0.1>` — the middle frame should be near-empty
+ground, not two heroes.
+
 QA the cut: `kino still --at <endA-0.05>,<startB>` — both should show full UI chrome, not
 mesh/glow peeking through. After encode: watch A→B without a backdrop flash.
 
