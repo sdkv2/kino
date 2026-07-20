@@ -110,13 +110,14 @@ var termGlow = 0.18 + 0.28 * edge;
 // Per-step 25% chunks looked stuck on short words like "Voiceover,".
 var barT0 = sched[0];
 var barT1 = (nw >= 4 ? words[nw - 1].end : sched[3]) + 0.2;
+// Continue from the 8% command-typing tease instead of resetting to 0 (avoids the bar dropping back).
 var barW = 0;
 if (env.t >= barT1) barW = 100;
-else if (env.t > barT0) barW = 100 * (env.t - barT0) / Math.max(0.25, barT1 - barT0);
+else if (env.t > barT0) barW = 8 + 92 * (env.t - barT0) / Math.max(0.25, barT1 - barT0);
 else barW = 8 * (nCmd / Math.max(1, CMD.length)); // tease while the command types
 return ''
 + TECH_BG()
-+ '<div class="cam" style="transform:translateY(' + panY.toFixed(2) + 'vw) scale(' + S.toFixed(4) + ')">'
++ '<div class="cam" style="opacity:' + Math.min(1, Math.max(0, (1 - env.progress) * 7)).toFixed(3) + ';transform:translateY(' + panY.toFixed(2) + 'vw) scale(' + S.toFixed(4) + ')">'
 +   '<div class="term" style="transform:translateY(' + floatY.toFixed(2) + 'vw);'
 +     'box-shadow:0 0 5vw rgba(128,226,180,' + termGlow.toFixed(3) + ')">'
 +     '<div class="cmd"><span class="pr">›</span> ' + typed
