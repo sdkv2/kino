@@ -3,6 +3,12 @@
 // app cut-in beats) with ffmpeg, and the page shows plain <img> elements. The local→source mapping
 // mirrors the composition math one-to-one: trimBefore + localFrame·speed, with appFreezeFrame
 // (pauseAt / clipTo holds) pinning the clock — the same pure helper the page component calls.
+//
+// Source-frame pick rule (verified black-box against the legacy engine with an index-encoded
+// 25fps source): the frame whose presentation timestamp is NEAREST the requested source time,
+// ties toward the later frame. Selection is by explicit display-order index against the probed
+// pts list — an fps-filter resample follows a different (pts-grid) rule, and frame≈time·rate
+// arithmetic breaks entirely on VFR screen recordings.
 import { execa } from "execa";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -80,58 +86,136 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
   return jobs;
 }
 
-const name = (n: number) => `f${String(n).padStart(6, "0")}.jpg`;
-
-// Dense extraction (video renders): one sequential ffmpeg decode pass per usage. The fps filter
-// resamples the stream so output frame n sits at source time startSec + n·stepSec — exactly the
-// frame the composition asks for. JPEG q2 = visually lossless for photographic footage.
-export async function extractDense(job: MediaJob, assetAbs: string, framesRoot: string): Promise<MediaEntryNode> {
-  const dir = join(framesRoot, job.key);
-  mkdirSync(dir, { recursive: true });
-  const rate = 1 / job.stepSec;
-  await execa("ffmpeg", [
-    "-y", "-loglevel", "error",
-    "-ss", job.startSec.toFixed(6),
-    "-i", assetAbs,
-    "-vf", `fps=${rate.toFixed(6)}`,
-    "-frames:v", String(job.maxEffFrame + 1),
-    "-q:v", "2",
-    join(dir, "f%06d.jpg"),
-  ]);
-  // ffmpeg image2 numbers from 1; EOF may stop the run short (page clamps to maxFrame = hold last).
-  const files = readdirSync(dir).filter((x) => x.endsWith(".jpg")).sort();
-  const byFrame: Record<number, string> = {};
-  files.forEach((file, idx) => (byFrame[idx] = file));
-  return { dir: job.key, byFrame, maxFrame: Math.max(0, files.length - 1) };
+interface VideoInfo {
+  pts: number[]; // presentation timestamps, sorted ascending (display order)
+  transfer: string;
 }
 
-// Sparse extraction (stills): only the requested local frames — one exact -ss seek each.
-export async function extractSparse(job: MediaJob, assetAbs: string, framesRoot: string, localFrames: number[]): Promise<MediaEntryNode> {
+async function probeVideo(abs: string): Promise<VideoInfo> {
+  const [{ stdout: meta }, { stdout: packets }] = await Promise.all([
+    execa("ffprobe", [
+      "-v", "error", "-select_streams", "v:0",
+      "-show_entries", "stream=color_transfer",
+      "-of", "default=noprint_wrappers=1", abs,
+    ]),
+    // Packet pts only — no decode, fast even on long clips. Sorting yields display order
+    // regardless of B-frame reordering.
+    execa("ffprobe", [
+      "-v", "error", "-select_streams", "v:0",
+      "-show_entries", "packet=pts_time",
+      "-of", "csv=p=0", abs,
+    ]),
+  ]);
+  const transfer = /color_transfer=([\w-]+)/.exec(meta)?.[1] ?? "";
+  const pts = packets
+    .split("\n")
+    .map((l) => parseFloat(l))
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
+  return { pts, transfer };
+}
+
+/** Display-order index of the frame whose pts is nearest `t` (ties → the later frame). */
+function nearestPtsIndex(pts: number[], t: number): number {
+  let lo = 0;
+  let hi = pts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (pts[mid] < t) lo = mid + 1;
+    else hi = mid;
+  }
+  // lo = first index with pts >= t; compare against its predecessor.
+  if (lo > 0 && t - pts[lo - 1] < pts[lo] - t) return lo - 1;
+  return lo;
+}
+
+// HDR sources (HLG / PQ) must be tone-mapped to SDR bt709 or the frames come out washed out —
+// the legacy extractor tone-mapped for us. Preferred chain needs zscale (libzimg); many ffmpeg
+// builds lack it, so fall back to the colorspace filter treating the HDR trc as bt2020-10 gamma —
+// close for HLG (its lower range is gamma-like by design), acceptable for PQ.
+let filterList: Promise<string> | null = null;
+async function ffmpegFilters(): Promise<string> {
+  filterList ??= execa("ffmpeg", ["-hide_banner", "-filters"]).then(
+    (r) => r.stdout,
+    () => "",
+  );
+  return filterList;
+}
+
+async function hdrChain(transfer: string): Promise<string | null> {
+  if (transfer !== "arib-std-b67" && transfer !== "smpte2084") return null;
+  const filters = await ffmpegFilters();
+  if (/\bzscale\b/.test(filters)) {
+    return "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable,zscale=t=bt709:m=bt709:r=tv,format=yuv420p";
+  }
+  if (/\bcolorspace\b/.test(filters)) {
+    return "colorspace=all=bt709:iall=bt2020:itrc=bt2020-10:fast=0,format=yuv420p";
+  }
+  return null; // no capable filter — raw frames (washed out) beat a failed render
+}
+
+// Map every needed local frame to its source-frame index and extract each unique index once, in a
+// single sequential decode (select by frame number). JPEG q2 = visually lossless for footage.
+async function extractIndices(
+  job: MediaJob,
+  assetAbs: string,
+  framesRoot: string,
+  localFrames: number[],
+): Promise<MediaEntryNode> {
   const dir = join(framesRoot, job.key);
   mkdirSync(dir, { recursive: true });
-  const wanted = [...new Set(localFrames.map((n) => Math.min(job.maxEffFrame, job.effFrame(n))))].sort((a, b) => a - b);
+  const { pts, transfer } = await probeVideo(assetAbs);
+  if (!pts.length) return { dir: job.key, byFrame: {}, maxFrame: 0 };
+  // Key everything by the EFFECTIVE (freeze-pinned) frame — that is the clock value the page's
+  // FrameVideo sees (Freeze pins useCurrentFrame to the pause frame), so it must be the map key.
+  const wanted = new Map<number, number[]>(); // srcIndex → effective frames that show it
+  for (const n of localFrames) {
+    const eff = Math.min(job.maxEffFrame, job.effFrame(n));
+    const idx = nearestPtsIndex(pts, job.startSec + eff * job.stepSec);
+    const list = wanted.get(idx) ?? [];
+    if (!list.includes(eff)) list.push(eff);
+    wanted.set(idx, list);
+  }
+  const uniq = [...wanted.keys()].sort((a, b) => a - b);
+  if (!uniq.length) return { dir: job.key, byFrame: {}, maxFrame: 0 };
+
+  const select = `select='${uniq.map((i) => `eq(n\\,${i})`).join("+")}'`;
+  const hdr = await hdrChain(transfer);
+  const vf = hdr ? `${select},${hdr}` : select;
+  await execa("ffmpeg", [
+    "-y", "-loglevel", "error",
+    "-i", assetAbs,
+    "-vf", vf,
+    "-fps_mode", "passthrough",
+    "-frames:v", String(uniq.length),
+    "-q:v", "2",
+    join(dir, "x%06d.jpg"),
+  ]);
+  // Outputs arrive in source order → x000001.jpg maps to uniq[0], etc. EOF can shorten the run;
+  // local frames whose index wasn't reached clamp to the last extracted file (hold last frame).
+  const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(".jpg")).sort();
   const byFrame: Record<number, string> = {};
   let maxFrame = 0;
-  for (const e of wanted) {
-    const srcTime = job.startSec + e * job.stepSec;
-    const out = join(dir, name(e));
-    await execa("ffmpeg", [
-      "-y", "-loglevel", "error",
-      "-ss", srcTime.toFixed(6),
-      "-i", assetAbs,
-      "-frames:v", "1",
-      "-q:v", "2",
-      out,
-    ], { reject: false });
-    if (!existsSync(out)) {
-      // Past EOF (ffmpeg exits clean but writes nothing): fall back to the clip's final frame so
-      // the still shows the hold, not a hole.
-      await execa("ffmpeg", ["-y", "-loglevel", "error", "-sseof", "-0.2", "-i", assetAbs, "-frames:v", "1", "-q:v", "2", out], { reject: false });
+  if (!files.length) return { dir: job.key, byFrame, maxFrame: 0 };
+  uniq.forEach((idx, i) => {
+    const file = files[Math.min(i, files.length - 1)];
+    for (const eff of wanted.get(idx)!) {
+      byFrame[eff] = file;
+      maxFrame = Math.max(maxFrame, eff);
     }
-    if (existsSync(out)) {
-      byFrame[e] = name(e);
-      maxFrame = Math.max(maxFrame, e);
-    }
-  }
+  });
   return { dir: job.key, byFrame, maxFrame };
+}
+
+// Dense extraction (video renders): every local frame of the usage.
+export async function extractDense(job: MediaJob, assetAbs: string, framesRoot: string): Promise<MediaEntryNode> {
+  if (!existsSync(assetAbs)) return { dir: job.key, byFrame: {}, maxFrame: 0 };
+  const locals = Array.from({ length: job.seqDurFrames }, (_, n) => n);
+  return extractIndices(job, assetAbs, framesRoot, locals);
+}
+
+// Sparse extraction (stills): only the requested local frames.
+export async function extractSparse(job: MediaJob, assetAbs: string, framesRoot: string, localFrames: number[]): Promise<MediaEntryNode> {
+  if (!existsSync(assetAbs)) return { dir: job.key, byFrame: {}, maxFrame: 0 };
+  return extractIndices(job, assetAbs, framesRoot, localFrames);
 }

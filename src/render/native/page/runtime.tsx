@@ -131,20 +131,18 @@ export interface SpringConfig {
 // spring library this style of animation spring popularised).
 function springValue(t: number, { damping = 10, mass = 1, stiffness = 100 }: SpringConfig): number {
   const w0 = Math.sqrt(stiffness / mass); // natural frequency
-  const zeta = damping / (2 * Math.sqrt(stiffness * mass)); // damping ratio
+  // Damping ratio, clamped at critical: the legacy engine treats any over-damped config as
+  // critically damped (verified black-box — damping 180 and 200 produce identical curves, and
+  // both match the critical-damping closed form exactly). Without the clamp, damping≈200 configs
+  // (kicker/logo fades) crawl for seconds instead of settling in ~15 frames.
+  const zeta = Math.min(1, damping / (2 * Math.sqrt(stiffness * mass)));
   let x: number;
   if (zeta < 1) {
     const wd = w0 * Math.sqrt(1 - zeta * zeta);
     const decay = Math.exp(-zeta * w0 * t);
     x = 1 - decay * (Math.cos(wd * t) + ((zeta * w0) / wd) * Math.sin(wd * t));
-  } else if (zeta === 1) {
-    x = 1 - Math.exp(-w0 * t) * (1 + w0 * t);
   } else {
-    const wr = w0 * Math.sqrt(zeta * zeta - 1);
-    const r1 = -zeta * w0 + wr;
-    const r2 = -zeta * w0 - wr;
-    // x(t) = 1 − (r2·e^{r1 t} − r1·e^{r2 t}) / (r2 − r1)  (x(0)=0, x′(0)=0)
-    x = 1 - (r2 * Math.exp(r1 * t) - r1 * Math.exp(r2 * t)) / (r2 - r1);
+    x = 1 - Math.exp(-w0 * t) * (1 + w0 * t);
   }
   return x;
 }
