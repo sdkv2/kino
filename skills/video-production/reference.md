@@ -212,6 +212,21 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   `animation` default to the segment's resolved caption look (animation falls back to `pop`). Overlays are
   clamped to their segment.
 
+## Sound effects & music
+- Spec `sfx: [{ src, at, volume? }]` — free-placed effects; `at` = seconds on the main timeline,
+  `volume` 0–1 (default 1). `src` as a bare id (`"whoosh"`, no slash/extension) resolves from the
+  shared library `assets-lib/sfx/<id>.mp3|.wav` (ships empty — drop in your own CC0 clips); a path
+  resolves from the project's `assets/`.
+- Spec `music: { src, volume?, duck?, fadeInSec?, fadeOutSec? }` — bed under the VO for the whole
+  video. `volume` = bed level (default 0.12), `duck` = level while a segment speaks (default 0.04,
+  0.3s linear ramps in/out of each VO span), `fadeOutSec` = tail fade to silence (default 2).
+- **Marker-driven placement:** author `sfx[].at` against `kino audio-markers <file>` output —
+  `<name>.markers.json` (`{ durationSec, rms[], onsets[], peaks[], silences[] }`) plus
+  `<name>.wave.png` / `<name>.spectrum.png`. Run it on the VO track (`.kino-cache/<title>/vo-*.mp3`)
+  to land effects in speech gaps, or on the music bed to hit its onsets/peaks.
+- Build warns on `sfx[].at` past the end of the VO, a music bed shorter than the video (it plays
+  once, no loop), and `duck` > `volume`.
+
 ## Cost model
 - Avatar engines bill per second of generated avatar; kino **trims the avatar to on-camera segments
   only** (app cut-ins aren't billed) and caches VO+avatar by content hash.
