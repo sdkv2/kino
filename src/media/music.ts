@@ -1,5 +1,5 @@
-// Bundled music-bed catalog for `kino music`. Files live in assets-lib/music/; agents use bare
-// ids in the spec (`"music": { "src": "ambient-night" }`) — no CDN scrape, no API key.
+// Music-bed helpers for `kino music`. assets-lib/music/ ships empty — drop a CC0 .mp3 there to
+// use its bare id in the spec (`"music": { "src": "my-bed" }`), or use a project asset path.
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { listMusicIds, MUSIC_LIB_DIR } from "./sfx.js";
@@ -10,15 +10,8 @@ export interface MusicBedMeta {
   use: string;
 }
 
-/** Mood hints for the curated beds — keep in sync with files in assets-lib/music/. */
-export const MUSIC_BEDS: MusicBedMeta[] = [
-  { id: "ambient-night", mood: "dark, soft pad", use: "sleep / wellness / night brands" },
-  { id: "warm-drone", mood: "low, mellow drone", use: "calm narrative, luxury soft-sell" },
-  { id: "soft-piano", mood: "gentle piano tones", use: "editorial, reflection, app stories" },
-  { id: "calm-pulse", mood: "soft pulsing sub", use: "breathing / habit / focus apps" },
-  { id: "bright-lift", mood: "brighter soft lift", use: "product reveal, friendly SaaS" },
-  { id: "chill-groove", mood: "light groove pulse", use: "lifestyle, casual consumer" },
-];
+/** Mood hints for curated beds. The library ships empty — entries only for beds dropped into assets-lib/music/. */
+export const MUSIC_BEDS: MusicBedMeta[] = [];
 
 export function catalogBeds(): Array<MusicBedMeta & { path: string }> {
   const onDisk = new Set(listMusicIds());

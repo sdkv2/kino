@@ -529,19 +529,19 @@ Every production-ready trailer needs a ducked music bed. **Do not scrape Mixkit 
 Bensound / random CDNs** — they 403, return empty bodies, or waste the run.
 
 ```
-kino music                              # bundled beds + short-form Freesound query ideas
+kino music                              # library beds (ships empty) + short-form Freesound query ideas
 kino music "soft ambient pad loop"      # Freesound CC0 search (needs FREESOUND_API_KEY)
 kino music "soft ambient pad loop" --get 2 --project <name>
 # in the spec (short-form: quiet bed, hard duck — VO wins on TikTok/Reels/Shorts):
-"music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }
+"music": { "src": "music/bed.mp3", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }
 # SFX optional — omit by default, and assets-lib/sfx/ ships empty (add your own CC0 clip first).
 # Soft pop/click only when a beat earns it (not every cut), referenced by project asset path:
 # "sfx": [ { "src": "sfx/click.mp3", "at": 10.1, "volume": 0.25 } ]
 ```
 
-- Music bare ids resolve from `assets-lib/music/` (`kino music`, `kino doctor`); SFX has no
-  bundled library — reference a project asset path (`sfx/<name>.mp3`) or drop your own CC0 clip
-  into `assets-lib/sfx/` to use a bare id.
+- Neither library ships clips: music and SFX bare ids resolve from CC0 files you drop into
+  `assets-lib/music/` / `assets-lib/sfx/`. Default route is a project asset path
+  (`music/bed.mp3`, `sfx/<name>.mp3`) — sourced via `kino music` Freesound search or your own.
 - Freesound search is **CC0 + 15–90s** by default (fits a 15–30s cut). Catalog skews ambient/SFX —
   good beds, not chart songs. **Platform trending audio is not pullable** (copyright).
 - Short-form taste: sparse bed under VO; **no default cut whoosh** — silent cuts + ducked music

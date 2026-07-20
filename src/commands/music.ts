@@ -1,5 +1,5 @@
-// `kino music` — bundled beds OR Freesound CC0 search (short-form beds).
-// No arg → list bundled. Known bundled id → show/copy. Anything else → Freesound search
+// `kino music` — library beds (assets-lib/music/, ships empty) OR Freesound CC0 search.
+// No arg → list library beds. Known library id → show/copy. Anything else → Freesound search
 // (like kino pexels). Prefer sparse beds under VO; trending TikTok sounds are not available via API.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -25,12 +25,21 @@ function noteAttribution(projectRoot: string, entry: string): void {
 
 function printBundledHelp(): void {
   const beds = catalogBeds();
-  process.stdout.write("Bundled music beds (CC0 procedural — bare id in the spec):\n\n");
-  for (const b of beds) {
-    process.stdout.write(`  ${b.id.padEnd(16)} ${b.mood.padEnd(22)} — ${b.use}\n`);
+  const onDisk = listMusicIds();
+  if (onDisk.length) {
+    process.stdout.write("Library music beds (assets-lib/music/ — bare id in the spec):\n\n");
+    for (const id of onDisk) {
+      const meta = beds.find((b) => b.id === id);
+      process.stdout.write(`  ${id.padEnd(16)}${meta ? ` ${meta.mood.padEnd(22)} — ${meta.use}` : ""}\n`);
+    }
+    process.stdout.write(`Copy into a project:  kino music <id> --get --project <name>\n`);
+  } else {
+    process.stdout.write(
+      "No library beds (assets-lib/music/ ships empty) — drop a CC0 .mp3 there to use its bare id,\n" +
+        "use a project asset path, or search Freesound below.\n",
+    );
   }
-  process.stdout.write(`\nIn a spec:\n  "music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }\n`);
-  process.stdout.write(`Copy bundled:  kino music ambient-night --get --project <name>\n`);
+  process.stdout.write(`\nIn a spec:\n  "music": { "src": "music/bed.mp3", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }\n`);
   process.stdout.write(`\nFreesound CC0 search (15–90s beds, short-form):\n`);
   process.stdout.write(`  kino music "soft ambient pad loop"\n`);
   process.stdout.write(`  kino music "soft ambient pad loop" --get 2 --project <name>\n`);
@@ -55,7 +64,6 @@ export async function music(
 
   if (!idOrQuery) {
     printBundledHelp();
-    if (onDisk.length === 0) log.warn("assets-lib/music/ is empty — reinstall or restore beds.");
     return;
   }
 

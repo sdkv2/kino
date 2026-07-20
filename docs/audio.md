@@ -36,7 +36,7 @@ Get exact per-word VO timings with `kino inspect <spec> --real` — use them to 
 One bed plays under the entire video. It **ducks automatically** whenever a segment is speaking, so you never hand-key volume around the VO:
 
 ```json
-"music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeInSec": 0, "fadeOutSec": 2 }
+"music": { "src": "music/bed.mp3", "volume": 0.12, "duck": 0.04, "fadeInSec": 0, "fadeOutSec": 2 }
 ```
 
 | Field | Default | Meaning |
@@ -52,13 +52,11 @@ Overlapping VO spans take the *most-ducked* level, so back-to-back beats never p
 **Sourcing beds** — `kino music`:
 
 ```bash
-kino music                                  # list bundled CC0 beds (assets-lib/music/)
-kino music ambient-night                    # show one bed + its spec snippet
+kino music                                  # list library beds (assets-lib/music/ — ships empty)
 kino music "lofi piano" --get 2 --project x # search Freesound CC0, download match 2
-kino music ambient-night --get --project x  # copy a bundled bed into the project
 ```
 
-Bundled bed ids (e.g. `"ambient-night"`) resolve straight from `music.src` — no copy needed. Freesound search targets short-form beds (CC0 only, 15–90s). Trending TikTok/Reels audio is **not** pullable via API (copyright). Full flag table in the [CLI reference](cli-reference.md#music).
+No beds ship with kino — drop a CC0 `.mp3` into `assets-lib/music/` to resolve its bare id straight from `music.src`, or (the usual route) keep beds in the project's `assets/music/` and use a path. Freesound search targets short-form beds (CC0 only, 15–90s). Trending TikTok/Reels audio is **not** pullable via API (copyright). Full flag table in the [CLI reference](cli-reference.md#music).
 
 ## Sound effects
 
@@ -73,7 +71,7 @@ Free-placed one-shots on the main timeline. Omit `sfx` entirely for **silent cut
 
 - **`at`** — seconds on the main timeline.
 - **`volume`** — 0–1, default `1`.
-- **`src`** (both `sfx[]` and `music`) — a **bare id** (no slash, no extension) resolves from the shared library at `assets-lib/sfx/<id>` then `assets-lib/music/<id>` (`.mp3`/`.wav`). The bundled SFX library ships empty — add your own, or use a path. A **path** (e.g. `sfx/click.mp3`) resolves from the project's `assets/`. Every ref is checked at validate time, before any API spend — a bad id fails the build early.
+- **`src`** (both `sfx[]` and `music`) — a **bare id** (no slash, no extension) resolves from the shared library at `assets-lib/sfx/<id>` then `assets-lib/music/<id>` (`.mp3`/`.wav`). Both shared libraries ship empty — add your own clips there, or use a path. A **path** (e.g. `sfx/click.mp3`) resolves from the project's `assets/`. Every ref is checked at validate time, before any API spend — a bad id fails the build early.
 
 Silent cuts + a ducked bed read cleaner than busy SFX. Reach for effects sparingly, on a real beat.
 
