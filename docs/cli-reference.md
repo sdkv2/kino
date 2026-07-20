@@ -17,7 +17,7 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 ## Build & preview
 
 ### `build`
-Generate a video from a spec: voiceover → optional avatar → Remotion composite → MP4.
+Generate a video from a spec: voiceover → optional avatar → Remotion composite → MP4. See [Build & preview](build-and-preview.md).
 
 ```
 kino build <spec> [options]
@@ -243,7 +243,7 @@ kino voices [--gender <g>]
 ```
 
 ### `avatars`
-List Avatar-IV photo-avatar looks (usable for lip-sync).
+List Avatar-IV photo-avatar looks (usable for lip-sync). See [Avatars & presenters](avatars.md).
 
 ```
 kino avatars [--gender <g>]
@@ -318,6 +318,7 @@ Screen local thumbs under `$TMPDIR/kino-pexels-photo-thumbs/` before `--get` (sa
 List bundled music beds (`assets-lib/music/`), or search Freesound CC0 tracks (15–90s, short-form
 length). Bare bed ids (e.g. `"ambient-night"`) resolve straight from a spec's `music.src` — no
 copy needed; `--get` is only for pulling a bed into a project or downloading a Freesound match.
+See [Audio](audio.md#music-beds).
 
 ```bash
 kino music                                  # list bundled beds
@@ -398,7 +399,7 @@ Analyze any audio or video file and write three artifacts: `<name>.markers.json`
 `{ durationSec, rms[], onsets[], peaks[], silences[] }` timestamps to author `sfx[].at` and
 cuts against — plus `<name>.wave.png` (waveform) and `<name>.spectrum.png` (spectrogram) for
 an at-a-glance read of the track. Works on the VO track in `.kino-cache`, an imported music
-bed, or an external reference video.
+bed, or an external reference video. See [Audio](audio.md#authoring-against-real-audio).
 
 ```
 kino audio-markers <file> [options]
