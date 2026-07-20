@@ -93,10 +93,17 @@ var caretOn = typing || Math.floor(env.frame / 15) % 2 === 0;
 // …paint out + caret
 ```
 
-Worked example (single CSS window: chrome + burst typing + time-based camera, plus the
-matching pull-back "thinking" beat, both emitted from one generator so chrome can't drift):
-`projects/kino-meta/assets/motion/gen-windows.py` → `prompt-window.js` + `thinking-window.js`
-(when present).
+**Copyable components** (from the kino advert) in `assets-lib/motion/`:
+
+| File | Use |
+|---|---|
+| `prompt-type.js` | Burst-typed prompt window + camera push |
+| `json-type.js` | JSON editor typing across the VO span |
+| `build-pipeline.js` | Terminal command + word-synced pipeline steps |
+| `loop-ready.js` | Settle to empty ready-state (loop seam) |
+
+Showcase: `npx tsx examples/motion-ui/render-ui.ts`. Project-local worked example:
+`projects/kino-meta/assets/motion/` (+ `gen-windows.py` for shared chrome).
 
 ## Camera (zoom / pan)
 
@@ -251,10 +258,12 @@ pixels across time. Use `kino still` / `--around` at **every** stage (mock is fr
      (attach --around sheets for typed + Lottie beats — not only sb-*.png)
 5. Real VO
      → kino build → inspect --real
+     → kino retune <spec>              # rewrite triggers[].at from word timings
      → kino frames <mp4> --around <t> on EVERY speech-locked beat
-     → retune KEY_MS / camera / Lottie triggers / word-gated pipelines from the sheet
+     → retune KEY_MS / camera / word-gated pipelines from the sheet
      → if a step UI finishes while VO still lists steps → drive steps off env.words
-6. Loop ads: prove PNG AE=0 on harness ends, then PSNR on mp4 first/last
+6. Loop ads: `"seamlessLoop": true` on the spec; prove PNG AE=0 on harness ends,
+   then trust post-build seam warn (or PSNR) on mp4 first/last
 7. Ship only after a real --around sheet shows speech-locked typing
 ```
 
@@ -270,7 +279,7 @@ ad-voice (VO lines)
   → author motion .js / frame PNG / Lottie ornaments
   → omit captions on montage; typed beat uses motion only
   → still --segment → still --around (loop) → storyboard → adversarial-critique
-  → kino build → inspect --real → still/frames --around → retune → ship
+  → kino build → inspect --real → kino retune → still/frames --around → retune knobs → ship
 ```
 
 Hand back to `video-production` for music/SFX/runtime pad rules (this skill often

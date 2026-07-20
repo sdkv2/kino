@@ -51,6 +51,7 @@ program
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
+  .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
 program
@@ -61,6 +62,7 @@ program
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
+  .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
   .action(async (s, o) => (await import("./commands/storyboard.js")).storyboard(s, o));
 
 program
@@ -103,9 +105,17 @@ program
   .action(async (f, o) => (await import("./commands/audiomarkers.js")).audioMarkers(f, o));
 
 program
+  .command("retune <spec>")
+  .description("Rewrite motion/background triggers from real VO word timings (speech-synced UIs)")
+  .option("--dry-run", "print changes without writing the spec")
+  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
+  .action(async (s, o) => (await import("./commands/retune.js")).retune(s, { dryRun: o.dryRun, project: o.project }));
+
+program
   .command("batch <input>")
-  .description("Render many specs (JSON array of spec paths)")
+  .description('Render many specs — JSON array of paths, or { "base", "variants": [{ "tag", "set" }] }')
   .option("--mock")
+  .option("--project <name>", "use projects/<name> (else inferred from each spec's path)")
   .action(async (s, o) => (await import("./commands/batch.js")).batch(s, o));
 
 program

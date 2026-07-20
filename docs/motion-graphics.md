@@ -416,14 +416,28 @@ The build **rejects** a graphic that contains any of the following (each error t
 
 ## Shared library
 
-Original, brand-neutral Tier 1 motion graphics ready to copy into a project's `assets/motion/` live
-in [`assets-lib/motion/`](../assets-lib/motion/) — card reveals, dials, counters, a type-only reveal,
-an ink-drawn illustration. All original work (unlike the Lottie library, nothing here is adapted from
-a third-party template), so there's no external license to track.
+Original motion graphics ready to copy into a project's `assets/motion/` live in
+[`assets-lib/motion/`](../assets-lib/motion/):
+
+- **Tier 1 (HTML)** — card reveals, dials, counters, a type-only reveal, an ink-drawn illustration.
+- **Tier 2 (JS, speech-synced UI)** — `prompt-type.js`, `json-type.js`, `build-pipeline.js`,
+  `loop-ready.js` — the typed prompt / JSON editor / build terminal / loop-seam pages extracted
+  from the kino advert. They read `env.words` (see [Typed-in-sync text](#typed-in-sync-text) and the
+  `speech-synced-ui` skill). Edit the knobs at the top of each file, then copy into the project.
+
+All original work (unlike the Lottie library, nothing here is adapted from a third-party template).
 
 ## Worked examples
 
-[`examples/motion-flex/`](../examples/motion-flex/) is a full showcase rendered through kino's real pipeline:
+[`examples/motion-ui/`](../examples/motion-ui/) renders the speech-synced UI pages (library files,
+mock `env.words`) through the real pipeline:
+
+```bash
+npx tsx examples/motion-ui/render-ui.ts            # stills → examples/motion-ui/out/
+FLEX_VIDEO=1 npx tsx examples/motion-ui/render-ui.ts # short 9:16 mp4
+```
+
+[`examples/motion-flex/`](../examples/motion-flex/) is a Tier 1 / procedural showcase:
 
 - `hero.html` — a kinetic title (blur-rise headline via scrubbed `@keyframes`, gradient shimmer).
 - `stat.html` — a count-up stat (pure-CSS `counter` driven by `--pct`, staggered keywords, `kino-cliptext`).

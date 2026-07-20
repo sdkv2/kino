@@ -5,6 +5,8 @@ import type { Project } from "../config/project.js";
 import type { Provider } from "../avatar/provider.js";
 import { lintMotionSource } from "../render/motiongraphic.js";
 import { resolveAudioSource } from "../media/sfx.js";
+import { resolveMotionSource } from "../media/motionLib.js";
+import { log } from "../log.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -82,8 +84,8 @@ export function assertAssetsExist(spec: Spec, project: Project): void {
   }
 }
 
-// Motion graphics: every referenced HTML file must exist and pass the determinism/safety lint.
-// Runs before VO generation so a bad graphic fails the build cheaply.
+// Motion graphics: every referenced file must resolve (library bare id or project asset) and pass
+// the determinism/safety lint. Runs before VO generation so a bad graphic fails the build cheaply.
 export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: string): string }): void {
   const refs: { source: string; where: string }[] = [];
   spec.segments.forEach((seg, i) => {
@@ -92,11 +94,17 @@ export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: strin
     if (ov?.source) refs.push({ source: ov.source, where: `segment[${i}].motionOverlay` });
   });
   for (const { source, where } of refs) {
-    const abs = project.assetPath(source);
-    if (!existsSync(abs)) throw new Error(`Missing motion graphic for ${where}: assets/${source}`);
+    let abs: string;
+    let fileName: string;
+    let display: string;
+    try {
+      ({ abs, fileName, display } = resolveMotionSource(source, project));
+    } catch (e) {
+      throw new Error(`Missing motion graphic for ${where}: ${(e as Error).message}`);
+    }
     const raw = readFileSync(abs, "utf8");
-    const violations = lintMotionSource(source, raw);
-    if (violations.length) throw new Error(`Motion graphic ${where} (assets/${source}): ${violations.join("; ")}`);
+    const violations = lintMotionSource(fileName, raw);
+    if (violations.length) throw new Error(`Motion graphic ${where} (${display}): ${violations.join("; ")}`);
   }
 }
 
@@ -118,6 +126,42 @@ export function assertAudioSources(spec: Spec, project: { assetPath(rel: string)
   }
 }
 
+const READY_PAIR: Record<string, string> = {
+  "prompt-type": "loop-ready",
+  "loop-ready": "prompt-type",
+  "prompt-window": "loop-settle",
+  "loop-settle": "prompt-window",
+};
+
+function motionBaseName(source: string): string {
+  const base = source.split(/[/\\]/).pop() ?? source;
+  return base.replace(/\.(js|html|json)$/i, "");
+}
+
+/** Soft guidance when seamlessLoop is set — throws only on hard structural mistakes. */
+export function assertSeamlessLoop(spec: Spec): void {
+  if (!spec.seamlessLoop) return;
+  const last = spec.segments[spec.segments.length - 1];
+  if (!last || last.kind !== "motion") {
+    throw new Error('seamlessLoop requires the last segment to be kind:"motion" (settle to the ready-state)');
+  }
+  if (spec.film == null || spec.film > 0) {
+    log.warn('seamlessLoop: set "film": 0 so the loop seam is not graded differently per encode');
+  }
+  if (last.text.trim().split(/\s+/).length <= 2) {
+    log.warn("seamlessLoop: last beat VO is very short — settle may feel rushed");
+  }
+  const first = spec.segments[0];
+  if (first?.kind === "motion") {
+    const a = motionBaseName(first.source);
+    const b = motionBaseName(last.source);
+    const expect = READY_PAIR[a];
+    if (expect && b !== expect) {
+      log.warn(`seamlessLoop: first is "${a}" but last is "${b}" — pair with "${expect}" for a clean loop seam`);
+    }
+  }
+}
+
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   const hits = complianceScan(spec, brand);
   if (hits.length) {
@@ -126,4 +170,5 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
   assertAudioSources(spec, project);
+  assertSeamlessLoop(spec);
 }

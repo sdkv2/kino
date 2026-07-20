@@ -1,3 +1,4 @@
-{ "brand": "kino", "title": "b2", "format": ["9:16"], "provider": "none", "film": 0,
-  "segments": [ { "kind": "motion", "source": "motion/spec-editor.js",
-    "text": "Your agent writes a spec", "transition": "cut" } ] }
+{ "brand": "kino", "title": "b2", "format": ["9:16"], "provider": "none", "film": 0, "voiceModel": "eleven_multilingual_v2",
+  "segments": [ { "kind": "motion", "source": "motion/build-terminal.js",
+    "text": "One command builds it. Voiceover, motion, render, mp4.",
+    "triggers": [ { "at": 1.567, "action": "pulse" }, { "at": 2.485, "action": "pulse" }, { "at": 3.309, "action": "pulse" }, { "at": 4.098, "action": "pulse" } ] } ] }

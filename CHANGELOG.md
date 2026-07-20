@@ -3,6 +3,13 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## Unreleased
+- **Motion bare ids**: `"source": "prompt-type"` resolves from `assets-lib/motion/` (like SFX).
+- **`kino retune`**: rewrite motion/`backgroundTriggers` `at` times from real VO word timings.
+- **`seamlessLoop`**: spec flag + validate guidance + post-build first/last-frame seam warn.
+- **`still`/`storyboard --platform`**: TikTok / Reels / Shorts safe-zone overlay for in-feed QA.
+- **`kino batch` variants**: `{ "base", "variants": [{ "tag", "set" }] }` patches + tagged builds.
+
 ## [1.18.1] — SFX/music bed, audio markers, and skill fan-out
 - **`sfx`/`music` spec fields**: free-placed sound-effect events and an auto-ducked music bed
   (volume, duck level, tail fade) mixed into the Remotion render, resolved from a shared

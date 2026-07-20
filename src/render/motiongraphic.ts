@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import type { MotionGraphicProps, BgKeyframe, BgTrigger, BgParamValue } from "./props.js";
+import { resolveMotionSource } from "../media/motionLib.js";
 import { sanitizeMotionHtml } from "./sanitizeMotion.js";
 import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
 
@@ -229,8 +230,7 @@ export function resolveMotionGraphic(
   ref: MotionGraphicRefInput,
   project: { assetPath(rel: string): string },
 ): MotionGraphicProps {
-  const abs = project.assetPath(ref.source);
-  if (!existsSync(abs)) throw new Error(`Missing motion graphic file: assets/${ref.source}`);
+  const { abs, display, fileName } = resolveMotionSource(ref.source, project);
   const raw = readFileSync(abs, "utf8");
   const base = {
     params: ref.params ?? {},
@@ -238,26 +238,26 @@ export function resolveMotionGraphic(
     triggers: ref.triggers ?? [],
     loop: ref.loop,
   };
-  const ext = ref.source.toLowerCase();
+  const ext = fileName.toLowerCase();
   if (ext.endsWith(".js")) {
     // Tier 2: procedural source. Lint for determinism/safety; bake the JS verbatim (not sanitized —
     // it's code, not markup; its per-frame output is trusted like the custom-background draw fn).
     const violations = lintMotionJs(raw);
-    if (violations.length) throw new Error(`Motion graphic assets/${ref.source}: ${violations.join("; ")}`);
+    if (violations.length) throw new Error(`Motion graphic ${display}: ${violations.join("; ")}`);
     return { html: "", proc: raw, ...base };
   }
   if (ext.endsWith(".json")) {
     // Tier 3: Lottie. Parse + validate + lint (throw), then warn (non-fatal).
     const { data } = parseLottie(raw); // throws friendly parse/shape/duration errors
     const violations = lintLottie(data);
-    if (violations.length) throw new Error(`Motion graphic assets/${ref.source}: ${violations.join("; ")}`);
-    for (const w of warnLottie(data)) console.warn(`Motion graphic assets/${ref.source}: ${w}`);
+    if (violations.length) throw new Error(`Motion graphic ${display}: ${violations.join("; ")}`);
+    for (const w of warnLottie(data)) console.warn(`Motion graphic ${display}: ${w}`);
     return { html: "", lottie: data, ...base };
   }
   if (ext.endsWith(".html")) {
     const violations = lintMotionHtml(raw);
-    if (violations.length) throw new Error(`Motion graphic assets/${ref.source}: ${violations.join("; ")}`);
+    if (violations.length) throw new Error(`Motion graphic ${display}: ${violations.join("; ")}`);
     return { html: sanitizeMotionHtml(raw), ...base };
   }
-  throw new Error(`Motion graphic assets/${ref.source}: motion source must be .html, .js, or .json`);
+  throw new Error(`Motion graphic ${display}: motion source must be .html, .js, or .json`);
 }
