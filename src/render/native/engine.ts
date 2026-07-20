@@ -217,6 +217,10 @@ export interface NativeRenderOpts {
 export async function renderVideoNative({ props, publicDir, formats, outDir, title }: NativeRenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), "kino-native-"));
+  const t0 = Date.now();
+  const lap = (m: string) => {
+    if (process.env.KINO_NATIVE_DEBUG) console.error(`[native timing] ${m} +${Date.now() - t0}ms`);
+  };
   try {
     const total = durationInFrames(props);
     const endSec = total / props.fps;
@@ -224,27 +228,35 @@ export async function renderVideoNative({ props, publicDir, formats, outDir, tit
       prepareDenseMedia(props, publicDir, scratch),
       buildAudioTrack(props, publicDir, endSec, scratch),
     ]);
+    lap("media+audio");
 
     const outputs: string[] = [];
     for (const fmt of formats) {
       const { width, height } = DIMS[fmt];
       const server = await startServer({ props, publicDir, framesDir, media, width, height, total });
-      const browser = await acquireBrowser();
+      // One browser PER WORKER — CDP screenshot capture serializes within a browser process, so
+      // worker parallelism only pays off across processes.
+      const n = Math.min(concurrency(), total);
+      const slots = Array.from({ length: n }, (_, i) => i);
       let handles: PageHandle[] = [];
       try {
-        const n = Math.min(concurrency(), total);
-        handles = await Promise.all(Array.from({ length: n }, () => openRenderPage(browser, server.url, width, height)));
+        const browsers = await Promise.all(slots.map((i) => acquireBrowser(i)));
+        lap("browsers");
+        handles = await Promise.all(browsers.map((b) => openRenderPage(b, server.url, width, height)));
+        lap("pages-boot");
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio });
         await renderFrameRange(handles, total, enc.stdin);
+        lap("frames");
         enc.stdin.end();
         await enc.done;
+        lap("encode-flush");
         const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
         renameSync(tmpOut, out);
         outputs.push(out);
       } finally {
         await Promise.all(handles.map((h) => h.page.close().catch(() => {})));
-        await releaseBrowser();
+        await Promise.all(slots.map((i) => releaseBrowser(i)));
         await server.close();
       }
     }

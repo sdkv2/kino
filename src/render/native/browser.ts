@@ -24,40 +24,44 @@ async function resolveExecutable(): Promise<string | undefined> {
   return SYSTEM_CHROME.find((p) => existsSync(p));
 }
 
-// Shared browser with an idle grace period: launch costs ~1s and render commands issue many
-// back-to-back render calls (stills, per-format videos, test files). The browser closes 1.5s
-// after the last release — the CDP socket would otherwise hold the process open forever, and an
-// immediate close would forfeit all reuse. The timer is unref'd so it never blocks exit by itself.
-interface Shared {
+// Browser pool with an idle grace period. One browser per render WORKER, not per render: CDP
+// screenshot capture serializes inside a browser process, so page-level workers in one browser
+// gain nothing — process-level parallelism is what makes the frame loop scale. Launch costs ~1s
+// per browser; each slot closes 1.5s after its last release (the CDP socket would otherwise hold
+// the CLI process open forever, and an immediate close would forfeit reuse across render calls).
+// Idle timers are unref'd so they never block exit by themselves.
+interface Slot {
   browser: Browser;
   refs: number;
   closeTimer: NodeJS.Timeout | null;
 }
-let shared: Promise<Shared> | null = null;
+const pool = new Map<number, Promise<Slot>>();
 
-export async function acquireBrowser(): Promise<Browser> {
-  if (shared) {
-    const s = await shared.catch(() => null);
+export async function acquireBrowser(slot = 0): Promise<Browser> {
+  const existing = pool.get(slot);
+  if (existing) {
+    const s = await existing.catch(() => null);
     if (s && s.browser.connected) {
       if (s.closeTimer) clearTimeout(s.closeTimer);
       s.closeTimer = null;
       s.refs++;
       return s.browser;
     }
-    shared = null;
+    pool.delete(slot);
   }
-  shared = launchBrowser().then((browser) => ({ browser, refs: 1, closeTimer: null }));
-  return (await shared).browser;
+  const created = launchBrowser().then((browser): Slot => ({ browser, refs: 1, closeTimer: null }));
+  pool.set(slot, created);
+  return (await created).browser;
 }
 
-export async function releaseBrowser(): Promise<void> {
-  const s = await shared?.catch(() => null);
+export async function releaseBrowser(slot = 0): Promise<void> {
+  const s = await pool.get(slot)?.catch(() => null);
   if (!s) return;
   s.refs = Math.max(0, s.refs - 1);
   if (s.refs > 0) return;
   if (s.closeTimer) clearTimeout(s.closeTimer);
   s.closeTimer = setTimeout(() => {
-    shared = null;
+    pool.delete(slot);
     void s.browser.close().catch(() => {});
   }, 1500);
   s.closeTimer.unref();
