@@ -8,7 +8,7 @@ import { join } from "node:path";
 import type { Browser, Page } from "puppeteer";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
-import { launchBrowser } from "./browser.js";
+import { acquireBrowser, releaseBrowser } from "./browser.js";
 import { getPageBundle } from "./pageBundle.js";
 import { startRenderServer, type RenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
@@ -229,7 +229,7 @@ export async function renderVideoNative({ props, publicDir, formats, outDir, tit
     for (const fmt of formats) {
       const { width, height } = DIMS[fmt];
       const server = await startServer({ props, publicDir, framesDir, media, width, height, total });
-      const browser = await launchBrowser();
+      const browser = await acquireBrowser();
       let handles: PageHandle[] = [];
       try {
         const n = Math.min(concurrency(), total);
@@ -243,7 +243,8 @@ export async function renderVideoNative({ props, publicDir, formats, outDir, tit
         renameSync(tmpOut, out);
         outputs.push(out);
       } finally {
-        await browser.close();
+        await Promise.all(handles.map((h) => h.page.close().catch(() => {})));
+        await releaseBrowser();
         await server.close();
       }
     }
@@ -284,7 +285,7 @@ export async function renderStillsNative({ props, publicDir, format, frames, out
 
     const { width, height } = DIMS[format];
     const server = await startServer({ props, publicDir, framesDir, media, width, height, total });
-    const browser = await launchBrowser();
+    const browser = await acquireBrowser();
     let handle: PageHandle | null = null;
     try {
       handle = await openRenderPage(browser, server.url, width, height);
@@ -297,7 +298,8 @@ export async function renderStillsNative({ props, publicDir, format, frames, out
       }
       return outs;
     } finally {
-      await browser.close();
+      await handle?.page.close().catch(() => {});
+      await releaseBrowser();
       await server.close();
     }
   } finally {
