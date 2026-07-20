@@ -41,7 +41,7 @@ async function openRenderPage(browser: Browser, url: string, width: number, heig
   const page = await browser.newPage();
   if (process.env.KINO_NATIVE_DEBUG) {
     page.on("console", (m) => console.error(`[native page ${m.type()}] ${m.text().slice(0, 500)}`));
-    page.on("pageerror", (e) => console.error(`[native pageerror] ${e.message}`));
+    page.on("pageerror", (e) => console.error(`[native pageerror] ${(e as Error).message}`));
     page.on("requestfailed", (r) => console.error(`[native reqfail] ${r.url()} ${r.failure()?.errorText}`));
   }
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
@@ -68,16 +68,17 @@ async function openRenderPage(browser: Browser, url: string, width: number, heig
     seek: async (frame: number) => {
       await page.evaluate(`window.kinoSeek(${frame})`);
     },
-    shot: async () => Buffer.from(await page.screenshot({ type: "png" })),
+    shot: async () => Buffer.from(await page.screenshot({ type: "jpeg", quality: 95 })),
   };
 }
 
-// Stream ordered PNG frames into a single libx264 encode (image2pipe on stdin) and mux the mixed
-// audio track in the same pass. bt709 tags + matrix match broadcast/players' expectations.
+// Stream ordered JPEG frames (q95 — Chrome's PNG encoder is ~10× slower per frame; the legacy
+// engine's own frame format was JPEG) into a single libx264 encode (image2pipe on stdin) and mux
+// the mixed audio track in the same pass. bt709 tags + matrix match players' expectations.
 function startEncoder(opts: { fps: number; out: string; audio: string | null }): { stdin: NodeJS.WritableStream; done: Promise<void> } {
   const args = [
     "-y", "-loglevel", "error",
-    "-f", "image2pipe", "-vcodec", "png", "-framerate", String(opts.fps), "-i", "-",
+    "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(opts.fps), "-i", "-",
     ...(opts.audio ? ["-i", opts.audio] : []),
     "-map", "0:v", ...(opts.audio ? ["-map", "1:a"] : []),
     "-c:v", "libx264", "-preset", "medium", "-crf", "18",
@@ -229,9 +230,10 @@ export async function renderVideoNative({ props, publicDir, formats, outDir, tit
       const { width, height } = DIMS[fmt];
       const server = await startServer({ props, publicDir, framesDir, media, width, height, total });
       const browser = await launchBrowser();
+      let handles: PageHandle[] = [];
       try {
         const n = Math.min(concurrency(), total);
-        const handles = await Promise.all(Array.from({ length: n }, () => openRenderPage(browser, server.url, width, height)));
+        handles = await Promise.all(Array.from({ length: n }, () => openRenderPage(browser, server.url, width, height)));
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio });
         await renderFrameRange(handles, total, enc.stdin);
@@ -283,8 +285,9 @@ export async function renderStillsNative({ props, publicDir, format, frames, out
     const { width, height } = DIMS[format];
     const server = await startServer({ props, publicDir, framesDir, media, width, height, total });
     const browser = await launchBrowser();
+    let handle: PageHandle | null = null;
     try {
-      const handle = await openRenderPage(browser, server.url, width, height);
+      handle = await openRenderPage(browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {
         await handle.seek(frame);
