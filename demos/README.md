@@ -1,8 +1,8 @@
 # kino demos
 
-The GIFs here are the showcase embedded in the root [README](../README.md) — each a real,
-deterministic `kino build` of a **fictional** sample brand (trimmed, silent previews; the full
-renders are faceless 9:16 MP4s with ElevenLabs voiceover):
+The `*.gif` files are the silent previews embedded in the root [README](../README.md); the matching
+`*.mp4` files are the full renders **with ElevenLabs voiceover**. Each is a real, deterministic
+`kino build` of a **fictional** sample brand (faceless, 9:16):
 
 | Preview | Demo | What it shows |
 |---|---|---|
