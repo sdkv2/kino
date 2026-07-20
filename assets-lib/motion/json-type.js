@@ -36,11 +36,11 @@ var caretOn = typing || Math.floor(env.frame / 15) % 2 === 0;
 var vis = shown.split("\n");
 var gutter = "", i;
 for (i = 0; i < vis.length; i++) gutter += (i + 1) + "\n";
-var pin = env.progress;
-var ease = 1 - (1 - pin) * (1 - pin);
-var S = 1 + 0.10 * ease;
-var panY = -2 + (-10 * ease);
-var panX = 0.8 * Math.sin(pin * Math.PI);
+// Camera: seam-safe env.edge breath — native scale at BOTH beat edges (no per-beat dive-cut).
+// See skills/speech-synced-ui § Camera.
+var S = 1 + 0.06 * env.edge;
+var panY = -1.2 * env.edge;
+var panX = 0;
 return ''
 + '<div class="bg"></div>'
 + '<div class="cam" style="transform:translate(' + panX.toFixed(2) + 'vw,' + panY.toFixed(2) + 'vw) scale(' + S.toFixed(4) + ')">'

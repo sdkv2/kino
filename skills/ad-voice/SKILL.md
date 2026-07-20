@@ -69,18 +69,21 @@ Frameworks (pick one; don't stack labels in the script):
 
 ## Quiet / editorial / luxury brands (mood, not conversion)
 
-**Use this branch when** the brand dial sets `Proof style: none`, OR the brand.md voice bans outcomes,
-numbers, and urgency (e.g. "sell the ritual, never the outcome"). Then these override the punchy
-House defaults above (they do **not** apply to ordinary app brands):
+**Use this branch when** the brand reads as a **calm mood piece** — dial `Energy: low` / `Pace: measured`,
+or prose that sells a *calm, unhurried feeling* (not a rush) and avoids urgency (the same "mood brand"
+test as *Before writing any copy* step 2). A lone `Proof style: none` is **not** the trigger: an **attitude brand** (`Proof: none`
+\+ `Energy: high` — a brash/loud spoof brand) has no numeric proof either but stays firmly on the punchy
+House defaults; attitude *replaces* proof, it does not go quiet. When the branch applies:
 
 - **Be specific through the senses.** Satisfy anti-slop #1 with observable action + concrete nouns
-  (`press the seed`, `warmed between the hands`) — never an invented metric.
+  (`press the seed`, `warmed between the hands`). One real product-truth number is fine (a `ten-minute`
+  ritual) — the ban is on *invented* metrics and promised outcomes, not on facts.
 - **Framework — Vignette / tone-poem:** mood open → material → use → sign-off. No pain, no urgency verb.
 - **Hooks name a moment, not a pain:** `Before the day asks anything of you,` /
   `A small ceremony, kept at the basin.`
-- **CTA is awareness / retail:** name a real act, no URL or install (`Aesop. Find a store, when
-  you're ready.`). Person may shift maker↔reader on purpose (we make / you keep) — a deliberate glide,
-  not drift.
+- **CTA is a soft act, not an install push:** name a real act without urgency — retail (`Aesop. Find a
+  store, when you're ready.`) or, for an **app**, a quiet in-app moment (`Lunara. Open it tonight.`) —
+  never `Download now`. Person may shift maker↔reader on purpose (we make / you keep), a deliberate glide.
 
 **Worked example** (predicate: `Proof style: none`; brand.md "sell the ritual, never the outcome").
 Brand: *Ora*, single-origin tea.
@@ -90,8 +93,8 @@ Brand: *Ora*, single-origin tea.
 - **2 use** — VO: "Held in both hands, and not rushed." · caption: `both hands`
 - **3 CTA** (awareness, no URL) — VO: "Ora. Find a tin at your grocer." · caption: `at your grocer`
 
-Passes because: `we` (make) → `you` (hold) shifts on purpose; zero numbers/superlatives; every line
-names an observable act, not an outcome.
+Passes because: `we` (make) → `you` (hold) shifts on purpose; no invented metrics or superlatives; every
+line names an observable act, not a promised outcome.
 
 ## Anti-slop rules (non-negotiable)
 
