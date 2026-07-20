@@ -24,7 +24,7 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
      off the product, don't guess hex codes
    - the logo / brand kit the user drops in → `brands/<name>/assets/`
    - `kino fonts` · `kino voices` · `kino backgrounds` — what's settable (font/labelFont, defaultVoice, background)
-   - `assets-lib/` — shared music/sfx/lottie the brand can lean on
+   - `assets-lib/` — shared motion/backgrounds the brand can lean on (music/sfx ship empty)
    - **or more** (with permission): the app's App Store listing / site / press kit for public brand assets;
      `kino pexels` / `kino photos` / image-gen for stills the brand lacks
 4. **Then scaffold** `kino init <brand>` and fill `brands/<brand>/brand.md` from what you discovered —
