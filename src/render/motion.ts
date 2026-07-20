@@ -50,3 +50,32 @@ export function shotTransform(shot: Shot, p: number): { scale: number; tx: numbe
       return { scale: 1.0, tx: 0, ty: 0 };
   }
 }
+
+/** Crossfade length for consecutive motion beats (~0.5s at 30fps). */
+export const MOTION_XFADE_FRAMES = 15;
+
+/**
+ * Sequence span for a full-screen motion beat. Holds the outgoing graphic through any VO gap
+ * and into an overlap with the next motion beat so the handoff is a dissolve, not a hard cut
+ * onto the faceless backdrop. `beatDur` still drives --progress (clamped at 1 while held).
+ */
+export function motionHandoff(opts: {
+  startSec: number;
+  endSec: number;
+  nextMotionStartSec: number | null;
+  prevIsMotion: boolean;
+  fps: number;
+  xfadeFrames?: number;
+}): { from: number; seqDur: number; beatDur: number; fadeIn: boolean } {
+  const xfade = opts.xfadeFrames ?? MOTION_XFADE_FRAMES;
+  const f = (s: number) => Math.round(s * opts.fps);
+  const from = f(opts.startSec);
+  const beatDur = Math.max(1, f(opts.endSec) - from);
+  const fadeIn = opts.prevIsMotion;
+  if (opts.nextMotionStartSec == null) {
+    return { from, seqDur: beatDur, beatDur, fadeIn };
+  }
+  // Hold through the gap, then overlap the next beat by `xfade` frames.
+  const seqEnd = f(opts.nextMotionStartSec) + xfade;
+  return { from, seqDur: Math.max(beatDur, seqEnd - from), beatDur, fadeIn };
+}

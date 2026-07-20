@@ -95,17 +95,22 @@ The backdrop is always the base layer (even in avatar mode), so app cut-in trans
 background rather than black — the avatar covers it on camera.
 - `glow` — animated CSS brand glows (zero-config default).
 - `image` — static `facelessBackdrop` with a slow Ken-Burns.
-- `mesh` / `aurora` / `particles` / `grid` — built-in Canvas2D presets, auto-coloured from the brand.
-- `custom` — your own Canvas2D `draw` fn. `backgroundComponent` points to a `.js` file whose body draws
-  using `ctx` + `env` (`env.params`, `env.pulse`, `env.frame`, `env.width/height`).
+- `solid` — static night + glow (**loop-safe**; no global-frame drift).
+- `mesh` / `aurora` / `particles` / `grid` — built-in Canvas2D presets (draft-friendly; mesh is an easy generic tell).
+- `custom` — your own Canvas2D `draw` fn. Set `backgroundComponent` on the **spec** (overrides brand) or
+  brand frontmatter. Bare id → `assets-lib/backgrounds/` (start with `"brand-wash"`); path → project
+  `assets/…` or workspace file. Same `env.params` / `env.pulse` / keyframes as presets.
   **Must be frame-driven** (use `env.frame`, never `Date.now()`/un-seeded `Math.random()`) or frames won't match.
+
+**Picker:** identity → `custom`; loop → `solid`; photo → `image`; quick draft → `glow`/`mesh`. Run `kino backgrounds`.
 
 ### Animating the background (agent-driven)
 `kino backgrounds` lists each preset's tweenable params (colorA/B/C, intensity) + actions (pulse). Drive
 them over time from the spec — keyframe params (numbers lerp, colours RGB-lerp, optional `easeInOut`) and
 fire one-shot actions at timestamps. Pair with `kino inspect` word times to sync to the VO.
 ```jsonc
-"background": "mesh",
+"background": "custom",
+"backgroundComponent": "brand-wash",
 "backgroundKeyframes": [
   { "at": 0,   "params": { "intensity": 0.2, "colorA": "#80e2b4" } },
   { "at": 4.0, "params": { "intensity": 1.0, "colorA": "#d99a20" }, "ease": "easeInOut" }
