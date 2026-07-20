@@ -8,7 +8,7 @@ import { log } from "../log.js";
 // produces a ready-to-build one: brands/<brand>/brand.md, .env, and projects/<brand>/ with specs/,
 // assets/, out/, and a project.json that assigns the brand.
 export async function init(brand = "default"): Promise<void> {
-  const ws = resolveWorkspace();
+  const ws = resolveWorkspace(process.cwd(), { create: true });
   const projectRoot = join(ws.workspaceRoot, "projects", brand);
   for (const d of [
     ws.brandDir(brand),

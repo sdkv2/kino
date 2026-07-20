@@ -37,4 +37,15 @@ describe("musicVolumeAt", () => {
   it("handles no spans and zero fade", () => {
     expect(musicVolumeAt(1, { ...opts, duckSpans: [], fadeOutSec: 0 })).toBeCloseTo(0.2, 5);
   });
+
+  it("ramps linearly from 0 to full volume over the head fadeInSec", () => {
+    const o = { ...opts, duckSpans: [], fadeInSec: 1 };
+    expect(musicVolumeAt(0, o)).toBeCloseTo(0, 5);
+    expect(musicVolumeAt(0.5, o)).toBeCloseTo(0.1, 5); // halfway: 0.2 * 0.5
+    expect(musicVolumeAt(1, o)).toBeCloseTo(0.2, 5); // fade complete, back to bed level
+  });
+
+  it("no head fade when fadeInSec is 0", () => {
+    expect(musicVolumeAt(0, { ...opts, duckSpans: [], fadeInSec: 0 })).toBeCloseTo(0.2, 5);
+  });
 });

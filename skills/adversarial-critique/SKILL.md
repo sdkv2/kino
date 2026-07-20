@@ -71,14 +71,20 @@ Task:
    🟠 Under-animated motion — sheet changes only via a single opacity fade, or entrance finishes
       early then holds dead; no stagger / idle life / speech punch / camera (see video-production
       § Make motion graphics move — need ≥3 motion layers)
+   🟠 Dead tail — multi-step UI (pipeline/tiles) lands in the first third then freezes while VO
+      continues; or steps light ahead of / behind the spoken nouns (should gate on env.words)
+   🟠 Copy/VO mismatch — on-screen chip/label nouns ≠ spoken words (e.g. "compose" vs "motion")
    🟠 Bad positioning — caption pinned to top edge; CTA left as a tiny lower-third subtitle on empty
       mesh (should be centered end card with `cta: true`); elements stacked in the same band;
       unsafe margin to TikTok/Reels UI (top/right/bottom)
    🟠 Legibility — light text on light subject, missing/weak caption backplate over busy footage,
       active-word colour that disappears into the ground
+   🟠 Loop seam — for looping ads: first≠last ready-state, fade-from/to black, or animated mesh
+      bg drift between ends (see video-production § Seamless loops)
    🟡 Hierarchy noise — too many competing text layers; emphasis glow on many words; jittery
       per-beat y/scale that would read as "jumping" across adjacent stills
-3. Ignore taste/brand vibes unless they cause a defect above. Ignore audio.
+3. Ignore taste/brand vibes unless they cause a defect above. Ignore audio (except note if a
+   looping cut has an obvious bed fade-to-silence at the end).
 
 Return ONLY a finding list, one line each:
 `file:beat: <emoji> <severity>: <what's wrong>. <concrete fix hint for the spec>.`
@@ -93,10 +99,12 @@ If truly clean: `OK — no major layout issues.`
 | 🔴 | Text cut off at frame edge or crushed by wrap |
 | 🔴 | Frozen motion on `--around` sheet (typed UI / Lottie / counter / camera identical across tiles) |
 | 🟠 | Under-animated motion (opacity-only / early freeze / no stagger / no idle life / no VO punch) |
+| 🟠 | Dead tail / steps not word-synced; on-screen nouns ≠ VO nouns |
 | 🟠 | CTA as tiny lower-third on empty mesh (should be centered end card with `cta: true`) |
 | 🟠 | Caption glued to top edge; stacked bands; platform UI collision zone |
 | 🟠 | Unreadable over bright footage / no backplate |
 | 🟠 | Motion/Lottie beat only reviewed at a single midpoint (no `--around` sheet) |
+| 🟠 | Loop seam broken (fade ends, mesh drift, first≠last ready poster) |
 | 🟡 | Too many text layers; multi-word emphasis; position jitter across beats |
 
 ## After findings

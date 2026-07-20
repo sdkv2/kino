@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { SpecSchema } from "../src/spec/schema.js";
 
 const valid = {
-  brand: "evidentcv",
+  brand: "acme",
   title: "lie-test",
   segments: [
     { kind: "avatar", text: "I ran my CV through five AI tools.", caption: "I tested 5 AI tools" },
@@ -29,6 +29,34 @@ describe("SpecSchema", () => {
     });
     expect(s.segments[0].caption).toBeUndefined();
     expect(s.segments[1].caption).toBeUndefined();
+  });
+});
+
+describe("SpecSchema strict segments (unknown-key footgun)", () => {
+  it("rejects a `transition` on a motion segment (motion hard-cuts; transition is inert there)", () => {
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [{ kind: "motion", source: "motion/x.html", text: "hi", transition: "fade" }],
+      }),
+    ).toThrow();
+  });
+  it("rejects an unknown key on an avatar segment", () => {
+    expect(() =>
+      SpecSchema.parse({ ...valid, segments: [{ kind: "avatar", text: "hi", caption: "hi", bogus: true }] }),
+    ).toThrow();
+  });
+  it("rejects an unknown key on an app segment", () => {
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [{ kind: "app", asset: "a.png", text: "hi", caption: "hi", bogus: true }],
+      }),
+    ).toThrow();
+  });
+  it("rejects an unknown key in sfx/music entries", () => {
+    expect(() => SpecSchema.parse({ ...valid, sfx: [{ src: "pop", at: 1, bogus: true }] })).toThrow();
+    expect(() => SpecSchema.parse({ ...valid, music: { src: "bed.mp3", bogus: true } })).toThrow();
   });
 });
 

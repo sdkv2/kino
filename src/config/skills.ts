@@ -1,6 +1,7 @@
 // Bundled agent skills live in the package's skills/ directory (npm files + git source of truth).
 // `kino skills --install` (also called from init) symlinks them into each agent’s project skill dir
 // so Cursor / Claude Code / Codex / universal agents all see the same playbooks.
+// Those agent dirs are gitignored — only skills/ ships in the repo.
 import {
   cpSync,
   existsSync,

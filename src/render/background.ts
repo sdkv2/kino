@@ -1,12 +1,12 @@
 import type { Brand } from "../config/brand.js";
 import type { Spec } from "../spec/schema.js";
 
-export type BackgroundKind = "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "custom";
+export type BackgroundKind = "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "solid" | "custom";
 
-// Faceless background selection. Back-compat: a brand with only a facelessBackdrop image keeps
-// rendering that image; with nothing set, the animated CSS glow. Spec overrides brand.
+// Faceless background selection. Spec overrides brand; unset → animated CSS glow.
+// Brands that want a still backdrop set `background: "image"` + `facelessBackdrop` explicitly.
 export function resolveBackgroundKind(brand: Brand, spec: Spec): BackgroundKind {
-  return (spec.background ?? brand.background ?? (brand.facelessBackdrop ? "image" : "glow")) as BackgroundKind;
+  return (spec.background ?? brand.background ?? "glow") as BackgroundKind;
 }
 
 export function resolveBackgroundColors(brand: Brand): string[] {

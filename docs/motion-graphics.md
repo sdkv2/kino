@@ -45,7 +45,7 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 | `--kino-words-shown` | count of the beat's spoken words whose start has been reached at this frame — reveal the first N words to type text **in sync with the VO** (no hand-placed keyframes) |
 | `--kino-word-count` | total spoken words in this beat |
 
-> The gold accent **is** auto-injected as `--kino-gold` (with a legacy `--gold` alias the shipped `examples/motion-flex/*` files use). You don't need to pass it as a param.
+> The gold accent **is** auto-injected as `--kino-gold`. You don't need to pass it as a param.
 
 ### Typed-in-sync text (the caption engine can't style; this can)
 
@@ -285,9 +285,15 @@ return data.map((h, i) =>
 
 It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
 the build lints the source and rejects `Date.now`/`Math.random`/timers/`fetch`/`import`/`require`/`process`
-and direct `document`/`window` access. **Comments are stripped before the scan**, so a banned token that
-appears only in a comment (e.g. a filename containing `window.`) is not flagged — keep those tokens out of
-executable code. Reference it from the spec exactly like a `.html` graphic.
+and direct `document`/`window` access. **Comments and string/template-literal contents are blanked
+before the scan**, so filenames like `"prompt-window.js"` or a comment mentioning `window.location`
+are not flagged — they don't execute. Expressions inside `${…}` are still scanned
+(`` `${window.location}` `` is banned). Keep banned tokens out of executable code.
+Reference it from the spec exactly like a `.html` graphic.
+
+`env` fields: `{ frame, t, progress, pulse, params, palette, width, height, words? }`. There is
+**no `env.duration`**. End-of-beat / seam logic should use `env.progress` thresholds (e.g. `> 0.95`) —
+`progress` never equals exactly `1.0` (max ≈ `(frames - 1) / frames`).
 
 ## Embedded Lottie (Tier 3)
 
@@ -390,13 +396,17 @@ The build **rejects** a graphic that contains any of the following (each error t
   `opacity` with `--progress` then holds is unfinished. Target **≥3 layers**: entrance (staggered
   `kino-pop` / scrubbed `@keyframes` / overshoot params) + **continuous life** off `--t` or a looping
   Lottie + speech lock (`triggers` / `env.words` / `kino-pulse`) and/or a CSS camera push. Stagger
-  whenever ≥2 elements share the frame. Brand calm ≠ motionless — soft idle life still counts.
-  Playbook: `skills/video-production` § Make motion graphics move.
+  whenever ≥2 elements share the frame. Multi-step UIs should light off `env.words` when the VO
+  names those steps (fixed clocks leave dead tails after real TTS). Brand calm ≠ motionless.
+  Playbook: `skills/video-production` § Make motion graphics move / Real VO retune / Seamless loops.
 - **Preview in a loop — `kino still` + `--around` are the main tools.** A midpoint still hides
-  typewriter grain, Lottie phase, and camera push. After every non-trivial edit:
-  `kino still <spec> --segment N` (layout) then `kino still <spec> --around <t>` (progression sheet;
-  tune `--span` / `--count`). **Read the sheet** — tiles should look meaningfully different. After real VO:
-  `kino still … --around <t> --real` or `kino frames <mp4> --around <t>`. Typed UI: `skills/speech-synced-ui`.
+  typewriter grain, Lottie phase, and camera push. `--segment N` ≠ t=0 — use `--at 0` for ready
+  posters. After every non-trivial edit: `kino still <spec> --segment N` (layout) then
+  `kino still <spec> --around <t>` (progression; tune `--span` / `--count`). Prefer **per-beat harness
+  specs** so you aren't waiting on a full Remotion encode. **Read the sheet**. After real VO:
+  `kino frames <mp4> --around <t>` and retune. Typed UI: `skills/speech-synced-ui`.
+- **Seamless loops:** paint a **static** full-bleed `.bg` in every motion graphic (brand `mesh`/`aurora`
+  drift on the global frame and break first≡last). Gate encoded seams with PSNR/RMSE, not raw AE.
 - **Use `vw` units for resolution independence.** The render canvas is 1080px wide, so `1vw = 10.8px`; sizing everything in `vw` makes the graphic render pixel-identical in the video *and* scale cleanly when the raw file is previewed at any width (a fixed-px graphic overflows a narrow preview pane).
 - **Match brand amplitude, not "no motion".** Quiet brands: soft `easeInOut`, long entrances (~1s),
   slow `--t` life. Punchy brands: `overshoot`/`spring`, word-fire Lottie, harder pops. Either way,

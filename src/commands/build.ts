@@ -11,7 +11,7 @@ import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
 import { SpecSchema, type Spec } from "../spec/schema.js";
-import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook } from "../spec/validate.js";
+import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
@@ -122,7 +122,7 @@ export async function prepare(
     cache,
     apiKey: mock ? undefined : requireKey("ELEVENLABS_API_KEY"),
     mock,
-    model: spec.voiceModel,
+    model: resolveVoiceModel(spec, brand),
     needClips: provider !== "none",
   });
 
@@ -179,6 +179,7 @@ export async function prepare(
       src: rel,
       volume: spec.music.volume,
       duck: spec.music.duck,
+      fadeInSec: spec.music.fadeInSec,
       fadeOutSec: spec.music.fadeOutSec,
       duckSpans: vo.timings.map((t) => ({ from: t.startSec, to: t.endSec })),
     };
@@ -338,7 +339,7 @@ export async function prepare(
       captionFontSize: brand.captionStyle.fontSize,
       captionStroke: brand.captionStyle.strokeWidth,
       captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
-      film: spec.film,
+      film: resolveFilm(spec, brand),
     },
     fps: 30,
     avatar: avatarRel,

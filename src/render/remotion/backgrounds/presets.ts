@@ -52,6 +52,22 @@ const mesh: DrawFn = (ctx, e) => {
   ctx.globalCompositeOperation = "source-over";
 };
 
+// Static night base + a subtle static radial glow. Deliberately reads NEITHER e.frame nor e.pulse —
+// a loop-safe backdrop for beats that must tile seamlessly (mesh/aurora drift on the global frame,
+// breaking the seam at the loop point). Colour-only: still resolves colorA/intensity per keyframe tween.
+const solid: DrawFn = (ctx, e) => {
+  const { width, height } = e;
+  const intensity = num(e, "intensity", 0.5);
+  const c = col(e, "colorA");
+  ctx.fillStyle = "#0b1020";
+  ctx.fillRect(0, 0, width, height);
+  const g = ctx.createRadialGradient(width * 0.5, height * 0.42, 0, width * 0.5, height * 0.42, Math.max(width, height) * 0.62);
+  g.addColorStop(0, withAlpha(c, 0.16 * (0.4 + intensity)));
+  g.addColorStop(1, withAlpha(c, 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+};
+
 const aurora: DrawFn = (ctx, e) => {
   const { frame, width, height } = e;
   const intensity = num(e, "intensity", 0.5);
@@ -154,7 +170,7 @@ const grid: DrawFn = (ctx, e) => {
   }
 };
 
-const PRESETS: Record<string, DrawFn> = { mesh, aurora, particles, grid };
+const PRESETS: Record<string, DrawFn> = { mesh, aurora, particles, grid, solid };
 export const PRESET_NAMES = Object.keys(PRESETS);
 export function getPreset(name: string): DrawFn | undefined {
   return PRESETS[name];

@@ -5,9 +5,10 @@
 - `kino inspect <spec> [--real]` — resolved plan as JSON: beats, timings, modes + per-segment **word timestamps**
 - `kino backgrounds` — list animated backgrounds + their agent-controllable params/actions
 - `kino elements` — list overlay elements (logo …) + their layout/tween controls
-- `kino still <spec> [--at <s,…> | --segment <n> | --around <s>] [--span] [--count] [--montage] [--real] [--format]` — render still(s) fast; **`--around` is the default QA tool for motion/Lottie/typed beats** (sheets N frames around a point — use after every edit)
+- `kino still <spec> [--at <s,…> | --segment <n> | --around <s>] [--span] [--count] [--montage] [--real] [--format]` — render still(s) fast; **`--around` after every motion edit**; `--at 0` for loop posters (`--segment` = midpoint only)
 - `kino storyboard <spec> [--frames <n>] [--real] [--format]` — per-beat stills (default 2: composition + the fully-revealed end-state) tiled into a labeled contact sheet; the **·full** tile is where a caption overflows the frame or collides with a `texts` overlay
-- `kino frames <video> [--at|--around|--count|--every] [--montage]` — extract stills from any video; `--around` sheets a moment (post-build twin of `still --around`)
+- `kino frames <video> [--at|--around|--count|--every] [--montage]` — extract stills from any video; `--around` sheets a moment (post-build twin of `still --around`; use after real VO to retune)
+- Seamless loops / real-VO retune / per-beat harnesses — see SKILL.md §§ Seamless loops, Real VO retune
 - `kino transcribe <video> [--format …] [--out …]` — **(reference videos only)** speech → timestamped transcript
 - `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
 - `kino batch <input.json>` — input is a JSON array of spec paths
@@ -45,14 +46,14 @@ Keep campaigns from cluttering each other. A **workspace** holds shared `brands/
 each **project** is `projects/<name>/` with its own `specs/`, `assets/`, `out/`, and a `project.json`
 that assigns a brand and optional default overrides:
 ```jsonc
-{ "brand": "evidentcv", "background": "mesh", "provider": "none", "font": "Inter", "captionMode": "phrase" }
+{ "brand": "acme", "background": "mesh", "provider": "none", "font": "Inter", "captionMode": "phrase" }
 ```
 - kino infers the project by walking up from the spec's path to the nearest `project.json`
   (`kino build projects/launch/specs/hook.json`), or use `--project <name>`.
 - Precedence: CLI flag > spec > project.json > brand. A spec may omit `brand` (the project supplies it).
 - Brands are shared at the workspace, so brand assets (`logo`, `facelessBackdrop`) are workspace-relative;
   app assets (`assets/...`) are project-relative.
-- **Back-compat:** with no `project.json`, the flat layout (`specs/ assets/ out/` at the root) still works.
+- Specs must live under `projects/<name>/specs/` (with a `project.json`). No flat layout.
 
 ## Iterative design loop (agents)
 `still`/`storyboard`/`inspect` default to **mock** (fast, $0; captions/background/layout render identically —
@@ -81,9 +82,9 @@ Faceless branding (optional):
 - `logoSize` — `small` (100px) / `medium` (150) / `big` (220) / a number. `logoPosition` — `top` /
   `bottom` / `left` / `right` / `center` / custom `{x,y}` (% of frame). Spec overrides brand; see `kino elements`.
   Tween it over time with spec `logoKeyframes: [{ at, params: { x, y, scale, opacity }, ease? }]`.
-- `background` — faceless background engine (see below). Default: `image` if `facelessBackdrop`
-  set, else `glow`. Override per-video with spec `background` or `--background <kind>`.
-- `facelessBackdrop` — image used when `background: "image"`.
+- `background` — faceless background engine (see below). Default: `glow`. Set `background: "image"`
+  when using a backdrop. Override per-video with spec `background` or `--background <kind>`.
+- `facelessBackdrop` — image used when `background: "image"` (required for that kind).
 - `backgroundComponent` — custom draw-fn file, used when `background: "custom"`.
 - `backgroundColors` — palette for animated backgrounds (default: mint/green/gold).
 - `backgroundIntensity` — 0..1 motion strength (default 0.5); spec `backgroundIntensity` overrides.

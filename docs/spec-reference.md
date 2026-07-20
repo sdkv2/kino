@@ -204,15 +204,15 @@ markers (onsets, peaks, silences) plus waveform/spectrogram PNGs.
   { "src": "pop", "at": 10.1, "volume": 0.25 },
   { "src": "sfx/impact.mp3", "at": 7.9, "volume": 0.7 }
 ],
-"music": { "src": "music/bed.mp3", "volume": 0.18, "duck": 0.06, "fadeOutSec": 2 }
+"music": { "src": "music/bed.mp3", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }
 ```
 
 - `src` (both `sfx[]` and `music`) — a bare id (`"pop"`, no slash/extension) resolves from
   the shared library (`assets-lib/sfx/<id>.mp3|.wav`); a path resolves from the project's
   `assets/`. Omit `sfx` for silent cuts (preferred short-form default — no bundled cut whoosh).
 - `sfx[].at` — seconds on the main timeline. `volume` 0–1 (default `1`).
-- `music` plays under the VO for the whole video: `volume` is the bed level (default `0.18`),
-  `duck` the level while a segment is speaking (default `0.06`, with 0.3s linear ramps in/out
+- `music` plays under the VO for the whole video: `volume` is the bed level (default `0.12`),
+  `duck` the level while a segment is speaking (default `0.04`, with 0.3s linear ramps in/out
   of each VO span), `fadeOutSec` the linear tail fade to silence at the end of the video
   (default `2`).
 
@@ -222,13 +222,13 @@ The brand config lives at `brands/<name>/brand.md`: a YAML **frontmatter** block
 
 ```md
 ---
-name: evidentcv
+name: acme
 colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64" }
 # disclosure: AI-generated   # optional — shown on every video when set
 # defaultVoice: <elevenlabs-voice-id>   # or set per spec
 bannedPhrases: [get the job, guaranteed interview, land more interviews]
 ---
-# evidentcv — brand guidelines
+# acme — brand guidelines
 
 ## Tone / Voice
 
@@ -314,7 +314,7 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
 
 ```json
 {
-  "title": "evident-demo",
+  "title": "acme-demo",
   "format": ["9:16", "3:4"],
   "background": "aurora",
   "backgroundIntensity": 0.6,
@@ -335,7 +335,7 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
     {
       "kind": "app",
       "asset": "assets/dashboard.png",
-      "text": "EvidentCV scores it instantly.",
+      "text": "Acme scores it instantly.",
       "caption": "Instant score",
       "kicker": { "text": "LIVE", "color": "gold" },
       "shot": "scroll",
@@ -346,7 +346,7 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
       "kind": "motion",
       "source": "motion/cta.html",
       "text": "Try it free today.",
-      "caption": "evidentcv.com",
+      "caption": "acme.com",
       "params": { "pct": 0 },
       "keyframes": [{ "at": 0.4, "params": { "pct": 100 }, "ease": "overshoot" }],
       "triggers": [{ "at": 0.4, "action": "pulse" }]

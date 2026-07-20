@@ -160,6 +160,20 @@ describe("motion graphics procedural (Tier 2)", () => {
     expect(greenOf(late)).toBeGreaterThan(180);  // ~90%
   }, 180000);
 
+  it("exposes env.durationFrames/env.duration (beat length) to the proc render", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-procdur-"));
+    // full-frame block whose green channel = durationFrames; 0..2s beat @30fps = 60 frames.
+    const proc = "return `<div style=\"position:absolute;inset:0;background:rgb(0,${env.durationFrames},0)\"></div>`;";
+    const props: KinoProps = {
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: { html: "", proc, params: {}, keyframes: [], triggers: [] } }],
+    };
+    const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "procdur-pub-")), format: "9:16",
+      frames: [{ frame: 6, name: "dur" }], outDir });
+    expect(greenOf(sampleCenter(outs[0]))).toBe(60); // env.duration = 60/30 = 2s, matches the 2s beat
+  }, 180000);
+
   it("renders a blank frame (no crash) when render(env) throws", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-procerr-"));
     const props: KinoProps = {

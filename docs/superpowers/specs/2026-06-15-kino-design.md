@@ -8,13 +8,13 @@ into finished vertical short-form videos. A companion **Claude skill** teaches a
 write specs and drive the CLI. Clean separation of concerns: **the agent supplies creativity; the
 CLI performs deterministic production.** No LLM lives inside the CLI.
 
-Born from the EvidentCV organic-content pipeline (ElevenLabs VO → HeyGen avatar → Remotion
+Born from the Acme organic-content pipeline (ElevenLabs VO → HeyGen avatar → Remotion
 composite), generalized into a standalone tool.
 
 ## Goals
 - One command (`kino build --spec s.json`) produces a post-ready 1080×1920 (and 1080×1440) MP4.
 - Composable subcommands so an agent can drive each step and debug.
-- Reusable across any app via per-project brand configs + specs (not coupled to EvidentCV).
+- Reusable across any app via per-project brand configs + specs (not coupled to Acme).
 - **Agent-safe:** `--mock` mode (zero API spend), content-hash caching (don't re-bill on edits),
   `doctor` preflight, strict spec validation, and a hard guard against the HeyGen Avatar-IV trap.
 - Reproducible & cheap: ~$0.50–1.00/video with avatar; the only paid calls are ElevenLabs + HeyGen.
@@ -59,7 +59,7 @@ Agent (Claude + skill)                kino CLI (deterministic)
 ## The video spec (agent-authored contract)
 ```jsonc
 {
-  "brand": "evidentcv",
+  "brand": "acme",
   "title": "lie-test",
   "format": ["9:16", "3:4"],          // default ["9:16"]
   "voice": "will",                     // optional; else brand default
@@ -71,8 +71,8 @@ Agent (Claude + skill)                kino CLI (deterministic)
       "text": "It scores the match, then traces every claim back to your real experience.",
       "caption": "every claim → your real CV",
       "kicker": { "text": "86% match", "color": "mint" } },   // optional pill
-    { "kind": "avatar", "text": "Search EvidentCV on the App Store. Free to try.",
-      "caption": "search EvidentCV — it's free", "cta": true }
+    { "kind": "avatar", "text": "Search Acme on the App Store. Free to try.",
+      "caption": "search Acme — it's free", "cta": true }
   ]
 }
 ```
@@ -144,7 +144,7 @@ A skill that teaches an agent to use `kino`:
   key derivation. Integration: `build --mock` end-to-end produces a valid MP4 with audio+video
   streams (assert via ffprobe). No paid calls in tests.
 
-## Known gotchas (carried from the EvidentCV build → encoded in the tool)
+## Known gotchas (carried from the Acme build → encoded in the tool)
 1. HeyGen audio lip-sync needs **Avatar-IV photo-avatar looks**, not legacy studio avatars.
 2. HeyGen **asset upload** (`audio_asset_id`) beats hosting a public URL.
 3. HeyGen returns an **SRT sidecar** (caption timing) — no Whisper needed.

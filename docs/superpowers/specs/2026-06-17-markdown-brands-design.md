@@ -21,7 +21,7 @@ faceless build should never demand an avatar look.
 - Docs (SKILL + README) updated.
 
 **Out of scope / breaking:**
-- `brands/<name>/brand.json` is **no longer read** (per decision). Existing JSON brands (e.g. EvidentCV)
+- `brands/<name>/brand.json` is **no longer read** (per decision). Existing JSON brands (e.g. Acme)
   must be converted to `brand.md`; not done here.
 - No change to the spec schema, the render composition (beyond skipping an empty disclosure), or the
   motion-graphics / Tier-2 work.

@@ -14,9 +14,6 @@ describe("buildMotionVars", () => {
     expect(v["--kino-gold"]).toBe("#d99a20");
     expect(v["--kino-font"]).toBe("Arial");
   });
-  it("also exposes the legacy --gold alias used by the shipped motion-flex examples", () => {
-    expect(buildMotionVars(theme, dyn)["--gold"]).toBe("#d99a20");
-  });
   it("sets the frame-driven vars", () => {
     const v = buildMotionVars(theme, dyn);
     expect(v["--frame"]).toBe("12");

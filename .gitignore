@@ -8,6 +8,16 @@ scratchpad/
 projects/
 brands/
 
+# Agent skill fan-out from `kino skills --install` (canonical source: skills/)
+.agents/
+.cursor/skills/
+.claude/skills/
+.codex/
+demos/.agents/
+demos/.cursor/skills/
+demos/.claude/skills/
+demos/.codex/
+
 # Demo workspace is tracked; keep heavy regenerable artifacts out
 demos/**/out/
 demos/**/.kino-cache/

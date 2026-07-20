@@ -7,7 +7,7 @@ import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS, type CaptionStyle,
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
 const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
-const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "custom"]);
+const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "solid", "custom"]);
 const CaptionStyleBg = z.object({ color: z.string().optional(), opacity: z.number().min(0).max(1).optional(), appOnly: z.boolean().optional() });
 
 // THE BRAND SPLIT: BrandFrontmatter (below) and Brand (further down) look like duplicates but model
@@ -65,6 +65,8 @@ export const BrandFrontmatterSchema = z
     replicateInput: z.record(z.unknown()).optional(),
     voiceAliases: z.record(z.string()).optional(),
     lookAliases: z.record(z.string()).optional(),
+    film: z.number().min(0).max(1).optional(), // brand-level default cinematic-finish intensity (spec.film wins)
+    voiceModel: z.string().optional(), // brand-level default TTS model (spec.voiceModel wins)
   })
   .strict();
 
@@ -107,6 +109,8 @@ export interface Brand {
   replicateInput?: Record<string, unknown>;
   voiceAliases: Record<string, string>;
   lookAliases: Record<string, string>;
+  film?: number;
+  voiceModel?: string;
 }
 
 // kino house defaults — used when no brand is set and to fill any field a brand.md omits.
@@ -156,7 +160,7 @@ export function loadBrand(brandDir: string): Brand {
 // Like loadBrand, but also returns the markdown guidelines body (for `kino brand`).
 export function loadBrandDoc(brandDir: string): { brand: Brand; body: string } {
   const mdPath = join(brandDir, "brand.md");
-  if (!existsSync(mdPath)) throw new Error(`Brand not found: ${mdPath} (brands are markdown now — create a brand.md)`);
+  if (!existsSync(mdPath)) throw new Error(`Brand not found: ${mdPath} — create brands/<name>/brand.md`);
   const { frontmatter, body } = parseBrandMd(readFileSync(mdPath, "utf8"));
   const fm = BrandFrontmatterSchema.parse(frontmatter);
   return { brand: mergeBrand(DEFAULT_BRAND, fm), body };

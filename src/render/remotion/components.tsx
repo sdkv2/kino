@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Easing, Freeze, Img, OffthreadVideo, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, Freeze, Img, OffthreadVideo, cancelRender, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { appFreezeFrame, appTrimFrames } from "../appMedia";
 import type { AppFrame } from "../props";
 import type { Theme, BackgroundProps, WordTiming, BgKeyframe } from "../props";
@@ -33,7 +33,11 @@ export const FontLoader: React.FC<{ url?: string | null; family?: string }> = ({
         document.fonts.add(f);
         continueRender(handle);
       })
-      .catch(() => continueRender(handle));
+      .catch((err) => {
+        cancelRender(
+          new Error(`Failed to load brand font "${family}" from ${url}: ${err instanceof Error ? err.message : err}`),
+        );
+      });
   }, [url, family, handle]);
   return null;
 };
@@ -195,8 +199,9 @@ const ImageBg: React.FC<{ src: string; t: Theme }> = ({ src, t }) => {
   );
 };
 
-// Dispatcher: glow = CSS drift; image = Ken-Burns photo; mesh/aurora/particles/grid = canvas
-// presets; custom = the brand's own draw fn. Animated backgrounds get the legibility scrim.
+// Dispatcher: glow = CSS drift; image = Ken-Burns photo; mesh/aurora/particles/grid/solid = canvas
+// presets (solid is the loop-safe static one); custom = the brand's own draw fn. Animated backgrounds
+// get the legibility scrim.
 export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps }> = ({ t, background }) => {
   const { kind, customCode, params, keyframes, triggers, image } = background;
   const draw = React.useMemo<DrawFn | undefined>(() => {

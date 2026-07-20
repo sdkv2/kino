@@ -70,4 +70,14 @@ describe("background presets", () => {
       expect(c.log).not.toEqual(a.log); // different frame → it actually animates
     });
   }
+
+  it("solid is frame-INDEPENDENT (loop-safe: no drift on the global frame across a seam)", () => {
+    const draw = getPreset("solid")!;
+    const a = recordCtx();
+    const b = recordCtx();
+    draw(a.ctx, env(30));
+    draw(b.ctx, env(75)); // a different frame
+    expect(a.log).toEqual(b.log); // identical ops regardless of frame → static
+    expect(a.log.length).toBeGreaterThan(0);
+  });
 });

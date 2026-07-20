@@ -4,9 +4,10 @@ description: >
   Use when on-screen UI text must type, reveal, or animate in lockstep with
   voiceover (terminal prompts, chat inputs, spoof AI windows, code editors),
   when captions are too plain for that surface, when a motion graphic must
-  zoom/pan with typed content, when building a caption-free montage around a
-  stylised typed prompt, or when iterating typed/Lottie motion that needs
-  frame-sheet QA (kino still --around) across edit stages.
+  zoom/pan with typed content, when building a caption-free montage or
+  seamless-loop typed UI, when expanding typed content (more text, not slower
+  typing), or when iterating typed/Lottie motion that needs frame-sheet QA
+  (kino still --around) and real-VO retune across edit stages.
 ---
 
 # Speech-synced UI (typed surfaces)
@@ -194,12 +195,26 @@ headers and slice glyph tops.
 
 ## Lint / authoring gotchas
 
-- Tier-2 JS lint strips comments before scanning — filenames like `prompt-window.png`
-  in comments no longer false-trip `window.`. Keep real `window.` / `document.` out of **code**.
+- Tier-2 JS lint blanks **comments and string/template literal contents** before scanning —
+  `"prompt-window.js"` / `` `file: prompt-window.js` `` / `// see window.location` are fine.
+  Expressions inside `${…}` are still scanned — `` `${window.location}` `` is banned.
 - Don't put `window.` / `document.` / `globalThis.` in live code (banned).
 - Motion HTML `body { background }` often doesn't paint (container host) — use an
-  explicit full-bleed paper `div` as the first layer.
+  explicit full-bleed paper/night `div` as the first layer. For **seamless loops**, that layer
+  must be **static** (no brand mesh/aurora behind — those drift on the global frame; see
+  `video-production` § Seamless loops).
+- `env` has **no `duration` field**. End-of-beat / seam logic → `env.progress` thresholds
+  (`> 0.95`). `progress === 1` is never true (max ≈ `(frames-1)/frames`).
+- Short locals collide easily in one-file procs (`st`, `t`, `i`) — don't shadow loop vars when
+  adding schedule helpers (silent logic bugs that only show on `--around` sheets).
 - After TS/render changes: rebuild `dist` — CLI runs compiled output.
+
+## More text ≠ slower typing
+
+User wants a longer / denser typed block → **expand the string / `LINES` array** (more JSON keys,
+more pipeline detail). Do **not** stretch the beat with a longer VO or switch to
+`frac = env.progress` over a padded beat unless they ask for slower typing. Same KEY_MS /
+word-meter, more glyphs. Confirm with a harness `--around` before the full rebuild.
 
 ## Animate the surface (not just the letters)
 
@@ -219,11 +234,13 @@ ornament + camera before shipping. Match brand energy (calm = soft; punchy = har
 ## Visual loop (mandatory — typed UI + Lottie ornaments)
 
 Do **not** author from `inspect` alone. Motion that "types" or "blinks" only proves itself in
-pixels across time. Use `kino still` / `--around` at **every** stage (mock is free):
+pixels across time. Use `kino still` / `--around` at **every** stage (mock is free). Prefer
+**per-beat harness specs** so you aren't waiting on a full Remotion encode each tweak.
 
 ```
 1. Scaffold chrome / proc / Lottie
      → kino still --segment N          # layout, field box, opaque bg?
+     → kino still --at 0               # ready poster / empty field (NOT midpoint)
 2. Wire env.words / caret / camera
      → kino still --around <mid>       # chars stream? caret? cam moves?
      → Read the sheet; edit; repeat (this is the main loop)
@@ -234,14 +251,17 @@ pixels across time. Use `kino still` / `--around` at **every** stage (mock is fr
      (attach --around sheets for typed + Lottie beats — not only sb-*.png)
 5. Real VO
      → kino build → inspect --real
-     → kino still --around <t> --real  OR  kino frames <mp4> --around <t>
-     → retune KEY_MS / camera / Lottie triggers from the sheet
-6. Ship only after a real --around sheet shows speech-locked typing
+     → kino frames <mp4> --around <t> on EVERY speech-locked beat
+     → retune KEY_MS / camera / Lottie triggers / word-gated pipelines from the sheet
+     → if a step UI finishes while VO still lists steps → drive steps off env.words
+6. Loop ads: prove PNG AE=0 on harness ends, then PSNR on mp4 first/last
+7. Ship only after a real --around sheet shows speech-locked typing
 ```
 
 Pick `--around` centers from word times (`kino inspect`): start of first word, mid-prompt,
 end of last word, Lottie trigger fire. One midpoint still is **not** enough — word-block vs
-burst typewriter look identical at a single frame.
+burst typewriter look identical at a single frame. Camera punch-then-hold: sample
+`--around` early in the beat (punch phase); a mid-beat sheet only shows the hold.
 
 ## Workflow hook
 

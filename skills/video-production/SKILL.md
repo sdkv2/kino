@@ -60,8 +60,8 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
 
 **Projects** keep campaigns tidy: `projects/<name>/{specs,assets,out}` + a `project.json` that assigns a
 shared brand and default overrides. Run any command on a spec inside a project (kino infers it from the
-path) or pass `--project <name>`. `kino projects --new <name> --brand <brand>` scaffolds one. The flat
-layout (no `project.json`) still works.
+path) or pass `--project <name>`. `kino projects --new <name> --brand <brand>` scaffolds one. Specs must
+live under a project — there is no flat layout.
 
 ## Avatar provider (cost lever — pick deliberately)
 Set per spec with `"provider"`, or per brand with `defaultProvider`, or override with `--provider`:
@@ -309,9 +309,12 @@ entrance counts as **one** — not enough by itself.
    or `"spring"` on the money moment; linear only for clocks/meters that should feel mechanical.
 4. **Punch the VO** — at least one visual accent on a spoken word (`triggers` → `kino-pulse`, word-fire
    Lottie, or a param jump). Silent motion + talking VO = disconnected.
-5. **Prefer Lottie for organic loops/bursts** (dots, confetti, sparkle) over reinventing them in CSS —
+5. **Multi-step UIs (pipelines, tile triptychs) light off `env.words`** when the VO names those steps —
+   not a fixed `t0`/`per` clock. Fixed clocks finish early under real VO → dead tail. See
+   [Real VO retune](#real-vo-retune-mandatory-before-ship).
+6. **Prefer Lottie for organic loops/bursts** (dots, confetti, sparkle) over reinventing them in CSS —
    but don't bake headline copy into Lottie glyphs.
-6. **Brand calm ≠ motionless.** Quiet brands still get soft continuous life + one clear entrance;
+7. **Brand calm ≠ motionless.** Quiet brands still get soft continuous life + one clear entrance;
    loud brands get harder pops and word-fire. Match Tone/Voice amplitude, don't delete motion.
 
 ### Anti-patterns (reject on `--around` sheet)
@@ -321,6 +324,8 @@ entrance counts as **one** — not enough by itself.
 - Counter/label never changes across the sheet
 - End card wordmark static for the whole beat (no scale/fade/pan)
 - Lottie stretched once with no loop and no triggers when the beat is >1.5s of “thinking”/ornament
+- Pipeline/tiles all land in the first third of a long beat, then hold dead while VO continues
+- On-screen step nouns ≠ spoken nouns
 
 ### Quick stack (copyable instincts)
 
@@ -368,12 +373,63 @@ you have **Read** pixel stills at multiple stages — not just `inspect` JSON or
 4. Typed UI / speech-locked surfaces → also follow `speech-synced-ui` (same still loop, stricter).
 5. If the `--around` sheet barely changes → add layers from [Make motion graphics move](#make-motion-graphics-move),
    don't declare victory.
+6. **`--segment N` is the beat midpoint, not t=0.** Loop posters / seam frames need
+   `kino still … --at 0` (and `--at <beatEnd>` for the last frame). Midpoint stills lie about empty
+   ready-states and end-of-beat clears.
+7. **Preview before the expensive rebuild.** A full Remotion encode of a motion-heavy cut can take
+   many minutes (~tens of minutes for ~20s @ 30fps of Tier-2 graphics). Keep **per-beat harness
+   specs** (`specs/_b0.json` …) that render one motion source so you can `kino still --around`
+   in seconds. Only `kino build` the assembled spec after harness sheets pass.
+
+## Real VO retune (mandatory before ship)
+
+Mock word times are evenly faked. **Real ElevenLabs timestamps differ** — fixed schedules
+(`t0`/`per`, hardcoded `triggers`, progress-only reveals keyed to mock length) desync and leave
+**dead tails** (animation finishes, VO still talking).
+
+After the first real build:
+
+1. `kino inspect <spec> --real` — note per-beat `start`/`end` and each word's times
+2. `kino frames <mp4> --around <t>` on every speech-locked beat — Read the sheet
+3. **Drive UI off `env.words`, not fixed clocks** — pipeline steps, capability tiles, counters that
+   name spoken nouns should light when that word starts (fallback schedule only for mock/empty words)
+4. Retune `triggers` / KEY_MS / clear thresholds from real times; rebuild (VO is content-hash
+   cached — re-render is the cost, not re-TTS)
+5. Re-check the loop seam on the **encoded mp4** (see below)
+
+**Copy/VO lock:** on-screen labels that enumerate steps must use the **same nouns the VO speaks**
+(e.g. chip `compose` + VO "motion" = 🟠). Align chip text to VO or VO to chips before ship.
+
+## Seamless loops (hero reels)
+
+When the brief is a looping site/hero video (first frame ≡ last frame):
+
+1. **Own the background in every motion graphic** — paint a **static** full-bleed `.bg` as the first
+   layer (night + baked radial glow, etc.). Brand presets like `mesh`/`aurora` animate off the
+   **global** frame counter; isolated harness seams can look perfect while the assembled mp4's
+   first/last frames drift. Static `.bg` occludes that drift.
+2. **`"transition": "cut"` on beat 0** if the host is an `app` beat. **`transition` is ignored on
+   `kind:"motion"`** (motion already hard-cuts) — don't rely on it for loop safety; verify there is
+   **no master fade-from-black / fade-to-black** on the encoded ends.
+3. Design beat 0 t=0 and the final beat's end as the **same ready poster** (empty field, solid caret,
+   native scale, no CTA). Prove with `kino still --at 0` vs `--at <last>` on harnesses (**lossless
+   PNG AE=0**), then on the mp4.
+4. **H.264 lies about AE.** Encoded first/last frames can differ by millions of AE counts from
+   compression noise while looking identical. Gate with **PSNR / RMSE / fuzz**, not raw AE:
+   PSNR ≳ 40 dB ≈ perceptually seamless. Source PNG AE=0 is the true geometric proof.
+5. Audio loop: `music.fadeInSec` is **not in the schema** (silently stripped). Prefer a continuous
+   bed without a hard fade-to-silence at the end, or accept a soft audio pop at the loop point.
+6. `env.progress` never reaches exactly `1.0` (max ≈ `(frames-1)/frames`). End-of-beat clears /
+   seam caret solid → use thresholds like `progress > 0.95`, never `progress === 1`.
+
+Worked example of this pattern: `projects/kino-meta/` (meta advert — window → spec → build → CTA →
+loop). Design notes: `docs/superpowers/specs/2026-07-19-kino-advert-design.md`.
 
 - **Check copy for cross-beat redundancy before the first preview**: a `motion` beat's on-screen
   label/dial text and the VO caption for that beat (or the one next to it) can end up saying the same
   thing twice (a timer graphic labelled "START TO FINISH" under a caption reading "start to finish,
   about twenty minutes"). Read the full beat list — spoken lines + any `texts`/motion labels — start
-  to finish, script only, before building the storyboard.
+  to finish, script only, before building the storyboard. Also check **VO nouns vs on-screen chips**.
 - **Target the middle of your runtime range, not the floor**: if `kino inspect`'s mock estimate lands
   at or below your minimum, don't assume the real VO will pace it out to a comfortable length — pad
   now (a beat, a slightly longer line, more breathing room on the hook/payoff) rather than shipping

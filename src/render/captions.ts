@@ -43,7 +43,7 @@ export function offsetWords(words: WordTiming[], dt: number): WordTiming[] {
 }
 
 // Caption comparison key: lowercased, alphanumerics only (drops punctuation/case so
-// "EvidentCV." matches "evidentcv").
+// "Acme." matches "acme").
 export function normWord(word: string): string {
   return word.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
