@@ -44,10 +44,10 @@ for (var k = 0; k < nSteps; k++){
     + '<span class="lbl" style="color:' + (st ? "var(--kino-white)" : "rgba(255,255,255,.4)") + '">'
     + STEPS[k] + '</span></div>';
 }
-var pin = env.progress;
-var ease = 1 - (1 - pin) * (1 - pin);
-var S = 1 + 0.08 * ease;
-var panY = -1.5 * ease;
+// Camera: seam-safe env.edge breath — native scale at BOTH beat edges (no per-beat dive-cut).
+// See skills/speech-synced-ui § Camera.
+var S = 1 + 0.06 * env.edge;
+var panY = -1.2 * env.edge;
 return ''
 + '<div class="bg"></div>'
 + '<div class="cam" style="transform:translateY(' + panY.toFixed(2) + 'vw) scale(' + S.toFixed(4) + ')">'
