@@ -158,7 +158,13 @@ layout and crowd the top chrome — don't.
 single beat must dodge a bright subject (check that still) — never a different `y` on every beat.
 
 **CTA = end card, not a subtitle.** `cta: true` on a faceless avatar beat uses the **centered hero**
-surface (same as other faceless talking beats). Write a short caption (`Cadence · free to try`, not a
+surface (same as other faceless talking beats). **`cta: true` is avatar-only — the CLI rejects it on a
+`motion` or `app` beat (`cta is avatar-only`).** A motion end-card graphic (baked wordmark + button, or
+a `texts` CTA) already *is* the end card; keep it plain `kind:"motion"` and carry the CTA copy in the
+graphic/`texts`, not via `cta: true`. **Two valid faceless CTA shapes:** (a) `kind:"avatar"` +
+`provider:"none"` **with** `cta:true` (the centered-hero caption surface — add a `motionOverlay` for a
+wordmark if you want the graphic), or (b) a pure `kind:"motion"` end-card **without** `cta:true`. "Faceless"
+comes from `provider:"none"`, not the segment kind — an `avatar` beat is still faceless. Write a short caption (`Cadence · free to try`, not a
 full spoken sentence). Prefer `captionMode: "phrase"` or `captionReveal: "all"` so the line lands as
 one poster, not a word drip. Logo is optional: if the caption already carries the brand name, **omit
 `brand.logo`** — a centered mark + centered wordmark fights. Otherwise put the mark mid/top so the
@@ -231,8 +237,13 @@ don't reintroduce per-caption `y` offsets to compensate.
   3+ consecutive `app` beats, jot the camera move **and** transition per beat first (CONCEPT.md) —
   auto-vary picks per-cut, not across the whole run, so an unlucky repeat (three push-ins) slips
   through unless you skim your own list. Tall stills (~2200px+) earn `scroll`; 9:16 plates do not.
-- **Faceless backgrounds** (`kino backgrounds`): **do not default to `mesh`.** Stock mesh/aurora are
-  fine drafts and an easy generic tell. Prefer:
+- **Faceless backgrounds** (`kino backgrounds`): **do not *default* to `mesh`** — but a brand whose
+  `brand.md` deliberately sets `mesh` + tuned `backgroundColors` **is** brand-correct; keep it (the CLI
+  nag is generic and can't tell a brand-set mesh from a lazy default). Set mesh colours via brand
+  frontmatter `backgroundColors`, or per-spec via `backgroundKeyframes` params `colorA/colorB/colorC` (a
+  single keyframe sets a constant; two animate) — there is **no** top-level `backgroundColors` spec key
+  (strict schema rejects it). Stock mesh/aurora
+  with no colour work is the generic tell. Prefer:
   - `"background": "custom"` + `"backgroundComponent": "brand-wash"` (or your draw fn) for authored identity
   - `"solid"` when `seamlessLoop` / settle (no global-frame drift)
   - `"image"` + `facelessBackdrop` for photo stages
@@ -340,6 +351,8 @@ entrance counts as **one** — not enough by itself.
    until the end is unfinished.
 3. **Drive numbers/bars with `params` + `keyframes`**, not a static label. Prefer `ease: "overshoot"`
    or `"spring"` on the money moment; linear only for clocks/meters that should feel mechanical.
+   **A lone keyframe holds static** — give a **start + end** pair (`[{at:0,pct:0},{at:0.6,pct:86}]`) or
+   the counter ships dead; `keyframes[].at` / `triggers[].at` are beat-relative **seconds**.
 4. **Punch the VO** — at least one visual accent on a spoken word (`triggers` → `kino-pulse`, word-fire
    Lottie, or a param jump). Silent motion + talking VO = disconnected.
 5. **Multi-step UIs (pipelines, tile triptychs) light off `env.words`** when the VO names those steps —
