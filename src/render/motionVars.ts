@@ -1,4 +1,5 @@
 import type { Theme, BgParamValue, WordTiming } from "./props.js";
+import { progressCurves } from "./bgparams.js";
 
 export interface MotionVarDynamics {
   frame: number;
@@ -35,10 +36,19 @@ export function wordsShownAt(words: WordTiming[] | undefined, t: number): number
 //   NOTE: --kino-gold MUST be here — omitting gold silently renders any gold-referencing declaration
 //   invalid (invisible, no error).
 export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string, string> {
+  const curves = progressCurves(dyn.progress);
   const vars: Record<string, string> = {
     "--frame": String(dyn.frame),
     "--t": dyn.t.toFixed(4),
     "--progress": dyn.progress.toFixed(4),
+    // Eased progress (same curves as keyframe ease). Prefer these over linear --progress for
+    // entrances/camera. overshoot/spring may briefly exceed 1 — fine for scale; clamp for opacity.
+    "--kino-out": curves.out.toFixed(4),
+    "--kino-inout": curves.inout.toFixed(4),
+    "--kino-overshoot": curves.overshoot.toFixed(4),
+    "--kino-spring": curves.spring.toFixed(4),
+    // 0 at beat edges, 1 mid-beat — seam-safe wash/breath (sin(progress·π)).
+    "--kino-edge": curves.edge.toFixed(4),
     "--pulse": dyn.pulse.toFixed(4),
     "--kino-green": t.green,
     "--kino-night": t.night,

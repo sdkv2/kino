@@ -7,6 +7,7 @@ the empty prompt so the mp4 **loops seamlessly**.
 
 - **Spec:** `specs/advert.json` (`"seamlessLoop": true`, `"film": 0`) · **Output:** `out/advert/advert-9x16.mp4` (9:16, faceless)
 - Designed for `<video autoplay muted loop>` — **first frame ≡ last frame** (empty prompt). Build runs a soft RGB seam check.
+- **Tech ground:** every beat paints a HUD/grid/nebula `.bg` (animated mid-beat via `sin(progress·π)` so seam ends stay identical).
 - **No captions** — typed UI locked to VO via `env.words`. After real VO: `kino retune specs/advert.json`.
 - **Audio:** ducked `ambient-night`. VO: `eleven_multilingual_v2`.
 - **Brand:** `brands/kino/`.

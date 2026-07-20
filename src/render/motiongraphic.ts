@@ -52,6 +52,10 @@ const BANNED_JS: { re: RegExp; msg: string }[] = [
   { re: /\bFunction\s*\(/, msg: "the Function constructor isn't allowed — render(env) must be a pure function of env" },
   { re: /\b(atob|btoa)\s*\(/, msg: "atob/btoa aren't allowed — don't decode and execute strings at render time" },
   { re: /\b(Date|Math)\s*\[/, msg: "computed access to Date/Math isn't allowed — use dotted Math.* geometry and env.t / env.frame" },
+  // ASI unary-plus trap: `return\n+ '<b'` or `…;\n+ '<b'` → NaN. Indent-continued
+  // `return ''\n  + '<b'` is fine (expression still open). See speech-synced-ui.
+  { re: /;\s*\n\s*\+\s*['"`]/, msg: "`;` then newline `+ '…'` is unary plus → NaN; keep one binary + chain or use out +=" },
+  { re: /\breturn\s*\n\s*\+\s*['"`]/, msg: "`return` then newline `+ '…'` is ASI unary plus → NaN; put the first string on the return line" },
 ];
 
 // Blank comments + string/template literal *contents* before scanning so banned access patterns that
