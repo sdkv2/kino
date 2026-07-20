@@ -4,21 +4,18 @@
   "format": ["9:16"],
   "provider": "none",
   "film": 0,
+  "seamlessLoop": true,
   "voiceModel": "eleven_multilingual_v2",
   "music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeInSec": 0.8, "fadeOutSec": 1.5 },
   "segments": [
     { "kind": "motion", "source": "motion/prompt-window.js",
       "text": "Kino, make me an advert." },
-    { "kind": "motion", "source": "motion/thinking-window.js",
-      "text": "There's no magic here." },
     { "kind": "motion", "source": "motion/spec-editor.js",
-      "text": "Your agent writes a spec —" },
+      "text": "Your agent writes a real JSON spec." },
     { "kind": "motion", "source": "motion/build-terminal.js",
-      "text": "— one command builds it. Voiceover, motion, render.",
-      "triggers": [ { "at": 1.8, "action": "pulse" }, { "at": 2.682, "action": "pulse" }, { "at": 3.495, "action": "pulse" } ] },
-    { "kind": "motion", "source": "motion/range-tiles.js",
-      "text": "Captions, motion, footage. All of it." },
-    { "kind": "motion", "source": "motion/close-window.js",
-      "text": "Kino. Tell your agent to make it. Kino, make me an advert." }
+      "text": "One command builds it. Voiceover, motion, render, mp4.",
+      "triggers": [ { "at": 1.567, "action": "pulse" }, { "at": 2.485, "action": "pulse" }, { "at": 3.309, "action": "pulse" }, { "at": 4.098, "action": "pulse" } ] },
+    { "kind": "motion", "source": "motion/loop-settle.js",
+      "text": "Tell your agent." }
   ]
 }

@@ -1,6 +1,3 @@
-{ "brand": "kino", "title": "b3", "format": ["9:16"], "provider": "none", "film": 0,
-  "segments": [ { "kind": "motion", "source": "motion/build-terminal.js",
-    "text": "one command builds it. Voiceover, motion, render.",
-    "transition": "cut",
-    "triggers": [ { "at": 1.3, "action": "pulse" }, { "at": 1.75, "action": "pulse" },
-                  { "at": 2.2, "action": "pulse" } ] } ] }
+{ "brand": "kino", "title": "b3", "format": ["9:16"], "provider": "none", "film": 0, "voiceModel": "eleven_multilingual_v2",
+  "segments": [ { "kind": "motion", "source": "motion/loop-settle.js",
+    "text": "Tell your agent." } ] }

@@ -3,6 +3,7 @@ import { prepare } from "./build.js";
 import { renderStills } from "../render/render.js";
 import { pickFrames, parseTimes, timesAround, inspectPlan } from "../render/preview.js";
 import { montage } from "../media/montage.js";
+import { parsePlatform } from "../render/platform.js";
 import { log } from "../log.js";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -18,6 +19,7 @@ export type StillOpts = {
   format?: string;
   font?: string;
   project?: string;
+  platform?: string;
 };
 
 // Render one (or a few) still frames — fast preview, no video encode.
@@ -27,6 +29,8 @@ export type StillOpts = {
 //   --montage        tile multiple stills into one contact sheet
 export async function still(specPath: string, opts: StillOpts): Promise<void> {
   const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font, project: opts.project });
+  const platformGuide = parsePlatform(opts.platform);
+  if (platformGuide) r.props.platformGuide = platformGuide;
   const plan = inspectPlan(r.props);
 
   let at: number[] | undefined;

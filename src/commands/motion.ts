@@ -1,11 +1,20 @@
 // Discovery: print the CSS-variable contract + rules an agent codes a motion-graphic HTML file
 // against. Mirrors `kino backgrounds`/`kino elements`. The graphic is referenced from the spec
 // (kind:"motion" or motionOverlay) and driven entirely by these kino-set variables.
+import { listMotionIds } from "../media/motionLib.js";
+
 export function motionHelpText(): string {
+  const lib = listMotionIds();
+  const libLine = lib.length
+    ? `Bundled library ids (bare source, no path): ${lib.join(", ")}`
+    : "Bundled library: (empty assets-lib/motion/)";
   return [
-    "Motion graphics — author a self-contained HTML/CSS file in assets/motion/, reference it from",
-    'the spec ({ "kind": "motion", "source": "motion/x.html", "text": "..." } or "motionOverlay").',
-    "JSON owns timing; your CSS reads kino-set variables. Motion = a function of these vars:",
+    "Motion graphics — author a self-contained HTML/CSS/.js file in assets/motion/, OR use a bare",
+    "id from assets-lib/motion/ (e.g. \"source\": \"prompt-type\"). Reference from the spec:",
+    '  { "kind": "motion", "source": "motion/x.html" | "prompt-type", "text": "..." }',
+    "  or \"motionOverlay\". JSON owns timing; CSS/JS reads kino-set variables.",
+    "",
+    `  ${libLine}`,
     "",
     "  --frame      integer frame within the beat",
     "  --t          seconds within the beat",

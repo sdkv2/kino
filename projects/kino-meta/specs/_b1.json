@@ -1,3 +1,3 @@
-{ "brand": "kino", "title": "b1", "format": ["9:16"], "provider": "none", "film": 0,
-  "segments": [ { "kind": "motion", "source": "motion/thinking-window.js",
-    "text": "There's no magic here", "transition": "cut" } ] }
+{ "brand": "kino", "title": "b1", "format": ["9:16"], "provider": "none", "film": 0, "voiceModel": "eleven_multilingual_v2",
+  "segments": [ { "kind": "motion", "source": "motion/spec-editor.js",
+    "text": "Your agent writes a real JSON spec." } ] }

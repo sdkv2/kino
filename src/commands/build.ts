@@ -30,6 +30,7 @@ import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic } from "../render/motiongraphic.js";
 import { beatRelativeWords } from "../render/motionVars.js";
+import { checkLoopSeam } from "../media/loopSeam.js";
 import { log } from "../log.js";
 
 // Foreground (text) colour for a kicker pill, keyed by the kicker's brand background colour: a
@@ -367,5 +368,14 @@ export async function build(
   const outName = variantName(spec.title, autoTag);
   const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName });
   outs.forEach((o) => log.ok(o));
+  if (spec.seamlessLoop) {
+    for (const o of outs) {
+      try {
+        await checkLoopSeam(o);
+      } catch (e) {
+        log.warn(`seamlessLoop seam check failed: ${(e as Error).message}`);
+      }
+    }
+  }
   return outs;
 }

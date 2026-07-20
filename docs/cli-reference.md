@@ -6,7 +6,7 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 
 **Commands**
 
-- Build & preview — [`build`](#build) · [`still`](#still) · [`storyboard`](#storyboard) · [`batch`](#batch) · [`inspect`](#inspect)
+- Build & preview — [`build`](#build) · [`still`](#still) · [`storyboard`](#storyboard) · [`retune`](#retune) · [`batch`](#batch) · [`inspect`](#inspect)
 - Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor) · [`skills`](#skills)
 - Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion) · [`pexels`](#pexels) · [`photos`](#photos) · [`music`](#music)
 - Reference-video analysis (research only) — [`transcribe`](#transcribe) · [`scan`](#scan) · [`frames`](#frames)
@@ -60,6 +60,7 @@ kino still <spec> [options]
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Use real VO/avatar + true timing (default: mock, free). |
+| `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA. Still-only — not on `build`. |
 
 ```bash
 kino still specs/lie-test.json --segment 0
@@ -67,6 +68,7 @@ kino still specs/lie-test.json --at 2.5,7
 kino still specs/lie-test.json --around 1.5            # 5 frames ±0.5s → one sheet
 kino still specs/lie-test.json --around 1.5 --span 2 --count 7
 kino still specs/lie-test.json --at 1,1.5,2 --montage
+kino still specs/lie-test.json --segment 0 --platform tiktok
 ```
 
 ### `storyboard`
@@ -83,20 +85,61 @@ kino storyboard <spec> [options]
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Real VO/avatar + true timing (default: mock, free). |
+| `--platform <name>` | `tiktok\|reels\|shorts` | Same safe-zone overlay as [`still`](#still). |
 
 ```bash
 kino storyboard specs/lie-test.json
+kino storyboard specs/lie-test.json --platform reels
+```
+
+### `retune`
+Rewrite beat-relative `triggers[].at` (and top-level `backgroundTriggers` if present) from **real** VO word timings. Same last-N-words heuristic as speech-synced pipeline UIs — kills hand-editing after the first real build.
+
+```
+kino retune <spec> [--dry-run] [--project <name>]
+```
+
+| Option | Value | Meaning |
+|---|---|---|
+| `--dry-run` | — | Print each `at` change without writing the spec. |
+| `--project <name>` | project | Use `projects/<name>`. |
+
+```bash
+kino build specs/advert.json            # produce real VO + word timings
+kino retune specs/advert.json --dry-run # preview: segment[2].triggers[0].at: 1.6 → 1.567
+kino retune specs/advert.json           # write the spec
 ```
 
 ### `batch`
-Render many specs (a JSON array of spec paths).
+Render many specs — either a JSON **array of paths**, or a **base + variants** file that patches one spec N ways and builds each with `--tag`.
 
 ```
-kino batch <input> [--mock]
+kino batch <input> [--mock] [--project <name>]
 ```
+
+**Legacy** — array of spec paths:
+
+```json
+["specs/a.json", "specs/b.json"]
+```
+
+**Variants** — one base × N hooks/tags:
+
+```json
+{
+  "base": "specs/advert.json",
+  "variants": [
+    { "tag": "hook-a", "set": { "segments.0.text": "Make me a trailer." } },
+    { "tag": "hook-b", "set": { "segments.0.text": "Make me a demo." }, "format": "9:16,3:4" }
+  ]
+}
+```
+
+`set` uses dotted paths into the parsed base (`segments.0.text`). Only replaces existing leaves / array indices. Variant specs land under `out/<title>/.batch/`, then each is built with `--tag <tag>`.
 
 ```bash
 kino batch specs/all.json --mock
+kino batch specs/hooks.json --mock
 ```
 
 ### `inspect`

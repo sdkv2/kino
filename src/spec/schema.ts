@@ -159,6 +159,10 @@ export const SpecSchema = z
     captionReveal: CaptionReveal.optional(), // words-mode reveal: "word" (default) | "all" (whole line laid out, highlight tracks VO)
     sfx: z.array(SfxEvent).optional(), // free-placed sound effects (place with `kino audio-markers`)
     music: Music.optional(), // music bed under the VO, auto-ducked while segments speak
+    // Web/hero loop: last beat should settle to the first-frame ready-state. Enables validate
+    // guidance + a post-build first/last-frame seam check (warn only). Not the same as segment
+    // `loop` (Lottie playback).
+    seamlessLoop: z.boolean().optional(),
     segments: z.array(Segment).min(1),
   })
   .superRefine((spec, ctx) => {

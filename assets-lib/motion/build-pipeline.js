@@ -1,35 +1,39 @@
-// Terminal types the real build command, then pipeline steps light with the VO.
-// Camera rides TIME (gentle push); row pulse stays soft so it feels built, not staged.
-var CMD = "kino build advert.json";
+// Terminal that types a build command, then lights pipeline steps off the last N
+// spoken words (Tier 2). Extracted from the kino advert (build-terminal beat).
+//
+// Customize: CMD, STEPS (labels). Speak the step names in the VO (in order) so they
+// light 1:1 — e.g. "… Voiceover, motion, render, mp4."
+// Copy into projects/<name>/assets/motion/ and: "source": "motion/build-pipeline.js"
+var CMD = "build advert.json";
+var STEPS = ["voiceover", "motion", "render", "mp4"];
 var KEY = 0.048;
 var words = env.words || [];
-// Type the command across the first spoken stretch (or first ~1.1s fallback)
 var typeEnd = (words.length >= 2) ? words[1].end : 1.1;
 var nCmd = Math.min(CMD.length, Math.floor((Math.max(0, env.t) / Math.max(0.4, typeEnd)) * CMD.length));
-// Prefer key-burst once VO has started so it still ticks like typing
 if (words.length && env.t > words[0].start) {
   var burst = Math.min(CMD.length, Math.floor((env.t - words[0].start) / KEY) + 1);
   nCmd = Math.max(nCmd, burst);
-  // Cap command typing before the pipeline nouns land
-  if (words.length >= 4 && env.t >= words[words.length - 4].start) nCmd = CMD.length;
+  if (words.length >= STEPS.length && env.t >= words[words.length - STEPS.length].start) nCmd = CMD.length;
 }
 var typed = CMD.slice(0, nCmd);
 var cmdDone = nCmd >= CMD.length;
 var caretOn = !cmdDone || Math.floor(env.frame / 15) % 2 === 0;
 
-var steps = ["voiceover", "motion", "render", "mp4"];
-var nw = words.length;
-// Last four spoken words drive the four pipeline steps 1:1
-var sched = (nw >= 4)
-  ? [words[nw - 4].start, words[nw - 3].start, words[nw - 2].start, words[nw - 1].start]
-  : [1.4, 1.9, 2.4, 2.85];
+var nw = words.length, nSteps = STEPS.length;
+var sched;
+if (nw >= nSteps) {
+  sched = [];
+  for (var s = 0; s < nSteps; s++) sched.push(words[nw - nSteps + s].start);
+} else {
+  sched = [1.4, 1.9, 2.4, 2.85].slice(0, nSteps);
+}
 function state(k){
   if (env.t < sched[k]) return 0;
-  var next = (k < 3) ? sched[k + 1] : sched[3] + 0.45;
+  var next = (k < nSteps - 1) ? sched[k + 1] : sched[nSteps - 1] + 0.45;
   return env.t < next ? 1 : 2;
 }
 var rows = "";
-for (var k = 0; k < steps.length; k++){
+for (var k = 0; k < nSteps; k++){
   var st = state(k);
   var col = st === 2 ? "var(--kino-mint)" : st === 1 ? "var(--kino-gold)" : "rgba(255,255,255,.25)";
   var glow = st === 1 ? "0 0 2.2vw " + col : "none";
@@ -38,9 +42,8 @@ for (var k = 0; k < steps.length; k++){
   rows += '<div class="row" style="transform:scale(' + pop.toFixed(3) + ')">'
     + '<span class="ic" style="color:' + col + ';box-shadow:' + glow + '">' + mark + '</span>'
     + '<span class="lbl" style="color:' + (st ? "var(--kino-white)" : "rgba(255,255,255,.4)") + '">'
-    + steps[k] + '</span></div>';
+    + STEPS[k] + '</span></div>';
 }
-// TIME camera: ease into a mild push as the pipeline fills
 var pin = env.progress;
 var ease = 1 - (1 - pin) * (1 - pin);
 var S = 1 + 0.08 * ease;
@@ -57,12 +60,13 @@ return ''
 + '<div class="kino-grain"></div><div class="kino-vignette"></div>'
 + '<style>'
 + '.bg{position:absolute;inset:0;background:'
-+   'radial-gradient(130% 90% at 50% 118%, rgba(128,226,180,.20), rgba(128,226,180,0) 58%),'
-+   'radial-gradient(110% 75% at 22% -12%, rgba(217,154,32,.12), rgba(217,154,32,0) 55%),'
-+   '#0b1020}'
++   'radial-gradient(130% 90% at 50% 118%, color-mix(in srgb, var(--kino-mint) 20%, transparent), transparent 58%),'
++   'radial-gradient(110% 75% at 22% -12%, color-mix(in srgb, var(--kino-gold) 12%, transparent), transparent 55%),'
++   'var(--kino-night)}'
 + '.cam{position:absolute;inset:0;transform-origin:50% 45%}'
 + '.term{position:absolute;left:7%;right:7%;top:18%;bottom:18%;border-radius:2.5vw;'
-+   'background:rgba(6,10,22,.9);border:0.12vw solid rgba(128,226,180,.2);padding:5vw;'
++   'background:color-mix(in srgb, var(--kino-night) 92%, #000);'
++   'border:0.12vw solid color-mix(in srgb, var(--kino-mint) 20%, transparent);padding:5vw;'
 +   'display:flex;flex-direction:column}'
 + '.cmd{font-family:var(--kino-label-font);color:var(--kino-white);font-size:4vw}'
 + '.pr{color:var(--kino-mint)}.crt{color:var(--kino-mint)}'

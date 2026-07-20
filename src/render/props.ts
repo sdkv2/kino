@@ -159,4 +159,6 @@ export interface KinoProps {
   sfx?: SfxProps[]; // free-placed sound effects
   music?: MusicProps | null; // music bed, ducked while VO speaks
   segments: KinoSegment[];
+  /** Still/storyboard only — in-feed safe-zone overlay. Never set by `kino build`. */
+  platformGuide?: "tiktok" | "reels";
 }
