@@ -15,6 +15,9 @@ export interface RenderOpts {
   formats: Array<"9:16" | "3:4">;
   outDir: string;
   title: string;
+  /** x264 preset: "veryfast" for mock/preview builds (2-3x faster encode, ~15% larger files at the
+   *  same crf), "medium" (default) for finals. */
+  preset?: "medium" | "veryfast";
 }
 
 export interface StillsOpts {

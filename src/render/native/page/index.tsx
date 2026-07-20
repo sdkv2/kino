@@ -1,7 +1,9 @@
-// Page boot for the native engine. Loads /render-config.json (props + dims + pre-extracted media
-// map), loads brand fonts BEFORE the first frame, then exposes window.kinoSeek(frame): a
-// synchronous React commit (flushSync → layout effects paint canvases/shadow DOM) followed by an
-// await on every <img> decode, so a screenshot taken after resolution is the complete frame.
+// Page boot for the native engine. window.kinoLoad() (re)initialises the page from
+// /render-config.json — sizes the stage, swaps brand fonts, renders frame 0 — so a booted page is
+// reused across render calls on the process-wide server without a navigation. window.kinoSeek(n)
+// is a synchronous React commit (flushSync → layout effects paint canvases/shadow DOM) followed by
+// an await on every <img>'s network completion, so a screenshot taken after resolution is the
+// complete frame.
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -20,16 +22,11 @@ interface RenderConfig {
 
 declare global {
   interface Window {
+    kinoLoad: () => Promise<void>;
     kinoSeek: (frame: number) => Promise<void>;
     __kinoReady: boolean;
     __kinoError?: string;
   }
-}
-
-async function loadFont(family: string, url: string): Promise<void> {
-  const ff = new FontFace(family, `url(${url})`);
-  await ff.load();
-  document.fonts.add(ff);
 }
 
 async function settleImages(): Promise<void> {
@@ -47,7 +44,7 @@ async function settleImages(): Promise<void> {
           resolve();
         };
         // A missing/failed image must not hang the render; the frame ships without it (parity with
-        // a broken <Img> src, which the legacy engine also surfaced as a blank layer, not a crash).
+        // a broken <Img> src, which surfaces as a blank layer, not a crash).
         img.addEventListener("load", done);
         img.addEventListener("error", done);
       });
@@ -55,46 +52,83 @@ async function settleImages(): Promise<void> {
   );
 }
 
-async function boot(): Promise<void> {
-  const cfg: RenderConfig = await (await fetch("/render-config.json")).json();
-  const { props, width, height, durationInFrames, media } = cfg;
+// Brand fonts keyed by family; re-pointed (delete + re-add) when a later render call uses a
+// different file under the same family — two FontFaces on one family would make matching ambiguous.
+const loadedFonts = new Map<string, FontFace>();
 
+async function syncFonts(props: KinoProps): Promise<void> {
+  const desired = new Map<string, string>();
+  if (props.theme.fontUrl) desired.set("KinoBrandFont", "/public/" + props.theme.fontUrl);
+  if (props.theme.labelFontUrl) desired.set("KinoLabelFont", "/public/" + props.theme.labelFontUrl);
+  for (const [family, ff] of loadedFonts) {
+    if (!desired.has(family)) {
+      document.fonts.delete(ff);
+      loadedFonts.delete(family);
+    }
+  }
+  for (const [family, url] of desired) {
+    const existing = loadedFonts.get(family);
+    if (existing && (existing as FontFace & { __url?: string }).__url === url) continue;
+    if (existing) {
+      document.fonts.delete(existing);
+      loadedFonts.delete(family);
+    }
+    const ff = new FontFace(family, `url(${url})`);
+    (ff as FontFace & { __url?: string }).__url = url;
+    await ff.load();
+    document.fonts.add(ff);
+    loadedFonts.set(family, ff);
+  }
+  await document.fonts.ready;
+}
+
+let root: Root | null = null;
+let current: RenderConfig | null = null;
+
+const App: React.FC<{ cfg: RenderConfig; frame: number }> = ({ cfg, frame }) => {
+  const config: VideoConfig = { fps: cfg.props.fps, width: cfg.width, height: cfg.height, durationInFrames: cfg.durationInFrames };
+  return (
+    <MediaProvider media={cfg.media}>
+      <FrameProvider frame={frame} config={config}>
+        <KinoVideo {...cfg.props} />
+      </FrameProvider>
+    </MediaProvider>
+  );
+};
+
+async function kinoSeek(frame: number): Promise<void> {
+  const cfg = current;
+  if (!cfg || !root) throw new Error("kinoSeek before kinoLoad");
+  flushSync(() => root!.render(<App cfg={cfg} frame={frame} />));
+  await settleImages();
+}
+
+async function kinoLoad(): Promise<void> {
+  const cfg: RenderConfig = await (await fetch("/render-config.json", { cache: "no-store" })).json();
   document.documentElement.style.background = "#000";
   document.body.style.margin = "0";
   const container = document.getElementById("root")!;
   Object.assign(container.style, {
     position: "relative",
-    width: `${width}px`,
-    height: `${height}px`,
+    width: `${cfg.width}px`,
+    height: `${cfg.height}px`,
     overflow: "hidden",
   });
-
-  // Brand fonts must be resolvable before frame 0 — a fallback-font first frame is a determinism
-  // and layout bug, not a cosmetic one.
-  if (props.theme.fontUrl) await loadFont("KinoBrandFont", "/public/" + props.theme.fontUrl);
-  if (props.theme.labelFontUrl) await loadFont("KinoLabelFont", "/public/" + props.theme.labelFontUrl);
-  await document.fonts.ready;
-
-  const config: VideoConfig = { fps: props.fps, width, height, durationInFrames };
-  const root: Root = createRoot(container);
-
-  const App: React.FC<{ frame: number }> = ({ frame }) => (
-    <MediaProvider media={media}>
-      <FrameProvider frame={frame} config={config}>
-        <KinoVideo {...props} />
-      </FrameProvider>
-    </MediaProvider>
-  );
-
-  window.kinoSeek = async (frame: number) => {
-    flushSync(() => root.render(<App frame={frame} />));
-    await settleImages();
-  };
-
-  await window.kinoSeek(0);
-  window.__kinoReady = true;
+  // Fonts must be resolvable before frame 0 — a fallback-font first frame is a determinism and
+  // layout bug, not a cosmetic one.
+  await syncFonts(cfg.props);
+  root ??= createRoot(container);
+  current = cfg;
+  await kinoSeek(0);
 }
 
-boot().catch((err) => {
-  window.__kinoError = err instanceof Error ? (err.stack ?? err.message) : String(err);
-});
+window.kinoLoad = kinoLoad;
+window.kinoSeek = kinoSeek;
+
+kinoLoad()
+  .then(() => {
+    window.__kinoReady = true;
+  })
+  .catch((err) => {
+    window.__kinoError = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  });

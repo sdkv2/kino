@@ -10,13 +10,15 @@ import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
 import { acquireBrowser, releaseBrowser } from "./browser.js";
 import { getPageBundle } from "./pageBundle.js";
-import { startRenderServer, type RenderServer } from "./server.js";
+import { ensureRenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
 
 const DIMS: Record<string, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "3:4": { width: 1080, height: 1440 },
 };
+
+export type EncodePreset = "medium" | "veryfast";
 
 // Composition length contract (matches the legacy calculateMetadata): last segment end, or a
 // 30-second default when there are no segments.
@@ -25,10 +27,23 @@ function durationInFrames(props: KinoProps): number {
   return Math.max(1, Math.round(total * props.fps));
 }
 
-function concurrency(): number {
+function concurrency(totalFrames: number): number {
   const env = Number(process.env.KINO_CONCURRENCY);
   if (Number.isFinite(env) && env >= 1) return Math.round(env);
-  return Math.min(4, Math.max(1, cpus().length - 1));
+  // Capture parallelism scales per browser process (see browser.ts), but each worker costs a
+  // Chrome launch + page boot — only long renders amortize a big pool. Short clips (tests,
+  // per-beat previews) keep 4; 20s+ videos take up to 8. Two cores stay free for encode/extract.
+  const cap = totalFrames > 600 ? 8 : 4;
+  return Math.min(cap, Math.max(1, cpus().length - 2));
+}
+
+// The render server and its config are process-wide singletons the pages re-read via kinoLoad();
+// serialize render calls so concurrent callers can't swap state under each other's pages.
+let renderLock: Promise<unknown> = Promise.resolve();
+function withRenderLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = renderLock.then(fn, fn);
+  renderLock = run.catch(() => {});
+  return run;
 }
 
 interface PageHandle {
@@ -37,22 +52,19 @@ interface PageHandle {
   shot: () => Promise<Buffer>;
 }
 
-async function openRenderPage(browser: Browser, url: string, width: number, height: number): Promise<PageHandle> {
-  const page = await browser.newPage();
-  if (process.env.KINO_NATIVE_DEBUG) {
-    page.on("console", (m) => console.error(`[native page ${m.type()}] ${m.text().slice(0, 500)}`));
-    page.on("pageerror", (e) => console.error(`[native pageerror] ${(e as Error).message}`));
-    page.on("requestfailed", (r) => console.error(`[native reqfail] ${r.url()} ${r.failure()?.errorText}`));
-  }
-  await page.setViewport({ width, height, deviceScaleFactor: 1 });
-  await page.goto(`${url}/index.html`, { waitUntil: "load" });
+// Booted pages cached per worker slot: a page stays on the singleton server's origin, so later
+// render calls re-init it with window.kinoLoad() (fonts + config + frame 0) instead of paying a
+// navigation + full React boot (~0.7s) each call. Invalidated when its browser idle-closed.
+const pageCache = new Map<number, Page>();
+
+async function awaitBoot(page: Page): Promise<void> {
   // Poll from node (each evaluate is a direct CDP call) — in-page rAF/timer polling is throttled
   // on background tabs, and every worker page but the frontmost one is a background tab.
   const deadline = Date.now() + 60000;
   for (;;) {
     const state = (await page.evaluate("window.__kinoError ?? (window.__kinoReady === true)")) as string | boolean;
     if (typeof state === "string") throw new Error(`native render page failed to boot:\n${state}`);
-    if (state === true) break;
+    if (state === true) return;
     if (Date.now() > deadline) {
       const diag = await page
         .evaluate(
@@ -63,25 +75,52 @@ async function openRenderPage(browser: Browser, url: string, width: number, heig
     }
     await new Promise((r) => setTimeout(r, 50));
   }
+}
+
+async function workerPage(slot: number, browser: Browser, url: string, width: number, height: number): Promise<PageHandle> {
+  let page = pageCache.get(slot) ?? null;
+  if (page && (page.isClosed() || page.browser() !== browser)) {
+    pageCache.delete(slot);
+    page = null;
+  }
+  if (page) {
+    const vp = page.viewport();
+    if (!vp || vp.width !== width || vp.height !== height) {
+      await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    }
+    await page.evaluate("window.kinoLoad()"); // re-init from the server's current config
+  } else {
+    page = await browser.newPage();
+    if (process.env.KINO_NATIVE_DEBUG) {
+      page.on("console", (m) => console.error(`[native page ${m.type()}] ${m.text().slice(0, 500)}`));
+      page.on("pageerror", (e) => console.error(`[native pageerror] ${(e as Error).message}`));
+      page.on("requestfailed", (r) => console.error(`[native reqfail] ${r.url()} ${r.failure()?.errorText}`));
+    }
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    await page.goto(`${url}/index.html`, { waitUntil: "load" });
+    await awaitBoot(page);
+    pageCache.set(slot, page);
+  }
+  const p = page;
   return {
-    page,
+    page: p,
     seek: async (frame: number) => {
-      await page.evaluate(`window.kinoSeek(${frame})`);
+      await p.evaluate(`window.kinoSeek(${frame})`);
     },
-    shot: async () => Buffer.from(await page.screenshot({ type: "jpeg", quality: 95 })),
+    shot: async () => Buffer.from(await p.screenshot({ type: "jpeg", quality: 95 })),
   };
 }
 
 // Stream ordered JPEG frames (q95 — Chrome's PNG encoder is ~10× slower per frame; the legacy
 // engine's own frame format was JPEG) into a single libx264 encode (image2pipe on stdin) and mux
 // the mixed audio track in the same pass. bt709 tags + matrix match players' expectations.
-function startEncoder(opts: { fps: number; out: string; audio: string | null }): { stdin: NodeJS.WritableStream; done: Promise<void> } {
+function startEncoder(opts: { fps: number; out: string; audio: string | null; preset: EncodePreset }): { stdin: NodeJS.WritableStream; done: Promise<void> } {
   const args = [
     "-y", "-loglevel", "error",
     "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(opts.fps), "-i", "-",
     ...(opts.audio ? ["-i", opts.audio] : []),
     "-map", "0:v", ...(opts.audio ? ["-map", "1:a"] : []),
-    "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+    "-c:v", "libx264", "-preset", opts.preset, "-crf", "18",
     "-vf", "scale=out_color_matrix=bt709:out_range=tv",
     "-pix_fmt", "yuv420p",
     "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
@@ -182,7 +221,7 @@ async function prepareDenseMedia(props: KinoProps, publicDir: string, scratch: s
   return { framesDir, media };
 }
 
-async function startServer(opts: {
+async function pointServerAt(opts: {
   props: KinoProps;
   publicDir: string;
   framesDir: string;
@@ -190,9 +229,9 @@ async function startServer(opts: {
   width: number;
   height: number;
   total: number;
-}): Promise<RenderServer> {
+}): Promise<{ url: string }> {
   const pageJs = await getPageBundle();
-  return startRenderServer({
+  return ensureRenderServer({
     publicDir: opts.publicDir,
     framesDir: opts.framesDir,
     pageJs,
@@ -212,53 +251,55 @@ export interface NativeRenderOpts {
   formats: Array<"9:16" | "3:4">;
   outDir: string;
   title: string;
+  preset?: EncodePreset; // veryfast for mock/preview builds; medium (default) for finals
 }
 
-export async function renderVideoNative({ props, publicDir, formats, outDir, title }: NativeRenderOpts): Promise<string[]> {
+export function renderVideoNative(opts: NativeRenderOpts): Promise<string[]> {
+  return withRenderLock(() => renderVideoLocked(opts));
+}
+
+async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium" }: NativeRenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), "kino-native-"));
   const t0 = Date.now();
   const lap = (m: string) => {
     if (process.env.KINO_NATIVE_DEBUG) console.error(`[native timing] ${m} +${Date.now() - t0}ms`);
   };
+  // One browser PER WORKER — CDP screenshot capture serializes within a browser process, so
+  // worker parallelism only pays off across processes.
+  const total = durationInFrames(props);
+  const n = Math.min(concurrency(total), total);
+  const slots = Array.from({ length: n }, (_, i) => i);
   try {
-    const total = durationInFrames(props);
     const endSec = total / props.fps;
-    const [{ framesDir, media }, audio] = await Promise.all([
+    // Browser launches overlap frame extraction + the audio mix — none depend on each other.
+    const [{ framesDir, media }, audio, browsers] = await Promise.all([
       prepareDenseMedia(props, publicDir, scratch),
       buildAudioTrack(props, publicDir, endSec, scratch),
+      Promise.all(slots.map((i) => acquireBrowser(i))),
     ]);
-    lap("media+audio");
+    lap("media+audio+browsers");
 
     const outputs: string[] = [];
-    for (const fmt of formats) {
-      const { width, height } = DIMS[fmt];
-      const server = await startServer({ props, publicDir, framesDir, media, width, height, total });
-      // One browser PER WORKER — CDP screenshot capture serializes within a browser process, so
-      // worker parallelism only pays off across processes.
-      const n = Math.min(concurrency(), total);
-      const slots = Array.from({ length: n }, (_, i) => i);
-      let handles: PageHandle[] = [];
-      try {
-        const browsers = await Promise.all(slots.map((i) => acquireBrowser(i)));
-        lap("browsers");
-        handles = await Promise.all(browsers.map((b) => openRenderPage(b, server.url, width, height)));
-        lap("pages-boot");
+    try {
+      for (const fmt of formats) {
+        const { width, height } = DIMS[fmt];
+        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+        const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
+        lap(`pages-boot ${fmt}`);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
-        const enc = startEncoder({ fps: props.fps, out: tmpOut, audio });
+        const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset });
         await renderFrameRange(handles, total, enc.stdin);
-        lap("frames");
+        lap(`frames ${fmt}`);
         enc.stdin.end();
         await enc.done;
-        lap("encode-flush");
+        lap(`encode-flush ${fmt}`);
         const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
         renameSync(tmpOut, out);
         outputs.push(out);
-      } finally {
-        await Promise.all(handles.map((h) => h.page.close().catch(() => {})));
-        await Promise.all(slots.map((i) => releaseBrowser(i)));
-        await server.close();
       }
+    } finally {
+      await Promise.all(slots.map((i) => releaseBrowser(i)));
     }
     return outputs;
   } finally {
@@ -274,7 +315,11 @@ export interface NativeStillsOpts {
   outDir: string;
 }
 
-export async function renderStillsNative({ props, publicDir, format, frames, outDir }: NativeStillsOpts): Promise<string[]> {
+export function renderStillsNative(opts: NativeStillsOpts): Promise<string[]> {
+  return withRenderLock(() => renderStillsLocked(opts));
+}
+
+async function renderStillsLocked({ props, publicDir, format, frames, outDir }: NativeStillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), "kino-native-still-"));
   try {
@@ -282,25 +327,27 @@ export async function renderStillsNative({ props, publicDir, format, frames, out
     const maxFrame = total - 1;
     const wanted = frames.map(({ frame, name }) => ({ frame: Math.min(maxFrame, Math.max(0, frame)), name }));
 
-    // Sparse extraction: only the video frames these stills actually show.
+    // Sparse extraction (only the video frames these stills show), overlapped with browser launch.
     const framesDir = join(scratch, "vframes");
     mkdirSync(framesDir, { recursive: true });
-    const jobs = planMediaJobs(props, props.fps);
     const media: Record<string, MediaEntryNode> = {};
-    for (const job of jobs) {
-      const locals = wanted
-        .map(({ frame }) => frame - job.fromFrame)
-        .filter((local) => local >= 0 && local < job.seqDurFrames);
-      if (!locals.length) continue;
-      media[job.key] = await extractSparse(job, join(publicDir, job.assetRel), framesDir, locals);
-    }
+    const [browser] = await Promise.all([
+      acquireBrowser(0),
+      (async () => {
+        for (const job of planMediaJobs(props, props.fps)) {
+          const locals = wanted
+            .map(({ frame }) => frame - job.fromFrame)
+            .filter((local) => local >= 0 && local < job.seqDurFrames);
+          if (!locals.length) continue;
+          media[job.key] = await extractSparse(job, join(publicDir, job.assetRel), framesDir, locals);
+        }
+      })(),
+    ]);
 
     const { width, height } = DIMS[format];
-    const server = await startServer({ props, publicDir, framesDir, media, width, height, total });
-    const browser = await acquireBrowser();
-    let handle: PageHandle | null = null;
     try {
-      handle = await openRenderPage(browser, server.url, width, height);
+      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+      const handle = await workerPage(0, browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {
         await handle.seek(frame);
@@ -310,9 +357,7 @@ export async function renderStillsNative({ props, publicDir, format, frames, out
       }
       return outs;
     } finally {
-      await handle?.page.close().catch(() => {});
-      await releaseBrowser();
-      await server.close();
+      await releaseBrowser(0);
     }
   } finally {
     rmSync(scratch, { recursive: true, force: true });
