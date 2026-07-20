@@ -131,6 +131,7 @@ npm run dev -- <args>   # run the CLI from source via tsx
 ```
 Work on a feature branch (`feat/…`, `fix/…`, `chore/…`), bump `version` in `package.json` for
 releases, and open a PR to `main`. Version history lives in [`CHANGELOG.md`](CHANGELOG.md).
+Full guidelines: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
