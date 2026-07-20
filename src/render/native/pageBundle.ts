@@ -11,7 +11,14 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-export async function getPageBundle(): Promise<string> {
+let cached: Promise<string> | null = null;
+
+export function getPageBundle(): Promise<string> {
+  cached ??= buildPageBundle();
+  return cached;
+}
+
+async function buildPageBundle(): Promise<string> {
   const devEntry = join(here, "page", "index.tsx");
   if (existsSync(devEntry)) {
     const esbuild = await import("esbuild");
