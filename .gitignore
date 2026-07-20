@@ -33,3 +33,4 @@ assets-lib/lottie/*.json
 .DS_Store
 logo/*
 !logo/kino-logo-web.png
+examples/**/out/

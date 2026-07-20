@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
+import { PlatformGuide } from "./PlatformGuide";
 import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../captionLayout";
 import { musicVolumeAt } from "../audio";
 import type { KinoProps } from "../props";
@@ -32,7 +33,7 @@ const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number 
   );
 };
 
-export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, background, disclosure, segments, sfx, music }) => {
+export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, background, disclosure, segments, sfx, music, platformGuide }) => {
   const f = (s: number) => Math.round(s * fps);
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
@@ -200,6 +201,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         );
       })}
       {disclosure ? <Disclosure text={disclosure} t={theme} /> : null}
+      {platformGuide ? <PlatformGuide kind={platformGuide} /> : null}
     </AbsoluteFill>
   );
 };
