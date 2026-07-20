@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SpecSchema } from "../src/spec/schema.js";
+import { SpecSchema, parseSpec } from "../src/spec/schema.js";
 
 const valid = {
   brand: "acme",
@@ -57,6 +57,22 @@ describe("SpecSchema strict segments (unknown-key footgun)", () => {
   it("rejects an unknown key in sfx/music entries", () => {
     expect(() => SpecSchema.parse({ ...valid, sfx: [{ src: "pop", at: 1, bogus: true }] })).toThrow();
     expect(() => SpecSchema.parse({ ...valid, music: { src: "bed.mp3", bogus: true } })).toThrow();
+  });
+  it("parseSpec explains logoPosition on a segment (top-level only)", () => {
+    expect(() =>
+      parseSpec({
+        ...valid,
+        segments: [{ kind: "avatar", text: "hi", caption: "Get Driftlog", logoPosition: "center" }],
+      }),
+    ).toThrow(/logoPosition is top-level/);
+  });
+  it("parseSpec explains transition on a motion segment", () => {
+    expect(() =>
+      parseSpec({
+        ...valid,
+        segments: [{ kind: "motion", source: "motion/x.html", text: "hi", transition: "fade" }],
+      }),
+    ).toThrow(/transition is app-only/);
   });
 });
 

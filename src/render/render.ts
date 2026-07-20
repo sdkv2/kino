@@ -1,4 +1,4 @@
-import { bundle } from "@remotion/bundler";
+import { bundle, type WebpackOverrideFn } from "@remotion/bundler";
 import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -9,6 +9,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 // Source .tsx entry (excluded from tsc build; bundled by esbuild at render time).
 // src/render and dist/render are both two levels under the package root.
 const ENTRY = resolve(here, "../../src/render/remotion/index.tsx");
+
+// Remotion bundles the .tsx SOURCE with webpack, whose resolver — unlike node ESM + tsc — does NOT map
+// a ".js" specifier onto its ".ts" source. Alias it so a module shared by the CLI (node ESM, which
+// requires the ".js" extension) and the composition bundle can use one ".js" import form. Without this,
+// a dual-consumed file (e.g. motionVars, imported by build.ts AND MotionGraphic.tsx) can't import
+// bgparams.js and resolve in both places.
+const tsResolve: WebpackOverrideFn = (config) => ({
+  ...config,
+  resolve: {
+    ...config.resolve,
+    extensionAlias: { ...(config.resolve?.extensionAlias ?? {}), ".js": [".ts", ".tsx", ".js"] },
+  },
+});
 
 const DIMS: Record<string, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
@@ -48,7 +61,7 @@ export interface StillsOpts {
 // Render individual PNG stills (one bundle, many frames) — fast preview, no video encode.
 export async function renderStills({ props, publicDir, format, frames, outDir }: StillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
-  const serveUrl = await bundle({ entryPoint: ENTRY, publicDir });
+  const serveUrl = await bundle({ entryPoint: ENTRY, publicDir, webpackOverride: tsResolve });
   try {
     const inputProps = props as unknown as Record<string, unknown>;
     const { width, height } = DIMS[format];
@@ -74,7 +87,7 @@ export async function renderStills({ props, publicDir, format, frames, outDir }:
 
 export async function renderVideo({ props, publicDir, formats, outDir, title }: RenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
-  const serveUrl = await bundle({ entryPoint: ENTRY, publicDir });
+  const serveUrl = await bundle({ entryPoint: ENTRY, publicDir, webpackOverride: tsResolve });
   try {
     const inputProps = props as unknown as Record<string, unknown>;
     const outputs: string[] = [];

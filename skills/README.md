@@ -10,6 +10,7 @@ Edit here. Do not maintain parallel copies under agent dirs.
 | `adversarial-critique` | Subagent frame QA (overlap / layout) |
 | `importing-footage` | Source recordings → beat map, clip windows, chrome frame, speed/pause |
 | `speech-synced-ui` | VO-locked typed UI, caption-free montage, seamless-loop typed surfaces, real-VO retune |
+| `motion-design` | Visual craft for motion graphics (composition, color, type, choreography, anti-generic) |
 
 ## Install for local agents
 

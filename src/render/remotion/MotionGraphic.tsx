@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme, MotionGraphicProps, MotionEnv } from "../props";
-import { paramsAt, pulseAt } from "../bgparams";
+import { paramsAt, pulseAt, progressCurves } from "../bgparams";
 import { buildMotionVars, wordsShownAt } from "../motionVars";
 import { sanitizeMotionHtml } from "../sanitizeMotion";
 import { Lottie, getLottieMetadata } from "@remotion/lottie";
@@ -14,6 +14,8 @@ import { lottiePlaybackRate } from "../lottie";
 //  • Scrub: pause ALL animations, then seek elements in the scrub set (`.kino-anim` + the built-in
 //    reveals below) to --progress via a negative animation-delay (the canonical Remotion scrub).
 //    --kino-delay (agent-set, default 0) staggers; sub-timing lives in the @keyframes % stops.
+//  • Eased progress vars (`--kino-out/-inout/-overshoot/-spring/-edge`): same curves as keyframe
+//    ease, applied to beat --progress every frame — Tier-1 can drive camera/opacity without JS.
 //  • Easing tokens (`--kino-ease-out/-in-out/-overshoot/-spring`): cubic-beziers matching the spec's
 //    keyframe eases, for `animation-timing-function:var(--kino-ease-…)` in any @keyframes.
 //  • One-class reveals (`.kino-rise/.kino-blur-rise/.kino-pop/.kino-wipe`): complete in the first ~third
@@ -42,9 +44,9 @@ const KINO_SCRUB_STYLE =
   ".kino-wipe{animation-name:kino-wipe;animation-timing-function:var(--kino-ease-in-out)}" +
   "@keyframes kino-rise{0%{opacity:0;transform:translateY(var(--kino-rise-y,42px))}35%{opacity:1;transform:none}100%{opacity:1;transform:none}}" +
   "@keyframes kino-blur-rise{0%{opacity:0;filter:blur(16px);transform:translateY(26px)}45%{opacity:1;filter:blur(0);transform:none}100%{opacity:1;filter:blur(0);transform:none}}" +
-  "@keyframes kino-pop{0%{opacity:0;transform:scale(.7)}40%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(1)}}" +
+  "@keyframes kino-pop{0%{opacity:0;transform:scale(.7)}40%{opacity:1;transform:scale(1.08)}70%{transform:scale(1)}100%{opacity:1;transform:scale(1)}}" +
   "@keyframes kino-wipe{0%{clip-path:inset(0 100% 0 0)}40%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 0)}}" +
-  ".kino-pulse{opacity:var(--pulse,0);transform:scale(calc(.86 + var(--pulse,0) * .16))}" +
+  ".kino-pulse{opacity:var(--pulse,0);transform:scale(calc(.88 + var(--pulse,0) * .18))}" +
   ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}" +
   ".kino-fade-edges{-webkit-mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);" +
   "mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent)}" +
@@ -110,6 +112,7 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   const resolved = paramsAt(data.params, data.keyframes, tt);
   const pulse = pulseAt(data.triggers, tt);
   const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
+  const curves = progressCurves(progress);
 
   const words = data.words ?? [];
   const wordsShown = wordsShownAt(words, tt);
@@ -143,6 +146,11 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       frame,
       t: tt,
       progress,
+      out: curves.out,
+      inout: curves.inout,
+      overshoot: curves.overshoot,
+      spring: curves.spring,
+      edge: curves.edge,
       pulse,
       params: resolved,
       palette: { mint: t.mint, green: t.green, night: t.night, white: t.white, gold: t.gold, font: t.font },

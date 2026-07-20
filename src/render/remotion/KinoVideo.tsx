@@ -1,12 +1,12 @@
 import React from "react";
-import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Audio, Easing, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, FontLoader, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
 import { PlatformGuide } from "./PlatformGuide";
 import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../captionLayout";
 import { musicVolumeAt } from "../audio";
 import type { KinoProps } from "../props";
-import type { Shot, Transition } from "../motion";
+import { MOTION_XFADE_FRAMES, motionHandoff, type Shot, type Transition } from "../motion";
 
 // Top-level Remotion composition. Layers render back-to-front in this order:
 //   1. night backdrop fill   2. faceless brand backdrop   3. avatar video windows
@@ -31,6 +31,19 @@ const AvatarClip: React.FC<{ src: string; trimFrames: number; durFrames: number 
       />
     </AbsoluteFill>
   );
+};
+
+/** Dissolve in over the motion→motion overlap. First motion beat stays opaque (loop seam). */
+const MotionFadeIn: React.FC<{ fadeIn: boolean; children: React.ReactNode }> = ({ fadeIn, children }) => {
+  const frame = useCurrentFrame();
+  const opacity = fadeIn
+    ? interpolate(frame, [0, MOTION_XFADE_FRAMES], [0, 1], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+        easing: Easing.out(Easing.cubic),
+      })
+    : 1;
+  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
 };
 
 export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, voTrack, logo, background, disclosure, segments, sfx, music, platformGuide }) => {
@@ -129,17 +142,27 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
           text/logo/caption layers, so designed graphics and type stay crisp. */}
       <FilmFinish t={theme} />
 
-      {/* Full-screen motion-graphic beats. */}
-      {segments
-        .filter((s) => s.kind === "motion" && s.motion)
-        .map((s, i) => {
-          const dur = f(s.endSec) - f(s.startSec);
-          return (
-            <Sequence key={`m${i}`} from={f(s.startSec)} durationInFrames={dur}>
-              <MotionGraphic data={s.motion!} durationFrames={dur} t={theme} captionBottom={captionBandBottom(s, !!avatar)} />
-            </Sequence>
-          );
-        })}
+      {/* Full-screen motion-graphic beats. Consecutive motion→motion handoffs hold the
+          outgoing graphic through the VO gap and dissolve into the next (~0.5s overlap). */}
+      {segments.map((s, i) => {
+        if (s.kind !== "motion" || !s.motion) return null;
+        const next = segments[i + 1];
+        const prev = segments[i - 1];
+        const { from, seqDur, beatDur, fadeIn } = motionHandoff({
+          startSec: s.startSec,
+          endSec: s.endSec,
+          nextMotionStartSec: next?.kind === "motion" ? next.startSec : null,
+          prevIsMotion: prev?.kind === "motion",
+          fps,
+        });
+        return (
+          <Sequence key={`m${i}`} from={from} durationInFrames={seqDur}>
+            <MotionFadeIn fadeIn={fadeIn}>
+              <MotionGraphic data={s.motion} durationFrames={beatDur} t={theme} captionBottom={captionBandBottom(s, !!avatar)} />
+            </MotionFadeIn>
+          </Sequence>
+        );
+      })}
 
       {/* Motion-graphic overlays layered on top of their host beat (avatar or app). */}
       {segments
