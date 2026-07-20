@@ -11,7 +11,7 @@ import type { WordTiming } from "../render/props.js";
 import type { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
 import { offsetWords } from "../render/captions.js";
-import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
+import { probeDuration, stitchAudio, trailingArtifactCut, trimAudio } from "../media/ffmpeg.js";
 import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL, modelSupportsContext } from "./elevenlabs.js";
 
 // Seconds of silence inserted between segments in the stitched track. Also part of the track
@@ -107,14 +107,29 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
     clips.push(clip);
     clipWords.push(JSON.parse(readFileSync(wordsFile, "utf8")) as WordTiming[]);
   }
-  const durations = await Promise.all(clips.map(probeDuration));
+  // Trim each clip to its true speech end so beats don't end on an ElevenLabs trailing burst (see
+  // trailingArtifactCut). Trimmed to lossless temp wav used for durations + the stitched track only;
+  // the raw cached clips are returned/hashed untouched, so the cache (and the avatar track that keys
+  // off vo.clips) stays stable, and stitchAudio re-encodes to mp3 exactly once.
+  const cleanClips = await Promise.all(
+    clips.map(async (c, i) => {
+      const cut = mock ? null : await trailingArtifactCut(c);
+      if (cut == null) return c;
+      const t = join(dir, `clean${i}.wav`);
+      await trimAudio(c, cut, t);
+      return t;
+    }),
+  );
+  const durations = await Promise.all(cleanClips.map(probeDuration));
   const timings = computeTimings(durations, GAP);
   const words = clipWords.map((w, i) => offsetWords(w, timings[i].startSec));
-  const trackKey = contentHash({ clips, GAP });
+  // stitch marker: bump when seam handling (declick fade / trailing-artifact trim) changes so old
+  // clicky tracks re-stitch. Hashes the raw clips (deterministic trim) so the key stays stable.
+  const trackKey = contentHash({ clips, GAP, stitch: "fade8-trim1" });
   let track = cache.get(trackKey, "mp3");
   if (!track) {
     const tmp = join(dir, "track.mp3");
-    await stitchAudio(clips, GAP, tmp);
+    await stitchAudio(cleanClips, GAP, tmp);
     track = cache.put(trackKey, "mp3", tmp);
   }
   return { trackPath: track, clips, timings, words, totalSec: timings.at(-1)!.endSec };
