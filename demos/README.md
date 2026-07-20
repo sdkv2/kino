@@ -1,8 +1,8 @@
 # kino demos
 
 The `*.gif` files are the silent previews embedded in the root [README](../README.md); the full renders
-**with ElevenLabs voiceover** are attached to the [`demo-assets` release](../../releases/tag/demo-assets)
-(kept out of the repo). Each is a real, deterministic `kino build` of a **fictional** sample brand
+**with ElevenLabs voiceover** are hosted as MP4s on Cloudflare R2 (linked from the README's showcase
+table, kept out of the repo). Each is a real, deterministic `kino build` of a **fictional** sample brand
 (faceless, 9:16):
 
 | Preview | Demo | What it shows |

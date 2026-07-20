@@ -8,4 +8,4 @@ Guides for using kino — the agent-driven short-form video CLI. New here? Start
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
 - **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers.
 
-The driving-agent playbook lives in [`../skills/video-production/SKILL.md`](../skills/video-production/SKILL.md). Design specs and implementation plans are under [`superpowers/`](superpowers/).
+The driving-agent playbook lives in [`../skills/video-production/SKILL.md`](../skills/video-production/SKILL.md).

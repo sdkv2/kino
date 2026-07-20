@@ -296,8 +296,10 @@ return data.map((h, i) =>
   transform-origin:bottom;transform:scaleY(var(--progress))}</style>`;
 ```
 
-`env = { frame, t, progress, out, inout, overshoot, spring, edge, pulse, params, palette:{mint,green,night,white,gold,font}, width, height, words? }`.
+`env = { frame, t, progress, out, inout, overshoot, spring, edge, pulse, params, palette:{mint,green,night,white,gold,font}, width, height, words?, durationFrames, duration }`.
 `words` is the beat-relative VO timing array (same as the caption engine); omit/empty when the beat has no speech.
+End-of-beat / seam logic should still prefer `env.progress` / `env.edge` thresholds (e.g. `progress > 0.95`) —
+`progress` never equals exactly `1.0` (max ≈ `(frames - 1) / frames`).
 
 It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
 the build lints the source and rejects `Date.now`/`Math.random`/timers/`fetch`/`import`/`require`/`process`
@@ -306,10 +308,6 @@ before the scan**, so filenames like `"prompt-window.js"` or a comment mentionin
 are not flagged — they don't execute. Expressions inside `${…}` are still scanned
 (`` `${window.location}` `` is banned). Keep banned tokens out of executable code.
 Reference it from the spec exactly like a `.html` graphic.
-
-`env` fields: `{ frame, t, progress, out, inout, overshoot, spring, edge, pulse, params, palette, width, height, words?, durationFrames, duration }`.
-End-of-beat / seam logic should still prefer `env.progress` / `env.edge` thresholds (e.g. `progress > 0.95`) —
-`progress` never equals exactly `1.0` (max ≈ `(frames - 1) / frames`).
 
 ## Embedded Lottie (Tier 3)
 

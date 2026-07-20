@@ -1,4 +1,4 @@
-// Audio source resolution for spec.sfx[] and spec.music: a bare id ("pop", "ambient-night" —
+// Audio source resolution for spec.sfx[] and spec.music: a bare id ("ambient-night" —
 // no slash, no extension) resolves from the shared libraries at assets-lib/sfx/ then
 // assets-lib/music/; anything path-like resolves through project.assetPath() with the usual
 // traversal guard. Throws on missing files so a bad ref fails the build before any API spend.

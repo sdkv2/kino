@@ -9,8 +9,6 @@ Copy into a project's `assets/motion/` and reference from a spec like any Lottie
 - `product-card-carousel.json` — card-swap carousel skeleton, gray image placeholders, product copy hidden. Swap the image assets' base64 `p` to fill the slots. 10s.
 - `logo-reveal.json` — masked logo reveal with ring wipe; logo slot is a transparent placeholder — replace image asset `image_0`'s base64 `p` with a brand PNG. 9s.
 
-Regression check: `projects/showcase/specs/lottie-check.json` renders all four (`kino storyboard specs/lottie-check.json`).
-
 ## Licensing
 
 These four were adapted from LottieFiles creator templates — cleaning them (background/HSB

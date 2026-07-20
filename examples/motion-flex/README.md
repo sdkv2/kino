@@ -9,8 +9,9 @@ kino-set CSS variables, composited deterministically into the video. Three beats
 | [`stat.html`](stat.html) | A **pure-CSS count-up** (`counter-reset: n round(down, var(--pct), 1)`), a bar filling to `--pct%`, and a keyword line **auto-staggered with `sibling-index()`**. |
 | [`orbit.html`](orbit.html) | Generative outro — four dots orbiting continuously off `--t` at different rates, pulsing rings, gradient wordmark. |
 
-Everything is a pure function of the frame — no `@keyframes`, no `transition`, no JS — so it passes
-the determinism lint and renders identically every time.
+Everything is a pure function of the frame — no `transition`, no JS — so it passes the determinism
+lint and renders identically every time. (`@keyframes` are used too, but scrubbed by kino via
+`class="kino-anim"`, not left to play freely.)
 
 ## Render it
 
