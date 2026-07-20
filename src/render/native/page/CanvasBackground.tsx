@@ -1,12 +1,12 @@
 import React, { useLayoutEffect, useRef } from "react";
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme, BgParamValue, BgKeyframe, BgTrigger } from "../../props";
-import { paramsAt, pulseAt } from "../../bgparams";
-import type { DrawFn } from "../../backgrounds/presets";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "./runtime";
+import type { Theme, BgParamValue, BgKeyframe, BgTrigger } from "../../props.js";
+import { paramsAt, pulseAt } from "../../bgparams.js";
+import type { DrawFn } from "../../backgrounds/presets.js";
 
 // Generic frame-driven canvas. Each frame: clear + paint night, resolve the agent's tweened params
-// + trigger pulse at the current time, then run `draw`. useLayoutEffect (sync, pre-paint) so Remotion
-// captures it deterministically.
+// + trigger pulse at the current time, then run `draw`. useLayoutEffect (sync, pre-paint) runs
+// inside the flushSync seek, so the screenshot captures it deterministically.
 export const CanvasBackground: React.FC<{
   draw: DrawFn;
   params: Record<string, BgParamValue>;
@@ -19,7 +19,7 @@ export const CanvasBackground: React.FC<{
   const ref = useRef<HTMLCanvasElement>(null);
 
   // Intentional: this re-runs on the frame-derived inputs to redraw every frame. The dep array is
-  // deliberate (Remotion advances frame-by-frame); it is NOT a missing-deps bug — do not add a [].
+  // deliberate (the engine advances frame-by-frame); it is NOT a missing-deps bug — do not add a [].
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;

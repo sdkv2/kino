@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { getPreset, PRESET_NAMES } from "../src/render/remotion/backgrounds/presets.js";
-import type { DrawEnv } from "../src/render/remotion/backgrounds/presets.js";
+import { getPreset, PRESET_NAMES } from "../src/render/backgrounds/presets.js";
+import type { DrawEnv } from "../src/render/backgrounds/presets.js";
 import { PRESET_SCHEMAS } from "../src/render/backgroundSchema.js";
 
 // A fake 2D context that records every call/assignment as a string, so we can assert a draw

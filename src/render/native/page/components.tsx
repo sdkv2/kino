@@ -1,46 +1,23 @@
+// Native-engine port of the composition components. Layout, styling and animation math are kept
+// line-for-line with the legacy composition so the two engines render identically; only the frame
+// plumbing differs: primitives come from ./runtime, video frames from ./media (pre-extracted), and
+// fonts are loaded once at page boot (index.tsx) instead of per-component.
 import React from "react";
-import { AbsoluteFill, Easing, Freeze, Img, OffthreadVideo, cancelRender, continueRender, delayRender, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import { appFreezeFrame, appTrimFrames } from "../appMedia";
-import type { AppFrame } from "../props";
-import type { Theme, BackgroundProps, WordTiming, BgKeyframe } from "../props";
-import { shotTransform, type Shot, type Transition } from "../motion";
-import { activeWordIndex, isHighlightWord, normWord } from "../captions";
-import { paramsAt } from "../bgparams";
-import { CanvasBackground } from "./backgrounds/CanvasBackground";
-import { getPreset, type DrawFn } from "../backgrounds/presets";
-// CAPTION_BOTTOM: px offset of the lower-third caption band from the frame bottom (defined +
-// documented in captionLayout.ts; also exposed to motion graphics as --kino-caption-bottom).
-import { CAPTION_BOTTOM } from "../captionLayout";
-import { luminance, filmFinishParams } from "../filmFinish";
-import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation, type CaptionReveal, type ResolvedText } from "../textStyles";
+import { AbsoluteFill, Easing, Freeze, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
+import { FrameVideo } from "./media";
+import { appFreezeFrame } from "../../appMedia.js";
+import type { AppFrame } from "../../props.js";
+import type { Theme, BackgroundProps, WordTiming, BgKeyframe } from "../../props.js";
+import { shotTransform, type Shot, type Transition } from "../../motion.js";
+import { activeWordIndex, isHighlightWord, normWord } from "../../captions.js";
+import { paramsAt } from "../../bgparams.js";
+import { CanvasBackground } from "./CanvasBackground";
+import { getPreset, type DrawFn } from "../../backgrounds/presets.js";
+import { CAPTION_BOTTOM } from "../../captionLayout.js";
+import { luminance, filmFinishParams } from "../../filmFinish.js";
+import { wordStyle, lineBoxStyle, animatePreset, composeFilters, type CaptionStyle, type CaptionAnimation, type CaptionReveal, type ResolvedText } from "../../textStyles.js";
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
-
-// luminance + filmFinishParams live in ../filmFinish (pure, unit-tested); the backdrop and the
-// finishing pass both adapt to a light "paper" brand vs a dark neon one off theme.night.
-
-// Loads a downloaded registry TTF before rendering, under `family` (theme.font/theme.labelFont
-// reference "KinoBrandFont"/"KinoLabelFont" by name). No-op when using a system font. Two font
-// slots share this loader: the caption font and a second `labelFont` motion beats can opt into
-// via --kino-label-font, for brands that pair a display face with a mono/label face.
-export const FontLoader: React.FC<{ url?: string | null; family?: string }> = ({ url, family = "KinoBrandFont" }) => {
-  const [handle] = React.useState(() => (url ? delayRender(`brand-font:${family}`) : null));
-  React.useEffect(() => {
-    if (!url || handle === null) return;
-    const ff = new FontFace(family, `url(${staticFile(url)})`);
-    ff.load()
-      .then((f) => {
-        document.fonts.add(f);
-        continueRender(handle);
-      })
-      .catch((err) => {
-        cancelRender(
-          new Error(`Failed to load brand font "${family}" from ${url}: ${err instanceof Error ? err.message : err}`),
-        );
-      });
-  }, [url, family, handle]);
-  return null;
-};
 
 export const Caption: React.FC<{ text: string; t: Theme; backplate?: { bg: string } | null; styleName?: CaptionStyle; anim?: CaptionAnimation }> = ({
   text,
@@ -160,9 +137,8 @@ export const HeroCaption: React.FC<{ text: string; t: Theme; styleName?: Caption
 };
 
 // Center scrim that keeps hero text legible over a busy background (derived from the brand night).
-// Luminance-adaptive: on a dark brand it's a gentle centre-darken for legibility (not the old
-// near-opaque black hole that hollowed out sparse backgrounds); on a light "paper" brand it's a
-// whisper so it stops pouring paper over the centre and washing the background out.
+// Luminance-adaptive: on a dark brand it's a gentle centre-darken for legibility; on a light
+// "paper" brand it's a whisper so it doesn't wash the background out.
 const Scrim: React.FC<{ t: Theme }> = ({ t }) => {
   const light = luminance(t.night) > 0.5;
   const a0 = light ? "33" : "9c"; // centre alpha (hex): paper barely touches, night darkens gently
@@ -171,7 +147,7 @@ const Scrim: React.FC<{ t: Theme }> = ({ t }) => {
 };
 
 // Three soft brand glows drifting over night (the zero-config default), on a subtle graded base so
-// the frame has vertical depth instead of one flat fill. Richer + brighter than a bare two-blob glow.
+// the frame has vertical depth instead of one flat fill.
 const GlowBg: React.FC<{ t: Theme }> = ({ t }) => {
   const f = useCurrentFrame();
   const dx = Math.sin(f / 60) * 6;
@@ -209,7 +185,6 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
       // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
       // source is trusted local project config that has already passed the sanitize + determinism lint
       // (sanitize: src/render/sanitizeMotion.ts; lint: src/render/motiongraphic.ts). Never feed untrusted/remote input here.
-      // brand-authored draw fn, runs per frame inside CanvasBackground.
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       return new Function("ctx", "env", customCode) as DrawFn;
     }
@@ -239,7 +214,7 @@ const numOf = (v: unknown, d: number) => (typeof v === "number" ? v : Number(v) 
 
 // Reusable overlay layer: positions children at (x%, y%) anchored at their centre, and tweens
 // x/y/scale/opacity from an agent keyframe track (absolute time = fromSec + local frame). With no
-// keyframes it does a gentle entrance (when defaultEntrance). Captions/kickers can adopt this too.
+// keyframes it does a gentle entrance (when defaultEntrance).
 export const AnimatedElement: React.FC<{
   x: number;
   y: number;
@@ -273,8 +248,7 @@ export const AnimatedElement: React.FC<{
 };
 
 // Tween wrapper for elements that already position themselves (captions, kickers). Keyframes offset
-// (x/y as % of frame), scale, and fade them over absolute time. No keyframes → pass-through (no change,
-// so the default look is preserved exactly).
+// (x/y as % of frame), scale, and fade them over absolute time. No keyframes → pass-through.
 export const TweenOverlay: React.FC<{ keyframes: BgKeyframe[]; children: React.ReactNode }> = ({ keyframes, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -303,8 +277,7 @@ export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number;
 );
 
 // Word-synced caption: the spoken words, revealed + highlighted in time with the VO.
-// Typewriter reveal (pop/bounce) per word at its start; active word highlighted; emphasised
-// words glow. Driven by absolute word timings, so it's frame-deterministic.
+// Driven by absolute word timings, so it's frame-deterministic.
 export const WordCaption: React.FC<{
   words: WordTiming[];
   emphasis?: string[];
@@ -314,9 +287,6 @@ export const WordCaption: React.FC<{
   styleName?: CaptionStyle;
   anim?: CaptionAnimation;
   reveal?: CaptionReveal; // "word" = per-word pop (default); "all" = whole line laid out, highlight tracks the VO
-  // "lower" = the lower-third band (default; app cut-ins + on-camera avatar beats). "center" =
-  // optical-centre hero placement at a larger size — used on faceless talking beats so the text
-  // IS the frame instead of a lone line stranded under an empty top two-thirds.
   placement?: "lower" | "center";
 }> = ({ words, emphasis = [], startSec, t, backplate, styleName = "stroke", anim, reveal = "word", placement = "lower" }) => {
   const frame = useCurrentFrame();
@@ -425,6 +395,7 @@ export const Kicker: React.FC<{ text: string; color: string; fg: string; t: Them
 
 export const AppCutaway: React.FC<{
   asset: string;
+  mediaKey: string; // pre-extracted frame set for a video asset (see ./media)
   dur: number;
   t: Theme;
   shot?: Shot;
@@ -435,14 +406,11 @@ export const AppCutaway: React.FC<{
   speed?: number;
   pauseAt?: number;
   frame?: AppFrame;
-  // Camera push/pan on the whole footage+chrome group (not the inner image). Beat-relative keyframe
-  // track — `at` is seconds from THIS beat's start (like captionKeyframes/kickerKeyframes), so the move
-  // rides the beat when VO timing shifts; no absolute video times to re-sync. The inner `shot` is
-  // disabled for framed beats, so this is the way to move the camera on inset device footage; captions,
-  // background and logo stay put (separate layers).
+  // Camera push/pan on the whole footage+chrome group. Beat-relative keyframe track.
   zoomKeyframes?: BgKeyframe[];
 }> = ({
   asset,
+  mediaKey,
   dur,
   t,
   shot = "static",
@@ -465,8 +433,7 @@ export const AppCutaway: React.FC<{
 
   // --- transition (outer layer), CapCut-style: spring "fly in" + settle, eased fade-out exit ---
   // ein = entrance spring over ~18 frames (damping 14 / stiffness 130 / mass 0.6 → fast settle with a
-  // small overshoot). eout = exit ramp 0→1 over the last 12 frames, cubic-eased. Every animated exit
-  // fades opacity out — motion without a fade snaps to the background and reads as a glitch.
+  // small overshoot). eout = exit ramp 0→1 over the last 12 frames, cubic-eased.
   const { fps } = useVideoConfig();
   const ein = spring({ frame: f, fps, config: { damping: 14, stiffness: 130, mass: 0.6 }, durationInFrames: 18 });
   const eIO = Math.min(1, ein); // clamped (no overshoot) for opacity/scale
@@ -506,10 +473,7 @@ export const AppCutaway: React.FC<{
   }
   // "cut": no entrance/exit animation
 
-  // --- canvas zoom (footage+chrome group) --- beat-relative keyframe track (`at` = seconds from this
-  // beat's start, resolved off the local frame exactly like TweenOverlay does for captions/kickers), so
-  // it rides the beat when VO timing shifts. Scales/pans the whole phone unit about its centre; captions,
-  // kicker, logo and the ground are separate layers, so they stay anchored. Identity when absent.
+  // --- canvas zoom (footage+chrome group) --- beat-relative keyframe track, identity when absent.
   const zoom = zoomKeyframes?.length
     ? paramsAt({ x: 0, y: 0, scale: 1, opacity: 1 }, zoomKeyframes, f / fps)
     : null;
@@ -518,9 +482,8 @@ export const AppCutaway: React.FC<{
     : {};
 
   const isVideo = asset.toLowerCase().endsWith(".mp4") || asset.toLowerCase().endsWith(".mov");
-  // clipTo → freeze hold (not Remotion trimAfter — that Sequence ends in source frames and
-  // drops the video under slow-mo / long VO). See appTrimFrames.
-  const { trimBefore } = appTrimFrames(fps, clipFrom, clipTo);
+  // clipTo → freeze hold; the pre-extracted frame set stops at the freeze point and the Freeze
+  // wrapper pins the clock there for the rest of the beat (see appFreezeFrame).
   const freezeAt = isVideo
     ? appFreezeFrame({ localFrame: f, fps, pauseAt, clipFrom, clipTo, speed })
     : null;
@@ -539,14 +502,7 @@ export const AppCutaway: React.FC<{
 
   const media = isVideo ? (
     <Freeze frame={freezeAt ?? 0} active={freezeAt != null}>
-      <OffthreadVideo
-        src={staticFile(asset)}
-        muted
-        volume={0}
-        trimBefore={trimBefore || undefined}
-        playbackRate={speed}
-        style={mediaStyle}
-      />
+      <FrameVideo mediaKey={mediaKey} style={mediaStyle} />
     </Freeze>
   ) : (
     <Img src={staticFile(asset)} style={mediaStyle} />
@@ -590,20 +546,9 @@ export const AppCutaway: React.FC<{
   );
 };
 
-// Cinematic finishing pass — the single layer that unifies footage, backgrounds and the avatar into
-// one graded "film" instead of flat composited layers. Two deterministic effects, both adaptive to
-// the base luminance so a light paper brand reads as printed stock and a dark neon brand reads as
-// film — neither ever glows (kino brand rule):
-//   • vignette  — a soft edge falloff that adds depth and pulls the eye to centre.
-//   • grain     — a single fixed-seed fractal-noise tile TRANSLATED on an 8-frame cycle, so it
-//                 shimmers like real emulsion without strobing. Crucially the (expensive) noise
-//                 rasterises ONCE — only a cheap transform changes per frame — so full video encodes
-//                 stay fast, and it's frame-deterministic (offset is a pure fn of frame → cache-safe,
-//                 identical across Remotion's parallel workers). Painted at half res for coarser,
-//                 more filmic grain at ~4x less cost.
-// Mounted ABOVE the photographic layers (backdrop/avatar/app) but BELOW the motion-graphic beats,
-// captions, logo and disclosure. Motion graphics own their finish via the opt-in .kino-grain /
-// .kino-vignette utilities (motiongraphic.ts), so this global pass must not impose grain on them.
+// Cinematic finishing pass — vignette + fixed-seed grain, deterministic per frame. Mounted ABOVE the
+// photographic layers (backdrop/avatar/app) but BELOW the motion-graphic beats, captions, logo and
+// disclosure. Motion graphics own their finish via the opt-in .kino-grain / .kino-vignette utilities.
 export const FilmFinish: React.FC<{ t: Theme }> = ({ t }) => {
   const f = useCurrentFrame();
   // Intensity from the spec (`film`, default 1); scales vignette + grain together.

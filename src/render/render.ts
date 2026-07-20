@@ -4,6 +4,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { mkdirSync, rmSync } from "node:fs";
 import type { KinoProps } from "./props.js";
+import { renderStillsNative, renderVideoNative } from "./native/engine.js";
+
+// Engine switch while the native engine soaks: KINO_ENGINE=native renders through the in-house
+// headless-Chrome frame stepper (render/native); anything else uses the legacy Remotion path.
+const useNative = () => process.env.KINO_ENGINE === "native";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Source .tsx entry (excluded from tsc build; bundled by esbuild at render time).
@@ -60,6 +65,7 @@ export interface StillsOpts {
 
 // Render individual PNG stills (one bundle, many frames) — fast preview, no video encode.
 export async function renderStills({ props, publicDir, format, frames, outDir }: StillsOpts): Promise<string[]> {
+  if (useNative()) return renderStillsNative({ props, publicDir, format, frames, outDir });
   mkdirSync(outDir, { recursive: true });
   const serveUrl = await bundle({ entryPoint: ENTRY, publicDir, webpackOverride: tsResolve });
   try {
@@ -86,6 +92,7 @@ export async function renderStills({ props, publicDir, format, frames, outDir }:
 }
 
 export async function renderVideo({ props, publicDir, formats, outDir, title }: RenderOpts): Promise<string[]> {
+  if (useNative()) return renderVideoNative({ props, publicDir, formats, outDir, title });
   mkdirSync(outDir, { recursive: true });
   const serveUrl = await bundle({ entryPoint: ENTRY, publicDir, webpackOverride: tsResolve });
   try {
