@@ -26,7 +26,9 @@ const MIME: Record<string, string> = {
   ".mov": "video/quicktime",
 };
 
-const INDEX_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>kino</title></head><body><div id="root"></div><script src="/page.js"></script></body></html>`;
+// border-box globally: a padded AbsoluteFill (width:100% + padding) must not overflow its frame —
+// the legacy composition environment sizes this way, and caption wrapping depends on it.
+const INDEX_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>kino</title><style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0}</style></head><body><div id="root"></div><script src="/page.js"></script></body></html>`;
 
 export interface RenderServer {
   url: string;
