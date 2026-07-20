@@ -41,13 +41,14 @@ describe("resolveAudioSource", () => {
     expect(MUSIC_LIB_DIR.endsWith(join("assets-lib", "music"))).toBe(true);
   });
 
-  it("resolves shipped sfx and music bare ids from the library", () => {
+  it("resolves shipped music bare ids from the library", () => {
     const p = fakeProject(mkdtempSync(join(tmpdir(), "kino-sfxr-")));
-    expect(listSfxIds()).toContain("pop");
-    expect(listSfxIds()).not.toContain("whoosh");
     expect(listMusicIds()).toContain("ambient-night");
-    expect(resolveAudioSource("pop", p)).toBe(join(SFX_LIB_DIR, "pop.mp3"));
     expect(resolveAudioSource("ambient-night", p)).toBe(join(MUSIC_LIB_DIR, "ambient-night.mp3"));
+  });
+
+  it("ships an empty sfx library", () => {
+    expect(listSfxIds()).toEqual([]);
   });
 });
 

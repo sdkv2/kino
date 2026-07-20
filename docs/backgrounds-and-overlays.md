@@ -55,9 +55,8 @@ Tween params over time with `backgroundKeyframes` and fire one-shot `backgroundT
 
 ## Custom backgrounds
 
-**Prefer `custom` over stock `mesh`/`aurora` when the brand should feel authored.** Mesh is a fine
-draft preset and an easy “AI ad” tell. Custom draw fns use the same `backgroundKeyframes` /
-`backgroundTriggers` surface as presets.
+**Prefer `custom` over stock `mesh`/`aurora` when the brand should feel authored** — custom draw fns
+use the same `backgroundKeyframes` / `backgroundTriggers` surface as presets.
 
 1. Set `"background": "custom"`.
 2. Point `backgroundComponent` at a draw fn — **spec overrides brand**:

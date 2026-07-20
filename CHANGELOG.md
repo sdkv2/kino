@@ -4,6 +4,9 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## Unreleased
+- **Removed bundled SFX**: `assets-lib/sfx/` now ships empty (`pop`/`ding`/`click`/`impact`/`riser`
+  dropped). SFX is still a spec feature — reference a project asset path (`sfx/<name>.mp3`) or
+  drop your own CC0 clip into `assets-lib/sfx/` to use a bare id. Music beds are unaffected.
 - **Motion bare ids**: `"source": "prompt-type"` resolves from `assets-lib/motion/` (like SFX).
 - **`kino retune`**: rewrite motion/`backgroundTriggers` `at` times from real VO word timings.
 - **`seamlessLoop`**: spec flag + validate guidance + post-build first/last-frame seam warn.

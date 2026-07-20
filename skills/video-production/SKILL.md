@@ -536,15 +536,18 @@ kino music "soft ambient pad loop"      # Freesound CC0 search (needs FREESOUND_
 kino music "soft ambient pad loop" --get 2 --project <name>
 # in the spec (short-form: quiet bed, hard duck — VO wins on TikTok/Reels/Shorts):
 "music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }
-# SFX optional — omit by default. Soft pop/click only when a beat earns it (not every cut):
-# "sfx": [ { "src": "pop", "at": 10.1, "volume": 0.25 } ]
+# SFX optional — omit by default, and assets-lib/sfx/ ships empty (add your own CC0 clip first).
+# Soft pop/click only when a beat earns it (not every cut), referenced by project asset path:
+# "sfx": [ { "src": "sfx/click.mp3", "at": 10.1, "volume": 0.25 } ]
 ```
 
-- Bare ids resolve from `assets-lib/music/` / `assets-lib/sfx/` (`kino music`, `kino doctor`).
+- Music bare ids resolve from `assets-lib/music/` (`kino music`, `kino doctor`); SFX has no
+  bundled library — reference a project asset path (`sfx/<name>.mp3`) or drop your own CC0 clip
+  into `assets-lib/sfx/` to use a bare id.
 - Freesound search is **CC0 + 15–90s** by default (fits a 15–30s cut). Catalog skews ambient/SFX —
   good beds, not chart songs. **Platform trending audio is not pullable** (copyright).
 - Short-form taste: sparse bed under VO; **no default cut whoosh** — silent cuts + ducked music
-  are enough. Skip `sfx` unless a reveal/CTA earns a soft `pop`/`click`. Avoid loud drums fighting captions.
+  are enough. Skip `sfx` unless a reveal/CTA earns a soft pop/click. Avoid loud drums fighting captions.
 - **Place SFX after the real VO exists** (when used): `kino build` → `kino inspect --real` and/or
   `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not shipping.
 
