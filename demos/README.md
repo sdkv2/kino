@@ -1,43 +1,20 @@
 # kino demos
 
-Shippable mock-brand trailers for showcasing kino. Each demo is a full brand + project
-under this workspace (`brands/` + `projects/`), separate from local scratch under the
-repo-root `brands/` / `projects/` (those stay gitignored).
+The GIFs here are the showcase embedded in the root [README](../README.md) — each a real,
+deterministic `kino build` of a **fictional** sample brand (trimmed, silent previews; the full
+renders are faceless 9:16 MP4s with ElevenLabs voiceover):
 
-## Layout
+| Preview | Demo | What it shows |
+|---|---|---|
+| `kino-meta.gif` | **The self-demo** | kino types its own `advert.json` and builds the ad you're watching |
+| `canned-doom.gif` | **Canned Doom** | all authored motion graphics, word-synced typing — no footage |
+| `lunara.gif` | **Lunara** | stock b-roll + a quiet mood read — the calm end of the range |
 
-```
-demos/
-  brands/<name>/brand.md
-  projects/<name>/{project.json,specs/,assets/,out/}
-```
+## Authoring workspace
 
-kino resolves the workspace from the project path, so `kino build demos/projects/<name>/specs/….json`
-works from the package root.
+`demos/` doubles as a kino workspace for building new demos: `brands/<name>/` + `projects/<name>/`
+resolve from the project path, e.g. `kino build demos/projects/<name>/specs/….json` from the package
+root. Source projects and Pexels assets stay local (gitignored) — commit only the trimmed showcase GIFs.
 
-## Demos
-
-| Brand | What | Spec | MP4 |
-|---|---|---|---|
-| **hold** | Indoor climbing beta — film, tap holds, share sequence | `projects/hold/specs/trailer.json` | `out/hold-trailer/hold-trailer-9x16.mp4` |
-| **crate** | Vinyl dig companion — sleeve ID + dig log | `projects/crate/specs/trailer.json` | `out/crate-trailer/crate-trailer-9x16.mp4` |
-| **swell** | Surf spot go/wait + tide windows | `projects/swell/specs/trailer.json` | `out/swell-trailer/swell-trailer-9x16.mp4` |
-
-## Build a demo
-
-```bash
-cd /path/to/kino          # package root
-npx tsx src/cli.ts doctor
-npx tsx src/cli.ts build demos/projects/hold/specs/trailer.json
-# → demos/projects/hold/out/hold-trailer/hold-trailer-9x16.mp4
-```
-
-Pexels clips are large — not always committed. If `assets/pexels/` is missing, re-pull with
-`kino pexels "…" --get N --project <name>` from a shell whose cwd is `demos/` (or pass paths
-under `demos/projects/<name>/`).
-
-## Authoring bar
-
-Follow `skills/video-production` + `ad-voice` + `adversarial-critique`:
-cold-open footage first, media ≈ half runtime, ducked music, no default cut whooshes,
-ElevenLabs `eleven_v3` default, storyboard → adversarial still QA → real build.
+Authoring bar: follow `skills/video-production` + `ad-voice` + `adversarial-critique` — cold-open footage
+first, media ≈ half runtime, ducked music, storyboard → adversarial still QA → real build.
