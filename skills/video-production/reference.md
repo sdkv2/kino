@@ -143,7 +143,7 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   CSS family string (back-compat). A registry name is **downloaded on demand** (Google Fonts → real TTF,
   cached globally in `~/.kino/fonts/`) and loaded into the render via `FontFace`; offline → system fallback.
 - `brand.labelFont` (registry name) sets the storyboard/montage label font (defaults to the caption
-  font) **and** is staged as a second Remotion typeface motion beats can reach via `--kino-label-font`
+  font) **and** is staged as a second render-page typeface motion beats can reach via `--kino-label-font`
   (falls back to `--kino-font` when unset) — use it for a mono/label face that shouldn't inherit the
   caption font's display weight (e.g. a boarding-pass-style chip inside a `kind:"motion"` beat).
 
@@ -237,5 +237,5 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - "needs a portrait image" → set `brand.avatarImage` (or `spec.avatarLook`) for hedra/replicate.
 - HeyGen timeout/credits → check `heygen` auth + remaining quota; each gen costs credits.
 - App segments silent → the VO track must stage to `_public/vo.mp3` (build does this); avatars are muted.
-- No captions/text issues → Remotion renders all text; the local minimal ffmpeg is never used for text.
+- No captions/text issues → the browser render engine draws all text; the local minimal ffmpeg is never used for text.
 - Re-render is free after a caption edit (VO/avatar are cached by content hash).

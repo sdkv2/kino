@@ -1,5 +1,5 @@
 // Built-in animated background draw functions. Each is a PURE function of `env` (esp. env.frame +
-// env.params + env.pulse) so Remotion captures it deterministically. params are tweened by the agent's
+// env.params + env.pulse) so the frame-stepping render captures it deterministically. params are tweened by the agent's
 // keyframes (see render/bgparams); pulse is a 0..1 envelope fired by triggers. Custom backgrounds get
 // the same env. PRESET_SCHEMAS documents the controllable params/actions (surfaced by `kino backgrounds`).
 

@@ -16,7 +16,7 @@ const greenOf = (s: string) => {
 };
 const fade = JSON.parse(readFileSync(join(__dirname, "../examples/motion-lottie/fade.json"), "utf8"));
 
-// Beat: 0..3s = 90 frames @30fps. Asset is 120 native frames (@60fps). @remotion/lottie maps comp frame
+// Beat: 0..3s = 90 frames @30fps. Asset is 120 native frames (@60fps). the Lottie player maps comp frame
 // → lottie frame index × playbackRate, so lottiePlaybackRate = 120/90 = 4/3: the fade plays once
 // stretched across the whole beat → center green is ~linear in beat progress (mid-beat ≈ 127).
 const mkProps = (loop = false): KinoProps => ({

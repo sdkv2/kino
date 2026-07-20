@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { appFreezeFrame, appTrimFrames } from "../src/render/appMedia.js";
 
 describe("appTrimFrames", () => {
-  it("only emits trimBefore — clipTo is freeze-held, not Remotion trimAfter", () => {
-    // Remotion trimAfter Sequence duration ignores playbackRate; passing it drops footage mid-VO.
+  it("only emits trimBefore — clipTo is freeze-held, not a source-frame trimAfter", () => {
+    // A source-frame trimAfter cutoff ignores playbackRate; honoring it would drop footage mid-VO.
     expect(appTrimFrames(30, 2, 5)).toEqual({ trimBefore: 60, trimAfter: undefined });
     expect(appTrimFrames(30, undefined, undefined)).toEqual({ trimBefore: 0, trimAfter: undefined });
   });

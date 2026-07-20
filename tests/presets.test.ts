@@ -4,7 +4,7 @@ import type { DrawEnv } from "../src/render/backgrounds/presets.js";
 import { PRESET_SCHEMAS } from "../src/render/backgroundSchema.js";
 
 // A fake 2D context that records every call/assignment as a string, so we can assert a draw
-// is a pure function of its env (determinism is required for frame-by-frame Remotion capture).
+// is a pure function of its env (determinism is required for frame-by-frame capture).
 function recordCtx() {
   const log: string[] = [];
   const num = (x: unknown) => (typeof x === "number" ? Math.round(x * 100) / 100 : String(x));

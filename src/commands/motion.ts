@@ -127,7 +127,7 @@ export function motionHelpText(): string {
     "  kino still <spec> --segment N          # layout / opaque Lottie bg",
     "  kino still <spec> --at 0               # ready poster (segment ≠ t=0)",
     "  kino still <spec> --around <t>         # progression sheet — tiles must look different",
-    "  Prefer per-beat harness specs — full Remotion rebuilds are slow.",
+    "  Prefer per-beat harness specs — full video encodes are slow.",
     "  …edit… still --around again…          # every non-trivial change",
     "  After real VO: frames <mp4> --around <t> then retune word-gated schedules",
     "",

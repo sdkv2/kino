@@ -1,6 +1,6 @@
 // CLI entry: registers every command with Commander and version (literal in cli.ts, kept in sync
 // with package.json). Each action uses a lazy `await import("./commands/x.js")` ON PURPOSE — it
-// keeps startup fast (only the invoked command's module + its heavy deps like Remotion load) and
+// keeps startup fast (only the invoked command's module + its heavy deps like the render engine load) and
 // isolates a broken command from crashing the whole CLI. Not a mistake; do not hoist these to
 // top-level imports.
 import { Command } from "commander";

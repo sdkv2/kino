@@ -157,7 +157,7 @@ describe("warnLottie", () => {
 });
 
 describe("lottiePlaybackRate", () => {
-  // @remotion/lottie maps composition frame → lottie frame INDEX × playbackRate (fps-agnostic), so the
+  // the Lottie player maps composition frame → lottie frame INDEX × playbackRate (fps-agnostic), so the
   // stretch is a NATIVE-FRAME ratio (durationInFrames / beatFrames). Pinned by tests/render-lottie.test.ts.
   it("stretches a 120-frame asset across a 90-frame beat → 4/3", () => {
     expect(lottiePlaybackRate(120, 90, false)).toBeCloseTo(4 / 3, 5);

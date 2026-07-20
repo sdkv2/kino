@@ -1,4 +1,4 @@
-// Pure (fs-free, no Remotion) math for the cinematic finishing pass, so it's unit-testable and shared
+// Pure (fs-free, render-free) math for the cinematic finishing pass, so it's unit-testable and shared
 // with the FilmFinish component. Intensity is a 0..1 scalar (spec `film`, default 1) that scales BOTH
 // the edge vignette and the grain — 0 = clean edges (a light "paper" video that doesn't want a
 // darkened border), 1 = the legacy graded look. The light/dark base still adapts to `night`.

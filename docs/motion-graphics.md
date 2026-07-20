@@ -1,6 +1,6 @@
 # Motion graphics
 
-Motion graphics let an agent author a **self-contained HTML/CSS file** whose animation is driven entirely by **kino-set CSS custom properties**. kino renders it deterministically in headless Chromium (via Remotion), mounted in a sandboxed Shadow DOM. The JSON spec owns the clock; your HTML is a stateless canvas that reads variables and paints the current frame.
+Motion graphics let an agent author a **self-contained HTML/CSS file** whose animation is driven entirely by **kino-set CSS custom properties**. kino renders it deterministically in headless Chromium, mounted in a sandboxed Shadow DOM. The JSON spec owns the clock; your HTML is a stateless canvas that reads variables and paints the current frame.
 
 Run `kino motion` for the same contract inline.
 
@@ -20,7 +20,7 @@ Run `kino motion` for the same contract inline.
 
 ## Why it's shaped this way
 
-Remotion renders by seeking to frame *N* and screenshotting. There is no real timeline running — so anything that animates on the **wall clock** (raw CSS `transition`, unscrubbed `@keyframes`, `requestAnimationFrame`, `Date.now()`) renders to a frozen or non-deterministic frame. kino's contract makes motion a pure function of frame state:
+kino renders by seeking to frame *N* and screenshotting. There is no real timeline running — so anything that animates on the **wall clock** (raw CSS `transition`, unscrubbed `@keyframes`, `requestAnimationFrame`, `Date.now()`) renders to a frozen or non-deterministic frame. kino's contract makes motion a pure function of frame state:
 
 - **JSON owns the clock** — `params`, `keyframes`, and `triggers` in the spec.
 - **HTML is a stateless canvas** — one markup file + one inline `<style>`, reading the variables kino sets every frame.
@@ -311,7 +311,7 @@ Reference it from the spec exactly like a `.html` graphic.
 
 ## Embedded Lottie (Tier 3)
 
-When a graphic needs organic illustrated motion, complex vector morphs, or designer-crafted logo reveals that come out of After Effects — things no agent can author from scratch — point `source` at a **`.json`** Bodymovin/LottieFiles file instead of a `.html` or `.js` file. kino plays it deterministically via `@remotion/lottie` (which drives the animation off `useCurrentFrame()`, the same frame-seek discipline as the rest of the pipeline).
+When a graphic needs organic illustrated motion, complex vector morphs, or designer-crafted logo reveals that come out of After Effects — things no agent can author from scratch — point `source` at a **`.json`** Bodymovin/LottieFiles file instead of a `.html` or `.js` file. kino plays it deterministically with a frame-seeked Lottie player (`goToAndStop` per frame — the same frame-seek discipline as the rest of the pipeline).
 
 ```json
 { "kind": "motion", "source": "motion/confetti.json", "text": "We just shipped it." }
@@ -348,7 +348,7 @@ The build **rejects** assets that violate kino's determinism/safety contract:
 - **No After Effects expressions** — AE expressions (`x` fields holding JS source strings) evaluate JavaScript at render time. They're rejected as both non-deterministic and an eval surface. Re-export with expressions baked or removed.
 - **Transparent background for overlays** — when used as a `motionOverlay`, the Lottie renders above the avatar/app video. An opaque full-frame solid (a common AE export default) completely occludes the presenter or screenshot. Export with a transparent background, or use the Lottie as a full-screen `kind:"motion"` beat instead.
 - **Keep focal content clear of the lower-third caption band** — kino can't reflow a brought-in Lottie; captions win on z-order and sit on top, but the animation's content can sit behind them. Use `--kino-caption-bottom` guidance only for HTML/CSS Tier-1 graphics; for Lottie, design the asset with caption-safe framing.
-- **3 MB cap** — the serialized JSON ships inline in Remotion's inputProps. Simplify or split animations that exceed the limit.
+- **3 MB cap** — the serialized JSON ships inline in the render-page config. Simplify or split animations that exceed the limit.
 
 > `.lottie` (dotLottie binary) support and brand color-token recoloring are documented follow-ons and are not yet implemented.
 
@@ -414,7 +414,7 @@ The build **rejects** a graphic that contains any of the following (each error t
   typewriter grain, Lottie phase, and camera push. `--segment N` ≠ t=0 — use `--at 0` for ready
   posters. After every non-trivial edit: `kino still <spec> --segment N` (layout) then
   `kino still <spec> --around <t>` (progression; tune `--span` / `--count`). Prefer **per-beat harness
-  specs** so you aren't waiting on a full Remotion encode. **Read the sheet**. After real VO:
+  specs** so you aren't waiting on a full video encode. **Read the sheet**. After real VO:
   `kino frames <mp4> --around <t>` and retune. Typed UI: `skills/speech-synced-ui`.
 - **Seamless loops:** paint a **static** full-bleed `.bg` in every motion graphic (brand `mesh`/`aurora`
   drift on the global frame and break first≡last). Gate encoded seams with PSNR/RMSE, not raw AE.

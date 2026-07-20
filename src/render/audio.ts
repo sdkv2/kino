@@ -1,4 +1,4 @@
-// Music-bed volume curve, evaluated per frame by the Remotion <Audio> volume callback.
+// Music-bed volume curve, applied per-sample by the native audio mix (render/native/audioMix).
 // Ducks to `duck` while any VO span is active with 0.3s linear ramps, holds `volume`
 // otherwise, and fades linearly to 0 over the final `fadeOutSec`. Pure — lives in
 // compiled-land (like props.ts) so both the CLI and the bundled .tsx can import it.

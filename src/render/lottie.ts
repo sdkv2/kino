@@ -1,10 +1,10 @@
 // Tier-3 Lottie support: parse + validate + lint + playback math for embedded Bodymovin (.json)
 // animations. fs-free and pure (deterministic) so it runs node-side (resolveMotionGraphic) AND in the
-// Remotion bundle (MotionGraphic.tsx).
+// render-page bundle (MotionGraphic.tsx).
 
 export type LottieData = Record<string, unknown>;
 
-export const LOTTIE_MAX_BYTES = 3 * 1024 * 1024; // 3 MB; the JSON ships inline in Remotion inputProps
+export const LOTTIE_MAX_BYTES = 3 * 1024 * 1024; // 3 MB; the JSON ships inline in the render-page config
 
 // Parse a Lottie JSON string and validate it is a Bodymovin doc with a determinable duration.
 // Throws friendly errors (caught by resolveMotionGraphic and surfaced to the agent).
@@ -144,7 +144,7 @@ export function warnLottie(data: LottieData): string[] {
 }
 
 // playbackRate to stretch a Lottie's full animation across the beat exactly once.
-// @remotion/lottie advances by mapping the composition frame to a lottie frame INDEX scaled only by
+// The player advances by mapping the composition frame to a lottie frame INDEX scaled only by
 // playbackRate — it does NOT reconcile the asset's native fps against the composition fps. So to span
 // `beatFrames` composition frames with an asset of `durationInFrames` NATIVE frames, the rate is a
 // frame-index ratio: durationInFrames / beatFrames (NOT a seconds ratio — the fps difference is

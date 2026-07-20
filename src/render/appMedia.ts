@@ -1,5 +1,5 @@
 // Pure helpers for app cut-in source footage: clip windows, speed, and freeze points.
-// Used by AppCutaway (Remotion) and unit-tested without a render.
+// Used by AppCutaway (render page) and the frame extractor, and unit-tested without a render.
 
 /** Composition frame at which to freeze the media timeline, or null if still playing. */
 export function appFreezeFrame(opts: {
@@ -27,9 +27,9 @@ export function appFreezeFrame(opts: {
 }
 
 /**
- * Remotion `<OffthreadVideo trimAfter>` wraps a Sequence whose `durationInFrames` is the
- * source `trimAfter` index — it does **not** stretch for `playbackRate`. Slow-mo (`speed<1`)
- * or a VO longer than the window then unmounts the video early (empty inset / black hole).
+ * A source-frame `trimAfter` cutoff would end the clip in SOURCE frames — it does **not**
+ * stretch for `playbackRate`. Slow-mo (`speed<1`) or a VO longer than the window would then
+ * unmount the video early (empty inset / black hole).
  *
  * So we only apply `trimBefore` (start offset). `clipTo` / `pauseAt` are enforced by
  * `appFreezeFrame` holding the last good composition frame for the rest of the beat.

@@ -11,8 +11,15 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "declaration": false,
-    "lib": ["ES2022", "DOM"]
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
   },
-  "include": ["src/**/*"],
-  "exclude": ["src/render/remotion/**/*", "src/render/native/page/**/*"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "src/render/native/page/**/*"
+  ]
 }

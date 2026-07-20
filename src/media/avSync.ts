@@ -1,4 +1,4 @@
-// After Remotion encode, AAC often pads a few dozen ms past the last video frame.
+// After the video encode, AAC often pads a few dozen ms past the last video frame.
 // Players then paint black (or an empty canvas) while the leftover audio plays — fatal for
 // seamless-loop ads. Hold the last video frame to cover the overhang.
 import { renameSync, unlinkSync } from "node:fs";
