@@ -310,7 +310,7 @@ Context: `src/render/motionVars.ts` is the source of truth for which CSS variabl
 
   ## Quickstart
   ```bash
-  cd <project> && kino init evidentcv     # scaffold .env, brand.md, dirs
+  cd <project> && kino init acme     # scaffold .env, brand.md, dirs
   kino doctor                             # preflight: keys, ffmpeg, fonts
   kino build specs/lie-test.json --mock   # free structural preview (no API spend)
   kino build specs/lie-test.json          # real render → out/lie-test/

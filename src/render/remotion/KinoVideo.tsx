@@ -61,6 +61,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               duckSpans: music.duckSpans,
               volume: music.volume,
               duck: music.duck,
+              fadeInSec: music.fadeInSec,
               fadeOutSec: music.fadeOutSec,
               endSec: segments.length ? Math.max(...segments.map((x) => x.endSec)) : 0,
             })

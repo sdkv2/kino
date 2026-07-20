@@ -60,6 +60,16 @@ export function resolveVoiceLook(spec: Spec, brand: Brand): { voiceId: string; l
   return { voiceId, lookId };
 }
 
+/** spec.voiceModel, else brand.voiceModel, else "eleven_v3". */
+export function resolveVoiceModel(spec: Spec, brand: Brand): string {
+  return spec.voiceModel ?? brand.voiceModel ?? "eleven_v3";
+}
+
+/** spec.film, else brand.film, else undefined (the renderer treats undefined as 1 — full finish). */
+export function resolveFilm(spec: Spec, brand: Brand): number | undefined {
+  return spec.film ?? brand.film;
+}
+
 export function assertAssetsExist(spec: Spec, project: Project): void {
   for (const [i, seg] of spec.segments.entries()) {
     if (seg.kind !== "app") continue;

@@ -49,7 +49,7 @@ kino doctor      # checks deps (ffmpeg/ffprobe, heygen CLI) + which API keys are
 ## Scaffold a project
 
 ```bash
-kino init evidentcv        # scaffold .env, a brand.md, and projects/evidentcv/
+kino init acme        # scaffold .env, a brand.md, and projects/acme/
 ```
 
 Every build runs inside a **project**:
@@ -99,5 +99,5 @@ Renders land at `out/<title>/<title>[-<tag>]-<format>.mp4` (e.g. `out/lie-test/l
 - **[Spec reference](spec-reference.md)** — the full JSON spec, `brand.md`, and `project.json`.
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
 - **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers.
-- Agent skills (canonical): [`skills/`](../skills/). `kino skills --install` (also `kino init`) fans out to `.agents` / `.cursor` / `.claude` / `.codex` skill dirs.
+- Agent skills (canonical): [`skills/`](../skills/). `kino skills --install` (also `kino init`) creates local (gitignored) symlinks under `.agents` / `.cursor` / `.claude` / `.codex`.
 - Playbooks: `video-production`, `ad-voice`, `adversarial-critique`. Also: `npx skills add sdkv2/kino`.

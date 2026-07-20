@@ -8,17 +8,17 @@
   "music": { "src": "ambient-night", "volume": 0.12, "duck": 0.04, "fadeInSec": 0.8, "fadeOutSec": 1.5 },
   "segments": [
     { "kind": "motion", "source": "motion/prompt-window.js",
-      "text": "Kino, make me an advert.", "transition": "cut" },
+      "text": "Kino, make me an advert." },
     { "kind": "motion", "source": "motion/thinking-window.js",
-      "text": "There's no magic here.", "transition": "cut" },
+      "text": "There's no magic here." },
     { "kind": "motion", "source": "motion/spec-editor.js",
-      "text": "Your agent writes a spec —", "transition": "dissolve" },
+      "text": "Your agent writes a spec —" },
     { "kind": "motion", "source": "motion/build-terminal.js",
-      "text": "— one command builds it. Voiceover, motion, render.", "transition": "dissolve",
+      "text": "— one command builds it. Voiceover, motion, render.",
       "triggers": [ { "at": 1.8, "action": "pulse" }, { "at": 2.682, "action": "pulse" }, { "at": 3.495, "action": "pulse" } ] },
     { "kind": "motion", "source": "motion/range-tiles.js",
-      "text": "Captions, motion, footage. All of it.", "transition": "dissolve" },
+      "text": "Captions, motion, footage. All of it." },
     { "kind": "motion", "source": "motion/close-window.js",
-      "text": "Kino. Tell your agent to make it. Kino, make me an advert.", "transition": "dissolve" }
+      "text": "Kino. Tell your agent to make it. Kino, make me an advert." }
   ]
 }

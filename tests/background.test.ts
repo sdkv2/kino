@@ -6,16 +6,16 @@ import type { Spec } from "../src/spec/schema.js";
 const palette = { night: "#000", mint: "#1", green: "#2", gold: "#3", white: "#fff" };
 
 describe("resolveBackgroundKind", () => {
-  it("defaults to glow when nothing is set and there is no image", () => {
+  it("defaults to glow when nothing is set", () => {
     expect(resolveBackgroundKind({} as unknown as Brand, {} as unknown as Spec)).toBe("glow");
   });
-  it("defaults to image when the brand has a facelessBackdrop (back-compat)", () => {
-    expect(resolveBackgroundKind({ facelessBackdrop: "bg.png" } as unknown as Brand, {} as unknown as Spec)).toBe("image");
+  it("does not infer image from facelessBackdrop alone — set background explicitly", () => {
+    expect(resolveBackgroundKind({ facelessBackdrop: "bg.png" } as unknown as Brand, {} as unknown as Spec)).toBe("glow");
   });
-  it("brand.background overrides the image default", () => {
+  it("honours brand.background", () => {
     expect(
-      resolveBackgroundKind({ facelessBackdrop: "bg.png", background: "mesh" } as unknown as Brand, {} as unknown as Spec),
-    ).toBe("mesh");
+      resolveBackgroundKind({ facelessBackdrop: "bg.png", background: "image" } as unknown as Brand, {} as unknown as Spec),
+    ).toBe("image");
   });
   it("spec.background wins over the brand", () => {
     expect(

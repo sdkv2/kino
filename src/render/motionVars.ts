@@ -32,8 +32,8 @@ export function wordsShownAt(words: WordTiming[] | undefined, t: number): number
 // Build the CSS custom properties set on a motion-graphic host every frame. The agent's shadow-scoped
 // CSS reads these (they inherit across the shadow boundary): the frame-driven vars, every resolved
 // spec param as --<key>, and the brand palette. Pure so it's unit-testable.
-//   NOTE: --kino-gold (and the legacy --gold alias the shipped motion-flex examples use) MUST be here —
-//   omitting gold silently renders any gold-referencing declaration invalid (invisible, no error).
+//   NOTE: --kino-gold MUST be here — omitting gold silently renders any gold-referencing declaration
+//   invalid (invisible, no error).
 export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string, string> {
   const vars: Record<string, string> = {
     "--frame": String(dyn.frame),
@@ -45,7 +45,6 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     "--kino-white": t.white,
     "--kino-mint": t.mint,
     "--kino-gold": t.gold,
-    "--gold": t.gold, // legacy alias used by examples/motion-flex/*.html
     "--kino-font": t.font,
     // Second typeface for label/mono-style text inside a motion beat, distinct from the caption
     // font — falls back to --kino-font so it's never invalid when the brand sets no labelFont.

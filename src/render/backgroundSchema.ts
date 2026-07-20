@@ -28,4 +28,5 @@ export const PRESET_SCHEMAS: Record<string, PresetSchema> = {
   aurora: { params: COMMON, actions: ["pulse"] },
   particles: { params: COMMON, actions: ["pulse"] },
   grid: { params: COMMON, actions: ["pulse"] },
+  solid: { params: COMMON, actions: ["pulse"] }, // loop-safe: static night base + glow, ignores frame/pulse motion
 };

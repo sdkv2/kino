@@ -64,7 +64,7 @@ describe("spec sfx/music schema", () => {
 
   it("parses music with defaults", () => {
     const s = SpecSchema.parse({ ...baseSpec, music: { src: "bed/track.mp3" } });
-    expect(s.music).toEqual({ src: "bed/track.mp3", volume: 0.18, duck: 0.06, fadeOutSec: 2 });
+    expect(s.music).toEqual({ src: "bed/track.mp3", volume: 0.12, duck: 0.04, fadeInSec: 0, fadeOutSec: 2 });
   });
 
   it("rejects out-of-range volume and negative at", () => {

@@ -9,11 +9,12 @@ export interface MusicVolumeOpts {
   duckSpans: Array<{ from: number; to: number }>; // VO-active spans (per-segment timings)
   volume: number; // bed level
   duck: number; // level while VO speaks
+  fadeInSec: number; // head fade (avoids a click on loop-audio starts)
   fadeOutSec: number;
   endSec: number; // video end (fade target)
 }
 
-export function musicVolumeAt(sec: number, { duckSpans, volume, duck, fadeOutSec, endSec }: MusicVolumeOpts): number {
+export function musicVolumeAt(sec: number, { duckSpans, volume, duck, fadeInSec, fadeOutSec, endSec }: MusicVolumeOpts): number {
   // Per span, compute the ducked level implied by proximity; overlapping ramps take the minimum
   // (most ducked) so back-to-back spans never pop the bed up in a short gap.
   let level = volume;
@@ -25,6 +26,8 @@ export function musicVolumeAt(sec: number, { duckSpans, volume, duck, fadeOutSec
     else continue;
     level = Math.min(level, l);
   }
+  // Head fade in from silence.
+  if (fadeInSec > 0 && sec < fadeInSec) level *= sec / fadeInSec;
   // Tail fade to silence.
   if (sec >= endSec) return 0;
   if (fadeOutSec > 0 && sec > endSec - fadeOutSec) level *= (endSec - sec) / fadeOutSec;

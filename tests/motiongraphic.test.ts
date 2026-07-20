@@ -98,9 +98,20 @@ describe("lintMotionJs", () => {
     expect(lintMotionJs("/* uses Math.random elsewhere — see docs */\nreturn Math.sin(env.t);")).toEqual([]);
     expect(lintMotionJs("return env.t; // window.location would be banned in code")).toEqual([]);
   });
-  it("still flags banned tokens in real code even when comments are present", () => {
+  it("does not flag banned access patterns inside string / template literals (emitted content)", () => {
+    // Filenames like prompt-window.js contain "window." — string contents don't execute.
+    expect(lintMotionJs('return `<div data-src="prompt-window.js"></div>`;')).toEqual([]);
+    expect(lintMotionJs("const src = 'motion/prompt-window.js'; return src;")).toEqual([]);
+    expect(lintMotionJs('const src = "prompt-window.js"; return src;')).toEqual([]);
+    expect(lintMotionJs("return `file: prompt-window.js`;")).toEqual([]);
+    expect(lintMotionJs('return "see document.createElement in the docs";')).toEqual([]);
+  });
+  it("still flags banned tokens in real code even when comments or strings are present", () => {
     expect(lintMotionJs("// safe comment\nreturn window.location.href;").length).toBeGreaterThan(0);
     expect(lintMotionJs("/* note */ return Math.random();")[0]).toMatch(/Math\.random/);
+    expect(lintMotionJs('const s = "ok"; return window.location;').length).toBeGreaterThan(0);
+    expect(lintMotionJs("return `${window.location}`;").length).toBeGreaterThan(0);
+    expect(lintMotionJs('return window["document"];').length).toBeGreaterThan(0);
   });
   it("still allows ordinary Math.* dotted geometry and user-defined functions", () => {
     expect(lintMotionJs("return Math.sin(env.t) * Math.PI")).toEqual([]);
@@ -261,6 +272,7 @@ describe("kino motion help", () => {
     expect(t).toMatch(/speech-synced-ui/);
     expect(t).toMatch(/--around/); // still/frames progression sheet loop
     expect(t).toMatch(/under-animate|Make it move/i);
+    expect(t).toMatch(/prompt-window\.js.*OK|string\/template contents are blanked/i);
   });
   it("documents the CSS helper kit (reveals, pulse, fade-edges, easing tokens)", () => {
     const t = motionHelpText();

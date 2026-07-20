@@ -48,11 +48,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 describe("resolveWorkspace", () => {
   it("resolves the shared workspace root, cache, and brand dir", () => {
     const ws = mkdtempSync(join(tmpdir(), "kino-ws-only-"));
-    mkdirSync(join(ws, "brands", "evidentcv"), { recursive: true });
+    mkdirSync(join(ws, "brands", "acme"), { recursive: true });
     const w = resolveWorkspace(ws);
     expect(w.workspaceRoot).toBe(ws);
     expect(w.cache).toBe(join(ws, ".kino-cache"));
-    expect(w.brandDir("evidentcv")).toBe(join(ws, "brands", "evidentcv"));
+    expect(w.brandDir("acme")).toBe(join(ws, "brands", "acme"));
   });
 });
 ```
@@ -242,7 +242,7 @@ describe("resolveProject", () => {
     expect(p.projectRoot).toBe(join(ws, "projects", "launch"));
     expect(p.assetPath("a.png")).toBe(join(ws, "projects", "launch", "assets", "a.png"));
     expect(p.outDir("t")).toBe(join(ws, "projects", "launch", "out", "t"));
-    expect(p.brandDir("evidentcv")).toBe(join(ws, "brands", "evidentcv"));
+    expect(p.brandDir("acme")).toBe(join(ws, "brands", "acme"));
     expect(p.projectConfigPath).toBe(join(ws, "projects", "launch", "project.json"));
   });
   it("resolves a project by name under projects/", () => {
@@ -375,7 +375,7 @@ git commit -m "feat(config): require a project — remove flat-layout fallback, 
 ```
 
 - [ ] **Step 4: Update `docs/getting-started.md`.**
-  - Line 49 comment: change `# scaffold .env, a brand.md, and project dirs` → `# scaffold .env, a brand.md, and projects/evidentcv/`.
+  - Line 49 comment: change `# scaffold .env, a brand.md, and project dirs` → `# scaffold .env, a brand.md, and projects/acme/`.
   - Replace lines 52-55 (the "two layouts" intro + both bullets):
 ```
 kino supports two layouts:
