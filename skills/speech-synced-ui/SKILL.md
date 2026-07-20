@@ -20,6 +20,16 @@ Contract detail: `docs/motion-graphics.md` → *Typed-in-sync text*. Runtime sur
 `env.words` + `--kino-words-shown` / `--kino-word-count` (injected into every
 `kind:"motion"` beat **and** every `motionOverlay`).
 
+**⚠ Time base — the silent-never-fire trap.** `env.words[i].start/end`, a motion beat's `triggers[].at`,
+and its `keyframes[].at` are all **beat-local seconds** (0 = that beat's own start). But `kino inspect`
+prints **absolute** timeline seconds — so a word shown as `12.5` in inspect is `12.5 − beat.startSec`
+*inside* its beat. Copy an absolute inspect time straight into `triggers[].at` and it fires past the beat
+end → silently never. Use **`kino retune`** (it does the offset for you) or subtract `startSec` yourself.
+`env.words` arrives **already beat-local at runtime** — do *not* subtract `startSec` from it in your JS;
+the offset applies only when you copy an **inspect** number into a spec `.at` field. By contrast,
+spec-level `backgroundTriggers` / `backgroundKeyframes` **are** absolute-timeline — they ride the whole
+video, not a beat.
+
 ## When
 
 - Prompt / chat / terminal / code surface must **look typed**, not captioned
