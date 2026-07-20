@@ -10,7 +10,7 @@ import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
-import { SpecSchema, type Spec } from "../spec/schema.js";
+import { parseSpec, type Spec } from "../spec/schema.js";
 import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
@@ -24,6 +24,7 @@ import { ensureFont } from "../fonts/manager.js";
 import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
 import { stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
+import { resolveBackgroundComponent } from "../media/backgroundLib.js";
 import { renderVideo, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
@@ -31,6 +32,7 @@ import { pickShot, pickTransition, type Shot, type Transition } from "../render/
 import { resolveMotionGraphic } from "../render/motiongraphic.js";
 import { beatRelativeWords } from "../render/motionVars.js";
 import { checkLoopSeam } from "../media/loopSeam.js";
+import { holdLastFrameToMatchAudio } from "../media/avSync.js";
 import { log } from "../log.js";
 
 // Foreground (text) colour for a kicker pill, keyed by the kicker's brand background colour: a
@@ -91,7 +93,7 @@ export async function prepare(
 ): Promise<PrepareResult> {
   const project = resolveProject({ specPath, project: opts.project });
   loadEnv(project.workspaceRoot);
-  const spec = SpecSchema.parse(JSON.parse(readFileSync(specPath, "utf8")));
+  const spec = parseSpec(JSON.parse(readFileSync(specPath, "utf8")));
 
   // A project.json assigns a brand + optional default overrides (layered under spec/CLI).
   const pc = loadProjectConfig(project.projectConfigPath);
@@ -208,9 +210,14 @@ export async function prepare(
     copyFileSync(imgAbs, join(publicDir, "faceless-bg.png"));
     bgImageRel = "faceless-bg.png";
   } else if (bgKind === "custom") {
-    const compAbs = resolveBrandFile(brand.backgroundComponent, project);
-    if (!compAbs) throw new Error('background "custom" needs brand.backgroundComponent (a draw-fn .js file)');
-    bgCustomCode = readFileSync(compAbs, "utf8");
+    const compRef = spec.backgroundComponent ?? brand.backgroundComponent;
+    if (!compRef) {
+      throw new Error(
+        'background "custom" needs backgroundComponent on the spec or brand ' +
+          '(bare id e.g. "brand-wash", or a path). See `kino backgrounds`.',
+      );
+    }
+    bgCustomCode = readFileSync(resolveBackgroundComponent(compRef, project), "utf8");
   }
   const bgColors = resolveBackgroundColors(brand);
   const background = {
@@ -265,7 +272,7 @@ export async function prepare(
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
   let appIdx = 0;
   const renderSegments = spec.segments.map((seg, i) => {
-    const captionMode = (seg.captionMode ?? brand.captionMode ?? "phrase") as "phrase" | "words";
+    const captionMode = (seg.captionMode ?? spec.captionMode ?? brand.captionMode ?? "phrase") as "phrase" | "words";
     const startSec = vo.timings[i].startSec;
     // hold visuals to the next beat's start so nothing blinks off during the inter-beat VO gap
     const endSec = i + 1 < spec.segments.length ? vo.timings[i + 1].startSec : vo.timings[i].endSec;
@@ -367,7 +374,16 @@ export async function build(
   const autoTag = opts.tag ?? opts.background ?? (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined);
   const outName = variantName(spec.title, autoTag);
   const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName });
-  outs.forEach((o) => log.ok(o));
+  for (const o of outs) {
+    // AAC pad past the last video frame → players flash black at EOF (and break seamless loops).
+    try {
+      const pad = await holdLastFrameToMatchAudio(o);
+      if (pad > 0) log.info(`held last frame +${pad.toFixed(3)}s to match audio (no black EOF)`);
+    } catch (e) {
+      log.warn(`av-sync hold failed: ${(e as Error).message}`);
+    }
+    log.ok(o);
+  }
   if (spec.seamlessLoop) {
     for (const o of outs) {
       try {

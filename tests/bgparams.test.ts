@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { paramsAt, pulseAt } from "../src/render/bgparams.js";
+import { paramsAt, pulseAt, applyEase, progressCurves } from "../src/render/bgparams.js";
 
 const base = { intensity: 0.5, colorA: "#000000" };
 
@@ -37,17 +37,39 @@ describe("paramsAt", () => {
       { at: 0, params: { scale: 0 } },
       { at: 1, params: { scale: 1 }, ease: "overshoot" as const },
     ];
-    expect(paramsAt(base, ok, 0.8).scale as number).toBeGreaterThan(1); // overshoots target=1
-    expect(paramsAt(base, ok, 1).scale).toBe(1); // settles exactly at the keyframe
+    expect(paramsAt(base, ok, 0.8).scale as number).toBeGreaterThan(1);
+    expect(paramsAt(base, ok, 1).scale).toBe(1);
+  });
+});
+
+describe("applyEase / progressCurves", () => {
+  it("ease-out cubic lands soft (above linear mid)", () => {
+    expect(applyEase("out", 0.5)).toBeGreaterThan(0.5);
+    expect(applyEase("out", 0)).toBe(0);
+    expect(applyEase("out", 1)).toBe(1);
+  });
+  it("edge is 0 at ends and 1 at mid", () => {
+    const a = progressCurves(0);
+    const b = progressCurves(0.5);
+    const c = progressCurves(1);
+    expect(a.edge).toBeCloseTo(0);
+    expect(b.edge).toBeCloseTo(1);
+    expect(c.edge).toBeCloseTo(0);
+    expect(b.out).toBeCloseTo(applyEase("out", 0.5));
   });
 });
 
 describe("pulseAt", () => {
   const trig = [{ at: 1, action: "pulse" }];
-  it("is 1 at the trigger, decays by half each half-life, 0 before", () => {
-    expect(pulseAt(trig, 1, 0.5)).toBeCloseTo(1);
-    expect(pulseAt(trig, 1.5, 0.5)).toBeCloseTo(0.5);
+  it("attacks to ~1 then decays (legacy halfLife arg still works)", () => {
     expect(pulseAt(trig, 0.5, 0.5)).toBe(0);
+    expect(pulseAt(trig, 1.045, 0.5)).toBeCloseTo(1, 1); // end of default attack @ halfLife 0.5
+    expect(pulseAt(trig, 1.045 + 0.5, 0.5)).toBeCloseTo(0.5, 1);
+  });
+  it("default envelope is punchier than a soft half-life of 0.5s", () => {
+    const soft = pulseAt(trig, 1.3, 0.5);
+    const punch = pulseAt(trig, 1.3); // default decay
+    expect(punch).toBeLessThan(soft);
   });
   it("ignores non-pulse actions and empty lists", () => {
     expect(pulseAt([{ at: 1, action: "flash" }], 1)).toBe(0);

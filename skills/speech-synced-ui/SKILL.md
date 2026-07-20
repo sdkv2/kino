@@ -12,9 +12,9 @@ description: >
 
 # Speech-synced UI (typed surfaces)
 
-Companion to `video-production`. That skill owns the trailer. **This skill owns
-VO-locked typed UI** — when the caption engine is the wrong tool and a motion
-graphic must paint the text instead.
+Companion to `video-production` (trailer) and `motion-design` (look / hierarchy /
+anti-generic). **This skill owns VO-locked typed UI** — when the caption engine is
+the wrong tool and a motion graphic must paint the text instead.
 
 Contract detail: `docs/motion-graphics.md` → *Typed-in-sync text*. Runtime surface:
 `env.words` + `--kino-words-shown` / `--kino-word-count` (injected into every
@@ -42,7 +42,7 @@ Need on-screen spoken text?
    │     ⚠ overlay zoom ≠ frame zoom → they desync
    └─ Chrome + text must move together (push-in while typing)
       └─ ONE kind:motion graphic: draw chrome in CSS/JS + type in field
-         + wrap in a .cam container driven by TIME (env.t / env.progress), never typed count
+         + wrap in a .cam container driven by TIME (env.out / env.edge), never typed count
 ```
 
 ## Caption-free beats
@@ -58,6 +58,10 @@ Need on-screen spoken text?
 a caption render. Words-mode brands still paint synced spoken words unless you
 override the beat to `phrase` + omit caption.
 
+**Same trap for short lower-thirds:** under `words`, the short `caption` field does **not**
+display — the spoken line does. Want `"one command"` over a busy dashboard? Force
+`"captionMode": "phrase"` on that app beat.
+
 Montage reel pattern: consecutive `app` beats, omit caption, `transition: "cut"`,
 short VO nouns per beat (`"The timer."`).
 
@@ -71,6 +75,14 @@ short VO nouns per beat (`"The timer."`).
 
 Word-block reveal (`join` all words with `start <= t`) reads as caption drip, not typing.
 Prefer the burst recipe for spoof terminals / chat inputs.
+
+**⚠ `env.words` are VO *transcript tokens*, not your display string.** In mock they're the spec `text`
+split on whitespace (so `30` stays `30`), but real TTS alignment can transcribe them differently
+(`30`→`thirty`, hyphen splits, dropped punctuation) — and the identical code then types the wrong
+glyphs, invisible until the real build. If the on-screen string can diverge from the spoken words
+(numerals, symbols, hyphenation), drive a **separate DISPLAY array** and advance it off `words[i].start`
+timings; don't paint `w.word` directly. Plain lowercase phrases that match the VO verbatim can paint
+`w.word`.
 
 ### Burst typewriter (Tier-2 sketch)
 
@@ -93,6 +105,11 @@ var caretOn = typing || Math.floor(env.frame / 15) % 2 === 0;
 // …paint out + caret
 ```
 
+**⚠ Tier-2 string concat trap:** in multi-line `return '' + a + b` chains, never start a continuation
+line with a lone `+ expr` after a line that already ended the expression — a leading `+ '<b…'` can
+parse as **unary plus on a string → `NaN`**, so the field shows `pushNaN1">`. Keep one binary `+`
+chain, or build with `out += …` then `return out`.
+
 **Copyable components** (from the kino advert) in `assets-lib/motion/`:
 
 | File | Use |
@@ -112,14 +129,15 @@ Two different systems — don't confuse them:
 | Surface | Camera | Notes |
 |---|---|---|
 | `app` footage (+ `frame` chrome) | `zoomKeyframes` | Scales footage **+ frame** as one group; captions/overlays stay put |
-| Motion graphic (beat or overlay) | CSS `transform` on a `.cam` wrapper | **Drive off TIME** (`env.t` / `env.progress`), never the typed-character count |
+| Motion graphic (beat or overlay) | CSS `transform` on a `.cam` wrapper | **Drive off TIME** (`env.out` / `env.edge` / `env.t`), never the typed-character count |
 
 ### ⚠ The #1 mistake: driving the camera off the typed fraction
 
 `charsTyped / totalChars` (or `--kino-words-shown`) is a **step function** — it jumps
 each keystroke, and keystrokes aren't evenly spaced. A camera position driven by it
-**lurches** once per character → visibly choppy zoom/pan. `env.t` / `env.progress`
-advance smoothly at 30fps; drive the camera off those.
+**lurches** once per character → visibly choppy zoom/pan. Prefer `env.out` / `env.edge`
+(eased progress / seam-safe breath) over linear `env.progress`; never typed-character count.
+Those advance smoothly at 30fps; drive the camera off those.
 
 You cannot literally lock the camera to the caret and stay smooth — the caret is
 discrete and **jumps at the line-wrap** (right edge → far-left of line 2). To "track
@@ -127,40 +145,107 @@ the text," use a continuous time proxy that follows its *general* fill direction
 the caret itself.
 
 ```js
-// inside render(env) — camera is a pure function of TIME, applied inline on .cam
-var pin = Math.min(1, env.t / 0.4);            // quick punch-in over 0.4s…
-var S   = 1 + 0.30 * (1 - (1 - pin) * (1 - pin));  // …easeOut, then HOLD (no per-letter creep)
-var panY = -54 * (env.progress * (2 - env.progress)); // gentle pan, smooth over the whole beat
-var cam = "translateY(" + panY.toFixed(2) + "px) scale(" + S.toFixed(4) + ")";
-// <div class="cam" style="transform:${cam}"> …  (.cam sets transform-origin: 50% 70%)
+// PREFERRED for multi-beat typed reels — peaks mid-beat, native at BOTH ends
+// (env.edge == sin(π·progress) → 0 at start/end → cuts don't zoom-pop; loop seam stays S=1)
+var breath = env.edge;
+var S = 1 + 0.06 * breath;          // keep amp small (0.04–0.08); every-beat 1.2× push feels seasick
+var panY = -1.2 * breath;
+var cam = "translateY(" + panY.toFixed(2) + "vw) scale(" + S.toFixed(4) + ")";
+// <div class="cam" style="transform:${cam}"> …  (.cam sets transform-origin)
 ```
 
-Pure-CSS equivalent when no JS: `transform: scale(calc(1 + 0.3*var(--progress)))` — still
-`--progress`, still smooth. A keyframed `params.cam` track gives eased holds.
+One-shot punch then hold (single hero beat only — **not** every beat in a reel):
 
-### Continuous camera across beats (no "weird zoom-out" pop)
-
-A zoomed terminal beat that hard-cuts to a wide montage beat **pops** (same window, two
-scales). Make consecutive window beats share scale at their boundary:
-
-```
-beat 0 (type)   punch-in → end zoomed on field  (S≈1.30, panY≈-54)
-beat 1 (think)  START at beat-0's exact end framing → PULL BACK to native (S=1.0, panY=0)
-                keep the prompt in the field (don't blank it), dots think in the viewport
-beat 2 (montage) native-scale PNG window → matches beat-1 END exactly → seamless
+```js
+var pin = Math.min(1, env.t / 0.4);
+var S = 1 + 0.12 * (1 - (1 - pin) * (1 - pin)); // local easeOut on pin, then HOLD
+// whole-beat soft push: scale(1 + 0.08 * env.out)
 ```
 
-Because beat 1 ends at **native scale (1.0)**, it equals the PNG-framed montage window;
-0→1 and 1→2 are both continuous. The only intended cut is montage → end card. A smooth
-animated pull-back reads as a deliberate reveal; an instant scale change reads as a bug.
+Pure-CSS: `scale(calc(1 + 0.06 * var(--kino-edge)))` — prefer `--kino-edge` over raw `--progress`.
+
+### ⚠ Don't ease-out zoom on every beat
+
+```
+BAD  beat N ends at S=1.14 + panY=-12vw  →  beat N+1 starts at S=1.0
+     = whip-zoom / dive-cut (kino-meta editor→terminal felt broken this way)
+
+GOOD every beat: S = 1 + amp·sin(π·progress)   // native at edges, soft mid breath
+     settle / loop-ready: hold S=1 (no zoom-out from a prior push)
+```
+
+Hard pans (−10vw+) and roll between cuts read as camera errors, not energy. Prefer UI
+motion (typing, pipeline steps, progress fill) over camera gymnastics.
+
+### Continuous camera across beats (shared framing)
+
+Consecutive window beats must **match scale at the cut**:
+
+```
+beat 0 (type)     breath mid → end native (S=1)
+beat 1 (editor)   start native → breath mid → end native
+beat 2 (terminal) start native → breath mid → end native
+beat 3 (settle)   hold S=1 entire beat (ready poster = beat-0 t=0)
+```
+
+If you *do* punch hard on beat 0, beat 1 must **start at that exact end framing** and
+pull back (or the cut pops). Easier: never leave native at beat edges.
 
 **Overlay trap:** a `motionOverlay` that zooms while the host `app`/`frame` stays static
 → text leaves the chrome. Fix: draw chrome + text as **one** motion beat and transform
 that unit (this is why the window is CSS, not a PNG + overlay).
 
-**First-beat fade trap:** default transitions fade the `app`/frame in, but overlays paint
-at full opacity from frame 0 → typed text floats over blurry ground. Use `"transition":
-"cut"` on that beat (or fade the overlay with the same envelope).
+**First-beat fade trap (app hosts):** default transitions fade the `app`/frame in, but
+overlays paint at full opacity from frame 0. Use `"transition": "cut"` on that beat.
+
+## Motion→motion handoffs (renderer)
+
+Consecutive `kind:"motion"` beats **auto-dissolve** (~15 frames / 0.5s at 30fps):
+
+1. Outgoing graphic **holds** through the VO gap (frozen at `--progress: 1`) — no flash of
+   faceless backdrop between clips.
+2. Incoming graphic **fades in** on top of that hold.
+3. First motion beat does **not** fade in (loop seam / cold open stays opaque).
+4. Last motion beat is **not** extended past VO end.
+
+You do **not** set `"transition"` on motion (schema rejects it — that field is app-only).
+Handoff is automatic when the next segment is also `motion`.
+
+QA the cut: `kino still --at <endA-0.05>,<startB>` — both should show full UI chrome, not
+mesh/glow peeking through. After encode: watch A→B without a backdrop flash.
+
+## Seam-safe animated grounds
+
+Motion must paint its own `.bg` (occludes brand `mesh`/`aurora` drift). For **life** that
+doesn't break `seamlessLoop`:
+
+```js
+var edge = env.edge; // 0 at beat start/end
+// animate grid/orbs/scan/particles with edge * f(t) — invisible or frozen at seam frames
+```
+
+Rest state at `edge=0` must match beat-0 t=0 **and** settle end (same nebulae/grid/HUD).
+
+## VO-locked progress UI
+
+Bars / steppers that count **completed** steps stay at 0% for the whole active step
+(e.g. bar dead during "voiceover"). Drive fill off the **spoken span** instead:
+
+```js
+// continuous across last-N noun starts → end of last word (same sched as step lights)
+var barT0 = sched[0], barT1 = words[nw - 1].end + 0.2;
+var barW = env.t <= barT0 ? 0
+  : env.t >= barT1 ? 100
+  : 100 * (env.t - barT0) / (barT1 - barT0);
+```
+
+Short words ("Voiceover,") make per-quarter 25% chunks look stuck — continuous fill doesn't.
+
+**⚠ A single or *last* motion beat has no post-VO tail** — the beat ends exactly at the last word
+(`endSec == lastWord.end`; confirm with `kino inspect`). The `+ 0.2` pad above and any reveal keyed to
+`lastWord.end + pad` run **off the end** of a final beat, so the bar never reaches 100% and cards keyed
+to the last word never paint. On the last/only beat, land every completion **before** the last word
+ends — key reveals to *earlier* word starts, not to the tail.
 
 ## Spoof AI / chat window recipe
 
@@ -210,8 +295,9 @@ headers and slice glyph tops.
   explicit full-bleed paper/night `div` as the first layer. For **seamless loops**, that layer
   must be **static** (no brand mesh/aurora behind — those drift on the global frame; see
   `video-production` § Seamless loops).
-- `env` has **no `duration` field**. End-of-beat / seam logic → `env.progress` thresholds
-  (`> 0.95`). `progress === 1` is never true (max ≈ `(frames-1)/frames`).
+- End-of-beat / seam logic → `env.progress` / `env.edge` thresholds (`progress > 0.95`).
+  `progress === 1` is never true (max ≈ `(frames-1)/frames`). Prefer progress/edge over
+  `env.duration` so mock vs real VO length stays stable.
 - Short locals collide easily in one-file procs (`st`, `t`, `i`) — don't shadow loop vars when
   adding schedule helpers (silent logic bugs that only show on `--around` sheets).
 - After TS/render changes: rebuild `dist` — CLI runs compiled output.
@@ -229,14 +315,16 @@ Typing alone is one layer. Spoof windows / terminals should still feel alive:
 
 | Layer | Do |
 |---|---|
-| Window entrance | Card scale/fade or `kino-pop` in first ~20% of beat (not hard-cut full opacity unless intentional) |
+| Window entrance | Card scale/fade or `kino-pop` in first ~20% of beat. **First/only beat (cold open / loop seam): scale-only, keep `opacity:1`** — an opacity fade from 0 blanks the `--at 0` poster |
 | Typed text | Burst typewriter + solid caret while keys land, blink when idle |
 | Ornaments | Looping Lottie dots / cursor; send-pulse on last word (`triggers`) |
-| Camera | `.cam` push driven by `--progress` / `env.t` (never typed count) — whole chrome+text as one unit |
+| Camera | Soft mid-beat breath (`sin(π·progress)`), **native at beat edges** — whole chrome+text as one unit |
 | Idle life | After prompt lands: subtle caret blink, soft ambient (dots), not a dead freeze |
+| Beat handoff | Trust renderer motion→motion dissolve; don't invent a second fade in the graphic |
 
 If `--around` only shows text growing and nothing else moves → under-animated. Add entrance +
-ornament + camera before shipping. Match brand energy (calm = soft; punchy = harder pops).
+ornament + light camera breath before shipping. Match brand energy (calm = soft breath;
+punchy = UI pops / pulses, not a 1.25× zoom every cut).
 
 ## Visual loop (mandatory — typed UI + Lottie ornaments)
 
@@ -262,15 +350,15 @@ pixels across time. Use `kino still` / `--around` at **every** stage (mock is fr
      → kino frames <mp4> --around <t> on EVERY speech-locked beat
      → retune KEY_MS / camera / word-gated pipelines from the sheet
      → if a step UI finishes while VO still lists steps → drive steps off env.words
-6. Loop ads: `"seamlessLoop": true` on the spec; prove PNG AE=0 on harness ends,
-   then trust post-build seam warn (or PSNR) on mp4 first/last
+6. Loop ads: `"seamlessLoop": true` + `"film": 0`; prove PNG AE=0 on harness ends
+   (`still --at 0` vs settle end); post-build seam warn + AV hold (no black EOF)
 7. Ship only after a real --around sheet shows speech-locked typing
 ```
 
 Pick `--around` centers from word times (`kino inspect`): start of first word, mid-prompt,
 end of last word, Lottie trigger fire. One midpoint still is **not** enough — word-block vs
-burst typewriter look identical at a single frame. Camera punch-then-hold: sample
-`--around` early in the beat (punch phase); a mid-beat sheet only shows the hold.
+burst typewriter look identical at a single frame. Also sample **beat boundaries**
+(`endA` / `startB`) to confirm the dissolve — not a backdrop flash or zoom pop.
 
 ## Workflow hook
 

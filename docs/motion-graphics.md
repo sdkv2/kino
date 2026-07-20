@@ -35,8 +35,13 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 |---|---|
 | `--frame` | integer frame within the beat |
 | `--t` | seconds within the beat |
-| `--progress` | `0 → 1` across the beat (use for entrances/reveals) |
-| `--pulse` | `0 → 1` envelope fired by spec triggers (`{ at, action: "pulse" }`) |
+| `--progress` | `0 → 1` across the beat (linear — prefer eased vars below for entrances) |
+| `--kino-out` | ease-out cubic of `--progress` (soft landings) |
+| `--kino-inout` | smoothstep of `--progress` |
+| `--kino-overshoot` | back-out of `--progress` (may briefly exceed `1` — great for `scale`) |
+| `--kino-spring` | elastic-out of `--progress` (may briefly exceed `1`) |
+| `--kino-edge` | `sin(progress·π)` — `0` at beat start/end, `1` mid (seam-safe wash/breath) |
+| `--pulse` | `0 → 1` envelope fired by spec triggers (`{ at, action: "pulse" }`) — fast attack (~45ms) then exponential decay |
 | `--<param>` | every key in the spec's `params`, tweened by `keyframes` (e.g. `--pct`) |
 | `--kino-mint` `--kino-green` `--kino-night` `--kino-white` `--kino-gold` | brand palette |
 | `--kino-font` | brand font family |
@@ -53,8 +58,9 @@ kino computes the beat's per-word VO timings and hands them to the motion graphi
 surface (terminal, code editor, chat bubble, monospace prompt with a block caret — anything the caption
 presets can't express) can type text locked to the speech, with zero drift.
 
-Agent playbook for recipes (caption-free montage, spoof chat window, camera-follows-typing):
-**`skills/speech-synced-ui/SKILL.md`**.
+Agent playbooks: recipes (caption-free montage, spoof chat window, camera-follows-typing) →
+**`skills/speech-synced-ui/SKILL.md`**; look/composition/anti-generic craft →
+**`skills/motion-design/SKILL.md`**.
 
 - **CSS-only (word grain)** — reveal per-word by comparing each word's index to `--kino-words-shown`. Word `i` (0-based):
   `opacity: clamp(0, calc(var(--kino-words-shown) - <i>), 1)`. Reads like caption drip — fine for chips, weak for "being typed".
@@ -220,7 +226,7 @@ kino injects a small, opt-in utility kit so you don't re-derive common motion. E
 <div class="card kino-blur-rise">spec.</div>
 ```
 
-**`kino-pulse`** — maps the `--pulse` envelope to an opacity + scale pop. Place spec `triggers` with `action:"pulse"` at the VO word times (from `kino inspect`) and the element punches on each word:
+**`kino-pulse`** — maps the `--pulse` envelope to an opacity + scale pop. Place spec `triggers` with `action:"pulse"` at the VO word times (from `kino inspect`) and the element punches on each word. The envelope attacks in ~45ms then decays (punchier than a soft half-life fade).
 
 ```html
 <style>.dot { width:24vw; height:24vw; border-radius:50%; background:var(--kino-green); }</style>
@@ -230,6 +236,16 @@ kino injects a small, opt-in utility kit so you don't re-derive common motion. E
 // in the spec, on this beat's motion / motionOverlay:
 "triggers": [{ "at": 0.31, "action": "pulse" }, { "at": 0.92, "action": "pulse" }]
 ```
+
+**Eased progress (no JS)** — drive camera / opacity off curves instead of linear `--progress`:
+
+```css
+.cam { transform: scale(calc(1 + 0.08 * var(--kino-out))); }
+.wash { opacity: calc(0.2 + 0.15 * var(--kino-edge)); } /* seam-safe life */
+.pop  { transform: scale(var(--kino-overshoot)); }       /* may exceed 1 mid-beat */
+```
+
+Tier-2 gets the same numbers as `env.out` / `env.inout` / `env.overshoot` / `env.spring` / `env.edge`.
 
 **`kino-fade-edges`** — a top/bottom mask gradient that feathers overflowing or scrolling content so it doesn't hard-cut at the frame edge.
 
@@ -280,7 +296,7 @@ return data.map((h, i) =>
   transform-origin:bottom;transform:scaleY(var(--progress))}</style>`;
 ```
 
-`env = { frame, t, progress, pulse, params, palette:{mint,green,night,white,gold,font}, width, height, words? }`.
+`env = { frame, t, progress, out, inout, overshoot, spring, edge, pulse, params, palette:{mint,green,night,white,gold,font}, width, height, words? }`.
 `words` is the beat-relative VO timing array (same as the caption engine); omit/empty when the beat has no speech.
 
 It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
@@ -291,8 +307,8 @@ are not flagged — they don't execute. Expressions inside `${…}` are still sc
 (`` `${window.location}` `` is banned). Keep banned tokens out of executable code.
 Reference it from the spec exactly like a `.html` graphic.
 
-`env` fields: `{ frame, t, progress, pulse, params, palette, width, height, words? }`. There is
-**no `env.duration`**. End-of-beat / seam logic should use `env.progress` thresholds (e.g. `> 0.95`) —
+`env` fields: `{ frame, t, progress, out, inout, overshoot, spring, edge, pulse, params, palette, width, height, words?, durationFrames, duration }`.
+End-of-beat / seam logic should still prefer `env.progress` / `env.edge` thresholds (e.g. `progress > 0.95`) —
 `progress` never equals exactly `1.0` (max ≈ `(frames - 1) / frames`).
 
 ## Embedded Lottie (Tier 3)

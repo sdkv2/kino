@@ -117,6 +117,15 @@ describe("lintMotionJs", () => {
     expect(lintMotionJs("return Math.sin(env.t) * Math.PI")).toEqual([]);
     expect(lintMotionJs("const toBar = (v) => `<i style=height:${v}%></i>`; return toBar(env.params.v)")).toEqual([]);
   });
+  it("flags ASI unary plus before a string (NaN trap)", () => {
+    expect(lintMotionJs("return '' + a;\n+ '<b>' + b;")[0]).toMatch(/unary plus|NaN/i);
+    expect(lintMotionJs("return\n+ '<b>' + b;")[0]).toMatch(/unary plus|NaN|ASI/i);
+  });
+  it("allows indent-continued binary + chains and out +=", () => {
+    expect(lintMotionJs("return ''\n  + '<b>' + b;")).toEqual([]);
+    expect(lintMotionJs("return '' + a\n  + '<b>' + b;")).toEqual([]);
+    expect(lintMotionJs("var out = '';\nout += '<b>';\nreturn out;")).toEqual([]);
+  });
 });
 
 describe("sanitizeMotionHtml", () => {

@@ -59,6 +59,12 @@ kino frames projects/<name>/assets/recordings/foo.mp4 --every 0.5 --montage
 
 Do not invent beats from filenames or duration alone.
 
+**Spot-check the two endpoints before committing a window.** A coarse `--every N` montage tile can
+straddle a phase change *inside* its N-second bin (a 3-2-1 countdown, a screen transition), so a tile
+that reads "WORK 0:19" may actually sit mid-countdown. After you pick each `clipFrom`/`clipTo`, confirm
+that exact second — `kino frames <mp4> --at <clipFrom>,<clipTo>` — and Read those two stills. Never
+author a clip window straight off a wide montage.
+
 ### 4. Beat map (before JSON)
 
 Short list only — ranges into the **source**, not the trailer timeline:
@@ -100,6 +106,11 @@ Same `asset`, different windows:
 VO still drives beat duration. If the clip (at `speed`) ends early, the last frame holds
 (via freeze — do not rely on Remotion `trimAfter`; it unmounts early under slow-mo).
 
+**`clipTo` is a soft freeze-ceiling, not a trim.** The beat plays `clipFrom → min(clipTo, clipFrom +
+beatLen·speed)`: VO *longer* than the window freezes on the `clipTo` frame; VO *shorter* cuts
+mid-window before reaching `clipTo`. So size the window ≥ the beat — `clipTo` will **not** trim an
+over-long VO line, and a window shorter than the VO just freezes early.
+
 ### 6. Custom frame (optional)
 
 Drop a PNG/WebP with a transparent “screen” hole into `assets/frames/`. Footage draws in
@@ -115,15 +126,46 @@ Drop a PNG/WebP with a transparent “screen” hole into `assets/frames/`. Foot
 ```
 
 **Hard rule when `frame` is set:** `shot: "static"` only — no `push-in` / `pull-out` / pan / tilt.
-(Renderer also forces static.) Prefer `cut` or `dissolve` for transitions. Reuse one frame across
+(Renderer also forces static — `frame ? "static" : shot`.) **A framed beat that shows `shot:"push-in"`
+or `"scroll"` is relying on that silent force — don't copy it; use `zoomKeyframes` (below) for a camera
+move on framed footage.** Prefer `cut` or `dissolve` for transitions. Reuse one frame across
 beats. Measure inset from the chrome asset (screen hole), not by eye on a wrong aspect. Preview
 with `kino still --segment N`.
+
+**Measuring the hole (the naive alpha-bbox is wrong).** The PNG is transparent *both* outside the
+phone body *and* in the screen hole, so a whole-image "bounding box of alpha < 16" returns the entire
+image (`0,0,~100,~100` — useless). The hole is the transparent rect *inside* the opaque bezel: scan
+the **centre row + centre column** for the `opaque → transparent → opaque` bands to isolate the inner
+rect, then convert px→%. (Or open the PNG on a solid colour so the hole is visible.) Match the footage
+aspect to the hole's `w:h`, or `objectFit:cover` crops the edges.
+
+Copy-paste (python3 + Pillow) — prints the `inset` for a centred phone whose only *interior* transparent
+region is the screen hole:
+
+```python
+from PIL import Image
+im = Image.open("frames/device-chrome.png").convert("RGBA"); W, H = im.size; px = im.load()
+def hole(at, n):                      # the transparent run flanked by opaque (skips the outer margin)
+    tr = [i for i in range(n) if at(i)[3] < 16]; runs = []; s = tr[0]
+    for a, b in zip(tr, tr[1:] + [None]):
+        if b != a + 1: runs.append((s, a)); s = b
+    inner = [r for r in runs if r[0] > 0 and r[1] < n - 1] or runs   # not touching the edge = the hole
+    return max(inner, key=lambda r: r[1] - r[0])
+x0, x1 = hole(lambda x: px[x, H // 2], W); y0, y1 = hole(lambda y: px[W // 2, y], H)
+print({"x": round(x0/W*100,1), "y": round(y0/H*100,1), "w": round((x1-x0)/W*100,1), "h": round((y1-y0)/H*100,1)})
+```
 
 **Hole radius:** renderer clips framed footage at **48px** corner radius. Match (or exceed) that in
 the PNG hole — a tighter radius leaves dark gradient leaks at the four corners. For portrait device
 UI / portrait stock, prefer a **portrait inset** (~9:16); a wide hole cover-crops headers and slices
 glyph tops. Typed prompt *inside* chrome that must also zoom → `speech-synced-ui` (one motion graphic),
 not a zooming overlay on this PNG.
+
+**Caption clearance:** a tall inset (≳75% h) pushes the device bottom past the lower-third caption
+band, so the caption lands *on* the lower screen instead of below the phone. If the beat's lower
+screen carries content, pick a shorter-inset frame (device reads smaller but the caption gets clear
+space) or raise the caption. (`iphone.png` hole is ~78% h — captions overlap the screen; the shorter
+`device-chrome.png` clears them.)
 
 **Camera move on framed footage → `zoomKeyframes`.** The inner `shot` is disabled inside a frame (it
 fights the inset), so a push-in comes from a `zoomKeyframes` track that scales/pans the footage **and**

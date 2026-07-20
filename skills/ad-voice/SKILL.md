@@ -18,7 +18,13 @@ reuse an existing brand or gather palette, voice, and assets from `brands/*`, th
 the owner before you write a personality. Then:
 
 1. `kino brand <name>` — read the brand's **Tone / Voice** section (see template below).
-2. If that section is empty or still scaffold text, **fill it with the brand owner** (or draft from product truth + ask for approval) before mass-producing specs.
+2. **Tone written as prose (not the dial fields) is finished, not scaffold.** Many real brands express
+   voice as a paragraph — punchy ones (Duolingo) and editorial ones (Aesop, "a botanist who reads
+   poetry") alike — with no Register/Person/Pace fields and no Say/Never-say pair. Map that prose to
+   the dial yourself and write (a *punchy* prose brand still lands on the House defaults; only a mood
+   brand trips the Quiet branch below); do **not** treat a missing dial as empty or block on an owner. Only the literal `kino init`
+   placeholder counts as scaffold — if you hit that, fill it with the brand owner (or draft from product
+   truth + ask for approval) before mass-producing specs.
 3. Apply **brand tone first**, then the house rules in this skill. Brand bans win over house defaults.
 
 ## Brand Tone / Voice (per-brand dial)
@@ -61,9 +67,37 @@ Frameworks (pick one; don't stack labels in the script):
 - **Hook → Demo → Proof → CTA** — footage-led apps.
 - **BAB** — Before → After → Bridge. Clear transformation only.
 
+## Quiet / editorial / luxury brands (mood, not conversion)
+
+**Use this branch when** the brand dial sets `Proof style: none`, OR the brand.md voice bans outcomes,
+numbers, and urgency (e.g. "sell the ritual, never the outcome"). Then these override the punchy
+House defaults above (they do **not** apply to ordinary app brands):
+
+- **Be specific through the senses.** Satisfy anti-slop #1 with observable action + concrete nouns
+  (`press the seed`, `warmed between the hands`) — never an invented metric.
+- **Framework — Vignette / tone-poem:** mood open → material → use → sign-off. No pain, no urgency verb.
+- **Hooks name a moment, not a pain:** `Before the day asks anything of you,` /
+  `A small ceremony, kept at the basin.`
+- **CTA is awareness / retail:** name a real act, no URL or install (`Aesop. Find a store, when
+  you're ready.`). Person may shift maker↔reader on purpose (we make / you keep) — a deliberate glide,
+  not drift.
+
+**Worked example** (predicate: `Proof style: none`; brand.md "sell the ritual, never the outcome").
+Brand: *Ora*, single-origin tea.
+
+- **0 hook** (a moment, not a pain) — VO: "Before the first email, there is water." · caption: `first, water`
+- **1 material** (sensory action, no metric) — VO: "We open the leaves slowly, in the heat." · caption: `opened slowly`
+- **2 use** — VO: "Held in both hands, and not rushed." · caption: `both hands`
+- **3 CTA** (awareness, no URL) — VO: "Ora. Find a tin at your grocer." · caption: `at your grocer`
+
+Passes because: `we` (make) → `you` (hold) shifts on purpose; zero numbers/superlatives; every line
+names an observable act, not an outcome.
+
 ## Anti-slop rules (non-negotiable)
 
-1. **Specific > adjective.** Replace every vague modifier with a number, time, comparison, or observable action.
+1. **Specific > adjective.** Replace every vague modifier with a number, time, comparison, or observable
+   action. *(A number is one way to be specific, not the only one — for `Proof style: none` / mood brands,
+   satisfy this with sensory action + concrete nouns, never an invented metric. See Quiet / editorial brands.)*
 2. **Speakable.** Read aloud. If it sounds like a landing page, rewrite. Contractions OK. Fragments OK.
 3. **One claim per beat.** No "and also" laundry lists in a single `text`.
 4. **No LLM throat-clearing.** Cut openers that announce thinking (`Here's the thing`, `The truth is`, `In today's…`).

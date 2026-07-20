@@ -154,9 +154,13 @@ export const SpecSchema = z
     logoSize: LogoSize.optional(), // small|medium|big or px (overrides brand.logoSize)
     logoPosition: LogoPosition.optional(), // top|bottom|left|right|center or {x,y}% (overrides brand)
     logoKeyframes: z.array(BgKeyframe).optional(), // tween logo x/y/scale/opacity over time
+    // Custom Canvas2D draw fn when background is "custom". Bare id → assets-lib/backgrounds/;
+    // path → project assets/ or workspace (overrides brand.backgroundComponent).
+    backgroundComponent: z.string().min(1).optional(),
     captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)
     captionAnimation: CaptionAnimation.optional(), // caption entrance preset (overrides brand.captionStyle.animation)
     captionReveal: CaptionReveal.optional(), // words-mode reveal: "word" (default) | "all" (whole line laid out, highlight tracks VO)
+    captionMode: CaptionMode.optional(), // "phrase" | "words" — spec-wide caption mode (brand < spec < segment)
     sfx: z.array(SfxEvent).optional(), // free-placed sound effects (place with `kino audio-markers`)
     music: Music.optional(), // music bed under the VO, auto-ducked while segments speak
     // Web/hero loop: last beat should settle to the first-frame ready-state. Enables validate
@@ -165,6 +169,7 @@ export const SpecSchema = z
     seamlessLoop: z.boolean().optional(),
     segments: z.array(Segment).min(1),
   })
+  .strict() // reject unknown top-level keys — a misplaced/misspelled key errors instead of silently no-op'ing
   .superRefine((spec, ctx) => {
     // Kept off the app object so discriminatedUnion stays a plain ZodObject (ZodEffects breaks it).
     spec.segments.forEach((seg, i) => {
@@ -192,3 +197,71 @@ export const SpecSchema = z
 
 export type Spec = z.infer<typeof SpecSchema>;
 export type Segment = z.infer<typeof Segment>;
+
+/** Top-level / brand fields agents often park on a segment by mistake. */
+const TOP_LEVEL_KEYS: Record<string, string> = {
+  logoPosition: "logoPosition is top-level (or brand.json) — not a segment field",
+  logoSize: "logoSize is top-level (or brand.json) — not a segment field",
+  logoKeyframes: "logoKeyframes is top-level — not a segment field",
+  film: "film is top-level — not a segment field",
+  seamlessLoop: "seamlessLoop is top-level — not a segment field",
+  background: "background is top-level (or brand.json) — not a segment field",
+  backgroundIntensity: "backgroundIntensity is top-level — not a segment field",
+  backgroundKeyframes: "backgroundKeyframes is top-level — not a segment field",
+  backgroundTriggers: "backgroundTriggers is top-level — not a segment field",
+  music: "music is top-level — not a segment field",
+  sfx: "sfx is top-level — not a segment field",
+  voice: "voice is top-level (or brand.json) — not a segment field",
+  voiceModel: "voiceModel is top-level — not a segment field",
+  provider: "provider is top-level (or brand/project) — not a segment field",
+  avatarLook: "avatarLook is top-level (or brand.json) — not a segment field",
+};
+
+/** Keys valid on some segment kinds but rejected on others (strict). */
+const SEGMENT_KIND_HINTS: Record<string, string> = {
+  transition: "transition is app-only (motion hard-cuts; motion→motion auto-dissolves)",
+  asset: "asset is app-only",
+  clipFrom: "clipFrom/clipTo are app-only (importing-footage)",
+  clipTo: "clipFrom/clipTo are app-only (importing-footage)",
+  speed: "speed is app-only",
+  pauseAt: "pauseAt is app-only",
+  frame: "frame chrome is app-only",
+  kicker: "kicker is app-only",
+  zoomKeyframes: "zoomKeyframes is app-only",
+  kickerKeyframes: "kickerKeyframes is app-only",
+  source: "source is motion-only (or motionOverlay on avatar/app)",
+  triggers: "triggers are motion-only (or motionOverlay / top-level backgroundTriggers)",
+  keyframes: "keyframes are motion-only (or motionOverlay)",
+  params: "params are motion-only (or motionOverlay)",
+  loop: "loop is motion/Lottie-only",
+  cta: "cta is avatar-only",
+  motionOverlay: "motionOverlay is avatar/app-only (motion segments use source)",
+};
+
+function formatUnrecognizedKey(key: string, path: (string | number)[]): string {
+  const onSegment = path[0] === "segments";
+  const where = onSegment ? `segments[${path[1]}]` : path.length ? path.join(".") : "spec";
+  if (onSegment && TOP_LEVEL_KEYS[key]) return `${where}: ${TOP_LEVEL_KEYS[key]}`;
+  if (onSegment && SEGMENT_KIND_HINTS[key]) return `${where}: ${SEGMENT_KIND_HINTS[key]}`;
+  return `${where}: unrecognized key '${key}'`;
+}
+
+/** Humanize Zod unrecognized_keys (and keep other issues). Prefer this at CLI boundaries. */
+export function formatSpecError(err: z.ZodError): string {
+  return err.issues
+    .map((issue) => {
+      if (issue.code === "unrecognized_keys") {
+        return issue.keys.map((k) => formatUnrecognizedKey(k, issue.path)).join("\n");
+      }
+      const loc = issue.path.length ? `${issue.path.join(".")}: ` : "";
+      return `${loc}${issue.message}`;
+    })
+    .join("\n");
+}
+
+/** Parse a spec with helpful footgun messages (logoPosition on CTA, transition on motion, …). */
+export function parseSpec(input: unknown): Spec {
+  const r = SpecSchema.safeParse(input);
+  if (r.success) return r.data;
+  throw new Error(formatSpecError(r.error));
+}
