@@ -23,7 +23,7 @@ These ship as **CC0 procedural** beds (ffmpeg-generated, no third-party samples)
 need to scrape Mixkit/Pixabay/Bensound CDNs. Replace any bed with a real licensed track by
 dropping an `.mp3` of the same id here, or use a project path (`"music": { "src": "music/bed.mp3" }`).
 
-Keep beds ~30–60 s, loop-friendly, peaking around −1.5 dBFS, 44.1 kHz stereo.
+Keep beds ~30–60 s, loop-friendly, mono, 48 kHz, peaking around −6 dBFS.
 
 ## Spec pattern
 

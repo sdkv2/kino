@@ -80,18 +80,18 @@ A spec is a JSON file describing the video as a list of **beats** (segments). Ea
 The render loop is built for tight iteration — every preview step is free:
 
 ```bash
-kino inspect  specs/lie-test.json            # resolved plan (beats, timings) as JSON
-kino still    specs/lie-test.json --segment 0 # one frame, fast, free (mock by default)
-kino storyboard specs/lie-test.json           # one still per beat, tiled into a labeled contact sheet
-kino build    specs/lie-test.json --mock      # full structural render, silent VO, $0
-kino build    specs/lie-test.json             # real render → out/lie-test/lie-test-9x16.mp4
+kino inspect  projects/acme/specs/lie-test.json            # resolved plan (beats, timings) as JSON
+kino still    projects/acme/specs/lie-test.json --segment 0 # one frame, fast, free (mock by default)
+kino storyboard projects/acme/specs/lie-test.json           # one still per beat, tiled into a labeled contact sheet
+kino build    projects/acme/specs/lie-test.json --mock      # full structural render, silent VO, $0
+kino build    projects/acme/specs/lie-test.json             # real render → projects/acme/out/lie-test/lie-test-9x16.mp4
 ```
 
 Typical loop: **map beats → preview a beat → edit the spec → re-preview → `build`**. Use `kino inspect` to read per-word VO timings when you need to sync animations (background tweens, motion-graphic keyframes) to the voiceover.
 
 ## Output
 
-Renders land at `out/<title>/<title>[-<tag>]-<format>.mp4` (e.g. `out/lie-test/lie-test-9x16.mp4`). The `--tag` suffix (auto-set from `--background`/`--font`) keeps variant renders side-by-side instead of overwriting.
+Renders land at `projects/<name>/out/<title>/<title>[-<tag>]-<format>.mp4` (e.g. `projects/acme/out/lie-test/lie-test-9x16.mp4`). The `--tag` suffix (auto-set from `--background`/`--font`) keeps variant renders side-by-side instead of overwriting.
 
 ## Next steps
 
@@ -100,4 +100,4 @@ Renders land at `out/<title>/<title>[-<tag>]-<format>.mp4` (e.g. `out/lie-test/l
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
 - **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers.
 - Agent skills (canonical): [`skills/`](../skills/). `kino skills --install` (also `kino init`) creates local (gitignored) symlinks under `.agents` / `.cursor` / `.claude` / `.codex`.
-- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`. Also: `npx skills add sdkv2/kino`.
+- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`. Also: `npx skills add sdkv2/kino`.

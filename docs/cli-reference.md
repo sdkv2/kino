@@ -93,7 +93,7 @@ kino storyboard specs/lie-test.json --platform reels
 ```
 
 ### `retune`
-Rewrite beat-relative `triggers[].at` (and top-level `backgroundTriggers` if present) from **real** VO word timings. Same last-N-words heuristic as speech-synced pipeline UIs — kills hand-editing after the first real build.
+Rewrite beat-relative `triggers[].at` (and top-level `backgroundTriggers` if present) from **real** VO word timings — maps each trigger onto a spoken content word (exact match if counts line up, else first-N or last-N by position). Kills hand-editing after the first real build.
 
 ```
 kino retune <spec> [--dry-run] [--project <name>]

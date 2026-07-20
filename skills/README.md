@@ -1,16 +1,13 @@
-# Agent skills (canonical)
-
-This directory is the **only** source of truth for kino’s agent playbooks. It ships in the npm package.
-Edit here. Do not maintain parallel copies under agent dirs.
+# Agent skills
 
 | Skill | Use |
 |---|---|
-| `video-production` | Specs, build, media, sound |
-| `ad-voice` | VO/caption language + brand Tone/Voice |
-| `adversarial-critique` | Subagent frame QA (overlap / layout) |
-| `importing-footage` | Source recordings → beat map, clip windows, chrome frame, speed/pause |
-| `speech-synced-ui` | VO-locked typed UI, caption-free montage, seamless-loop typed surfaces, real-VO retune |
-| `motion-design` | Visual craft for motion graphics (composition, color, type, choreography, anti-generic) |
+| `video-production` | Producing a short-form vertical ad with the `kino` CLI — spec authoring, build workflow, cost/compliance guardrails. Start here for any new video. |
+| `ad-voice` | Writing/rewriting segment `text`/`caption`/CTAs so copy sounds human, not AI slop; filling a brand's Tone/Voice section. |
+| `adversarial-critique` | Fresh-eyes subagent QA pass over storyboard/build stills — overlap, overflow, bad positioning, legibility. Run after `kino storyboard` and before calling a build done. |
+| `importing-footage` | Turning a long source recording (screen capture, device scroll, desktop demo) into beats — clip windows, chrome frame seating, speed/pause retiming. |
+| `speech-synced-ui` | On-screen UI text that must type/reveal in lockstep with VO (terminal prompts, chat inputs, spoof AI windows, code editors); caption-free montages; seamless-loop typed surfaces. |
+| `motion-design` | Visual craft for motion graphics (Tier-1 HTML, Tier-2 JS, motionOverlay) — composition, color, type, camera/choreography, spoof-UI craft, anti-generic checks. |
 
 ## Install for local agents
 
