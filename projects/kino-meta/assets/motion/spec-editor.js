@@ -81,7 +81,9 @@ var LINES = [
 var full = LINES.join("\n");
 var words = env.words || [];
 var t0 = words.length ? words[0].start : 0;
-var t1 = words.length ? words[words.length - 1].end : 1;
+// Keep typing through — and slightly past — the beat end so the JSON is still being written as it
+// dissolves into the build terminal, instead of finishing at the VO end and sitting static.
+var t1 = (env.duration || (words.length ? words[words.length - 1].end : 1)) * 1.18;
 var span = Math.max(0.4, t1 - t0);
 var elapsed = Math.max(0, env.t - t0);
 var shownN = words.length && env.t > t0
