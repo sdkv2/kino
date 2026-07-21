@@ -23,9 +23,9 @@ render engine.
 
 <table>
 <tr>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta-sm.gif" width="240" alt="kino writing its own advert.json spec, live"></a></td>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-clip.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-sm.gif" width="240" alt="The Descent — long-form kino build"></a></td>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara-sm.gif" width="240" alt="Lunara — quiet mood piece"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.webp" width="240" alt="kino writing its own advert.json spec, live"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-clip.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent.webp" width="240" alt="The Descent — long-form kino build"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.webp" width="240" alt="Lunara — quiet mood piece"></a></td>
 </tr>
 <tr>
 <td align="center"><b>The self-demo</b><br><sub>kino types its own <code>advert.json</code> and builds the ad you're watching</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4">▶ watch with sound</a></td>
@@ -34,7 +34,7 @@ render engine.
 </tr>
 </table>
 
-<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> — faceless, 9:16, ElevenLabs voiceover. Previews are silent trimmed GIFs; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
+<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> — faceless, 9:16, ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
 
 ## Pipeline at a glance
 ```
