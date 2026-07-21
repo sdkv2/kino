@@ -16,8 +16,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [20, 22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -37,7 +37,13 @@ jobs:
           ffmpeg -version | head -1
       - name: Install ffmpeg 8 (Windows)
         if: runner.os == 'Windows'
-        uses: FedericoCarboni/setup-ffmpeg@v3
+        shell: pwsh
+        run: |
+          curl.exe -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n8.1-latest-win64-gpl-8.1.zip -o ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath C:\ffmpeg
+          $dir = Get-ChildItem 'C:\ffmpeg' -Directory | Select-Object -First 1
+          Add-Content $env:GITHUB_PATH (Join-Path $dir.FullName 'bin')
+          & (Join-Path $dir.FullName 'bin\ffmpeg.exe') -version | Select-Object -First 1
       # Ubuntu 24.04 blocks unprivileged user namespaces, which kills the Chrome sandbox
       # for puppeteer's downloaded browser. Re-allow them so render tests can launch it.
       - name: Allow Chrome sandbox userns (Linux)
