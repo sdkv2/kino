@@ -21,10 +21,28 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      # The audio silence/artifact heuristics are calibrated against recent real ffmpeg
-      # encoder output (see src/media/binPaths.ts) — the bundled ffmpeg-static 6.x build
-      # fails trailingArtifactCut. Put a recent ffmpeg on PATH so binPaths prefers it.
-      - uses: FedericoCarboni/setup-ffmpeg@v3
+      # The audio silence/artifact heuristics are calibrated against ffmpeg 8 encoder
+      # output (see src/media/binPaths.ts) — static 6.x and johnvansickle 7.x builds fail
+      # trailingArtifactCut. Put ffmpeg 8 on PATH per-OS so binPaths prefers it.
+      - name: Install ffmpeg 8 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz | sudo tar -xJ -C /opt
+          sudo ln -s /opt/ffmpeg-n8.1-*/bin/ffmpeg /opt/ffmpeg-n8.1-*/bin/ffprobe /usr/local/bin/
+          ffmpeg -version | head -1
+      - name: Install ffmpeg 8 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+          ffmpeg -version | head -1
+      - name: Install ffmpeg 8 (Windows)
+        if: runner.os == 'Windows'
+        uses: FedericoCarboni/setup-ffmpeg@v3
+      # Ubuntu 24.04 blocks unprivileged user namespaces, which kills the Chrome sandbox
+      # for puppeteer's downloaded browser. Re-allow them so render tests can launch it.
+      - name: Allow Chrome sandbox userns (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       # Render tests probe pixels with ImageMagick 7's `magick`; there is no static
       # ImageMagick dep, so install it per-OS.
       - name: Install ImageMagick (Linux)
