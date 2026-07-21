@@ -28,7 +28,7 @@ export async function genSilence(seconds: number, out: string): Promise<void> {
 export async function trailingArtifactCut(clip: string): Promise<number | null> {
   const dur = await probeDuration(clip);
   const { stderr } = await execa(
-    "ffmpeg",
+    FFMPEG_PATH,
     ["-i", clip, "-af", "silencedetect=noise=-50dB:d=0.05", "-f", "null", "-"],
     { reject: false },
   );
@@ -39,9 +39,13 @@ export async function trailingArtifactCut(clip: string): Promise<number | null> 
   // If ffmpeg emitted no closing silence_end for the last gap, silence ran to EOF → clip ends clean.
   const lastEnd = ends.length >= starts.length ? ends[ends.length - 1] : dur;
   const trailing = dur - lastEnd; // audio remaining after the last silence gap
+  // Floor at 35ms: probeDuration reads container metadata while silencedetect walks the decoded
+  // stream, and mp3 encoder delay/padding skews the two by up to ~30ms depending on the ffmpeg
+  // build (johnvansickle 7.x overshoots; static 6.x undershoots) — below that, "trailing audio"
+  // is just EOF slop, not a burst. Real ElevenLabs artifacts run ≥50ms.
   // ponytail: >0.25s of trailing audio is a real final word, not a burst — leave it. Ceiling raise if
   // a legit closing word ever gets clipped.
-  return trailing > 0.003 && trailing <= 0.25 ? lastStart : null;
+  return trailing > 0.035 && trailing <= 0.25 ? lastStart : null;
 }
 
 // Keep [0, endSec] of src as a lossless wav (used to drop trailing artifacts before stitching).
