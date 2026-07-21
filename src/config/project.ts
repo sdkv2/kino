@@ -84,13 +84,13 @@ export function resolveProject(opts: { specPath?: string; project?: string; cwd?
     if (opts.project) {
       throw new Error(
         `Project '${opts.project}' not found at projects/${opts.project}/ (no project.json). ` +
-          `Create it with: kino projects --new ${opts.project} --brand <brand>`,
+          `Create it with: kino projects --new ${opts.project} [--brand <brand>]`,
       );
     }
     const where = opts.specPath ? `spec '${opts.specPath}'` : "this command";
     throw new Error(
       `No project found for ${where}. kino no longer supports a flat layout — every spec must live ` +
-        `under projects/<name>/specs/. Create one with: kino projects --new <name> --brand <brand>`,
+        `under projects/<name>/specs/. Create one with: kino projects --new <name> [--brand <brand>]`,
     );
   }
 

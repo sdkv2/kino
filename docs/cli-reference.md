@@ -178,17 +178,18 @@ kino init acme
 List projects, or scaffold a new one.
 
 ```
-kino projects [--new <name> --brand <brand>]
+kino projects [--new <name>] [--brand <brand>]
 ```
 
 | Option | Value | Meaning |
 |---|---|---|
 | `--new <name>` | name | Scaffold a new project under `projects/`. |
-| `--brand <brand>` | brand | Brand to assign to the new project. |
+| `--brand <brand>` | brand | Brand to assign to the new project (omit for kino defaults). |
 
 ```bash
 kino projects                               # list
 kino projects --new acme --brand acme
+kino projects --new scratch                 # no brand — kino house defaults
 ```
 
 ### `doctor`

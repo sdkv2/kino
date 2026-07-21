@@ -3,6 +3,10 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.21.0] — optional brand
+- **Brandless projects**: `kino projects --new <name>` no longer requires `--brand`. `project.json`
+  `brand` is now optional; without one, builds run on kino house defaults (`DEFAULT_BRAND`).
+
 ## [1.20.0] — project-local music beds
 - **Project-local audio**: the shared music library ships empty (matching SFX). Source beds
   per-project — asset paths (`music/bed.mp3`), drop-in CC0 beds in `assets-lib/music/` for bare

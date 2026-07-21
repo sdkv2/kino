@@ -34,9 +34,9 @@ program
 
 program
   .command("projects")
-  .description("List projects, or scaffold one: --new <name> --brand <brand>")
+  .description("List projects, or scaffold one: --new <name> [--brand <brand>]")
   .option("--new <name>", "scaffold a new project under projects/")
-  .option("--brand <brand>", "brand to assign to the new project")
+  .option("--brand <brand>", "brand to assign to the new project (omit for kino defaults)")
   .action(async (o) => (await import("./commands/projects.js")).projects(o));
 
 program
