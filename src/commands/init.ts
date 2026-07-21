@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { resolveWorkspace } from "../config/project.js";
 import { installAllSkills } from "../config/skills.js";
 import { log } from "../log.js";
+import { KINO_VERSION } from "../version.js";
 
 // Scaffold a workspace + a first project named after the brand. kino requires a project, so init
 // produces a ready-to-build one: brands/<brand>/brand.md, .env, and projects/<brand>/ with specs/,
@@ -43,6 +44,7 @@ export async function init(brand = "default"): Promise<void> {
       JSON.stringify(
         {
           title: "sample",
+          kinoVersion: KINO_VERSION,
           provider: "none",
           background: "glow",
           segments: [
