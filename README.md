@@ -16,7 +16,7 @@
 
 **kino** turns an agent-authored JSON spec into finished vertical videos. The driving agent supplies
 the creative; kino handles deterministic production: ElevenLabs voiceover, an optional AI avatar
-(HeyGen / Hedra / Replicate) or a **faceless** background, composited in Remotion to a 9:16 / 3:4 MP4.
+(HeyGen / Hedra / Replicate) or a **faceless** background, composited by an in-house headless-Chrome render engine to a 9:16 / 3:4 MP4.
 
 ## Showcase
 
@@ -39,7 +39,7 @@ the creative; kino handles deterministic production: ElevenLabs voiceover, an op
 ```
 spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ avatar plan + trim
           ─▶ avatar (HeyGen/Hedra/Replicate) or faceless background / motion graphics
-          ─▶ Remotion composite ─▶ ffmpeg ─▶ out/<title>/…mp4
+          ─▶ native render (headless Chrome) ─▶ ffmpeg ─▶ out/<title>/…mp4
 ```
 The agent authors specs; kino performs every step deterministically (no LLM inside the CLI).
 
