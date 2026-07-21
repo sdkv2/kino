@@ -55,6 +55,11 @@ export async function ensureRenderServer(state: ServerState): Promise<{ url: str
       res.end(INDEX_HTML);
       return;
     }
+    if (url === "/favicon.ico") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (url === "/page.js") {
       res.writeHead(200, { "content-type": MIME[".js"] });
       res.end(s.pageJs);
