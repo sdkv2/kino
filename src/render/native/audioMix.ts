@@ -5,6 +5,7 @@
 import { execa } from "execa";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { FFMPEG_PATH } from "../../media/binPaths.js";
 import { musicVolumeAt } from "../audio.js";
 import type { KinoProps } from "../props.js";
 
@@ -12,7 +13,7 @@ const RATE = 44100;
 
 async function shapeMusicBed(srcAbs: string, music: NonNullable<KinoProps["music"]>, endSec: number, workDir: string): Promise<string> {
   const raw = join(workDir, "music-raw.pcm");
-  await execa("ffmpeg", ["-y", "-loglevel", "error", "-i", srcAbs, "-vn", "-f", "s16le", "-ar", String(RATE), "-ac", "2", raw]);
+  await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-i", srcAbs, "-vn", "-f", "s16le", "-ar", String(RATE), "-ac", "2", raw]);
   const buf = readFileSync(raw);
   const opts = {
     duckSpans: music.duckSpans,
@@ -31,7 +32,7 @@ async function shapeMusicBed(srcAbs: string, music: NonNullable<KinoProps["music
   }
   writeFileSync(raw, buf);
   const out = join(workDir, "music-shaped.wav");
-  await execa("ffmpeg", ["-y", "-loglevel", "error", "-f", "s16le", "-ar", String(RATE), "-ac", "2", "-i", raw, out]);
+  await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-f", "s16le", "-ar", String(RATE), "-ac", "2", "-i", raw, out]);
   return out;
 }
 
@@ -70,6 +71,6 @@ export async function buildAudioTrack(props: KinoProps, publicDir: string, endSe
   const args = ["-y", "-loglevel", "error"];
   for (const i of inputs) args.push("-i", i);
   args.push("-filter_complex", filters.join(";"), "-map", "[mix]", "-t", endSec.toFixed(4), "-ar", String(RATE), out);
-  await execa("ffmpeg", args);
+  await execa(FFMPEG_PATH, args);
   return out;
 }

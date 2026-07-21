@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
+import { FFMPEG_PATH } from "./binPaths.js";
 import { SEAM_OK_MEAN, seamDiff } from "./seam.js";
 import { log } from "../log.js";
 
@@ -17,7 +18,7 @@ async function extractRawRgb(
   if (seek.sseof != null) args.push("-sseof", String(seek.sseof));
   if (seek.ss != null) args.push("-ss", String(seek.ss));
   args.push("-i", video, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", out);
-  await execa("ffmpeg", args);
+  await execa(FFMPEG_PATH, args);
 }
 
 /** Compare first vs last frame of an mp4. Logs ok/warn; never throws on soft mismatch. */
