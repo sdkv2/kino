@@ -6,6 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
+import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import type { KinoProps } from "../src/render/props.js";
 
 // Frame-accuracy proof for video-in-page app beats: the source video encodes its own frame index
@@ -35,7 +36,7 @@ async function makeIndexVideo(dir: string): Promise<string> {
     list.push(p);
   }
   const out = join(dir, "app.mp4");
-  await execa("ffmpeg", [
+  await execa(FFMPEG_PATH, [
     "-y", "-loglevel", "error",
     "-framerate", String(FPS),
     "-i", join(dir, "src-%03d.ppm"),

@@ -7,6 +7,7 @@ import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
+import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import type { KinoProps } from "../src/render/props.js";
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9 };
@@ -245,8 +246,8 @@ describe("renderVideo with sfx + music", () => {
   it("renders an mp4 with sfx and a ducked music bed without crashing", async () => {
     const publicDir = mkdtempSync(join(tmpdir(), "kino-sfxpub-"));
     const outDir = mkdtempSync(join(tmpdir(), "kino-sfxout-"));
-    await execa("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=880:duration=0.3", join(publicDir, "sfx-0.mp3")]);
-    await execa("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", join(publicDir, "music.mp3")]);
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=880:duration=0.3", join(publicDir, "sfx-0.mp3")]);
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4", join(publicDir, "music.mp3")]);
     const props: KinoProps = {
       theme,
       fps: 30,

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { frames } from "../src/commands/frames.js";
 import { execa } from "execa";
+import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ import { join } from "node:path";
 async function testClip(): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "kino-frtest-"));
   const v = join(dir, "clip.mp4");
-  await execa("ffmpeg", ["-y", "-loglevel", "error",
+  await execa(FFMPEG_PATH, ["-y", "-loglevel", "error",
     "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=30", "-pix_fmt", "yuv420p", v]);
   return v;
 }

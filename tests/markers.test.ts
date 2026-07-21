@@ -77,6 +77,7 @@ describe("computeMarkers", () => {
 
 import { analyzeAudio, decodePcm } from "../src/media/markers.js";
 import { execa } from "execa";
+import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import { mkdtempSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -86,7 +87,7 @@ describe("analyzeAudio (ffmpeg integration)", () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-mk-"));
     const f = join(dir, "burst.mp3");
     // 1s silence, 1s 440Hz tone, 1s silence
-    await execa("ffmpeg", ["-y", "-loglevel", "error",
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error",
       "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
       "-af", "adelay=1000:all=1,apad=pad_dur=1", f]);
     const { markers, jsonPath, wavePath, spectrumPath } = await analyzeAudio(f, dir);
@@ -104,7 +105,7 @@ describe("analyzeAudio (ffmpeg integration)", () => {
   it("decodePcm returns normalized samples at the requested rate", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-pcm-"));
     const f = join(dir, "t.mp3");
-    await execa("ffmpeg", ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", f]);
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", f]);
     const s = await decodePcm(f, 16000);
     expect(s.length).toBeGreaterThan(15000);
     expect(s.length).toBeLessThan(18000);

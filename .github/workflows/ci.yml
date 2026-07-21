@@ -25,6 +25,34 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+      # Render tests probe pixels with ImageMagick 7's `magick`. ffmpeg comes from the
+      # bundled ffmpeg-static, but there is no static ImageMagick dep, so install it here.
+      - name: Install ImageMagick (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          if ! command -v magick >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y libfuse2
+            sudo curl -fsSL https://imagemagick.org/archive/binaries/magick -o /usr/local/bin/magick
+            sudo chmod +x /usr/local/bin/magick
+          fi
+          magick -version
+      - name: Install ImageMagick (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          command -v magick >/dev/null || brew install imagemagick
+          magick -version
+      - name: Install ImageMagick (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Get-Command magick -ErrorAction SilentlyContinue) { magick -version }
+          else {
+            choco install imagemagick -y --no-progress
+            $exe = Get-ChildItem 'C:\Program Files\ImageMagick*\magick.exe' -Recurse | Select-Object -First 1
+            Add-Content $env:GITHUB_PATH $exe.DirectoryName
+            & $exe.FullName -version
+          }
       # prepare script runs tsc + page bundle during npm ci, so dist/ is built here
       - run: npm ci
       - run: npm test

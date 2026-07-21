@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { genSilence, probeDuration, stitchAudio, extractAudio, extractFrame, trailingArtifactCut, trimAudio } from "../src/media/ffmpeg.js";
 import { execa } from "execa";
+import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import { mkdtempSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,7 +17,7 @@ async function makeClip(parts: Array<{ tone?: number; sil?: number }>, out: stri
     chain.push(`[${i}:a]aformat=sample_rates=44100:channel_layouts=mono[a${i}]`);
   });
   const cat = parts.map((_, i) => `[a${i}]`).join("") + `concat=n=${parts.length}:v=0:a=1[o]`;
-  await execa("ffmpeg", ["-y", "-loglevel", "error", ...inputs,
+  await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", ...inputs,
     "-filter_complex", `${chain.join(";")};${cat}`, "-map", "[o]",
     "-c:a", "libmp3lame", "-b:a", "128k", out]);
 }
@@ -44,7 +45,7 @@ describe("ffmpeg helpers", () => {
     const v = join(dir, "v.mp4");
     const wav = join(dir, "a.wav");
     // a 2s clip that actually has an audio stream
-    await execa("ffmpeg", ["-y", "-loglevel", "error",
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error",
       "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
       "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=30",
       "-pix_fmt", "yuv420p", "-shortest", v]);
@@ -91,7 +92,7 @@ describe("ffmpeg helpers", () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-xf-"));
     const v = join(dir, "v.mp4");
     const png = join(dir, "f.png");
-    await execa("ffmpeg", ["-y", "-loglevel", "error",
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error",
       "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=30", "-pix_fmt", "yuv420p", v]);
     await extractFrame(v, 1.0, png);
     expect(existsSync(png)).toBe(true);
