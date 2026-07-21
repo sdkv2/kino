@@ -10,7 +10,8 @@ import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
 import { acquireBrowser, releaseBrowser } from "./browser.js";
-import { getPageBundle } from "./pageBundle.js";
+import { frameSignatures, openFrameCache } from "./frameCache.js";
+import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
 
@@ -47,7 +48,7 @@ function withRenderLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-interface PageHandle {
+export interface PageHandle {
   page: Page;
   seek: (frame: number) => Promise<void>;
   shot: () => Promise<Buffer>;
@@ -147,18 +148,27 @@ const writeFrame = (stdin: NodeJS.WritableStream, buf: Buffer) =>
 // Render frames [0, total) across `workers` pages into the encoder, in order. Workers claim the
 // next frame index; a single drain loop writes each frame as soon as its predecessor shipped,
 // with a bounded look-ahead so memory stays flat.
-async function renderFrameRange(handles: PageHandle[], total: number, stdin: NodeJS.WritableStream): Promise<void> {
+export async function renderFrameRange(
+  handles: PageHandle[],
+  total: number,
+  stdin: NodeJS.WritableStream,
+  cache?: { get(n: number): Promise<Buffer | null>; put(n: number, buf: Buffer): Promise<void> },
+): Promise<void> {
   const AHEAD = 48; // max undrained frames in memory
   const ready = new Map<number, Buffer>();
   let next = 0; // next frame index to claim
   let written = 0; // next frame index to write
   let failure: Error | null = null;
-  let wake: (() => void) | null = null;
+  // Wake-all, not a single slot: workers and the drain wait concurrently, and a lone `wake`
+  // variable drops every resolver but the last registrant — parked workers sleep forever and the
+  // pipeline deadlocks near the AHEAD limit. Spurious wakes are fine; every loop re-checks.
+  let waiters: Array<() => void> = [];
   const notify = () => {
-    wake?.();
-    wake = null;
+    const w = waiters;
+    waiters = [];
+    for (const r of w) r();
   };
-  const waitTick = () => new Promise<void>((resolve) => (wake = resolve));
+  const waitTick = () => new Promise<void>((resolve) => waiters.push(resolve));
 
   const workers = handles.map(async (h) => {
     for (;;) {
@@ -170,8 +180,15 @@ async function renderFrameRange(handles: PageHandle[], total: number, stdin: Nod
       }
       const frame = next++;
       try {
-        await h.seek(frame);
-        ready.set(frame, await h.shot());
+        const cached = cache ? await cache.get(frame) : null;
+        if (cached) {
+          ready.set(frame, cached);
+        } else {
+          await h.seek(frame);
+          const buf = await h.shot();
+          ready.set(frame, buf);
+          if (cache) await cache.put(frame, buf);
+        }
       } catch (err) {
         failure = err as Error;
       }
@@ -288,12 +305,18 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
         const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
         lap(`pages-boot ${fmt}`);
+        // Capture cache: unchanged beats reuse their stored JPEGs; only dirty frames hit Chrome.
+        // Keyed per encode preset — mock (veryfast) and final (medium) share captures fine, but the
+        // cache lives beside the outputs, so a preview and a final build read the same store.
+        const sigs = frameSignatures({ props, publicDir, pageJsHash: await getPageBundleHash(), width, height, total, fps: props.fps });
+        const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset });
-        await renderFrameRange(handles, total, enc.stdin);
-        lap(`frames ${fmt}`);
+        await renderFrameRange(handles, total, enc.stdin, cache);
+        lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
         enc.stdin.end();
         await enc.done;
+        cache.commit();
         lap(`encode-flush ${fmt}`);
         const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
         renameSync(tmpOut, out);
