@@ -372,8 +372,13 @@ export async function build(
 ): Promise<string[]> {
   const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
   log.step("render");
-  // Tag variant renders (explicit --tag, else a --background/--font override) so they don't overwrite the default.
-  const autoTag = opts.tag ?? opts.background ?? (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined);
+  // Tag variant renders (explicit --tag, else a --background/--font override, else mock) so a
+  // preview or variant never overwrites the shipped default render.
+  const autoTag =
+    opts.tag ??
+    opts.background ??
+    (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined) ??
+    (opts.mock ? "mock" : undefined);
   const outName = variantName(spec.title, autoTag);
   // Mock builds are previews — take the fast encode preset; real builds keep the final quality.
   const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: opts.mock ? "veryfast" : "medium" });
