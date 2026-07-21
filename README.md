@@ -14,9 +14,10 @@
 
 ---
 
-**kino** turns an agent-authored JSON spec into finished vertical videos. The driving agent supplies
-the creative; kino handles deterministic production: ElevenLabs voiceover, an optional AI avatar
-(HeyGen / Hedra / Replicate) or a **faceless** background, composited by an in-house headless-Chrome render engine to a 9:16 / 3:4 MP4.
+**kino** turns an agent-authored JSON spec into a finished vertical video. The agent writes the
+spec, kino renders it: ElevenLabs voiceover, an optional AI avatar (HeyGen / Hedra / Replicate)
+or a **faceless** background, composited to a 9:16 / 3:4 MP4 by an in-house headless-Chrome
+render engine.
 
 ## Showcase
 
@@ -28,8 +29,8 @@ the creative; kino handles deterministic production: ElevenLabs voiceover, an op
 </tr>
 <tr>
 <td align="center"><b>The self-demo</b><br><sub>kino types its own <code>advert.json</code> and builds the ad you're watching</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4">▶ watch with sound</a></td>
-<td align="center"><b>The Descent</b><br><sub>long-form build — shows kino holding pace and structure well past a typical 30s spot</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent.mp4">▶ watch full video with sound</a></td>
-<td align="center"><b>Lunara</b><br><sub>stock b-roll + a quiet mood read — the calm end of the range</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4">▶ watch with sound</a></td>
+<td align="center"><b>The Descent</b><br><sub>a long-form build, well past the usual 30s spot</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent.mp4">▶ watch full video with sound</a></td>
+<td align="center"><b>Lunara</b><br><sub>stock b-roll and a quiet voiceover</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4">▶ watch with sound</a></td>
 </tr>
 </table>
 
@@ -41,7 +42,7 @@ spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ avatar plan + tri
           ─▶ avatar (HeyGen/Hedra/Replicate) or faceless background / motion graphics
           ─▶ native render (headless Chrome) ─▶ ffmpeg ─▶ out/<title>/…mp4
 ```
-The agent authors specs; kino performs every step deterministically (no LLM inside the CLI).
+No LLM inside the CLI: every step is deterministic, so the same spec renders the same video.
 
 ## Install
 ```bash
@@ -55,9 +56,9 @@ install what's missing), `npm install` / `build` / `link`, then an API-key walkt
 cd ~/kino && npm install && npm run build && npm link
 ```
 Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Real VO needs an
-[ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral — supports the project) —
-faceless builds need only that; avatar builds need it too whenever kino drives the voice
-(most setups), plus the avatar provider key.
+[ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project).
+Faceless builds need only that. Avatar builds also need the avatar provider's key, plus
+ElevenLabs whenever kino drives the voice (most setups).
 
 ## Quickstart
 ```bash
@@ -67,7 +68,7 @@ npx @sdkv2/kino build projects/acme/specs/sample.json --mock  # free structural 
 npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → projects/acme/out/sample/
 ```
 `kino init` writes a ready-to-build faceless sample (provider `none`, $0), so the first
-`kino build` works with no editing — swap in your own spec once the preview looks right.
+`kino build` works with no editing. Swap in your own spec once the preview looks right.
 
 `npx` pulls Node deps fresh each first run — Puppeteer's Chromium is bundled. ffmpeg/ffprobe use
 your system install if on PATH, otherwise fall back to a bundled binary automatically. For
@@ -75,8 +76,8 @@ frequent use, `npm i -g @sdkv2/kino` avoids the npx resolve overhead.
 
 ## Agent skills
 
-Playbooks live only in [`skills/`](skills/) (`video-production`, `ad-voice`, `adversarial-critique`, …).
-That directory is the sole source of truth in the repo.
+Agent playbooks (`video-production`, `ad-voice`, `adversarial-critique`, …) are in
+[`skills/`](skills/) — the only copy in the repo.
 
 **From any project** (Cursor / Claude Code / Codex / …):
 
@@ -102,8 +103,8 @@ Agent fan-out dirs stay off git so they do not clutter the tree. Details: [`skil
   frame-deterministic Canvas2D, auto-coloured from the brand.
 - **Captions** — `phrase` (editorial block) or `words` (revealed word-by-word, synced to real VO
   timestamps, with active-word highlight + per-segment emphasis).
-- **Fonts** — curated names (`kino fonts`) downloaded on demand (Google Fonts → `~/.kino/fonts/`),
-  or any raw CSS family.
+- **Fonts** — pick a name from `kino fonts` (fetched on demand from Google Fonts into
+  `~/.kino/fonts/`), or use any raw CSS family.
 - **Stock media** — `kino pexels` (video) and `kino photos` (stills) search Pexels (portrait-first)
   into project assets; same `PEXELS_API_KEY`. `.mp4` / `.jpg` work in app cut-ins.
 - **Animated backgrounds & overlays** — backgrounds, logo, captions, and kickers are all tweenable
@@ -120,7 +121,7 @@ Agent fan-out dirs stay off git so they do not clutter the tree. Details: [`skil
   assigns a brand). `kino init <brand>` scaffolds the first one; `kino projects --new` adds more.
 
 ## Documentation
-Full guides live in [`docs/`](docs/):
+Longer guides are in [`docs/`](docs/):
 - [Getting started](docs/getting-started.md) — install, scaffold, first render.
 - [CLI reference](docs/cli-reference.md) — every command + flag.
 - [Spec reference](docs/spec-reference.md) — the JSON spec, `brand.md`, `project.json`.
