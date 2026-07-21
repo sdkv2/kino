@@ -3,15 +3,17 @@ import { resolveProject, resolveWorkspace, findUp } from "../src/config/project.
 import { ProjectConfigSchema } from "../src/config/projectConfig.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 describe("findUp", () => {
+  // findUp joins with the platform separator, so fixture paths must too or the win32 lookups miss.
+  const P = (s: string) => s.split("/").join(sep);
   it("returns the nearest ancestor that contains the marker", () => {
-    const fs = new Set(["/a/brands"]);
-    expect(findUp("/a/b/c", "brands", (p) => fs.has(p))).toBe("/a");
+    const fs = new Set([P("/a/brands")]);
+    expect(findUp(P("/a/b/c"), "brands", (p) => fs.has(p))).toBe(P("/a"));
   });
   it("returns null when the marker is never found", () => {
-    expect(findUp("/a/b/c", "brands", () => false)).toBeNull();
+    expect(findUp(P("/a/b/c"), "brands", () => false)).toBeNull();
   });
 });
 

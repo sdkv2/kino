@@ -7,7 +7,8 @@ import ffprobeStatic from "ffprobe-static";
 // shift a few ms across ffmpeg versions. Bundled binaries are the zero-install fallback.
 function onPath(cmd: string): boolean {
   try {
-    execSync(`command -v ${cmd}`, { stdio: "ignore" });
+    // `command -v` is a POSIX shell builtin; cmd.exe needs `where`.
+    execSync(process.platform === "win32" ? `where ${cmd}` : `command -v ${cmd}`, { stdio: "ignore" });
     return true;
   } catch {
     return false;
