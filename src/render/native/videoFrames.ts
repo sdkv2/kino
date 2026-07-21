@@ -185,22 +185,31 @@ async function extractIndices(
   // -copyts keeps `t` equal to the probed pts. Pre-seek to ~1s before the first wanted frame
   // (-noaccurate_seek lands on the prior keyframe) so a deep clipFrom into a long source doesn't
   // decode the whole head of the file.
-  const terms = uniq.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
-  const select = `select='${terms.join("+")}'`;
+  // ffmpeg 8's expression parser rejects long `+` chains (recursion limit lands between 80 and
+  // 120 between() terms — "Cannot allocate memory"), so extract in chunks. -start_number keeps
+  // the output numbering contiguous across chunks; indices are sorted, so an EOF-shortened run
+  // still leaves a gap-free file list (later chunks are past EOF and produce nothing).
+  const CHUNK = 64;
   const hdr = await hdrChain(transfer);
-  const vf = hdr ? `${select},${hdr}` : select;
-  const firstPts = pts[uniq[0]];
-  const preseek = firstPts > 2 ? ["-ss", Math.max(0, firstPts - 1).toFixed(3), "-noaccurate_seek", "-copyts"] : [];
-  await execa(FFMPEG_PATH, [
-    "-y", "-loglevel", "error",
-    ...preseek,
-    "-i", assetAbs,
-    "-vf", vf,
-    "-fps_mode", "passthrough",
-    "-frames:v", String(uniq.length),
-    "-q:v", "2",
-    join(dir, "x%06d.jpg"),
-  ]);
+  for (let c = 0; c < uniq.length; c += CHUNK) {
+    const part = uniq.slice(c, c + CHUNK);
+    const terms = part.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
+    const select = `select='${terms.join("+")}'`;
+    const vf = hdr ? `${select},${hdr}` : select;
+    const firstPts = pts[part[0]];
+    const preseek = firstPts > 2 ? ["-ss", Math.max(0, firstPts - 1).toFixed(3), "-noaccurate_seek", "-copyts"] : [];
+    await execa(FFMPEG_PATH, [
+      "-y", "-loglevel", "error",
+      ...preseek,
+      "-i", assetAbs,
+      "-vf", vf,
+      "-fps_mode", "passthrough",
+      "-frames:v", String(part.length),
+      "-start_number", String(c + 1),
+      "-q:v", "2",
+      join(dir, "x%06d.jpg"),
+    ]);
+  }
   // Outputs arrive in source order → x000001.jpg maps to uniq[0], etc. EOF can shorten the run;
   // local frames whose index wasn't reached clamp to the last extracted file (hold last frame).
   const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(".jpg")).sort();
