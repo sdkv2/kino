@@ -15,6 +15,11 @@ const SYSTEM_CHROME = [
 
 async function resolveExecutable(): Promise<string | undefined> {
   if (process.env.KINO_CHROME) return process.env.KINO_CHROME;
+  // Chrome-for-Testing has no linux-arm64 builds; puppeteer downloads an x86-64 binary there
+  // (crashes at launch with free(): invalid pointer). Use the system's native Chromium instead.
+  if (process.platform === "linux" && process.arch === "arm64") {
+    return SYSTEM_CHROME.find((p) => existsSync(p));
+  }
   try {
     const p = await puppeteer.executablePath();
     if (p && existsSync(p)) return p;

@@ -3,7 +3,7 @@
 // mixed node-side), so the output is deterministic run-to-run. Public API mirrors render.ts.
 import { spawn } from "node:child_process";
 import { cpus, tmpdir } from "node:os";
-import { mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, Page } from "puppeteer";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
@@ -21,6 +21,18 @@ const DIMS: Record<string, { width: number; height: number }> = {
 };
 
 export type EncodePreset = "medium" | "veryfast";
+
+// rename() fails with EXDEV when the scratch dir (os.tmpdir, often tmpfs on Linux) and the
+// output dir sit on different filesystems — fall back to copy + delete.
+function moveFile(src: string, dest: string): void {
+  try {
+    renameSync(src, dest);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EXDEV") throw e;
+    copyFileSync(src, dest);
+    rmSync(src, { force: true });
+  }
+}
 
 // Composition length contract (matches the legacy calculateMetadata): last segment end, or a
 // 30-second default when there are no segments.
@@ -319,7 +331,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         cache.commit();
         lap(`encode-flush ${fmt}`);
         const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
-        renameSync(tmpOut, out);
+        moveFile(tmpOut, out);
         outputs.push(out);
       }
     } finally {
