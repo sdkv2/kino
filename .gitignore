@@ -33,3 +33,6 @@ examples/**/out/
 
 # Local self-demo render (served from R2)
 kino-meta.mp4
+
+# demo workspace (GIFs served from git history via raw URLs)
+demos/
