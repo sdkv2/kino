@@ -7,6 +7,7 @@ import { lintMotionSource } from "../render/motiongraphic.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveMotionSource } from "../media/motionLib.js";
 import { log } from "../log.js";
+import { KINO_VERSION } from "../version.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -202,6 +203,13 @@ export function assertVoiceTags(spec: Spec, brand: Brand): void {
   );
 }
 
+/** Soft warning when the spec was authored/built against a different kino version. */
+export function assertKinoVersion(spec: Spec): void {
+  if (spec.kinoVersion && spec.kinoVersion !== KINO_VERSION) {
+    log.warn(`spec.kinoVersion "${spec.kinoVersion}" does not match installed kino ${KINO_VERSION} — behavior may differ`);
+  }
+}
+
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   const hits = complianceScan(spec, brand);
   if (hits.length) {
@@ -213,4 +221,5 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertSeamlessLoop(spec, brand);
   assertBackgroundChoice(spec, brand);
   assertVoiceTags(spec, brand);
+  assertKinoVersion(spec);
 }
