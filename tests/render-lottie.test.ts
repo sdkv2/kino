@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderStills } from "../src/render/render.js";
-import { execSync } from "node:child_process";
+import { magick } from "./magick.js";
 import { mkdtempSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +8,7 @@ import type { KinoProps } from "../src/render/props.js";
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9 };
 const bg = { kind: "glow" as const, image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] };
-const sampleCenter = (png: string) => execSync(`magick "${png}" -format "%[pixel:p{540,960}]" info:`).toString().trim();
+const sampleCenter = (png: string) => magick([png, "-format", "%[pixel:p{540,960}]", "info:"]).trim();
 const greenOf = (s: string) => {
   const m = s.match(/srgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (!m) throw new Error(`Unexpected pixel format: ${s}`);
@@ -70,7 +70,7 @@ describe("Tier-3 Lottie render", () => {
 // The pop.json burst is magenta (#ff00ff), absent from the glow background. The center pixel (540,960)
 // is the burst's anchor, so it reads magenta whenever a burst is on screen and the background otherwise.
 const centerIsMagenta = (png: string) => {
-  const s = execSync(`magick "${png}" -format "%[pixel:p{540,960}]" info:`).toString();
+  const s = magick([png, "-format", "%[pixel:p{540,960}]", "info:"]);
   const m = s.match(/srgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (!m) throw new Error(`Unexpected pixel format: ${s}`);
   const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
@@ -100,8 +100,8 @@ describe("Tier-3 Lottie word-fire (triggers)", () => {
       outDir: mkdtempSync(join(tmpdir(), "kino-lottie-fire-")),
     });
     expect(
-      execSync(`magick "${outs[1]}" -format "%[pixel:p{540,960}]" info:`).toString(),
-    ).toBe(execSync(`magick "${outs[2]}" -format "%[pixel:p{540,960}]" info:`).toString()); // determinism
+      magick([outs[1], "-format", "%[pixel:p{540,960}]", "info:"]),
+    ).toBe(magick([outs[2], "-format", "%[pixel:p{540,960}]", "info:"])); // determinism
     expect(centerIsMagenta(outs[1])).toBe(true);  // burst 1 on screen at its trigger
     expect(centerIsMagenta(outs[4])).toBe(true);  // burst 2 on screen at its trigger
     expect(centerIsMagenta(outs[0])).toBe(false); // nothing before the first trigger

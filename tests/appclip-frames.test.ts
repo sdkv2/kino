@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderStills } from "../src/render/render.js";
 import { appFreezeFrame, appTrimFrames } from "../src/render/appMedia.js";
-import { execSync } from "node:child_process";
+import { magick } from "./magick.js";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,7 +47,7 @@ async function makeIndexVideo(dir: string): Promise<string> {
 }
 
 const redAt = (png: string) => {
-  const s = execSync(`magick "${png}" -format "%[pixel:p{540,960}]" info:`).toString();
+  const s = magick([png, "-format", "%[pixel:p{540,960}]", "info:"]);
   const m = s.match(/srgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (!m) throw new Error(`Unexpected pixel format: ${s}`);
   return Number(m[1]);

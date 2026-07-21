@@ -3,7 +3,7 @@ import { renderVideo, renderStills } from "../src/render/render.js";
 import { probeDuration } from "../src/media/ffmpeg.js";
 import { generateMock } from "../src/avatar/heygen.js";
 import { mkdtempSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { magick } from "./magick.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execa } from "execa";
@@ -188,7 +188,7 @@ describe("renderVideo", () => {
     };
     const outs = await renderStills({ props, publicDir: outDir, format: "9:16", frames: [{ frame: 5, name: "s1" }, { frame: 55, name: "s2" }], outDir });
     // top-left corner, well clear of any centred content: pixel is driven only by the background draw.
-    const sample = (png: string) => execSync(`magick "${png}" -format "%[pixel:p{40,60}]" info:`).toString().trim();
+    const sample = (png: string) => magick([png, "-format", "%[pixel:p{40,60}]", "info:"]).trim();
     expect(sample(outs[0])).toBe(sample(outs[1])); // static: frame doesn't move it
   }, 180000);
 

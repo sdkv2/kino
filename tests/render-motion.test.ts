@@ -1,15 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { renderStills } from "../src/render/render.js";
-import { execSync } from "node:child_process";
+import { magick } from "./magick.js";
 import { mkdtempSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { KinoProps } from "../src/render/props.js";
-
-// Windows headless Chrome renders .kino-pulse/.kino-rise fully visible before their trigger
-// (magentaFraction ~1.0 where mac/linux give ~0), and DirectWrite AA shifts the cliptext
-// glyph-edge threshold. Skipped there until the trigger scrub is debugged on win32.
-const isWin = process.platform === "win32";
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9 };
 const bg = { kind: "glow" as const, image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] };
@@ -47,7 +42,7 @@ describe("motion graphics render", () => {
   }, 180000);
 });
 
-const sampleCenter = (png: string) => execSync(`magick "${png}" -format "%[pixel:p{540,960}]" info:`).toString().trim();
+const sampleCenter = (png: string) => magick([png, "-format", "%[pixel:p{540,960}]", "info:"]).trim();
 
 describe("motion graphics @keyframes scrub", () => {
   it("scrubs a .kino-anim @keyframes across the beat, deterministically", async () => {
@@ -93,13 +88,11 @@ describe("motion graphics @keyframes scrub", () => {
 // measures the gradient-clipped glyph's painted area. ImageMagick: magenta→white, everything else→black.
 const magentaFraction = (png: string) =>
   parseFloat(
-    execSync(`magick "${png}" -fuzz 28% -fill white -opaque '#ff00ff' -fuzz 0 -fill black +opaque white -format "%[fx:mean]" info:`)
-      .toString()
-      .trim(),
+    magick([png, "-fuzz", "28%", "-fill", "white", "-opaque", "#ff00ff", "-fuzz", "0", "-fill", "black", "+opaque", "white", "-format", "%[fx:mean]", "info:"]).trim(),
   );
 
 describe("motion graphics kino-cliptext helper", () => {
-  it.skipIf(isWin)("restores the trailing glyph edge that background-clip:text would otherwise cut", async () => {
+  it("restores the trailing glyph edge that background-clip:text would otherwise cut", async () => {
     // A shrink-wrapped, gradient-clipped glyph with tight negative letter-spacing: the box ends up
     // narrower than the ink, so the right of the "8" has no gradient behind it → transparent (cut).
     // class="kino-cliptext" widens the paint box so that ink keeps its gradient. Solid magenta so it
@@ -213,7 +206,7 @@ describe("motion graphics CSS helper kit", () => {
       motion: { html, params: {}, keyframes: [], triggers } }],
   });
 
-  it.skipIf(isWin)(".kino-pulse pops on a trigger (action:pulse) and is hidden before it, deterministically", async () => {
+  it(".kino-pulse pops on a trigger (action:pulse) and is hidden before it, deterministically", async () => {
     // Full-frame magenta box opacity/scale-driven by --pulse. Trigger at 0.5s (frame 15): hidden at
     // frame 6 (pulse 0), shown at frame 16 (pulse ~1). Magenta is absent from the glow background.
     const html = `<style>.b{position:absolute;inset:0;background:#ff00ff}</style><div class="b kino-pulse"></div>`;
@@ -228,7 +221,7 @@ describe("motion graphics CSS helper kit", () => {
     expect(sampleCenter(outs[1])).toBe(sampleCenter(outs[2])); // same frame twice → identical
   }, 180000);
 
-  it.skipIf(isWin)(".kino-rise reveals across the beat and holds, deterministically", async () => {
+  it(".kino-rise reveals across the beat and holds, deterministically", async () => {
     // Reveal completes by ~35% of the beat then holds: hidden at frame 0 (opacity 0), shown by frame 50.
     const html = `<style>.b{position:absolute;inset:0;background:#ff00ff}</style><div class="b kino-rise"></div>`;
     const outs = await renderStills({
@@ -249,8 +242,8 @@ const brightnessOf = (s: string) => {
   return (Number(m[1]) + Number(m[2]) + Number(m[3])) / 3;
 };
 const sampleAt = (png: string, x: number, y: number) =>
-  execSync(`magick "${png}" -format "%[pixel:p{${x},${y}}]" info:`).toString().trim();
-const stddev = (png: string) => parseFloat(execSync(`magick "${png}" -format "%[fx:standard_deviation]" info:`).toString().trim());
+  magick([png, "-format", `%[pixel:p{${x},${y}}]`, "info:"]).trim();
+const stddev = (png: string) => parseFloat(magick([png, "-format", "%[fx:standard_deviation]", "info:"]).trim());
 
 describe("motion graphics SVG texture library", () => {
   const mkMotion = (html: string, disclosure = "test"): KinoProps => ({
