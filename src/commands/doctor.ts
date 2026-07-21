@@ -2,6 +2,7 @@ import { execa } from "execa";
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
+import { FFMPEG_PATH, FFPROBE_PATH } from "../media/binPaths.js";
 import { listMusicIds, listSfxIds } from "../media/sfx.js";
 import { log } from "../log.js";
 
@@ -18,8 +19,8 @@ export async function doctor(): Promise<void> {
   loadEnv(resolveWorkspace().workspaceRoot);
   const checks: Array<[string, boolean]> = [
     ["node", true],
-    ["ffmpeg", await has("ffmpeg", ["-version"])],
-    ["ffprobe", await has("ffprobe", ["-version"])],
+    ["ffmpeg", await has(FFMPEG_PATH, ["-version"])],
+    ["ffprobe", await has(FFPROBE_PATH, ["-version"])],
     ["heygen CLI (provider: heygen)", await has("heygen", ["--version"])],
     ["ELEVENLABS_API_KEY", !!process.env.ELEVENLABS_API_KEY],
     ["HEYGEN_API_KEY (provider: heygen)", !!process.env.HEYGEN_API_KEY],
@@ -53,7 +54,7 @@ export async function doctor(): Promise<void> {
     }
   }
 
-  log.info("Faceless (provider: none) needs only ffmpeg + ELEVENLABS_API_KEY — no avatar credits.");
+  log.info("Faceless (provider: none) needs only ELEVENLABS_API_KEY — no avatar credits (ffmpeg falls back to a bundled binary if not on PATH).");
   log.info("HeyGen lip-sync needs Avatar-IV photo looks (kino avatars); hedra/replicate need a portrait image (brand.avatarImage).");
   log.info("Music/SFX: kino music · bare ids in the spec · kino audio-markers to place sfx[].at");
 }

@@ -3,9 +3,10 @@
 // seamless-loop ads. Hold the last video frame to cover the overhang.
 import { renameSync, unlinkSync } from "node:fs";
 import { execa } from "execa";
+import { FFMPEG_PATH, FFPROBE_PATH } from "./binPaths.js";
 
 async function streamDuration(file: string, which: "v:0" | "a:0"): Promise<number> {
-  const { stdout } = await execa("ffprobe", [
+  const { stdout } = await execa(FFPROBE_PATH, [
     "-v", "error",
     "-select_streams", which,
     "-show_entries", "stream=duration",
@@ -26,7 +27,7 @@ export async function holdLastFrameToMatchAudio(videoPath: string): Promise<numb
 
   const tmp = videoPath.replace(/\.mp4$/i, "") + ".avsync-tmp.mp4";
   try {
-    await execa("ffmpeg", [
+    await execa(FFMPEG_PATH, [
       "-y", "-loglevel", "error",
       "-i", videoPath,
       "-vf", `tpad=stop_mode=clone:stop_duration=${pad.toFixed(4)}`,

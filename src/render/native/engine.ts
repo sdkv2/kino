@@ -6,6 +6,7 @@ import { cpus, tmpdir } from "node:os";
 import { mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser, Page } from "puppeteer";
+import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
 import { acquireBrowser, releaseBrowser } from "./browser.js";
@@ -128,7 +129,7 @@ function startEncoder(opts: { fps: number; out: string; audio: string | null; pr
     "-movflags", "+faststart",
     opts.out,
   ];
-  const proc = spawn("ffmpeg", args, { stdio: ["pipe", "ignore", "pipe"] });
+  const proc = spawn(FFMPEG_PATH, args, { stdio: ["pipe", "ignore", "pipe"] });
   let stderr = "";
   proc.stderr.on("data", (d) => (stderr += d));
   const done = new Promise<void>((resolve, reject) => {

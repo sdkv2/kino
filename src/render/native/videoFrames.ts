@@ -12,6 +12,7 @@
 import { execa } from "execa";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { FFMPEG_PATH, FFPROBE_PATH } from "../../media/binPaths.js";
 import { appFreezeFrame, appTrimFrames } from "../appMedia.js";
 import type { KinoProps } from "../props.js";
 
@@ -93,14 +94,14 @@ interface VideoInfo {
 
 async function probeVideo(abs: string): Promise<VideoInfo> {
   const [{ stdout: meta }, { stdout: packets }] = await Promise.all([
-    execa("ffprobe", [
+    execa(FFPROBE_PATH, [
       "-v", "error", "-select_streams", "v:0",
       "-show_entries", "stream=color_transfer",
       "-of", "default=noprint_wrappers=1", abs,
     ]),
     // Packet pts only — no decode, fast even on long clips. Sorting yields display order
     // regardless of B-frame reordering.
-    execa("ffprobe", [
+    execa(FFPROBE_PATH, [
       "-v", "error", "-select_streams", "v:0",
       "-show_entries", "packet=pts_time",
       "-of", "csv=p=0", abs,
@@ -135,7 +136,7 @@ function nearestPtsIndex(pts: number[], t: number): number {
 // close for HLG (its lower range is gamma-like by design), acceptable for PQ.
 let filterList: Promise<string> | null = null;
 async function ffmpegFilters(): Promise<string> {
-  filterList ??= execa("ffmpeg", ["-hide_banner", "-filters"]).then(
+  filterList ??= execa(FFMPEG_PATH, ["-hide_banner", "-filters"]).then(
     (r) => r.stdout,
     () => "",
   );
@@ -190,7 +191,7 @@ async function extractIndices(
   const vf = hdr ? `${select},${hdr}` : select;
   const firstPts = pts[uniq[0]];
   const preseek = firstPts > 2 ? ["-ss", Math.max(0, firstPts - 1).toFixed(3), "-noaccurate_seek", "-copyts"] : [];
-  await execa("ffmpeg", [
+  await execa(FFMPEG_PATH, [
     "-y", "-loglevel", "error",
     ...preseek,
     "-i", assetAbs,

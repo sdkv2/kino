@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { FFMPEG_PATH } from "../media/binPaths.js";
 
 export interface Look {
   id: string;
@@ -60,7 +61,7 @@ export async function pollDownload(videoId: string, out: string, timeoutSec = 60
 
 // --mock: a 6s silent placeholder so render runs with zero spend.
 export async function generateMock(out: string): Promise<void> {
-  await execa("ffmpeg", [
+  await execa(FFMPEG_PATH, [
     "-y", "-loglevel", "error",
     "-f", "lavfi", "-i", "color=c=0x0b1020:s=1080x1920:r=30:d=6",
     "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",

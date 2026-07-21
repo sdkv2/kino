@@ -61,13 +61,17 @@ faceless builds need only that; avatar builds need it too whenever kino drives t
 
 ## Quickstart
 ```bash
-cd <project> && kino init acme                       # scaffold .env, brand.md, dirs + a sample spec
-kino doctor                                          # preflight: API keys, ffmpeg/ffprobe, heygen CLI
-kino build projects/acme/specs/sample.json --mock    # free structural preview (no API spend)
-kino build projects/acme/specs/sample.json           # real render → projects/acme/out/sample/
+cd <project> && npx @sdkv2/kino init acme            # scaffold .env, brand.md, dirs + a sample spec
+npx @sdkv2/kino doctor                               # preflight: API keys, ffmpeg/ffprobe, heygen CLI
+npx @sdkv2/kino build projects/acme/specs/sample.json --mock  # free structural preview (no API spend)
+npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → projects/acme/out/sample/
 ```
 `kino init` writes a ready-to-build faceless sample (provider `none`, $0), so the first
 `kino build` works with no editing — swap in your own spec once the preview looks right.
+
+`npx` pulls Node deps fresh each first run — Puppeteer's Chromium is bundled. ffmpeg/ffprobe use
+your system install if on PATH, otherwise fall back to a bundled binary automatically. For
+frequent use, `npm i -g @sdkv2/kino` avoids the npx resolve overhead.
 
 ## Agent skills
 
