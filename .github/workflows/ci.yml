@@ -26,9 +26,13 @@ jobs:
       # trailingArtifactCut. Put ffmpeg 8 on PATH per-OS so binPaths prefers it.
       - name: Install ffmpeg 8 (Linux)
         if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz | sudo tar -xJ -C /opt
-          sudo ln -s /opt/ffmpeg-n8.1-*/bin/ffmpeg /opt/ffmpeg-n8.1-*/bin/ffprobe /usr/local/bin/
+          url=$(gh api repos/BtbN/FFmpeg-Builds/releases/latest \
+            --jq '[.assets[] | select(.name | test("linux64-gpl-8\\.[0-9.]+\\.tar\\.xz$"))][0].browser_download_url')
+          curl -fsSL "$url" | sudo tar -xJ -C /opt
+          sudo ln -s /opt/ffmpeg-*/bin/ffmpeg /opt/ffmpeg-*/bin/ffprobe /usr/local/bin/
           ffmpeg -version | head -1
       - name: Install ffmpeg 8 (macOS)
         if: runner.os == 'macOS'
@@ -38,8 +42,12 @@ jobs:
       - name: Install ffmpeg 8 (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl.exe -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n8.1-latest-win64-gpl-8.1.zip -o ffmpeg.zip
+          $url = gh api repos/BtbN/FFmpeg-Builds/releases/latest `
+            --jq '[.assets[] | select(.name | test("win64-gpl-8\\.[0-9.]+\\.zip$"))][0].browser_download_url'
+          curl.exe -fsSL $url -o ffmpeg.zip
           Expand-Archive ffmpeg.zip -DestinationPath C:\ffmpeg
           $dir = Get-ChildItem 'C:\ffmpeg' -Directory | Select-Object -First 1
           Add-Content $env:GITHUB_PATH (Join-Path $dir.FullName 'bin')
