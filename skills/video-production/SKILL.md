@@ -316,8 +316,7 @@ don't reintroduce per-caption `y` offsets to compensate.
   stretch/loop). Assets must embed images (base64 `data:` URIs) and outline/embed fonts (no system fonts,
   no AE expressions). Works in all three motion slots (`kind:"motion"`, `motionOverlay` on `avatar` or `app`).
   Rebrand a template's logo/image slot by replacing the image asset's base64 `p` payload.
-  When adapting LottieFiles downloads, see "Sourcing from LottieFiles" in
-  docs/motion-graphics.md — notably: strip the `fh`/`fs`/`fb` block creator exports stamp on text
+  When adapting LottieFiles downloads: strip the `fh`/`fs`/`fb` block creator exports stamp on text
   animators (renders all text red in lottie-web), delete the near-universal opaque `Background` layer,
   and don't rewrite template text (glyphs are baked; only exported characters render).
   **After any Lottie adapt/rebrand:** `kino still --segment N` (layout + transparency) **and**

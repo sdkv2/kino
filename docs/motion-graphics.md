@@ -352,36 +352,6 @@ The build **rejects** assets that violate kino's determinism/safety contract:
 
 > `.lottie` (dotLottie binary) support and brand color-token recoloring are documented follow-ons and are not yet implemented.
 
-### Sourcing from LottieFiles
-
-> **Licensing** — LottieFiles templates carry the original creator's license (free-tier templates
-> are typically free for personal/commercial use with restrictions that vary by creator; some
-> require attribution, some are paid-tier only). Cleaning a template (removing the background layer,
-> fixing the HSB artifact) does **not** change its license. Adapted templates stay in your
-> project's `assets/` — verify the source template's license before redistributing one anywhere
-> public. When in doubt, prefer CC0 sources or author the animation from scratch.
-
-When adapting downloads (download as **Lottie JSON**, not `.lottie`), templates from the LottieFiles creator
-(`meta.g: @lottiefiles/creator`) are the best-behaved family: no expressions, fonts embedded as
-`data:` TTFs, glyph outlines baked in `chars`, and customization slots named in layer names
-(`Edit_*`, `Replace_Background`, `Logo_Here`, `Click_*`). Four gotchas found the hard way:
-
-- **Red-text HSB artifact** — creator exports stamp every text animator with `fh:0, fs:100, fb:100`
-  (fill hue/saturation/brightness). The LottieFiles player ignores the block; lottie-web honors it,
-  and full saturation at hue 0 tints **all text red**. Delete `fh`/`fs`/`fb` from `t.a[].a` so the
-  authored `fc` fill color renders.
-- **Opaque full-frame background is near-universal** — usually a top-level layer named `Background`/
-  `BG` (or an opaque card). Delete the layer to composite over kino's faceless background or use the
-  asset as an overlay.
-- **Text is glyph-limited** — text renders from the baked `chars` outlines, so edits are limited to
-  glyphs the export already contains; missing characters fall back to the embedded font with a
-  console warning. Treat template copy as fixed (or hide text layers) rather than rewriting freely.
-- **Aspect** — most templates are 1920×1080 or 1080×1080; in a 9:16 frame they letterbox into a
-  centered band (contain-fit). Fine for mid-frame content; check the storyboard before shipping.
-
-To rebrand an image slot (e.g. the `Logo_Here` placeholder), replace the image asset's base64 `p`
-payload with your own PNG data URI — the animation's masks and motion carry over unchanged.
-
 ## Determinism & safety (the lint)
 
 The build **rejects** a graphic that contains any of the following (each error tells you what to do instead), from [`src/render/motiongraphic.ts`](../src/render/motiongraphic.ts):
