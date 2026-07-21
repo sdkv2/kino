@@ -23,12 +23,12 @@ the creative; kino handles deterministic production: ElevenLabs voiceover, an op
 <table>
 <tr>
 <td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4" title="Watch with sound"><img src="demos/kino-meta.gif" width="240" alt="kino writing its own advert.json spec, live"></a></td>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/canned-doom.mp4" title="Watch with sound"><img src="demos/canned-doom.gif" width="240" alt="Canned Doom — all-motion spoof product ad"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-clip.mp4" title="Watch with sound"><img src="demos/the-descent.gif" width="240" alt="The Descent — kino trailer"></a></td>
 <td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4" title="Watch with sound"><img src="demos/lunara.gif" width="240" alt="Lunara — quiet mood piece"></a></td>
 </tr>
 <tr>
 <td align="center"><b>The self-demo</b><br><sub>kino types its own <code>advert.json</code> and builds the ad you're watching</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4">▶ watch with sound</a></td>
-<td align="center"><b>Canned Doom</b><br><sub>all authored motion graphics — no footage, word-synced typing</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/canned-doom.mp4">▶ watch with sound</a></td>
+<td align="center"><b>The Descent</b><br><sub>trailer clip</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent.mp4">▶ watch full video with sound</a></td>
 <td align="center"><b>Lunara</b><br><sub>stock b-roll + a quiet mood read — the calm end of the range</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4">▶ watch with sound</a></td>
 </tr>
 </table>
