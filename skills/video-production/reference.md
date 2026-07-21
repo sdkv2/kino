@@ -14,7 +14,7 @@
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
 - `kino fonts` — list curated fonts (with descriptions + cache status)
-- `kino projects [--new <name> --brand <brand>]` — list or scaffold projects
+- `kino projects [--new <name>] [--brand <brand>]` — list or scaffold projects (brand optional)
 - `kino pexels "<query>" [--get n --project]` — stock b-roll (local thumbs cached on search)
 - `kino music [query] [--get n --project]` — bundled beds or Freesound CC0 search (15–90s short-form)
 - `kino audio-markers <file>` — onsets/peaks/silences for `sfx[].at`

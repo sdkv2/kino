@@ -63,7 +63,8 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
 
 **Projects** keep campaigns tidy: `projects/<name>/{specs,assets,out}` + a `project.json` that assigns a
 shared brand and default overrides. Run any command on a spec inside a project (kino infers it from the
-path) or pass `--project <name>`. `kino projects --new <name> --brand <brand>` scaffolds one. Specs must
+path) or pass `--project <name>`. `kino projects --new <name> [--brand <brand>]` scaffolds one (brand
+optional — omitted = kino house defaults). Specs must
 live under a project — there is no flat layout.
 
 ## Avatar provider (cost lever — pick deliberately)

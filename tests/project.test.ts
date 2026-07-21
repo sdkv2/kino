@@ -89,8 +89,9 @@ describe("resolveProject", () => {
 });
 
 describe("ProjectConfigSchema", () => {
-  it("requires a brand and accepts optional default overrides", () => {
+  it("accepts an optional brand and optional default overrides", () => {
     expect(ProjectConfigSchema.parse({ brand: "acme", background: "mesh" })).toMatchObject({ brand: "acme", background: "mesh" });
-    expect(ProjectConfigSchema.safeParse({}).success).toBe(false);
+    expect(ProjectConfigSchema.parse({}).brand).toBeUndefined();
+    expect(ProjectConfigSchema.safeParse({ brand: 7 }).success).toBe(false);
   });
 });
