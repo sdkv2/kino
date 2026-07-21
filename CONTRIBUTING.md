@@ -11,7 +11,7 @@ npm run build          # tsc → dist/
 npm link               # optional: makes `kino` available globally
 ```
 
-Requires Node 18+ and ffmpeg/ffprobe (plus ImageMagick for storyboards). `bash setup.sh`
+Requires Node 20+ and ffmpeg/ffprobe (plus ImageMagick for storyboards). `bash setup.sh`
 automates all of this, including an API-key walkthrough.
 
 No API keys are needed for most development: `kino build <spec> --mock` renders a full

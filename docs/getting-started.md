@@ -8,7 +8,7 @@ This guide takes you from a clean checkout to your first rendered video. For the
 
 | Requirement | Why |
 |---|---|
-| **Node 18+** | runtime (the CLI is ESM) |
+| **Node 20+** | runtime (the CLI is ESM) |
 | **ffmpeg / ffprobe** | audio muxing, frame extraction |
 | **ImageMagick** (`magick`) | storyboard contact sheets + frame montages |
 | **ElevenLabs API key** | voiceover (required for real renders — faceless and most avatar setups) |
@@ -28,7 +28,7 @@ cd <your-project>
 bash ~/kino/setup.sh          # installs the `kino` command + writes a project .env
 ```
 
-`setup.sh` is a guided installer: it checks prerequisites (Node 18+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. Keys can also be supplied via the environment to run non-interactively:
+`setup.sh` is a guided installer: it checks prerequisites (Node 20+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. Keys can also be supplied via the environment to run non-interactively:
 
 ```bash
 ELEVENLABS_API_KEY=sk_... bash ~/kino/setup.sh

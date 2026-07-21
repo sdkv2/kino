@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kino setup — guided install: prerequisites (Node 18+, ffmpeg, ImageMagick), the `kino`
+# kino setup — guided install: prerequisites (Node 20+, ffmpeg, ImageMagick), the `kino`
 # command, and your API keys.
 #
 #   cd <your-project> && bash /path/to/kino/setup.sh        # .env lands in the current dir
@@ -55,9 +55,9 @@ logo
 # ── prerequisites ────────────────────────────────────────────────────────────
 step "Prerequisites"
 
-command -v node >/dev/null 2>&1 || fail "Node.js not found — install Node 18+ (https://nodejs.org) and re-run."
+command -v node >/dev/null 2>&1 || fail "Node.js not found — install Node 20+ (https://nodejs.org) and re-run."
 NODE_MAJOR="$(node -v | sed 's/^v\([0-9]*\).*/\1/')"
-[ "$NODE_MAJOR" -ge 18 ] || fail "Node $(node -v) is too old — kino needs Node 18+."
+[ "$NODE_MAJOR" -ge 20 ] || fail "Node $(node -v) is too old — kino needs Node 20+."
 ok "node $(node -v)"
 
 MISSING=()

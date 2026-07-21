@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/node-%E2%89%A518-brightgreen.svg" alt="Node ≥18">
+  <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg" alt="Node ≥20">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/output-9%3A16%20MP4-black.svg" alt="9:16 MP4 output">
   <a href="https://try.elevenlabs.io/7t4pgbmyxq67" title="Referral — supports the project"><img src="https://img.shields.io/badge/voiceover-ElevenLabs-000?logo=elevenlabs&logoColor=fff" alt="Voiceover by ElevenLabs"></a>
@@ -49,13 +49,13 @@ No LLM inside the CLI: every step is deterministic, so the same spec renders the
 git clone https://github.com/sdkv2/kino.git ~/kino     # clone the toolchain once
 cd <your-project> && bash ~/kino/setup.sh              # install `kino` + write a project .env
 ```
-`setup.sh` is a guided installer: prerequisite checks (Node 18+, ffmpeg, ImageMagick — offers to
+`setup.sh` is a guided installer: prerequisite checks (Node 20+, ffmpeg, ImageMagick — offers to
 install what's missing), `npm install` / `build` / `link`, then an API-key walkthrough (written to a
 `chmod 600`, git-ignored `.env`). Manual install:
 ```bash
 cd ~/kino && npm install && npm run build && npm link
 ```
-Requires Node 18+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Real VO needs an
+Requires Node 20+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Real VO needs an
 [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project).
 Faceless builds need only that. Avatar builds also need the avatar provider's key, plus
 ElevenLabs whenever kino drives the voice (most setups).

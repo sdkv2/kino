@@ -3,6 +3,9 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [1.21.1] — node 20 floor
+- **Node ≥20 required**: `engines` bumped from 18 (EOL) to 20; setup.sh, docs, and badge now agree.
+
 ## [1.21.0] — optional brand
 - **Brandless projects**: `kino projects --new <name>` no longer requires `--brand`. `project.json`
   `brand` is now optional; without one, builds run on kino house defaults (`DEFAULT_BRAND`).
