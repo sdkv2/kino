@@ -44,6 +44,7 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
    **Typed UI / caption-free montage / spoof chat window:** read `speech-synced-ui` — captions are optional;
    stylised speech-locked typing lives in motion graphics (`env.words`), not the caption engine.
    **Look / hierarchy / anti-generic craft** for those graphics: `motion-design`.
+   **3D geometry** (phone / depth field / wordmark via `.scene.js` + Blender): `3d-scenes`.
 3. **Iterate (fast, free):** `kino inspect specs/foo.json` to map the beats, then **look at pixels** —
    never trust the JSON alone for motion/Lottie. Defaults are mock (zero spend).
    If mock `durationSec` ≤ ~20 on a 20–30s brief, **pad VO lines before storyboard** (both mock

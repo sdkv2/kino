@@ -26,7 +26,7 @@ Edit real `assets/motion/*` (or bare-id library sources). Prove with `kino still
 
 **Hand off elsewhere:** VO wording → `ad-voice`. Beat list / cold open → `video-production`.
 Character burst typing / retune → `speech-synced-ui`. Overlap with captions/logo →
-`adversarial-critique`.
+`adversarial-critique`. Real 3D (`.scene.js` / Blender) → `3d-scenes`.
 
 ## Beat job first (composition follows work)
 
@@ -214,20 +214,9 @@ explains speech or settle, and a first frame that could only be this product.
 
 ## 3D scenes (`.scene.js`)
 
-When a beat needs **real 3D** — a device product shot, a depth/particle background, a 3D wordmark end
-card — author a `.scene.js` source instead of forcing it in CSS. Body of `scene(api)` → `update(env)`;
-same JSON `params`/`keyframes`/`triggers` as 2D. **Backend is Blender** (Eevee drafts / Cycles
-finals) — install Blender ≥ 4.2 (`brew install --cask blender` or `KINO_BLENDER`), confirm with
-`kino doctor`.
-
-**Workflow:** iterate with `kino storyboard` / `kino still` (Eevee drafts by default) → ship with
-`kino build` (Cycles `final` unless `--draft`) or `kino still … --final` for a single beat. Cache
-hits under `_scene3d/` skip unchanged beats.
-
-Before authoring, **read `docs/3d-scenes.md` and `src/render/scene/recordApi.ts`** (ground truth —
-this skill doesn't restate the surface). Presets: `phone-orbit`, `depth-particles`, `wordmark-3d`.
-Design taste is the same as 2D — one artifact, a color commitment, motion that explains or settles,
-seam-safe loops (`env.edge`, absolute camera setters).
+Real geometry (phone product shot, depth field, extruded wordmark) → **`3d-scenes` skill**
+(Blender drafts/finals, presets, quality CLI). Do not force that look in CSS. Visual taste still
+applies (one artifact, brand palette, caption clearance) — run `3d-scenes` for the pipeline.
 
 ## Craft loop (truthful completion)
 
@@ -246,7 +235,8 @@ pass on the beat, run the full checklist above.
 ## Related
 
 - `docs/motion-graphics.md` — CSS/JS contract, lint, helpers
-- `docs/3d-scenes.md` — `.scene.js` 3D contract, `api.*` reference, presets
+- `docs/3d-scenes.md` — `.scene.js` contract (detail); workflow → `skills/3d-scenes`
+- `skills/3d-scenes` — Blender 3D beats, presets, draft/final gate
 - `skills/speech-synced-ui` — typing grain, camera, seamless loop, retune
 - `skills/video-production` — trailer structure, brand discovery, ship gate
 - `skills/adversarial-critique` — overlap / safe-zone frame QA
