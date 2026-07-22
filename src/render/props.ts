@@ -99,6 +99,8 @@ export interface MotionGraphicProps {
   loop?: boolean; // Tier 3 playback (inert for html/proc); default false
   scene?: string; // 3D: linted source — body of scene(api) → update(env) (docs/3d-scenes.md)
   sceneAssets?: string[]; // 3D: statically-extracted /public asset paths (staged + cache-hashed)
+  sceneFrames?: { dir: string; count: number }; // 3D: Blender-rendered stills, hash-named under /scene3d/<dir>/f00001.png…
+
   params: Record<string, BgParamValue>; // base CSS-variable values
   keyframes: BgKeyframe[]; // tween params over time (--<name>)
   triggers: BgTrigger[]; // one-shot pulses (--pulse)

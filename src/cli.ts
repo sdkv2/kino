@@ -21,6 +21,7 @@ program
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
+  .option("--draft", "force Eevee drafts for every 3D scene beat (fast iterate)")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
   });
@@ -60,6 +61,7 @@ program
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
   .option("--grid", "overlay a rule-of-thirds grid for composition QA")
+  .option("--final", "Cycles finals for 3D beats (default: Eevee draft)")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
 program
@@ -71,6 +73,7 @@ program
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
+  .option("--final", "Cycles finals for 3D beats (default: Eevee draft)")
   .action(async (s, o) => (await import("./commands/storyboard.js")).storyboard(s, o));
 
 program

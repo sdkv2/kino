@@ -9,9 +9,15 @@ import { log } from "../log.js";
 // One labeled still per beat, tiled into a single contact sheet — review the whole video at a glance.
 export async function storyboard(
   specPath: string,
-  opts: { real?: boolean; format?: string; font?: string; project?: string; frames?: string; platform?: string },
+  opts: { real?: boolean; format?: string; font?: string; project?: string; frames?: string; platform?: string; final?: boolean },
 ): Promise<void> {
-  const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font, project: opts.project });
+  const r = await prepare(specPath, {
+    mock: !opts.real,
+    format: opts.format,
+    font: opts.font,
+    project: opts.project,
+    draft3d: !opts.final, // storyboard defaults to Eevee drafts
+  });
   const platformGuide = parsePlatform(opts.platform);
   if (platformGuide) r.props.platformGuide = platformGuide;
   // Frames per beat: default 2 — the composition frame plus the fully-revealed end-state, where a
@@ -21,7 +27,14 @@ export async function storyboard(
   const format = r.formats[0];
   const frames = picks.map((p, i) => ({ frame: p.frame, name: `sb-${i}` }));
   const outDir = join(r.project.outDir(r.spec.title), "stills");
-  const stills = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir });
+  const stills = await renderStills({
+    props: r.props,
+    publicDir: r.publicDir,
+    scene3dDir: r.scene3dDir,
+    format,
+    frames,
+    outDir,
+  });
   const out = join(r.project.outDir(r.spec.title), "storyboard.png");
   // Keep each beat's frames grouped on a row: cols = perBeat × (beats-per-row).
   const cols = perBeat * Math.max(1, Math.floor(4 / perBeat));

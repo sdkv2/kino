@@ -23,6 +23,8 @@ export type StillOpts = {
   platform?: string;
   word?: string;
   grid?: boolean;
+  /** Opt out of draft-force: render Cycles finals for 3D beats (storyboard/still default draft). */
+  final?: boolean;
 };
 
 // Render one (or a few) still frames — fast preview, no video encode.
@@ -31,7 +33,13 @@ export type StillOpts = {
 //   (neither)        one still per beat        --real          true VO/avatar + timing
 //   --montage        tile multiple stills into one contact sheet
 export async function still(specPath: string, opts: StillOpts): Promise<void> {
-  const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font, project: opts.project });
+  const r = await prepare(specPath, {
+    mock: !opts.real,
+    format: opts.format,
+    font: opts.font,
+    project: opts.project,
+    draft3d: !opts.final, // preview path defaults to Eevee drafts
+  });
   const platformGuide = parsePlatform(opts.platform);
   if (platformGuide) r.props.platformGuide = platformGuide;
   if (opts.grid) r.props.grid = true;
@@ -66,7 +74,7 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
   const format = r.formats[0];
   const frames = picks.map((p) => ({ frame: p.frame, name: slug(p.label) || "frame" }));
   const outDir = join(r.project.outDir(r.spec.title), "stills");
-  const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir });
+  const outs = await renderStills({ props: r.props, publicDir: r.publicDir, scene3dDir: r.scene3dDir, format, frames, outDir });
   outs.forEach((o) => log.ok(o));
 
   // --around/--word read a moment as a strip; tile by default. --montage tiles any multi-frame still.

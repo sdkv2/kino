@@ -15,12 +15,7 @@ import { frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
-
-const DIMS: Record<Format, { width: number; height: number }> = {
-  "9:16": { width: 1080, height: 1920 },
-  "3:4": { width: 1080, height: 1440 },
-  "16:9": { width: 1920, height: 1080 },
-};
+import { DIMS } from "../dims.js";
 
 export type EncodePreset = "medium" | "veryfast";
 
@@ -266,6 +261,7 @@ async function pointServerAt(opts: {
   props: KinoProps;
   publicDir: string;
   framesDir: string;
+  scene3dDir: string;
   media: Record<string, MediaEntryNode>;
   width: number;
   height: number;
@@ -275,6 +271,7 @@ async function pointServerAt(opts: {
   return ensureRenderServer({
     publicDir: opts.publicDir,
     framesDir: opts.framesDir,
+    scene3dDir: opts.scene3dDir,
     pageJs,
     renderConfigJson: JSON.stringify({
       props: opts.props,
@@ -289,6 +286,7 @@ async function pointServerAt(opts: {
 export interface NativeRenderOpts {
   props: KinoProps;
   publicDir: string;
+  scene3dDir: string;
   formats: Format[];
   outDir: string;
   title: string;
@@ -299,7 +297,7 @@ export function renderVideoNative(opts: NativeRenderOpts): Promise<string[]> {
   return withRenderLock(() => renderVideoLocked(opts));
 }
 
-async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium" }: NativeRenderOpts): Promise<string[]> {
+async function renderVideoLocked({ props, publicDir, scene3dDir, formats, outDir, title, preset = "medium" }: NativeRenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), "kino-native-"));
   const t0 = Date.now();
@@ -325,7 +323,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     try {
       for (const fmt of formats) {
         const { width, height } = DIMS[fmt];
-        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+        const server = await pointServerAt({ props, publicDir, framesDir, scene3dDir, media, width, height, total });
         const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
         lap(`pages-boot ${fmt}`);
         // Capture cache: unchanged beats reuse their stored JPEGs; only dirty frames hit Chrome.
@@ -357,6 +355,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
 export interface NativeStillsOpts {
   props: KinoProps;
   publicDir: string;
+  scene3dDir: string;
   format: Format;
   frames: Array<{ frame: number; name: string }>;
   outDir: string;
@@ -366,7 +365,7 @@ export function renderStillsNative(opts: NativeStillsOpts): Promise<string[]> {
   return withRenderLock(() => renderStillsLocked(opts));
 }
 
-async function renderStillsLocked({ props, publicDir, format, frames, outDir }: NativeStillsOpts): Promise<string[]> {
+async function renderStillsLocked({ props, publicDir, scene3dDir, format, frames, outDir }: NativeStillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), "kino-native-still-"));
   try {
@@ -393,7 +392,7 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir }: 
 
     const { width, height } = DIMS[format];
     try {
-      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+      const server = await pointServerAt({ props, publicDir, framesDir, scene3dDir, media, width, height, total });
       const handle = await workerPage(0, browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {

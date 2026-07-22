@@ -26,7 +26,7 @@ import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { KinoProps, KinoSegment, WordTiming } from "../render/props.js";
+import type { KinoProps, KinoSegment, MotionGraphicProps, Theme, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic, type MotionGraphicRefInput } from "../render/motiongraphic.js";
@@ -34,6 +34,9 @@ import { beatRelativeWords, resolveWordAnchors } from "../render/motionVars.js";
 import { probeFramePicks, isUnderAnimated } from "../render/motionProbe.js";
 import { checkLoopSeam, imageMeanDiff } from "../media/loopSeam.js";
 import { holdLastFrameToMatchAudio } from "../media/avSync.js";
+import { runScene } from "../render/scene/runScene.js";
+import { ensureSceneStills } from "../render/scene/ensureStills.js";
+import { DIMS } from "../render/dims.js";
 import { log } from "../log.js";
 
 // Resolve the portrait image hedra/replicate lip-sync against (heygen uses a hosted look id instead).
@@ -73,6 +76,7 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
 export interface PrepareResult {
   props: KinoProps;
   publicDir: string;
+  scene3dDir: string; // Blender-rendered 3D scene stills cache, beside publicDir (cross-build — never wiped)
   formats: Format[];
   project: Project;
   spec: Spec;
@@ -84,7 +88,15 @@ export interface PrepareResult {
 // inspection commands (still/storyboard/inspect) so they share the exact pipeline.
 export async function prepare(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; project?: string },
+  opts: {
+    mock?: boolean;
+    format?: string;
+    provider?: string;
+    background?: string;
+    font?: string;
+    project?: string;
+    draft3d?: boolean; // force quality "draft" for every 3D scene beat (kino build --draft / preview default)
+  },
 ): Promise<PrepareResult> {
   const project = resolveProject({ specPath, project: opts.project });
   loadEnv(project.workspaceRoot);
@@ -148,6 +160,9 @@ export async function prepare(
   // Stage everything the render page reads via staticFile(): app assets, the avatar clip, and the VO track.
   const publicDir = join(project.outDir(spec.title), "_public");
   mkdirSync(publicDir, { recursive: true });
+  // _scene3d is a cross-build Blender-stills cache, hash-keyed by timeline content — beside
+  // _public, never wiped here (a fresh build's cache hits skip re-rendering unchanged scene beats).
+  const scene3dDir = join(project.outDir(spec.title), "_scene3d");
   const staged = new Set<string>();
   const stageAsset = (rel: string) => {
     if (staged.has(rel)) return;
@@ -272,6 +287,25 @@ export async function prepare(
   }
 
   const c = brand.colors;
+  const fps = 30;
+  // Built ahead of renderSegments: 3D scene beats (below) need it for runScene, and it's otherwise
+  // only assembled once, into `props`.
+  const theme: Theme = {
+    font: themeFont,
+    fontUrl,
+    labelFont: themeLabelFont,
+    labelFontUrl,
+    night: c.night,
+    mint: c.mint,
+    green: c.green,
+    gold: c.gold,
+    white: c.white,
+    brandName: brand.name,
+    captionFontSize: brand.captionStyle.fontSize,
+    captionStroke: brand.captionStyle.strokeWidth,
+    captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
+    film: resolveFilm(spec, brand),
+  };
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
   let appIdx = 0;
   const renderSegments = spec.segments.map((seg, i) => {
@@ -365,24 +399,53 @@ export async function prepare(
     for (const rel of seg.motionOverlay?.sceneAssets ?? []) stageAsset(rel);
   }
 
+  // Blender stills for every scene beat/overlay — hash-keyed under _scene3d; cache hits skip spawn.
+  const fmt0 = formats[0] ?? "9:16";
+  const { width: sceneW, height: sceneH } = DIMS[fmt0];
+  const ensureOne = async (
+    mg: MotionGraphicProps | undefined,
+    quality: "draft" | "final" | "max",
+    durationFrames: number,
+    beatLabel: string,
+  ): Promise<void> => {
+    if (!mg?.scene) return;
+    const { timeline, hash } = runScene({
+      source: mg.scene,
+      params: mg.params as Record<string, number | string>,
+      words: mg.words ?? [],
+      theme,
+      width: sceneW,
+      height: sceneH,
+      fps,
+      durationFrames: Math.max(1, durationFrames),
+      quality,
+      keyframes: mg.keyframes,
+      triggers: mg.triggers,
+    });
+    log.info(`  · 3d ${beatLabel} (${quality}, ${timeline.meta.frameCount} frames)`);
+    mg.sceneFrames = await ensureSceneStills({
+      timeline,
+      hash,
+      scene3dDir,
+      publicDir,
+      beatLabel,
+    });
+    // Page renders SceneFrames, not the raw scene source.
+    mg.scene = undefined;
+  };
+  for (let i = 0; i < renderSegments.length; i++) {
+    const seg = renderSegments[i] as KinoSegment;
+    const durationFrames = Math.max(1, Math.round((seg.endSec - seg.startSec) * fps));
+    const specSeg = spec.segments[i] as { quality?: "draft" | "final" | "max"; motionOverlay?: { quality?: "draft" | "final" | "max" } };
+    const q = (raw?: "draft" | "final" | "max"): "draft" | "final" | "max" =>
+      opts.draft3d ? "draft" : (raw ?? "final");
+    await ensureOne(seg.motion, q(specSeg.quality), durationFrames, `beat ${i}`);
+    await ensureOne(seg.motionOverlay, q(specSeg.motionOverlay?.quality ?? specSeg.quality), durationFrames, `beat ${i} overlay`);
+  }
+
   const props: KinoProps = {
-    theme: {
-      font: themeFont,
-      fontUrl,
-      labelFont: themeLabelFont,
-      labelFontUrl,
-      night: c.night,
-      mint: c.mint,
-      green: c.green,
-      gold: c.gold,
-      white: c.white,
-      brandName: brand.name,
-      captionFontSize: brand.captionStyle.fontSize,
-      captionStroke: brand.captionStyle.strokeWidth,
-      captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
-      film: resolveFilm(spec, brand),
-    },
-    fps: 30,
+    theme,
+    fps,
     avatar: avatarRel,
     avatarWindows,
     voTrack: "vo.mp3",
@@ -394,14 +457,26 @@ export async function prepare(
     segments: renderSegments,
   };
 
-  return { props, publicDir, formats, project, spec, labelFont, words: vo.words };
+  return { props, publicDir, scene3dDir, formats, project, spec, labelFont, words: vo.words };
 }
 
 export async function build(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; tag?: string; project?: string },
+  opts: {
+    mock?: boolean;
+    format?: string;
+    provider?: string;
+    background?: string;
+    font?: string;
+    tag?: string;
+    project?: string;
+    draft?: boolean; // force Eevee drafts for every 3D scene beat
+  },
 ): Promise<string[]> {
-  const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
+  const { props, publicDir, scene3dDir, formats, project, spec } = await prepare(specPath, {
+    ...opts,
+    draft3d: !!opts.draft,
+  });
   // Under-animation probe: sample each full-screen motion beat at a few progress points and warn
   // when the frames barely differ — a poster with a dissolve, not motion. Never fails the build.
   try {
@@ -409,7 +484,7 @@ export async function build(
     if (picks.length) {
       const dir = mkdtempSync(join(tmpdir(), "kino-probe-"));
       const frames = picks.flatMap((p) => p.frames.map((f, j) => ({ frame: f, name: `probe-${p.segment}-${j}` })));
-      const outs = await renderStills({ props, publicDir, format: formats[0], frames, outDir: dir });
+      const outs = await renderStills({ props, publicDir, scene3dDir, format: formats[0], frames, outDir: dir });
       let k = 0;
       for (const p of picks) {
         const mine = outs.slice(k, k + p.frames.length);
@@ -438,7 +513,15 @@ export async function build(
     (opts.mock ? "mock" : undefined);
   const outName = variantName(spec.title, autoTag);
   // Mock builds are previews — take the fast encode preset; real builds keep the final quality.
-  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: opts.mock ? "veryfast" : "medium" });
+  const outs = await renderVideo({
+    props,
+    publicDir,
+    scene3dDir,
+    formats,
+    outDir: project.outDir(spec.title),
+    title: outName,
+    preset: opts.mock ? "veryfast" : "medium",
+  });
   for (const o of outs) {
     // AAC pad past the last video frame → players flash black at EOF (and break seamless loops).
     try {

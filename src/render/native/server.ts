@@ -38,6 +38,7 @@ const INDEX_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>kino
 export interface ServerState {
   publicDir: string;
   framesDir: string;
+  scene3dDir: string; // Blender-rendered 3D scene stills, hash-named cache dirs (SceneFrames layer)
   pageJs: string;
   renderConfigJson: string;
 }
@@ -76,6 +77,7 @@ export async function ensureRenderServer(state: ServerState): Promise<{ url: str
     const roots: Array<[string, string]> = [
       ["/public/", s.publicDir],
       ["/vframes/", s.framesDir],
+      ["/scene3d/", s.scene3dDir],
     ];
     for (const [prefix, root] of roots) {
       if (!url.startsWith(prefix)) continue;

@@ -52,6 +52,9 @@ const motionFields = {
   keyframes: z.array(MotionKeyframe).optional(),
   triggers: z.array(MotionTrigger).optional(),
   loop: z.boolean().optional(), // Tier-3 Lottie playback; inert for html/proc graphics
+  // 3D scene beats only (.scene.js): Eevee draft / Cycles 128-sample final / Cycles 512-sample max.
+  // Unauthored beats default "final"; `kino build --draft` forces draft for every scene beat.
+  quality: z.enum(["draft", "final", "max"]).optional(),
 };
 const MotionGraphicRef = z.object(motionFields);
 const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
@@ -265,6 +268,7 @@ const SEGMENT_KIND_HINTS: Record<string, string> = {
   loop: "loop is motion/Lottie-only",
   cta: "cta is avatar/motion-only",
   motionOverlay: "motionOverlay is avatar/app-only (motion segments use source)",
+  quality: "quality is motion-only (3D scene beats)",
 };
 
 function formatUnrecognizedKey(key: string, path: (string | number)[]): string {

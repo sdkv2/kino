@@ -210,3 +210,23 @@ describe("atWord anchors (motion keyframes/triggers)", () => {
     expect(() => parseSpec({ ...valid, backgroundKeyframes: [{ atWord: "scan", params: { intensity: 1 } }] })).toThrow();
   });
 });
+
+describe("quality (3D scene beats)", () => {
+  it("accepts draft|final|max on motion segments", () => {
+    for (const quality of ["draft", "final", "max"] as const) {
+      const s = SpecSchema.parse({
+        title: "q",
+        segments: [{ kind: "motion", source: "phone-orbit", text: "hi", quality }],
+      });
+      expect((s.segments[0] as { quality?: string }).quality).toBe(quality);
+    }
+  });
+  it("rejects quality on app segments with motion-only hint", () => {
+    expect(() =>
+      parseSpec({
+        ...valid,
+        segments: [{ kind: "app", asset: "a.png", text: "hi", quality: "draft" }],
+      }),
+    ).toThrow(/quality is motion-only/);
+  });
+});

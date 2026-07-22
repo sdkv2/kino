@@ -10,6 +10,7 @@ import { buildMotionVars, wordsShownAt } from "../../motionVars.js";
 import { sanitizeMotionHtml } from "../../sanitizeMotion.js";
 import { lottiePlaybackRate } from "../../lottie.js";
 import { LottieFrame, lottieMeta } from "./lottie";
+import { SceneFrames } from "./SceneFrames";
 
 // Trusted stylesheet injected into every motion-graphic shadow root. All of it is determinism-safe:
 // animations are force-paused and scrubbed by --progress (no wall clock), helpers read frame-driven
@@ -121,6 +122,10 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
         : null,
     [data.proc, data.lottie],
   );
+
+  if (data.sceneFrames) {
+    return <SceneFrames frames={data.sceneFrames} />;
+  }
 
   let html = data.html;
   if (procFn) {

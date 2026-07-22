@@ -36,3 +36,8 @@ kino-meta.mp4
 
 # demo workspace (GIFs served from git history via raw URLs)
 demos/
+
+# Blender / Python
+scripts/__pycache__/
+**/__pycache__/
+*.pyc
