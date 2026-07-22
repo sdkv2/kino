@@ -5,7 +5,7 @@
 
 export type ObjectType =
   | "box" | "sphere" | "plane" | "cylinder" | "torus" | "roundedBox"
-  | "devicePhone" | "gltf" | "text3d" | "particles" | "group"
+  | "devicePhone" | "gltf" | "text3d" | "particles" | "group" | "layer"
   | "dirLight" | "ambient" | "hemi" | "contactShadow";
 
 export interface MaterialSpec {
@@ -60,6 +60,7 @@ class ParamRef {
 }
 interface TextureHandle {
   path: string;
+  frames?: number; // animated screen: PNG-sequence dir with this many f%05d.png frames
 }
 
 interface Vec3 {
@@ -110,8 +111,10 @@ export interface Recorder {
 export function createRecordApi(opts: {
   baseParams: Record<string, number | string>;
   palette: Record<string, string>;
+  screens?: Record<string, { dir: string; frames: number }>;
+  layers?: Record<string, { path: string; aspect: number }>;
 }): Recorder {
-  const { baseParams, palette } = opts;
+  const { baseParams, palette, screens = {}, layers = {} } = opts;
   const records: { obj: TimelineObject; handle: Handle }[] = [];
   const cam: CameraSnapshot = { p: [0, 0, 6], lookAt: null, fov: 40, zoom: 1 };
   let world: "studio" | "night" | "none" = "none";
@@ -237,6 +240,42 @@ export function createRecordApi(opts: {
 
   // --- assets ----------------------------------------------------------------------------------
   const texture = (pathOrParam: string | ParamRef): TextureHandle => ({ path: resolvePathRel(pathOrParam) });
+
+  /** Animated html screen (rasterized sequence) or static texture passthrough for non-html paths. */
+  const screen = (pathOrParam: string | ParamRef): TextureHandle => {
+    const rel = resolvePathRel(pathOrParam);
+    if (!rel.toLowerCase().endsWith(".html")) return { path: rel };
+    const r = screens[rel];
+    if (!r) throw new Error(`api.screen("${rel}") has no rasterized sequence — the pre-raster pass must run before runScene`);
+    return { path: r.dir, frames: r.frames };
+  };
+
+  /** One rasterized SVG element as its own plane; per-layer depth/material/keyframes. */
+  const layerZs: number[] = [];
+  const layer = (pathOrParam: string | ParamRef, o: {
+    x?: number; y?: number; z?: number; width?: number;
+    material?: "unlit" | "emissive"; emission?: number;
+  } = {}) => {
+    const rel = resolvePathRel(pathOrParam);
+    const r = layers[rel];
+    if (!r) throw new Error(`api.layer("${rel}") has no rasterized png — the pre-raster pass must run before runScene`);
+    const z = o.z ?? 0;
+    for (const prev of layerZs) {
+      if (Math.abs(prev - z) < 0.02) {
+        throw new Error(`api.layer z ${z} is within 0.02 of another layer (z-fighting) — separate layer depths by >= 0.02`);
+      }
+    }
+    layerZs.push(z);
+    const h = makeHandle(basic({ transparent: true, opacity: 1 }), [o.x ?? 0, o.y ?? 0, z]);
+    return record("layer", {
+      path: r.path,
+      aspect: r.aspect,
+      width: o.width ?? 1,
+      material: o.material ?? "unlit",
+      emission: o.emission ?? 1,
+    }, h);
+  };
+
   const gltf = (pathOrParam: string | ParamRef) =>
     record("gltf", { path: resolvePathRel(pathOrParam) }, makeHandle());
 
@@ -272,9 +311,10 @@ export function createRecordApi(opts: {
 
   /** Rounded-slab phone: dark clearcoat body + unlit screen showing the `screen` texture. */
   const devicePhone = (o: { screen: TextureHandle | string; width?: number; height?: number; depth?: number; radius?: number }) => {
-    const screen = typeof o.screen === "string" ? o.screen : o.screen?.path ?? "";
+    const screenTex = typeof o.screen === "string" ? { path: o.screen } : o.screen ?? { path: "" };
     return record("devicePhone", {
-      screen,
+      screen: screenTex.path,
+      ...(screenTex.frames ? { screenFrames: screenTex.frames } : {}),
       width: o.width ?? 1,
       height: o.height ?? 2.16,
       depth: o.depth ?? 0.08,
@@ -286,7 +326,7 @@ export function createRecordApi(opts: {
     box, sphere, plane, cylinder, torus, roundedBox,
     pbr, basic, emissive,
     group, dirLight, ambient, hemi, env, contactShadow, post, camera,
-    texture, gltf, text3d, particles, devicePhone,
+    texture, screen, layer, gltf, text3d, particles, devicePhone,
     /** Seeded PRNG factory: api.random(seed)() → next float in [0,1). */
     random: (seed: number) => mulberry32(seed),
     /** Deferred param reference; pass to texture/gltf to resolve baseParams[name] at load time. */
