@@ -79,7 +79,7 @@ short VO nouns per beat (`"The timer."`).
 
 | Grain | Use | How |
 |---|---|---|
-| **Word** | Fast, caption-like | CSS: `opacity: clamp(0, calc(var(--kino-words-shown) - i), 1)` per word |
+| **Word** | Fast, caption-like | CSS: `opacity: clamp(0, calc(var(--kino-words-shown) - i), 1)` per word — the var is continuous (fraction into the word's span), so each word eases in rather than popping |
 | **Character (even)** | Steady stream inside each word | Meter `chars` across `[word.start, word.end]` with `env.t` |
 | **Character (typed feel)** | Real keystrokes | Burst each word's chars at ~45ms/key over the **front** of the word span, then **hold**; idle caret blinks between words, solid while typing |
 
@@ -143,10 +143,11 @@ Two different systems — don't confuse them:
 
 ### ⚠ The #1 mistake: driving the camera off the typed fraction
 
-`charsTyped / totalChars` (or `--kino-words-shown`) is a **step function** — it jumps
-each keystroke, and keystrokes aren't evenly spaced. A camera position driven by it
-**lurches** once per character → visibly choppy zoom/pan. Prefer `env.out` / `env.edge`
-(eased progress / seam-safe breath) over linear `env.progress`; never typed-character count.
+`charsTyped / totalChars` **jumps each keystroke**, and keystrokes aren't evenly spaced —
+a camera position driven by it **lurches** once per character → visibly choppy zoom/pan.
+(`--kino-words-shown` is continuous but still speech-paced: it plateaus in word gaps, so a
+camera driven by it stalls and surges.) Prefer `env.out` / `env.edge` (eased progress /
+seam-safe breath) over linear `env.progress`; never typed-character count.
 Those advance smoothly at 30fps; drive the camera off those.
 
 You cannot literally lock the camera to the caret and stay smooth — the caret is

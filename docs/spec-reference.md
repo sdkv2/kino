@@ -109,9 +109,9 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `text` | string | ✅ | Spoken VO for the beat. |
 | `caption` | string | — | Optional on-screen caption. |
 | `loop` | boolean | — | Tier-3 Lottie: loop at native speed instead of stretching once across the beat (default). |
-| `params` | `Record<string, number\|string>` | — | Base CSS-variable values (read as `--<key>`). |
-| `keyframes` | BgKeyframe[] | — | Tween params over the beat. |
-| `triggers` | BgTrigger[] | — | One-shot `pulse` envelopes (`--pulse`). |
+| `params` | `Record<string, number\|string>` | — | Base CSS-variable values (read as `--<key>`). Also an **implicit t=0 keyframe**: a lone keyframe tweens from the base value instead of holding. |
+| `keyframes` | MotionKeyframe[] | — | Tween params over the beat. Each entry sets exactly one of `at` (beat-relative seconds) or **`atWord`** (a spoken word — first case/punctuation-insensitive occurrence — or a word index), resolved against the build's VO timings so anchors ride real TTS with no retune. |
+| `triggers` | MotionTrigger[] | — | One-shot `pulse` envelopes (`--pulse`). Same `at` / `atWord` anchoring as keyframes. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Emphasised words (`words` mode). |
 | `captionKeyframes` | BgKeyframe[] | — | Tween the caption. |
@@ -120,7 +120,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 
-> **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS.
+> **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS. `atWord` anchoring works in all motion slots (full-screen beats and overlays); other keyframe tracks (`backgroundKeyframes`, `zoomKeyframes`, `captionKeyframes`, …) remain seconds-only and keep their one-keyframe-holds idiom.
 
 ### Enums
 

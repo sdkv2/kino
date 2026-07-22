@@ -11,7 +11,7 @@ import { AbsoluteFill, Easing, Sequence, interpolate, staticFile, useCurrentFram
 import { FrameVideo } from "./media";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
-import { PlatformGuide } from "./PlatformGuide";
+import { PlatformGuide, GridGuide } from "./PlatformGuide";
 import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../../captionLayout.js";
 import type { KinoProps } from "../../props.js";
 import { MOTION_XFADE_FRAMES, motionHandoff, type Shot, type Transition } from "../../motion.js";
@@ -41,7 +41,7 @@ const MotionFadeIn: React.FC<{ fadeIn: boolean; children: React.ReactNode }> = (
   return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
 };
 
-export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, logo, background, disclosure, segments, platformGuide }) => {
+export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindows, logo, background, disclosure, segments, platformGuide, grid }) => {
   const f = (s: number) => Math.round(s * fps);
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
@@ -188,6 +188,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
       })}
       {disclosure ? <Disclosure text={disclosure} t={theme} /> : null}
       {platformGuide ? <PlatformGuide kind={platformGuide} /> : null}
+      {grid ? <GridGuide /> : null}
     </AbsoluteFill>
   );
 };

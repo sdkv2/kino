@@ -20,14 +20,58 @@ export function beatRelativeWords(words: WordTiming[] | undefined, startSec: num
   return words.map((w) => ({ word: w.word, start: w.start - startSec, end: w.end - startSec }));
 }
 
-/** How many of the beat's spoken words have STARTED by beat-relative time `t` (seconds).
- *  Word-granular, matching the caption engine's per-word reveal — the signal a typed-in-sync
- *  motion graphic reads to know how much of the prompt to show. Words are beat-relative. */
+/** Continuous count of the beat's spoken words shown by beat-relative time `t` (seconds): each
+ *  word contributes its elapsed fraction (0→1 across its spoken span), so word-gated reveals like
+ *  clamp(0, calc(var(--kino-words-shown) - i), 1) ease through the word instead of stepping at its
+ *  start (the "weird lag" on gated lines). Reaches exactly k when word k finishes; zero-length
+ *  spans count as fully shown at their start. Words are beat-relative. */
 export function wordsShownAt(words: WordTiming[] | undefined, t: number): number {
   if (!words) return 0;
   let n = 0;
-  for (const w of words) if (w.start <= t) n++;
+  for (const w of words) {
+    if (t < w.start) continue;
+    const span = w.end - w.start;
+    n += span <= 0 ? 1 : Math.min(1, (t - w.start) / span);
+  }
   return n;
+}
+
+/** Normalize a spoken word for atWord matching: lowercase, letters+digits only. */
+const wordKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Resolve word-anchored timing entries ({ atWord: "match" } or { atWord: 2 }) to concrete
+ * beat-relative `at` seconds from the beat's VO word spans — so triggers/keyframes ride the real
+ * TTS timing instead of hand-copied numbers that drift between mock and real VO. Text matches the
+ * first occurrence, case/punctuation-insensitive; numbers are word indices. Plain `at` entries pass
+ * through untouched. Throws (naming the beat's words) on a miss so typos fail at validate, not on
+ * screen.
+ */
+export function resolveWordAnchors<T extends { at?: number; atWord?: string | number }>(
+  track: T[] | undefined,
+  words: WordTiming[] | undefined,
+  where: string,
+): (Omit<T, "at" | "atWord"> & { at: number })[] | undefined {
+  if (!track) return undefined;
+  return track.map((entry) => {
+    const { atWord, at, ...rest } = entry;
+    if (atWord == null) {
+      if (at == null) throw new Error(`${where}: set exactly one of at / atWord`);
+      return { ...rest, at } as Omit<T, "at" | "atWord"> & { at: number };
+    }
+    if (!words || words.length === 0) throw new Error(`${where}: atWord needs spoken words, but this beat has no spoken words`);
+    let hit: WordTiming | undefined;
+    if (typeof atWord === "number") {
+      hit = words[atWord];
+      if (!hit) throw new Error(`${where}: atWord ${atWord} out of range (beat has ${words.length} words)`);
+    } else {
+      hit = words.find((w) => wordKey(w.word) === wordKey(atWord));
+      if (!hit) {
+        throw new Error(`${where}: atWord "${atWord}" is not spoken in this beat — words: ${words.map((w) => w.word).join(" ")}`);
+      }
+    }
+    return { ...rest, at: Math.round(hit.start * 1000) / 1000 } as Omit<T, "at" | "atWord"> & { at: number };
+  });
 }
 
 // Build the CSS custom properties set on a motion-graphic host every frame. The agent's shadow-scoped
@@ -64,7 +108,8 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     "--kino-caption-bottom": `${dyn.captionBottom ?? 0}px`,
     // Spoken-word progress, so a stylised graphic can type text in sync with the VO without
     // hand-placed keyframes: reveal the first --kino-words-shown of --kino-word-count words.
-    "--kino-words-shown": String(dyn.wordsShown ?? 0),
+    // Continuous (fraction into the current word's span) — 3dp keeps integer values printing bare.
+    "--kino-words-shown": String(Math.round((dyn.wordsShown ?? 0) * 1000) / 1000),
     "--kino-word-count": String(dyn.wordCount ?? 0),
   };
   for (const [k, v] of Object.entries(dyn.params)) vars[`--${k}`] = String(v);

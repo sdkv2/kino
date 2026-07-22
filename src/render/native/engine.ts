@@ -23,14 +23,23 @@ const DIMS: Record<string, { width: number; height: number }> = {
 export type EncodePreset = "medium" | "veryfast";
 
 // rename() fails with EXDEV when the scratch dir (os.tmpdir, often tmpfs on Linux) and the
-// output dir sit on different filesystems — fall back to copy + delete.
-function moveFile(src: string, dest: string): void {
+// output dir sit on different filesystems — fall back to copy + delete. fsImpl is injectable
+// so the EXDEV path is unit-testable (it can't be provoked on a single-filesystem test host).
+export function moveFile(
+  src: string,
+  dest: string,
+  fsImpl: { renameSync: typeof renameSync; copyFileSync: typeof copyFileSync; rmSync: typeof rmSync } = {
+    renameSync,
+    copyFileSync,
+    rmSync,
+  },
+): void {
   try {
-    renameSync(src, dest);
+    fsImpl.renameSync(src, dest);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EXDEV") throw e;
-    copyFileSync(src, dest);
-    rmSync(src, { force: true });
+    fsImpl.copyFileSync(src, dest);
+    fsImpl.rmSync(src, { force: true });
   }
 }
 

@@ -186,6 +186,24 @@ export function assertBackgroundChoice(spec: Spec, brand: Brand): void {
   );
 }
 
+/**
+ * Words-mode paints the SPOKEN text word-by-word — a segment `caption` string never appears there.
+ * Both mock promos burned an iteration on this, so warn the moment a caption is authored under a
+ * resolved words mode (brand < spec < segment) and differs from the spoken text.
+ */
+export function assertCaptionModes(spec: Spec, brand: Brand): void {
+  spec.segments.forEach((seg, i) => {
+    const mode = seg.captionMode ?? spec.captionMode ?? brand.captionMode ?? "phrase";
+    if (mode !== "words") return;
+    const cap = seg.caption?.trim();
+    if (!cap || cap === seg.text.trim()) return;
+    log.warn(
+      `segment[${i}]: caption is ignored under words mode (the spoken text paints word-by-word) — ` +
+        `set "captionMode": "phrase" on this beat to show the caption, or drop it`,
+    );
+  });
+}
+
 // Bracket audio tags ([short pause], [softly], …) only work on eleven_v3 — other models speak them.
 const AUDIO_TAG_RE = /\[[a-z][a-z0-9 \-]{0,40}\]/i;
 
@@ -220,6 +238,7 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertAudioSources(spec, project);
   assertSeamlessLoop(spec, brand);
   assertBackgroundChoice(spec, brand);
+  assertCaptionModes(spec, brand);
   assertVoiceTags(spec, brand);
   assertKinoVersion(spec);
 }

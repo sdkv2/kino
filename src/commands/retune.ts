@@ -126,7 +126,12 @@ export async function retune(
     }));
 
     if (seg.kind !== "motion" || !seg.triggers?.length) return;
-    const { next, changes } = retuneTriggers(beatRel, seg.triggers);
+    // Word-anchored triggers (atWord) already resolve against real VO at build — nothing to retune.
+    if (seg.triggers.some((t) => t.atWord != null)) {
+      logLines.push(`segment[${i}].triggers: word-anchored (atWord) — no retune needed`);
+      return;
+    }
+    const { next, changes } = retuneTriggers(beatRel, seg.triggers as Trigger[]);
     if (changes.some((c) => c.includes("need"))) {
       logLines.push(`segment[${i}]: ${changes[0]}`);
       return;

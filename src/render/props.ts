@@ -171,4 +171,6 @@ export interface KinoProps {
   segments: KinoSegment[];
   /** Still/storyboard only — in-feed safe-zone overlay. Never set by `kino build`. */
   platformGuide?: "tiktok" | "reels";
+  /** Still only — rule-of-thirds grid overlay for composition QA. Never set by `kino build`. */
+  grid?: boolean;
 }

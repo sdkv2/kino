@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMotionVars, wordsShownAt, beatRelativeWords } from "../src/render/motionVars.js";
+import { buildMotionVars, wordsShownAt, beatRelativeWords, resolveWordAnchors } from "../src/render/motionVars.js";
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#ffffff", captionFontSize: 74, captionStroke: 9 };
 const dyn = { frame: 12, t: 0.4, progress: 0.5, pulse: 0.25, params: {} as Record<string, number | string> };
@@ -56,15 +56,54 @@ describe("wordsShownAt", () => {
     { word: "make", start: 0.4, end: 0.7 },
     { word: "me", start: 0.8, end: 1.0 },
   ];
-  it("counts words whose spoken start has been reached at beat-relative time t", () => {
+  it("ramps continuously through each word's span (no integer step-lag on gated reveals)", () => {
     expect(wordsShownAt(words, -0.1)).toBe(0); // before the first word
-    expect(wordsShownAt(words, 0)).toBe(1); // first word starts exactly at 0
-    expect(wordsShownAt(words, 0.5)).toBe(2);
+    expect(wordsShownAt(words, 0.15)).toBeCloseTo(0.5); // mid-span of word 0
+    expect(wordsShownAt(words, 0.3)).toBeCloseTo(1); // word 0 fully spoken
+    expect(wordsShownAt(words, 0.35)).toBeCloseTo(1); // inter-word gap holds the count
+    expect(wordsShownAt(words, 0.55)).toBeCloseTo(1.5); // mid-span of word 1
     expect(wordsShownAt(words, 5)).toBe(3); // past the end → all shown
+  });
+  it("treats a zero-length word span as fully shown at its start", () => {
+    expect(wordsShownAt([{ word: "x", start: 1, end: 1 }], 1)).toBe(1);
+    expect(wordsShownAt([{ word: "x", start: 1, end: 1 }], 0.9)).toBe(0);
   });
   it("returns 0 for an empty or missing word list", () => {
     expect(wordsShownAt([], 1)).toBe(0);
     expect(wordsShownAt(undefined, 1)).toBe(0);
+  });
+});
+
+describe("resolveWordAnchors", () => {
+  const words = [
+    { word: "Scan.", start: 0, end: 0.3 },
+    { word: "Match.", start: 0.4, end: 0.7 },
+    { word: "Rewrite.", start: 0.8, end: 1.1 },
+  ];
+  it("resolves atWord text to the word's beat-relative start (case/punctuation-insensitive)", () => {
+    const r = resolveWordAnchors([{ atWord: "match", action: "pulse" }], words, "segment[3].triggers");
+    expect(r).toEqual([{ at: 0.4, action: "pulse" }]);
+  });
+  it("resolves a numeric atWord as a word index", () => {
+    const r = resolveWordAnchors([{ atWord: 2, params: { pct: 86 } }], words, "x");
+    expect(r?.[0].at).toBeCloseTo(0.8);
+  });
+  it("passes plain at entries through untouched", () => {
+    expect(resolveWordAnchors([{ at: 1.5, action: "pulse" }], words, "x")).toEqual([{ at: 1.5, action: "pulse" }]);
+  });
+  it("throws naming the beat's words when atWord text is not spoken there", () => {
+    expect(() => resolveWordAnchors([{ atWord: "nope", action: "pulse" }], words, "segment[3].triggers")).toThrow(
+      /nope[\s\S]*Scan/,
+    );
+  });
+  it("throws when a numeric atWord is out of range", () => {
+    expect(() => resolveWordAnchors([{ atWord: 9, action: "pulse" }], words, "x")).toThrow(/9/);
+  });
+  it("throws when atWord is used on a beat with no spoken words", () => {
+    expect(() => resolveWordAnchors([{ atWord: "hi", action: "pulse" }], undefined, "x")).toThrow(/no spoken words/i);
+  });
+  it("returns undefined for an undefined track", () => {
+    expect(resolveWordAnchors(undefined, words, "x")).toBeUndefined();
   });
 });
 

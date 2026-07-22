@@ -13,6 +13,21 @@ const GUIDE: Record<
   reels: { rail: 0.11, bottom: 0.16, top: 0.07, label: "Reels / Shorts safe zones" },
 };
 
+/** Rule-of-thirds grid for still composition QA (`kino still --grid`). Not used on `kino build`. */
+export const GridGuide: React.FC = () => {
+  const line: React.CSSProperties = { position: "absolute", background: "rgba(255,255,255,0.45)" };
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none", zIndex: 51 }}>
+      {[1, 2].map((i) => (
+        <div key={`v${i}`} style={{ ...line, top: 0, bottom: 0, width: 1, left: `${(i * 100) / 3}%` }} />
+      ))}
+      {[1, 2].map((i) => (
+        <div key={`h${i}`} style={{ ...line, left: 0, right: 0, height: 1, top: `${(i * 100) / 3}%` }} />
+      ))}
+    </AbsoluteFill>
+  );
+};
+
 /** Translucent in-feed chrome overlay for still/storyboard QA. Not used on `kino build`. */
 export const PlatformGuide: React.FC<{ kind: PlatformGuideKind }> = ({ kind }) => {
   const g = GUIDE[kind];

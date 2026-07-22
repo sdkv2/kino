@@ -21,6 +21,20 @@ async function extractRawRgb(
   await execa(FFMPEG_PATH, args);
 }
 
+/** Mean channel Δ (0..255) between two same-size images, via ffmpeg PNG→raw RGB24 decode. */
+export async function imageMeanDiff(a: string, b: string): Promise<number> {
+  const dir = mkdtempSync(join(tmpdir(), "kino-imgdiff-"));
+  try {
+    const ra = join(dir, "a.rgb");
+    const rb = join(dir, "b.rgb");
+    await extractRawRgb(a, ra, {});
+    await extractRawRgb(b, rb, {});
+    return seamDiff(readFileSync(ra), readFileSync(rb));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** Compare first vs last frame of an mp4. Logs ok/warn; never throws on soft mismatch. */
 export async function checkLoopSeam(videoPath: string): Promise<number> {
   const dir = mkdtempSync(join(tmpdir(), "kino-seam-"));

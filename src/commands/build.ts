@@ -3,7 +3,7 @@
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
 // variant-tagging on top.
-import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync } from "node:fs";
+import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
@@ -25,13 +25,14 @@ import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from ".
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent } from "../media/backgroundLib.js";
-import { renderVideo, variantName } from "../render/render.js";
+import { renderVideo, renderStills, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
-import { resolveMotionGraphic } from "../render/motiongraphic.js";
-import { beatRelativeWords } from "../render/motionVars.js";
-import { checkLoopSeam } from "../media/loopSeam.js";
+import { resolveMotionGraphic, type MotionGraphicRefInput } from "../render/motiongraphic.js";
+import { beatRelativeWords, resolveWordAnchors } from "../render/motionVars.js";
+import { probeFramePicks, isUnderAnimated } from "../render/motionProbe.js";
+import { checkLoopSeam, imageMeanDiff } from "../media/loopSeam.js";
 import { holdLastFrameToMatchAudio } from "../media/avSync.js";
 import { log } from "../log.js";
 
@@ -282,6 +283,24 @@ export async function prepare(
     // Beat's spoken words, beat-relative — every motion graphic (beat or overlay) gets them so it can
     // type text in sync with the VO. Independent of captionMode: the words exist even with captions off.
     const motionWords = beatRelativeWords(vo.words[i], startSec);
+    // atWord anchors resolve here — against THIS build's VO timings — so word-anchored
+    // triggers/keyframes ride real TTS with no mock→real retune.
+    const anchorMotion = (
+      ref: {
+        source: string;
+        params?: Record<string, number | string>;
+        keyframes?: { at?: number; atWord?: string | number; params: Record<string, number | string>; ease?: "linear" | "easeInOut" | "overshoot" | "spring" }[];
+        triggers?: { at?: number; atWord?: string | number; action: string }[];
+        loop?: boolean;
+      },
+      where: string,
+    ): MotionGraphicRefInput => ({
+      source: ref.source,
+      params: ref.params,
+      loop: ref.loop,
+      keyframes: resolveWordAnchors(ref.keyframes, motionWords, `${where}.keyframes`),
+      triggers: resolveWordAnchors(ref.triggers, motionWords, `${where}.triggers`),
+    });
     const base = {
       kind: seg.kind,
       asset: seg.kind === "app" ? seg.asset : undefined,
@@ -316,7 +335,9 @@ export async function prepare(
         kicker: seg.kicker
           ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
           : undefined,
-        motionOverlay: seg.motionOverlay ? { ...resolveMotionGraphic(seg.motionOverlay, project), words: motionWords } : undefined,
+        motionOverlay: seg.motionOverlay
+          ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
+          : undefined,
       };
     }
     if (seg.kind === "avatar") {
@@ -324,13 +345,21 @@ export async function prepare(
         ...base,
         cta: seg.cta || undefined,
         shot: seg.shot as Shot | undefined,
-        motionOverlay: seg.motionOverlay ? { ...resolveMotionGraphic(seg.motionOverlay, project), words: motionWords } : undefined,
+        motionOverlay: seg.motionOverlay
+          ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
+          : undefined,
       };
     }
     // motion segment: resolve the full-screen graphic; VO drives its duration like other beats.
     return {
       ...base,
-      motion: { ...resolveMotionGraphic({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, project), words: motionWords },
+      motion: {
+        ...resolveMotionGraphic(
+          anchorMotion({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, `segment[${i}]`),
+          project,
+        ),
+        words: motionWords,
+      },
     };
   });
 
@@ -371,6 +400,32 @@ export async function build(
   opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; tag?: string; project?: string },
 ): Promise<string[]> {
   const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
+  // Under-animation probe: sample each full-screen motion beat at a few progress points and warn
+  // when the frames barely differ — a poster with a dissolve, not motion. Never fails the build.
+  try {
+    const picks = probeFramePicks(props.segments, props.fps);
+    if (picks.length) {
+      const dir = mkdtempSync(join(tmpdir(), "kino-probe-"));
+      const frames = picks.flatMap((p) => p.frames.map((f, j) => ({ frame: f, name: `probe-${p.segment}-${j}` })));
+      const outs = await renderStills({ props, publicDir, format: formats[0], frames, outDir: dir });
+      let k = 0;
+      for (const p of picks) {
+        const mine = outs.slice(k, k + p.frames.length);
+        k += p.frames.length;
+        const diffs: number[] = [];
+        for (let j = 1; j < mine.length; j++) diffs.push(await imageMeanDiff(mine[j - 1], mine[j]));
+        if (isUnderAnimated(diffs)) {
+          log.warn(
+            `segment[${p.segment}] motion graphic barely animates across the beat (probe Δ ` +
+              `${diffs.map((d) => d.toFixed(2)).join(" / ")}) — add entrance/life/speech layers (skills/motion-design)`,
+          );
+        }
+      }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  } catch (e) {
+    log.warn(`motion probe skipped: ${(e as Error).message}`);
+  }
   log.step("render");
   // Tag variant renders (explicit --tag, else a --background/--font override, else mock) so a
   // preview or variant never overwrites the shipped default render.

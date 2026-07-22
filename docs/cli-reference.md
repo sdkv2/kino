@@ -56,11 +56,13 @@ kino still <spec> [options]
 | `--count <n>` | n | Frames in the `--around` window (default `5`). |
 | `--montage` | — | Tile multiple stills into one contact sheet (also implied by `--around`). |
 | `--segment <n>` | index | Render the midpoint of segment `n`. |
+| `--word <word>` | spoken word | With `--segment`: center the `--around` sheet on that word's spoken start (case/punctuation-insensitive) — no hand-copying times from `inspect`. Word times shift when copy changes; this always resolves against the current VO. |
 | `--format <fmt>` | `9:16\|3:4` | Output format. |
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Use real VO/avatar + true timing (default: mock, free). |
 | `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA. Still-only — not on `build`. |
+| `--grid` | — | Overlay a rule-of-thirds grid for composition QA (fill budget / dead bands). Still-only — not on `build`. |
 
 ```bash
 kino still specs/lie-test.json --segment 0
@@ -69,6 +71,8 @@ kino still specs/lie-test.json --around 1.5            # 5 frames ±0.5s → one
 kino still specs/lie-test.json --around 1.5 --span 2 --count 7
 kino still specs/lie-test.json --at 1,1.5,2 --montage
 kino still specs/lie-test.json --segment 0 --platform tiktok
+kino still specs/lie-test.json --segment 2 --word match   # sheet centered where "match" is spoken
+kino still specs/lie-test.json --segment 0 --grid          # rule-of-thirds composition check
 ```
 
 ### `storyboard`

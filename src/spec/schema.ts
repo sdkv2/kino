@@ -31,11 +31,27 @@ const BgKeyframe = z.object({
   ease: z.enum(["linear", "easeInOut", "overshoot", "spring"]).optional(),
 });
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
+// Motion tracks may anchor to a spoken word instead of hand-copied seconds: atWord "match" (first
+// case/punctuation-insensitive occurrence) or a word index. Resolved against the beat's VO word
+// timings at build, so the anchor rides real TTS timing — no mock→real retune. Exactly one of
+// at / atWord per entry.
+const oneAnchor = (k: { at?: number; atWord?: string | number }) => (k.at != null) !== (k.atWord != null);
+const anchorMsg = { message: "set exactly one of at / atWord" };
+const AtWord = z.union([z.string().min(1), z.number().int().min(0)]);
+const MotionKeyframe = z
+  .object({
+    at: z.number().optional(),
+    atWord: AtWord.optional(),
+    params: z.record(z.union([z.number(), z.string()])),
+    ease: z.enum(["linear", "easeInOut", "overshoot", "spring"]).optional(),
+  })
+  .refine(oneAnchor, anchorMsg);
+const MotionTrigger = z.object({ at: z.number().optional(), atWord: AtWord.optional(), action: z.string() }).refine(oneAnchor, anchorMsg);
 const motionFields = {
   source: z.string().min(1),
   params: z.record(z.union([z.number(), z.string()])).optional(),
-  keyframes: z.array(BgKeyframe).optional(),
-  triggers: z.array(BgTrigger).optional(),
+  keyframes: z.array(MotionKeyframe).optional(),
+  triggers: z.array(MotionTrigger).optional(),
   loop: z.boolean().optional(), // Tier-3 Lottie playback; inert for html/proc graphics
 };
 const MotionGraphicRef = z.object(motionFields);

@@ -3,6 +3,18 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [Unreleased]
+- `atWord` anchors on motion `keyframes`/`triggers` (word text or index) — resolved against each
+  build's VO timings, so word-synced moments never need a mock→real retune.
+- `kino still --segment N --word <w>` centers a sheet on a spoken word; `--grid` overlays a
+  rule-of-thirds grid for composition QA.
+- `--kino-words-shown` is now continuous (fraction into the current word's span) — word-gated CSS
+  reveals ease instead of stepping.
+- Motion `params` act as an implicit t=0 keyframe: a lone keyframe tweens from the base value
+  (background/zoom/caption tracks keep the one-keyframe-holds idiom).
+- Build warns when a full-screen motion beat barely animates (3-point probe-frame diff) and when a
+  segment `caption` is authored under a resolved words-mode (it would never paint).
+
 ## [1.21.1] — node 20 floor
 - **Node ≥20 required**: `engines` bumped from 18 (EOL) to 20; setup.sh, docs, and badge now agree.
 

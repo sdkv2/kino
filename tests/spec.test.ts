@@ -184,3 +184,29 @@ describe("SpecSchema app footage fields", () => {
     ).toThrow();
   });
 });
+
+describe("atWord anchors (motion keyframes/triggers)", () => {
+  const motionSeg = (extra: Record<string, unknown>) => ({
+    ...valid,
+    segments: [{ kind: "motion", source: "motion/x.html", text: "Scan it now.", ...extra }],
+  });
+  it("accepts atWord (text or index) on motion triggers and keyframes", () => {
+    expect(() =>
+      parseSpec(
+        motionSeg({
+          triggers: [{ atWord: "scan", action: "pulse" }],
+          keyframes: [{ atWord: 1, params: { pct: 86 } }],
+        }),
+      ),
+    ).not.toThrow();
+  });
+  it("rejects an entry with both at and atWord", () => {
+    expect(() => parseSpec(motionSeg({ triggers: [{ at: 1, atWord: "scan", action: "pulse" }] }))).toThrow(/exactly one/i);
+  });
+  it("rejects an entry with neither at nor atWord", () => {
+    expect(() => parseSpec(motionSeg({ triggers: [{ action: "pulse" }] }))).toThrow(/exactly one/i);
+  });
+  it("does not accept atWord on non-motion tracks (backgroundKeyframes)", () => {
+    expect(() => parseSpec({ ...valid, backgroundKeyframes: [{ atWord: "scan", params: { intensity: 1 } }] })).toThrow();
+  });
+});

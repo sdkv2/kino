@@ -48,11 +48,13 @@ program
   .option("--count <n>", "frames in the --around window (default 5)")
   .option("--montage", "tile multiple stills into one contact sheet")
   .option("--segment <n>", "render the midpoint of segment n")
+  .option("--word <word>", "center the sheet on a spoken word's start (with --segment; implies montage)")
   .option("--format <fmt>", "9:16 or 3:4")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
+  .option("--grid", "overlay a rule-of-thirds grid for composition QA")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
 program

@@ -77,14 +77,24 @@ function lerpValue(a: ParamValue, b: ParamValue, p: number): ParamValue {
   return p < 1 ? a : b; // non-tweenable → snap to the later keyframe
 }
 
-// Resolve every param at time t: base values overridden by per-param keyframe tracks (clamped at ends).
-export function paramsAt(base: Record<string, ParamValue>, keyframes: Keyframe[], t: number): Record<string, ParamValue> {
+// Resolve every param at time t: base values overridden by per-param keyframe tracks (clamped at
+// ends). `implicitBase` treats the base value as a t=0 keyframe so a lone keyframe tweens from it
+// instead of holding (motion graphics opt in — the "dead counter" trap); background/zoom/caption
+// tracks keep the documented "one keyframe = constant/hold" idiom.
+export function paramsAt(
+  base: Record<string, ParamValue>,
+  keyframes: Keyframe[],
+  t: number,
+  opts?: { implicitBase?: boolean },
+): Record<string, ParamValue> {
   const out: Record<string, ParamValue> = { ...base };
   const keys = new Set<string>();
   for (const k of keyframes) for (const p of Object.keys(k.params)) keys.add(p);
   for (const key of keys) {
     const track = keyframes.filter((k) => key in k.params).sort((a, b) => a.at - b.at);
     if (!track.length) continue;
+    // Ease on the implicit tween comes from the first real keyframe, matching the a→b convention below.
+    if (opts?.implicitBase && track[0].at > 0 && key in base) track.unshift({ at: 0, params: { [key]: base[key] } });
     if (t <= track[0].at) {
       out[key] = track[0].params[key];
       continue;

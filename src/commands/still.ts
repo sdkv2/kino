@@ -4,6 +4,7 @@ import { renderStills } from "../render/render.js";
 import { pickFrames, parseTimes, timesAround, inspectPlan } from "../render/preview.js";
 import { montage } from "../media/montage.js";
 import { parsePlatform } from "../render/platform.js";
+import { resolveWordAnchors } from "../render/motionVars.js";
 import { log } from "../log.js";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -20,6 +21,8 @@ export type StillOpts = {
   font?: string;
   project?: string;
   platform?: string;
+  word?: string;
+  grid?: boolean;
 };
 
 // Render one (or a few) still frames — fast preview, no video encode.
@@ -31,11 +34,22 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
   const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font, project: opts.project });
   const platformGuide = parsePlatform(opts.platform);
   if (platformGuide) r.props.platformGuide = platformGuide;
+  if (opts.grid) r.props.grid = true;
   const plan = inspectPlan(r.props);
 
+  // --word: center the sheet on a spoken word's start — no hand-copying times from `kino inspect`.
+  // r.words are absolute timeline seconds, so the anchor is already a global timestamp.
+  let wordCenter: number | undefined;
+  if (opts.word != null) {
+    if (opts.segment == null) throw new Error("kino still --word needs --segment <n> (the beat that speaks it)");
+    const segIdx = Number(opts.segment);
+    const anchored = resolveWordAnchors([{ atWord: opts.word, action: "seek" }], r.words[segIdx], `segment[${segIdx}]`);
+    wordCenter = anchored![0].at;
+  }
+
   let at: number[] | undefined;
-  if (opts.around != null) {
-    const center = Number(opts.around);
+  if (opts.around != null || wordCenter != null) {
+    const center = wordCenter ?? Number(opts.around);
     if (!Number.isFinite(center)) throw new Error(`kino still --around needs a number (got ${opts.around})`);
     at = timesAround(center, {
       count: opts.count ? Number(opts.count) : undefined,
@@ -47,11 +61,7 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
     at = parseTimes(opts.at);
   }
 
-  const sel = at
-    ? { at }
-    : opts.segment != null
-      ? { segment: Number(opts.segment) }
-      : {};
+  const sel = at ? { at } : opts.segment != null ? { segment: Number(opts.segment) } : {};
   const picks = pickFrames(r.props.segments, r.props.fps, sel);
   const format = r.formats[0] as "9:16" | "3:4";
   const frames = picks.map((p) => ({ frame: p.frame, name: slug(p.label) || "frame" }));
@@ -59,10 +69,10 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
   const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir });
   outs.forEach((o) => log.ok(o));
 
-  // --around is for reading a moment as a strip; tile by default. --montage tiles any multi-frame still.
-  const wantMontage = opts.montage || opts.around != null;
+  // --around/--word read a moment as a strip; tile by default. --montage tiles any multi-frame still.
+  const wantMontage = opts.montage || opts.around != null || opts.word != null;
   if (wantMontage && outs.length > 1) {
-    const tag = opts.around != null ? `around-${opts.around}s` : "montage";
+    const tag = opts.word != null ? `word-${slug(opts.word)}` : opts.around != null ? `around-${opts.around}s` : "montage";
     const sheet = join(outDir, `${slug(r.spec.title) || "still"}-${tag}.png`);
     await montage(
       outs.map((p, i) => ({ path: p, label: picks[i].label })),

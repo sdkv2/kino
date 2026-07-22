@@ -47,7 +47,7 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 | `--kino-font` | brand font family |
 | `--kino-label-font` | brand `labelFont` (falls back to `--kino-font`) |
 | `--kino-caption-bottom` | px from the frame bottom where kino's caption band sits (`0px` when this beat has no caption) — keep your own text clear of it, e.g. `bottom:calc(var(--kino-caption-bottom) + 24px)` |
-| `--kino-words-shown` | count of the beat's spoken words whose start has been reached at this frame — reveal the first N words to type text **in sync with the VO** (no hand-placed keyframes) |
+| `--kino-words-shown` | **continuous** count of the beat's spoken words shown at this frame — each word contributes its elapsed fraction (0→1 across its spoken span), reaching exactly *k* when word *k* finishes. Gated reveals like `clamp(0, calc(var(--kino-words-shown) - i), 1)` ease through the word instead of stepping at its start |
 | `--kino-word-count` | total spoken words in this beat |
 
 > The gold accent **is** auto-injected as `--kino-gold`. You don't need to pass it as a param.
@@ -63,7 +63,9 @@ Agent playbooks: recipes (caption-free montage, spoof chat window, camera-follow
 **`skills/motion-design/SKILL.md`**.
 
 - **CSS-only (word grain)** — reveal per-word by comparing each word's index to `--kino-words-shown`. Word `i` (0-based):
-  `opacity: clamp(0, calc(var(--kino-words-shown) - <i>), 1)`. Reads like caption drip — fine for chips, weak for "being typed".
+  `opacity: clamp(0, calc(var(--kino-words-shown) - <i>), 1)`. The var is continuous, so each word
+  eases in across its spoken span (no step-lag). Fine for chips and gated lines; for a "being typed"
+  feel prefer the JS burst typewriter below.
 - **JS `render(env)`** — `env.words` is the beat's `{ word, start, end }[]` (times are **beat-relative** seconds,
   matching `env.t`). Prefer a **burst typewriter** (chars land ~45ms apart at the front of each word span, then hold)
   over joining whole words at `start <= t` (word blocks) or metering evenly across the whole span (metronome feel):
@@ -126,7 +128,25 @@ Both carry the timing controls:
 }
 ```
 
-`ease` ∈ `linear | easeInOut | overshoot | spring`. Each param surfaces as `--<key>`; a `pulse` trigger surfaces as a decaying `--pulse` envelope. Sync `at` times to the voiceover with `kino inspect`.
+`ease` ∈ `linear | easeInOut | overshoot | spring`. Each param surfaces as `--<key>`; a `pulse` trigger surfaces as a decaying `--pulse` envelope.
+
+**Anchor to spoken words, not seconds.** Every motion keyframe/trigger accepts `atWord` in place of
+`at`: a word (`"atWord": "match"` — first occurrence, case/punctuation-insensitive) or a word index
+(`"atWord": 3`). Anchors resolve against the build's actual VO timings, so they ride real TTS with
+**no mock→real retune** — prefer them wherever the moment belongs to a spoken word:
+
+```json
+"keyframes": [{ "atWord": "match", "params": { "pct": 86 }, "ease": "overshoot" }],
+"triggers":  [{ "atWord": "match", "action": "pulse" }]
+```
+
+A typo'd `atWord` fails the build naming the beat's words. Plain `at` seconds remain for moments
+with no word (mid-gap settles); sync those with `kino inspect`, or preview a word's moment directly
+with `kino still <spec> --segment N --word match`.
+
+The base `params` values act as an **implicit t=0 keyframe**: a lone keyframe tweens from the base
+value to its target (so `"params": { "pct": 0 }` + one keyframe at `"atWord": "match"` counts up and
+lands on the word — no start keyframe needed).
 
 ## A first example
 

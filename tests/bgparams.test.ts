@@ -32,6 +32,23 @@ describe("paramsAt", () => {
     ];
     expect(paramsAt(base, ek, 1).intensity).toBeCloseTo(0.5);
   });
+  it("tweens from the base value to a lone keyframe with implicitBase (motion graphics)", () => {
+    const lone = [{ at: 2, params: { pct: 86 } }];
+    expect(paramsAt({ pct: 0 }, lone, 0, { implicitBase: true }).pct).toBe(0);
+    expect(paramsAt({ pct: 0 }, lone, 1, { implicitBase: true }).pct).toBeCloseTo(43);
+    expect(paramsAt({ pct: 0 }, lone, 3, { implicitBase: true }).pct).toBe(86);
+  });
+  it("honours the lone keyframe's ease on the implicit tween from base", () => {
+    const lone = [{ at: 1, params: { scale: 1 }, ease: "overshoot" as const }];
+    expect(paramsAt({ scale: 0 }, lone, 0.8, { implicitBase: true }).scale as number).toBeGreaterThan(1);
+  });
+  it("snaps to the first keyframe when the base carries no value for that key", () => {
+    expect(paramsAt({}, [{ at: 2, params: { pct: 86 } }], 0, { implicitBase: true }).pct).toBe(86);
+  });
+  it("keeps the constant/hold idiom without implicitBase (backgrounds, zoom, captions)", () => {
+    const lone = [{ at: 2, params: { colorA: "#ff0000" } }];
+    expect(paramsAt({ colorA: "#000000" }, lone, 0).colorA).toBe("#ff0000");
+  });
   it("overshoot eases past the target before settling", () => {
     const ok = [
       { at: 0, params: { scale: 0 } },

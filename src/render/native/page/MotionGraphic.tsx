@@ -90,7 +90,7 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const tt = frame / fps;
-  const resolved = paramsAt(data.params, data.keyframes, tt);
+  const resolved = paramsAt(data.params, data.keyframes, tt, { implicitBase: true });
   const pulse = pulseAt(data.triggers, tt);
   const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
   const curves = progressCurves(progress);

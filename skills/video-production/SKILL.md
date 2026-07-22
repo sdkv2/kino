@@ -349,8 +349,10 @@ entrance counts as **one** — not enough by itself.
    until the end is unfinished.
 3. **Drive numbers/bars with `params` + `keyframes`**, not a static label. Prefer `ease: "overshoot"`
    or `"spring"` on the money moment; linear only for clocks/meters that should feel mechanical.
-   **A lone keyframe holds static** — give a **start + end** pair (`[{at:0,pct:0},{at:0.6,pct:86}]`) or
-   the counter ships dead; `keyframes[].at` / `triggers[].at` are beat-relative **seconds**.
+   Base `params` are an implicit t=0 keyframe, so `"params": {"pct": 0}` + one keyframe tweens 0→86.
+   **Anchor to spoken words**: `{"atWord": "match", ...}` (word text or index) instead of `at`
+   seconds wherever the moment belongs to a word — it resolves against the build's real VO, so
+   nothing desyncs between mock and real. `at` stays beat-relative **seconds** for word-less moments.
 4. **Punch the VO** — at least one visual accent on a spoken word (`triggers` → `kino-pulse`, word-fire
    Lottie, or a param jump). Silent motion + talking VO = disconnected.
 5. **Multi-step UIs (pipelines, tile triptychs) light off `env.words`** when the VO names those steps —
@@ -424,6 +426,11 @@ you have **Read** pixel stills at multiple stages — not just `inspect` JSON or
    many minutes (~tens of minutes for ~20s @ 30fps of Tier-2 graphics). Keep **per-beat harness
    specs** (`specs/_b0.json` …) that render one motion source so you can `kino still --around`
    in seconds. Only `kino build` the assembled spec after harness sheets pass.
+8. **Copy edits move the clock.** `--around` takes global seconds, and editing any beat's `text`
+   re-paces every beat after it — sheet times derived before the edit now straddle beat edges
+   (classic case: padding VO to hit runtime, then sheeting with pre-pad times). Prefer
+   `kino still --segment N --word <w>` (always resolves against the current VO); for raw `--around`
+   times, re-run `kino inspect` and re-derive every `t` after any copy change.
 
 ## Real VO retune (mandatory before ship)
 
@@ -438,7 +445,8 @@ After the first real build:
 3. **Drive UI off `env.words`, not fixed clocks** — pipeline steps, capability tiles, counters that
    name spoken nouns should light when that word starts (fallback schedule only for mock/empty words)
 4. Retune `triggers` / KEY_MS / clear thresholds from real times; rebuild (VO is content-hash
-   cached — re-render is the cost, not re-TTS)
+   cached — re-render is the cost, not re-TTS). `atWord`-anchored triggers/keyframes need **no**
+   retune — they re-resolve against each build's VO; only hand-placed `at` seconds drift.
 5. Re-check the loop seam on the **encoded mp4** (see below)
 
 **Copy/VO lock:** on-screen labels that enumerate steps must use the **same nouns the VO speaks**
@@ -477,6 +485,9 @@ handoff detail: `speech-synced-ui`.
   thing twice (a timer graphic labelled "START TO FINISH" under a caption reading "start to finish,
   about twenty minutes"). Read the full beat list — spoken lines + any `texts`/motion labels — start
   to finish, script only, before building the storyboard. Also check **VO nouns vs on-screen chips**.
+  Same-frame counts too: on a typed beat the surface already paints the VO (`env.words`), so a
+  foot/kicker label repeating that sentence duplicates it in one frame — give the label artifact
+  meta instead (filename, line count), not the spoken claim.
 - **Target the middle of your runtime range, not the floor**: if `kino inspect`'s mock estimate lands
   at or below your minimum, don't assume the real VO will pace it out to a comfortable length — pad
   now (a beat, a slightly longer line, more breathing room on the hook/payoff) rather than shipping
