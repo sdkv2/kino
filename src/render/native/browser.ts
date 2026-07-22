@@ -81,6 +81,10 @@ export async function launchBrowser(): Promise<Browser> {
     args: [
       "--force-color-profile=srgb",
       "--disable-gpu",
+      // 3D scenes need a WebGL context; with the GPU disabled Chrome (150+) only grants one via the
+      // deprecated SwiftShader fallback, which this flag re-enables. SwiftShader is pure software, so
+      // it stays deterministic on a given machine — the property the scene render tests assert.
+      "--enable-unsafe-swiftshader",
       "--force-device-scale-factor=1",
       "--hide-scrollbars",
       "--mute-audio",
