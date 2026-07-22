@@ -63,7 +63,7 @@ const BANNED_JS: { re: RegExp; msg: string }[] = [
 // "window."). Real code in `${…}` template expressions is kept. Blanking (not deleting) preserves
 // offsets and can't fuse two tokens into a spurious match. The `[^:]` guard keeps `http://` from
 // being eaten as a line comment.
-function stripJsNoise(src: string): string {
+export function stripJsNoise(src: string): string {
   let out = "";
   let i = 0;
   const n = src.length;
