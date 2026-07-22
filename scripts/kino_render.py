@@ -466,12 +466,26 @@ def build_particles(spec):
     empty.empty_display_type = "PLAIN_AXES"
     bpy.context.collection.objects.link(empty)
 
+    # Particles are meant to read as bright points (three.js + bloom). Drive them unlit/emissive
+    # from the MaterialSpec color — PBR under softboxes alone washes to near-black at this scale.
+    mat_spec = dict(spec.get("material") or {})
+    mat_spec["kind"] = "emissive"
+    mat = build_material(mat_spec, spec["id"] + "_mat")
+    # Bump emission so small spheres punch through Filmic without needing huge light energy.
+    try:
+        for n in mat.node_tree.nodes:
+            if n.type == "BSDF_PRINCIPLED":
+                set_input(n, ["Emission Strength"], 4.0)
+                break
+    except Exception:
+        pass
+
     # Build ONE icosphere mesh datablock (via a throwaway object we immediately discard) and
     # instance it for every position — avoids hundreds of bpy.ops calls for large particle counts.
     bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=size)
     template = bpy.context.active_object
     mesh_data = template.data
-    mesh_data.materials.append(build_material(spec.get("material"), spec["id"] + "_mat"))
+    mesh_data.materials.append(mat)
     bpy.data.objects.remove(template, do_unlink=True)
 
     for i, pos in enumerate(positions):
@@ -594,9 +608,9 @@ WORLD_HORIZON_HEX = "#141b2e"  # slightly lighter navy, "floor" of the backdrop 
 # the subject. Blender AREA energy is Watts — three.js-ish intensities of ~1–2 map to hundreds of W
 # for a ~2m softbox, otherwise drafts render near-black. Retune at the draft gate (Task 15).
 STUDIO_LIGHTS = (
-    {"name": "KinoKeyLight", "pos": (-3.2, 4.0, 3.0), "energy": 350.0, "size": 2.2},
-    {"name": "KinoFillLight", "pos": (3.6, 1.4, 2.2), "energy": 140.0, "size": 2.4},
-    {"name": "KinoRimLight", "pos": (0.0, 2.2, -3.8), "energy": 200.0, "size": 1.6},
+    {"name": "KinoKeyLight", "pos": (-3.2, 4.0, 3.0), "energy": 450.0, "size": 2.2},
+    {"name": "KinoFillLight", "pos": (3.6, 1.4, 2.2), "energy": 180.0, "size": 2.4},
+    {"name": "KinoRimLight", "pos": (0.0, 2.2, -3.8), "energy": 260.0, "size": 1.6},
 )
 
 
