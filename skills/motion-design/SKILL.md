@@ -212,6 +212,19 @@ Common kino odors:
 Wanted instead: a color commitment level, type with a reason, one domain artifact, motion that
 explains speech or settle, and a first frame that could only be this product.
 
+## 3D scenes (`.scene.js`)
+
+When a beat needs **real 3D** — a device product shot, a depth/particle background, a 3D wordmark end
+card — author a `.scene.js` source instead of forcing it in CSS. It's the body of `scene(api)`
+returning `update(env)`; a small curated scene API hides three.js, driven per frame by the same
+`env` and the same JSON `params`/`keyframes`/`triggers` as 2D motion.
+
+Before authoring, **read `docs/3d-scenes.md` and `src/render/native/page/scene/api.ts`** (that file is
+ground truth — this skill doesn't restate the surface). The three presets cover the common cases via
+params — reach for them first: `phone-orbit` (device + screenshot), `depth-particles` (abstract
+background), `wordmark-3d` (CTA end card). Design taste is the same as 2D — one artifact, a color
+commitment, motion that explains or settles, seam-safe loops (`env.edge`, absolute camera setters).
+
 ## Craft loop (truthful completion)
 
 1. Sketch the beat job + artifact in one sentence.
@@ -229,6 +242,7 @@ pass on the beat, run the full checklist above.
 ## Related
 
 - `docs/motion-graphics.md` — CSS/JS contract, lint, helpers
+- `docs/3d-scenes.md` — `.scene.js` 3D contract, `api.*` reference, presets
 - `skills/speech-synced-ui` — typing grain, camera, seamless loop, retune
 - `skills/video-production` — trailer structure, brand discovery, ship gate
 - `skills/adversarial-critique` — overlap / safe-zone frame QA

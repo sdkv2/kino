@@ -105,7 +105,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `kind` | `"motion"` | ✅ | |
-| `source` | string | ✅ | Path under the project (`motion/hook.html`) **or** a bare library id with no `/` or `.` (e.g. `"prompt-type"` → `assets-lib/motion/prompt-type.js`). See `kino motion` for bundled ids. |
+| `source` | string | ✅ | Path under the project (`motion/hook.html`) **or** a bare library id with no `/` or `.` (e.g. `"prompt-type"` → `assets-lib/motion/prompt-type.js`). Extension picks the type: `.html` (Tier-1), `.js` (Tier-2 procedural), `.json` (Tier-3 Lottie), `.scene.js` (3D scene — see [3D scenes](3d-scenes.md)). See `kino motion` for bundled ids. |
 | `text` | string | ✅ | Spoken VO for the beat. |
 | `caption` | string | — | Optional on-screen caption. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |

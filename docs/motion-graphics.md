@@ -14,6 +14,7 @@ Run `kino motion` for the same contract inline.
 - [Helper classes (reveals, pulse, easing)](#helper-classes-reveals-pulse-easing)
 - [Procedural graphics (Tier 2)](#procedural-graphics-tier-2)
 - [Embedded Lottie (Tier 3)](#embedded-lottie-tier-3)
+- [3D scenes (Tier 4)](#3d-scenes-tier-4)
 - [Determinism & safety (the lint)](#determinism--safety-the-lint)
 - [Authoring tips](#authoring-tips)
 - [Worked examples](#worked-examples)
@@ -371,6 +372,23 @@ The build **rejects** assets that violate kino's determinism/safety contract:
 - **3 MB cap** — the serialized JSON ships inline in the render-page config. Simplify or split animations that exceed the limit.
 
 > `.lottie` (dotLottie binary) support and brand color-token recoloring are documented follow-ons and are not yet implemented.
+
+## 3D scenes (Tier 4)
+
+When a beat needs **real 3D** — a device product shot, a depth background, an extruded wordmark — point
+`source` at a **`.scene.js`** file. Its body is `scene(api)` and returns `update(env)`; a small curated
+scene API hides three.js, driven per frame by the **same `env`** as Tier-2. It renders to a transparent
+WebGL canvas composited into the same layer slot, so it works in a full-screen `kind:"motion"` beat and
+as a `motionOverlay` — with the same `params` / `keyframes` / `triggers` (and `atWord`) timing.
+
+```json
+{ "kind": "motion", "source": "motion/phone-orbit.scene.js",
+  "params": { "screenshot": "shots/dash.png", "spin": 0.4 },
+  "text": "Meet the new dashboard." }
+```
+
+Full contract, the `api.*` reference, lint rules, and the three presets → **[3D scenes](3d-scenes.md)**.
+Read that and `src/render/native/page/scene/api.ts` before authoring.
 
 ## Determinism & safety (the lint)
 
