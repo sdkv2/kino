@@ -25,9 +25,9 @@ export function lintSceneJs(src: string): string[] {
   return BANNED_SCENE.filter((b) => b.re.test(code)).map((b) => b.msg);
 }
 
-// api.texture("lit") | api.texture('lit') | api.texture(api.param("name")) — same for api.gltf.
-const CALL_RE = /\bapi\s*\.\s*(?:texture|gltf)\s*\(\s*(?:"([^"]*)"|'([^']*)'|api\s*\.\s*param\s*\(\s*(?:"(\w+)"|'(\w+)')\s*\))/g;
-const CALL_SITE_RE = /\bapi\s*\.\s*(?:texture|gltf)\s*\(/g;
+// api.texture("lit") | api.texture(api.param("name")) — same for gltf/screen/layer. Group 1 = call name.
+const CALL_RE = /\bapi\s*\.\s*(texture|gltf|screen|layer)\s*\(\s*(?:"([^"]*)"|'([^']*)'|api\s*\.\s*param\s*\(\s*(?:"(\w+)"|'(\w+)')\s*\))/g;
+const CALL_SITE_RE = /\bapi\s*\.\s*(?:texture|gltf|screen|layer)\s*\(/g;
 
 function badPath(p: string): boolean {
   return p.startsWith("/") || p.split("/").includes("..") || /^[a-z]+:/i.test(p);
@@ -49,8 +49,8 @@ export function extractSceneAssets(
   for (const m of src.matchAll(CALL_RE)) {
     if (stripped.slice(m.index ?? 0, (m.index ?? 0) + 3) !== "api") continue;
     extracted++;
-    const literal = m[1] ?? m[2];
-    const paramName = m[3] ?? m[4];
+    const literal = m[2] ?? m[3];
+    const paramName = m[4] ?? m[5];
     let path: string | undefined = literal;
     if (paramName !== undefined) {
       const v = params[paramName];
@@ -78,4 +78,49 @@ export function extractSceneAssets(
     violations.push(`api.texture/api.gltf arguments must be string literals or api.param("name") — kino resolves and caches assets before render`);
   }
   return { assets: [...assets], violations };
+}
+
+/** Height/width ratio of an SVG source (viewBox first, width/height attrs as fallback). */
+export function svgAspect(svg: string): number {
+  const vb = svg.match(/viewBox\s*=\s*["']\s*[\d.eE+-]+[\s,]+[\d.eE+-]+[\s,]+([\d.eE+-]+)[\s,]+([\d.eE+-]+)/);
+  if (vb) {
+    const w = Number(vb[1]), h = Number(vb[2]);
+    if (w > 0 && h > 0) return h / w;
+  }
+  const wAttr = svg.match(/<svg[^>]*\swidth\s*=\s*["']([\d.]+)/);
+  const hAttr = svg.match(/<svg[^>]*\sheight\s*=\s*["']([\d.]+)/);
+  if (wAttr && hAttr && Number(wAttr[1]) > 0 && Number(hAttr[1]) > 0) return Number(hAttr[1]) / Number(wAttr[1]);
+  throw new Error("svg needs a viewBox (or width/height attrs) so the layer plane can be sized");
+}
+
+/** Categorized raster refs for the pre-rasterize pass: .html screens and .svg layers. */
+export function extractSceneRefs(
+  src: string,
+  params: Record<string, number | string>,
+): { screens: string[]; layers: string[]; violations: string[] } {
+  const violations: string[] = [];
+  const screens = new Set<string>();
+  const layers = new Set<string>();
+  const stripped = stripJsNoise(src);
+  for (const m of src.matchAll(CALL_RE)) {
+    if (stripped.slice(m.index ?? 0, (m.index ?? 0) + 3) !== "api") continue;
+    const call = m[1];
+    if (call !== "screen" && call !== "layer") continue;
+    const paramName = m[4] ?? m[5];
+    let path: string | undefined = m[2] ?? m[3];
+    if (paramName !== undefined) {
+      const v = params[paramName];
+      if (typeof v !== "string" || !v) continue; // extractSceneAssets already reports this
+      path = v;
+    }
+    if (!path || badPath(path)) continue; // ditto
+    if (call === "screen") {
+      if (path.toLowerCase().endsWith(".html")) screens.add(path);
+      // non-html screen = static texture passthrough, no raster needed
+    } else {
+      if (path.toLowerCase().endsWith(".svg")) layers.add(path);
+      else violations.push(`api.layer("${path}") must reference an .svg asset`);
+    }
+  }
+  return { screens: [...screens], layers: [...layers], violations };
 }
