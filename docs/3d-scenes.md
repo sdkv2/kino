@@ -57,7 +57,9 @@ Set per beat/overlay via `quality: "draft" | "final" | "max"` on the motion fiel
 default **`final`** on `kino build` (no `--draft`). Preview commands force draft unless `--final`.
 
 Stills cache under `out/<title>/_scene3d/<timeline-hash>/`. Changing source, params, words, dims,
-fps, or quality invalidates the hash — unchanged beats skip Blender.
+fps, or quality invalidates the hash — unchanged beats skip Blender. HTML screen and SVG layer
+raster outputs are content-addressed under `_public/_screens/<digest>/` and
+`_public/_layers/<digest>.png`; Chrome raster runs only on a Blender cache miss.
 
 ## The module contract
 
@@ -65,7 +67,7 @@ A `.scene.js` file is the **body of `scene(api)`** and must **return an `update(
 
 ```js
 // phone-orbit.scene.js — body of scene(api); returns update(env)
-const phone = api.devicePhone({ screen: api.texture(api.param("screenshot")) });
+const phone = api.devicePhone({ screen: api.screen(api.param("screenshot")) });
 api.env("studio");
 api.dirLight({ intensity: 2.4, position: [2.5, 3, 2] });
 const cam = api.camera({ fov: 32 });
@@ -137,6 +139,8 @@ palette; anything else is a raw CSS color.
 |---|---|
 | `api.box` / `sphere` / `plane` / `cylinder` / `torus` / `roundedBox` | Primitives; materials optional. |
 | `api.devicePhone({ screen, width?, height?, depth?, radius? })` | Procedural rounded-slab phone + screen texture (Blender: bevel/subsurf body + emissive screen). |
+| `api.screen(pathOrParam)` | Screen texture. `.html` → VO-synced animated sequence (Tier-1 contract: `--kino-*` vars, `--progress`, `--kino-words-shown`; rasterized 720×1556 before Blender). Image paths pass through like `api.texture`. |
+| `api.layer(pathOrParam, {x,y,z,width,material,emission})` | One SVG element as its own plane (alpha PNG, 2048px long edge). `width` in world units, height from the SVG aspect. `material: "unlit"` (default) or `"emissive"` + `emission`. Animate via handle transforms + `.material.opacity`. Layer z values must differ by ≥ 0.02. |
 | `api.gltf(pathOrParam)` | glTF/glb under `_public` (Blender native import). |
 | `api.text3d(str, { size?, depth?, bevel?, material? })` | Extruded text. `geometry.computeBoundingBox()` / `boundingBox` is a **shim** (glyph advance ≈ `0.62·size·length`) for fit-to-frame — Blender uses its own font metrics for the mesh. |
 
@@ -167,7 +171,7 @@ Particle positions and `api.random` use seeded mulberry32 only.
 
 | Id | Job | Key params |
 |---|---|---|
-| `phone-orbit` | Device product shot | `screenshot` (required), `spin`, `zoom` |
+| `phone-orbit` | Device product shot | `screenshot` (required — `.png`/`.jpg` still or `.html` animated screen), `spin`, `zoom` |
 | `depth-particles` | Abstract depth field | `intensity`, `color` |
 | `wordmark-3d` | CTA extruded mark | `text`, `depth` |
 

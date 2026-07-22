@@ -42,7 +42,7 @@ No Blender → build fails on the named beat with an install hint. Non-3D specs 
 
 | Id | Job | Must-set params |
 |---|---|---|
-| `phone-orbit` | Device product shot | `screenshot` (project asset path) |
+| `phone-orbit` | Device product shot | `screenshot` (project asset path — `.png`/`.jpg` still or `.html` animated screen) |
 | `depth-particles` | Abstract depth / loop field | optional `intensity`, `color` |
 | `wordmark-3d` | CTA extruded mark | optional `text`, `depth` |
 
@@ -101,6 +101,7 @@ Wipe `_scene3d/` only when translator constants change (lights live in Python, n
 | Beat type | Must read on a draft still |
 |---|---|
 | Phone | Screen UI legible; body has clearcoat sheen; soft contact shadow / ground; not edge-on at settle |
+| Layered SVG / HTML screen | Each element crisp at rest; visible depth separation on camera move; no halo on alpha edges; screen UI state lands on spoken words |
 | Particles | Colored points visible (mint/gold), depth, seam-safe if looping (`env.edge`) |
 | Wordmark | Metal has tonal modeling (not flat grey blob); grounded; fit-to-frame (bbox shim is approximate) |
 

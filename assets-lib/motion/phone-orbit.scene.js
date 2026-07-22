@@ -1,7 +1,7 @@
 // Device product shot: rounded-slab phone (clearcoat body), spec screenshot on screen, swept 3/4
 // reveal + push-in, grounded by a fake contact shadow.
-// params: screenshot (required asset path) · spin (yaw sweep in half-turns, default 0.35 ≈ 63°) · zoom (default 1)
-const phone = api.devicePhone({ screen: api.texture(api.param("screenshot")) });
+// params: screenshot (required asset path — .png/.jpg still or .html animated screen) · spin (yaw sweep in half-turns, default 0.35 ≈ 63°) · zoom (default 1)
+const phone = api.devicePhone({ screen: api.screen(api.param("screenshot")) });
 const shadow = api.contactShadow({ radius: 1.0, opacity: 0.42, y: -1.05 });
 api.env("studio");
 api.dirLight({ intensity: 2.4, position: [2.5, 3, 2] });
