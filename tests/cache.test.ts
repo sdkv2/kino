@@ -51,3 +51,25 @@ describe("frameSignatures scene assets", () => {
     for (let n = 120; n < 300; n++) expect(b[n]).not.toBe(a[n]);
   });
 });
+
+describe("frameSignatures render mode", () => {
+  const publicDir = mkdtempSync(join(tmpdir(), "kino-mode-pub-"));
+  const props = {
+    fps: 30,
+    segments: [
+      { kind: "motion", startSec: 0, endSec: 2, motion: { html: "", scene: "return () => {};", sceneAssets: [], params: {}, keyframes: [], triggers: [] } },
+    ],
+  } as unknown as KinoProps;
+  const sigOpts = { props, publicDir, pageJsHash: "pj", width: 1080, height: 1920, total: 60, fps: 30 };
+
+  it("never cross-serves gpu and software frames for identical props", () => {
+    const sw = frameSignatures({ ...sigOpts, mode: "sw" });
+    const gpu = frameSignatures({ ...sigOpts, mode: "gpu" });
+    for (let n = 0; n < 60; n++) expect(gpu[n]).not.toBe(sw[n]);
+  });
+
+  it("is stable within a mode", () => {
+    expect(frameSignatures({ ...sigOpts, mode: "sw" })).toEqual(frameSignatures({ ...sigOpts, mode: "sw" }));
+    expect(frameSignatures({ ...sigOpts, mode: "gpu" })).toEqual(frameSignatures({ ...sigOpts, mode: "gpu" }));
+  });
+});

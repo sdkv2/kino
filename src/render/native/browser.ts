@@ -72,30 +72,45 @@ export async function releaseBrowser(slot = 0): Promise<void> {
   s.closeTimer.unref();
 }
 
+// Chrome launch flags as a pure function of the env, so both render modes are unit-testable.
+// Default = software WebGL via SwiftShader: pure software, so it stays bit-deterministic on a given
+// machine — the canonical reproducible mode the scene render tests assert. KINO_GPU=1 opts into a
+// real GPU context (ANGLE Metal on darwin) for 3D quality/speed, trading that bit-determinism
+// guarantee for it. The shared flags below (sRGB, scale factor, etc.) pin the surface in BOTH modes.
+export function launchArgs(env: NodeJS.ProcessEnv): string[] {
+  const gpu = env.KINO_GPU === "1";
+  return [
+    "--force-color-profile=srgb",
+    ...(gpu
+      ? // Real GPU WebGL. ANGLE picks the platform's native backend; darwin needs Metal named
+        // explicitly, elsewhere bare --use-angle takes ANGLE's per-platform default.
+        [process.platform === "darwin" ? "--use-angle=metal" : "--use-angle"]
+      : [
+          "--disable-gpu",
+          // With the GPU disabled Chrome (150+) only grants a WebGL context via the deprecated
+          // SwiftShader fallback, which this flag re-enables.
+          "--enable-unsafe-swiftshader",
+        ]),
+    "--force-device-scale-factor=1",
+    "--hide-scrollbars",
+    "--mute-audio",
+    "--disable-extensions",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    // Worker pages are background tabs; without these Chrome throttles their timers/rAF and a
+    // non-frontmost page can stall indefinitely.
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows",
+  ];
+}
+
 export async function launchBrowser(): Promise<Browser> {
   const executablePath = await resolveExecutable();
   return puppeteer.launch({
     headless: true,
     executablePath,
     protocolTimeout: 120000,
-    args: [
-      "--force-color-profile=srgb",
-      "--disable-gpu",
-      // 3D scenes need a WebGL context; with the GPU disabled Chrome (150+) only grants one via the
-      // deprecated SwiftShader fallback, which this flag re-enables. SwiftShader is pure software, so
-      // it stays deterministic on a given machine — the property the scene render tests assert.
-      "--enable-unsafe-swiftshader",
-      "--force-device-scale-factor=1",
-      "--hide-scrollbars",
-      "--mute-audio",
-      "--disable-extensions",
-      "--no-default-browser-check",
-      "--disable-background-networking",
-      // Worker pages are background tabs; without these Chrome throttles their timers/rAF and a
-      // non-frontmost page can stall indefinitely.
-      "--disable-background-timer-throttling",
-      "--disable-renderer-backgrounding",
-      "--disable-backgrounding-occluded-windows",
-    ],
+    args: launchArgs(process.env),
   });
 }

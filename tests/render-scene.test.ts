@@ -72,4 +72,15 @@ describe("3d scene render", () => {
     // faceless avatar beat, so sample an off-centre point the caption never touches.
     expectMint(sampleAt(outs[0], 150, 300)); // the overlay scene composited over the avatar beat
   }, 240000);
+
+  // GPU smoke: only runs under KINO_GPU=1 (Metal-backed ANGLE on darwin). Skips cleanly — and
+  // visibly — under default `npm test`, where Chrome launches with --disable-gpu/SwiftShader.
+  // Proves a real GPU WebGL context can still draw and composite the scene (a blank canvas here
+  // would fail expectMint), i.e. KINO_GPU produced a working context, not an empty frame.
+  it.runIf(process.env.KINO_GPU === "1")("draws the scene under a real GPU context (KINO_GPU=1)", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-3dgpu-"));
+    const outs = await renderStills({ props: props(), publicDir: outDir, format: "9:16", frames: [{ frame: 30, name: "g" }], outDir });
+    expect(outs).toHaveLength(1);
+    expectMint(center(outs[0]));
+  }, 240000);
 });
