@@ -10,7 +10,6 @@ import { flushSync } from "react-dom";
 import { FrameProvider, type VideoConfig } from "./runtime";
 import { MediaProvider, type MediaMap } from "./media";
 import { KinoVideo } from "./KinoVideo";
-import { settleScene } from "./scene/api";
 import type { KinoProps } from "../../props.js";
 
 interface RenderConfig {
@@ -19,7 +18,6 @@ interface RenderConfig {
   height: number;
   durationInFrames: number;
   media: MediaMap;
-  gpu?: boolean; // KINO_GPU render mode; forwarded to Scene3D for 2× supersampling
 }
 
 declare global {
@@ -88,7 +86,7 @@ let root: Root | null = null;
 let current: RenderConfig | null = null;
 
 const App: React.FC<{ cfg: RenderConfig; frame: number }> = ({ cfg, frame }) => {
-  const config: VideoConfig = { fps: cfg.props.fps, width: cfg.width, height: cfg.height, durationInFrames: cfg.durationInFrames, gpu: cfg.gpu };
+  const config: VideoConfig = { fps: cfg.props.fps, width: cfg.width, height: cfg.height, durationInFrames: cfg.durationInFrames };
   return (
     <MediaProvider media={cfg.media}>
       <FrameProvider frame={frame} config={config}>
@@ -103,11 +101,6 @@ async function kinoSeek(frame: number): Promise<void> {
   if (!cfg || !root) throw new Error("kinoSeek before kinoLoad");
   flushSync(() => root!.render(<App cfg={cfg} frame={frame} />));
   await settleImages();
-  // 3D asset loads resolve async; a canvas doesn't repaint on texture arrival like an <img>
-  // does — one more synchronous commit re-renders every live scene with settled assets.
-  if (await settleScene()) {
-    flushSync(() => root!.render(<App cfg={cfg} frame={frame} />));
-  }
 }
 
 async function kinoLoad(): Promise<void> {

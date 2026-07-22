@@ -39,16 +39,12 @@ export function frameSignatures(opts: {
   height: number;
   total: number;
   fps: number;
-  /** Render backend — GPU and software produce different pixels, so they must never cross-serve. */
-  mode?: "gpu" | "sw";
 }): string[] {
   const { props, publicDir, pageJsHash, width, height, total, fps } = opts;
-  const mode = opts.mode ?? (process.env.KINO_GPU === "1" ? "gpu" : "sw");
   const f = (s: number) => Math.round(s * fps);
   const globalSig = sha1(
     JSON.stringify({
       v: VERSION,
-      mode,
       width,
       height,
       fps,

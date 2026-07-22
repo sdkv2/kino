@@ -282,7 +282,6 @@ async function pointServerAt(opts: {
       height: opts.height,
       durationInFrames: opts.total,
       media: opts.media,
-      gpu: process.env.KINO_GPU === "1", // Scene3D reads this to supersample 2× on real GPU
     }),
   });
 }

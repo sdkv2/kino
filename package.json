@@ -51,7 +51,6 @@
     "ffprobe-static": "^3.1.0",
     "isomorphic-dompurify": "^2.36.0",
     "puppeteer": "^25.3.0",
-    "three": "0.185.1",
     "yaml": "^2.9.0",
     "zod": "^3.23.8"
   },
@@ -60,7 +59,6 @@
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.7",
-    "@types/three": "^0.185.1",
     "esbuild": "^0.28.1",
     "lottie-web": "^5.13.0",
     "react": "^18.3.1",
