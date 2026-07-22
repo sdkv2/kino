@@ -53,13 +53,15 @@ export interface RunSceneOpts {
   quality: "draft" | "final" | "max";
   keyframes?: BgKeyframe[];
   triggers?: BgTrigger[];
+  screens?: Record<string, { dir: string; frames: number }>;
+  layers?: Record<string, { path: string; aspect: number }>;
 }
 
 /** Lint → record api → per-frame snapshots. Pure of (opts); hash is the stills cache key. */
 export function runScene(opts: RunSceneOpts): { timeline: Timeline; hash: string } {
   const {
     source, params, words, theme, width, height, fps, durationFrames, quality,
-    keyframes = [], triggers = [],
+    keyframes = [], triggers = [], screens = {}, layers = {},
   } = opts;
 
   const violations = lintSceneJs(source);
@@ -72,7 +74,7 @@ export function runScene(opts: RunSceneOpts): { timeline: Timeline; hash: string
     white: theme.white,
     gold: theme.gold,
   };
-  const recorder = createRecordApi({ baseParams: params, palette });
+  const recorder = createRecordApi({ baseParams: params, palette, screens, layers });
 
   // Lexical shadowing: banned globals are parameters bound to undefined (belt on lint's suspenders).
   const body = new Function(

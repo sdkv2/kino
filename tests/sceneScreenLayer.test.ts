@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createRecordApi } from "../src/render/scene/recordApi.js";
+import { runScene } from "../src/render/scene/runScene.js";
 
 const palette = { mint: "#80e2b4", green: "#0c8d64", night: "#0b1020", white: "#ffffff", gold: "#d99a20" };
 const mk = (extra: object = {}) =>
@@ -57,5 +58,22 @@ describe("api.layer", () => {
     const api = mk({ layers }).api as Record<string, any>;
     api.layer("svg/logo.svg", { z: 0.3 });
     expect(() => api.layer("svg/logo.svg", { z: 0.31 })).toThrow(/z/);
+  });
+});
+
+const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9 };
+
+describe("runScene raster threading", () => {
+  const source = `const p = api.devicePhone({ screen: api.screen("screens/dash.html") });
+return (env) => { p.rotation.y = env.progress; };`;
+  const run = (dir: string) =>
+    runScene({
+      source, params: {}, words: [], theme, width: 270, height: 480, fps: 30, durationFrames: 2,
+      quality: "draft", screens: { "screens/dash.html": { dir, frames: 2 } },
+    });
+
+  it("hash busts when the screen raster digest changes", () => {
+    expect(run("_screens/aaa").hash).not.toBe(run("_screens/bbb").hash);
+    expect(run("_screens/aaa").hash).toBe(run("_screens/aaa").hash);
   });
 });
