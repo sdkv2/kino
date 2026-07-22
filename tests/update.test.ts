@@ -12,3 +12,17 @@ describe("detectInstallKind", () => {
     expect(detectInstallKind("/usr/local/lib/node_modules/@sdkv2/kino", () => false)).toBe("global");
   });
 });
+
+import { classifyWorkingTree } from "../src/commands/update.js";
+
+describe("classifyWorkingTree", () => {
+  it("proceeds on a clean tree", () => {
+    expect(classifyWorkingTree("")).toBe("clean");
+  });
+  it("resets a lockfile-only change (npm version churn blocks pull forever)", () => {
+    expect(classifyWorkingTree(" M package-lock.json\n")).toBe("reset-lock");
+  });
+  it("aborts on real local changes", () => {
+    expect(classifyWorkingTree(" M src/cli.ts\n M package-lock.json\n")).toBe("dirty");
+  });
+});
