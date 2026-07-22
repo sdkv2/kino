@@ -591,12 +591,12 @@ WORLD_ZENITH_HEX = "#05070d"   # dark navy backdrop, top of frame
 WORLD_HORIZON_HEX = "#141b2e"  # slightly lighter navy, "floor" of the backdrop gradient
 
 # Fixed 3-point studio rig (kino/Y-up space): key upper-left-front, fill camera-right, rim behind
-# the subject. Sizes/energies/positions are provisional constants — retune here at the draft gate
-# (Task 15), never per-preset.
+# the subject. Blender AREA energy is Watts — three.js-ish intensities of ~1–2 map to hundreds of W
+# for a ~2m softbox, otherwise drafts render near-black. Retune at the draft gate (Task 15).
 STUDIO_LIGHTS = (
-    {"name": "KinoKeyLight", "pos": (-3.2, 4.0, 3.0), "energy": 2.0, "size": 2.2},
-    {"name": "KinoFillLight", "pos": (3.6, 1.4, 2.2), "energy": 0.8, "size": 2.4},
-    {"name": "KinoRimLight", "pos": (0.0, 2.2, -3.8), "energy": 1.1, "size": 1.6},
+    {"name": "KinoKeyLight", "pos": (-3.2, 4.0, 3.0), "energy": 350.0, "size": 2.2},
+    {"name": "KinoFillLight", "pos": (3.6, 1.4, 2.2), "energy": 140.0, "size": 2.4},
+    {"name": "KinoRimLight", "pos": (0.0, 2.2, -3.8), "energy": 200.0, "size": 1.6},
 )
 
 
@@ -770,7 +770,12 @@ def configure_cycles_device(scene):
 def pick_engine(scene, quality):
     if quality == "draft":
         scene.render.engine = eevee_engine_id()
-        scene.eevee.taa_render_samples = 32  # fixed draft sample count: fast, no adaptive/noisy term
+        scene.eevee.taa_render_samples = 64  # fixed draft sample count
+        # Eevee Next needs raytracing for soft area-light response; without it softboxes read flat/black.
+        try:
+            scene.eevee.use_raytracing = True
+        except Exception:
+            pass
         return "EEVEE"
 
     scene.render.engine = "CYCLES"
