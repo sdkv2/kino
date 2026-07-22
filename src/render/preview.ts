@@ -8,7 +8,6 @@ export interface SegmentSummary {
   durSec: number;
   captionMode: string;
   asset?: string;
-  hasKicker: boolean;
 }
 
 export interface InspectPlan {
@@ -31,7 +30,6 @@ export function inspectPlan(props: KinoProps): InspectPlan {
     durSec: round2(s.endSec - s.startSec),
     captionMode: s.captionMode ?? "phrase",
     ...(s.asset ? { asset: s.asset } : {}),
-    hasKicker: !!s.kicker,
   }));
   return {
     fps: props.fps,

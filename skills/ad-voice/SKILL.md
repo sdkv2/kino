@@ -145,7 +145,7 @@ actually say it. (This is stronger than "read aloud" — the *friend* frame is w
 
 ### Hard-banned vocabulary (house list)
 
-Never in VO, captions, kickers, or `texts` overlays unless the brand explicitly overrides:
+Never in VO, captions, or `texts` overlays unless the brand explicitly overrides:
 
 `unlock` · `unleash` · `elevate` · `empower` · `revolutionize` · `transform your` · `supercharge` ·
 `seamless` / `seamlessly` · `effortless` / `effortlessly` · `streamline` · `cutting-edge` ·

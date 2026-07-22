@@ -100,6 +100,6 @@ Renders land at `projects/<name>/out/<title>/<title>[-<tag>]-<format>.mp4` (e.g.
 - **[CLI reference](cli-reference.md)** — every `kino` command and flag.
 - **[Spec reference](spec-reference.md)** — the full JSON spec, `brand.md`, and `project.json`.
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
-- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers.
+- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions.
 - Agent skills (canonical): [`skills/`](../skills/). `kino skills --install` (also `kino init`) creates local (gitignored) symlinks under `.agents` / `.cursor` / `.claude` / `.codex`.
 - Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`. Also: `npx skills add sdkv2/kino`.

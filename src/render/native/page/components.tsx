@@ -247,7 +247,7 @@ export const AnimatedElement: React.FC<{
   );
 };
 
-// Tween wrapper for elements that already position themselves (captions, kickers). Keyframes offset
+// Tween wrapper for elements that already position themselves (captions). Keyframes offset
 // (x/y as % of frame), scale, and fade them over absolute time. No keyframes → pass-through.
 export const TweenOverlay: React.FC<{ keyframes: BgKeyframe[]; children: React.ReactNode }> = ({ keyframes, children }) => {
   const frame = useCurrentFrame();
@@ -376,20 +376,6 @@ export const WordCaption: React.FC<{
   }
   return (
     <div style={{ position: "absolute", left: 56, right: 56, bottom: CAPTION_BOTTOM, display: "flex", justifyContent: "center" }}>{row}</div>
-  );
-};
-
-export const Kicker: React.FC<{ text: string; color: string; fg: string; t: Theme }> = ({ text, color, fg, t }) => {
-  const f = useCurrentFrame();
-  // damping 180 = heavily damped (no overshoot) → a clean fade-in (drives opacity only). top 150 = px
-  // from the frame top where the kicker pill sits.
-  const s = spring({ frame: f, fps: 30, config: { damping: 180 } });
-  return (
-    <div style={{ position: "absolute", top: 150, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: s }}>
-      <span style={{ background: color, color: fg, fontFamily: t.font, fontWeight: 900, fontSize: 36, padding: "13px 24px", borderRadius: 999 }}>
-        {text}
-      </span>
-    </div>
   );
 };
 

@@ -134,7 +134,7 @@ function springValue(t: number, { damping = 10, mass = 1, stiffness = 100 }: Spr
   // Damping ratio, clamped at critical: the legacy engine treats any over-damped config as
   // critically damped (verified black-box — damping 180 and 200 produce identical curves, and
   // both match the critical-damping closed form exactly). Without the clamp, damping≈200 configs
-  // (kicker/logo fades) crawl for seconds instead of settling in ~15 frames.
+  // (logo fades) crawl for seconds instead of settling in ~15 frames.
   const zeta = Math.min(1, damping / (2 * Math.sqrt(stiffness * mass)));
   let x: number;
   if (zeta < 1) {

@@ -278,7 +278,7 @@ kino backgrounds
 ```
 
 ### `elements`
-List overlay elements (logo, captions, kickers) and their layout/tween controls. See [Backgrounds & overlays](backgrounds-and-overlays.md#overlay-elements).
+List overlay elements (logo, captions) and their layout/tween controls. See [Backgrounds & overlays](backgrounds-and-overlays.md#overlay-elements).
 
 ```
 kino elements

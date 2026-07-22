@@ -40,7 +40,6 @@ export interface KinoSegment {
   endSec: number;
   /** Faceless avatar beats (including cta:true end cards) use centered hero captions. */
   cta?: boolean;
-  kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
   transition?: string; // resolved in/out transition for app cut-ins
   clipFrom?: number; // seconds into source asset
@@ -56,7 +55,6 @@ export interface KinoSegment {
   captionReveal?: CaptionReveal; // words-mode reveal: "word" (per-word pop, default) | "all" (whole line, highlight tracks VO)
   texts?: ResolvedText[]; // standalone stylised text overlays, absolute-timed
   captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)
-  kickerKeyframes?: BgKeyframe[]; // tween the kicker (app segments)
   zoomKeyframes?: BgKeyframe[]; // camera push/pan on the footage+chrome group (beat-relative: at = sec from beat start)
   motion?: MotionGraphicProps; // resolved graphic for kind === "motion"
   motionOverlay?: MotionGraphicProps; // resolved overlay graphic layered on this beat

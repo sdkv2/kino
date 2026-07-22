@@ -19,7 +19,6 @@ const TextOverlaySpec = z.object({
   animation: CaptionAnimation.optional(),
 });
 
-const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });
 const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "scroll", "scroll-up", "static"]);
 const Transition = z.enum(["fade", "dissolve", "fly-left", "fly-up", "pop", "cut"]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
@@ -109,7 +108,6 @@ const Segment = z.discriminatedUnion("kind", [
     text: z.string().min(1),
     voFile: VoFile.optional(),
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
-    kicker: Kicker.optional(),
     shot: Shot.optional(),
     transition: Transition.optional(),
     // Source-footage slice + retiming (importing-footage skill). Seconds into the asset.
@@ -132,7 +130,6 @@ const Segment = z.discriminatedUnion("kind", [
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
     captionKeyframes: z.array(BgKeyframe).optional(),
-    kickerKeyframes: z.array(BgKeyframe).optional(),
     // Camera push/pan on the whole footage+chrome group (the "canvas zoom" for inset device footage).
     // Beat-relative track — `at` is seconds from THIS segment's start (like captionKeyframes), so it
     // rides the beat when VO timing shifts; params x/y/scale/opacity.
@@ -258,9 +255,9 @@ const SEGMENT_KIND_HINTS: Record<string, string> = {
   speed: "speed is app-only",
   pauseAt: "pauseAt is app-only",
   frame: "frame chrome is app-only",
-  kicker: "kicker is app-only",
+  kicker: "kicker was removed from kino — delete it (use `texts` overlays for context labels)",
   zoomKeyframes: "zoomKeyframes is app-only",
-  kickerKeyframes: "kickerKeyframes is app-only",
+  kickerKeyframes: "kicker was removed from kino — delete kickerKeyframes",
   source: "source is motion-only (or motionOverlay on avatar/app)",
   triggers: "triggers are motion-only (or motionOverlay / top-level backgroundTriggers)",
   keyframes: "keyframes are motion-only (or motionOverlay)",

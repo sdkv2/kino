@@ -1,6 +1,6 @@
 # Backgrounds & overlays
 
-For faceless beats (no avatar), kino renders a deterministic, brand-coloured **background**. On any beat it can also lay out **overlay elements** — the logo mark, captions, and kickers — all tweenable on one shared keyframe layer. This page documents both. For where these fields live in the spec, see the [Spec reference](spec-reference.md); for fully custom animated beats, see [Motion graphics](motion-graphics.md).
+For faceless beats (no avatar), kino renders a deterministic, brand-coloured **background**. On any beat it can also lay out **overlay elements** — the logo mark and captions — all tweenable on one shared keyframe layer. This page documents both. For where these fields live in the spec, see the [Spec reference](spec-reference.md); for fully custom animated beats, see [Motion graphics](motion-graphics.md).
 
 - [Faceless backgrounds](#faceless-backgrounds)
 - [Animating a background](#animating-a-background)
@@ -131,9 +131,5 @@ Shown on faceless talking beats. Set `logoSize`/`logoPosition` (spec or brand), 
 ### Captions
 
 Tween per segment with `captionKeyframes` (`params: { x, y, scale, opacity }`, x/y as % offset). For legibility over light app screenshots, enable the **backplate** on the brand: `captionStyle.background { color?, opacity?, appOnly? }` — a translucent rounded panel behind the lower-third caption. `appOnly` (default `true`) scopes it to app cut-ins; `opacity` defaults to `0.82`; `color` defaults to brand `night`.
-
-### Kickers
-
-The small label on `app` beats (`kicker: { text, color }`, color ∈ `mint|green|gold`) tweens via `kickerKeyframes` (`params: { x, y, scale, opacity }`).
 
 See also: [Spec reference](spec-reference.md) · [CLI reference](cli-reference.md) · [Motion graphics](motion-graphics.md).

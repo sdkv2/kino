@@ -169,7 +169,7 @@ space) or raise the caption. (`iphone.png` hole is ~78% h — captions overlap t
 
 **Camera move on framed footage → `zoomKeyframes`.** The inner `shot` is disabled inside a frame (it
 fights the inset), so a push-in comes from a `zoomKeyframes` track that scales/pans the footage **and**
-chrome together — the phone grows in frame while captions, kicker, logo and the ground stay anchored
+chrome together — the phone grows in frame while captions, logo and the ground stay anchored
 (they're separate layers). `at` is **seconds from the beat's start** (`0` = beat start), like
 `captionKeyframes` — so the move **rides the beat**: re-timing or re-ordering the video never desyncs it,
 no `kino inspect` lookup needed. `params` are `scale` (zoom), `x`/`y` (focal offset, % of composition),

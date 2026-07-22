@@ -1,7 +1,7 @@
 // Native-engine port of the top-level composition. Layers render back-to-front exactly as the
 // legacy composition documents:
 //   1. night backdrop fill   2. faceless brand backdrop   3. avatar video windows
-//   4. app cut-ins (each with its own kicker overlay)     5. full-screen motion-graphic beats
+//   4. app cut-ins     5. full-screen motion-graphic beats
 //   6. motion-graphic overlays   7. standalone text overlays (spec `texts[]`)
 //   8. logo (faceless beats only)   9. captions (word/hero/lower-third)   10. AI disclosure
 // Audio (VO, SFX, ducked music) is mixed node-side by the engine (../audioMix.ts) — nothing to
@@ -9,7 +9,7 @@
 import React from "react";
 import { AbsoluteFill, Easing, Sequence, interpolate, staticFile, useCurrentFrame } from "./runtime";
 import { FrameVideo } from "./media";
-import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
+import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, HeroCaption, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
 import { PlatformGuide, GridGuide } from "./PlatformGuide";
 import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../../captionLayout.js";
@@ -87,14 +87,6 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               frame={s.frame}
               zoomKeyframes={s.zoomKeyframes}
             />
-            {s.kicker ? (
-              // Kicker stays scoped to its own beat — it must not bleed over the next clip.
-              <Sequence durationInFrames={beatDur}>
-                <TweenOverlay keyframes={s.kickerKeyframes ?? []}>
-                  <Kicker text={s.kicker.text} color={s.kicker.color} fg={s.kicker.fg} t={theme} />
-                </TweenOverlay>
-              </Sequence>
-            ) : null}
           </Sequence>
         );
       })}

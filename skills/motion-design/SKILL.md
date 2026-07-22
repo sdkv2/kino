@@ -96,10 +96,10 @@ mint hairlines vanish on encode.
 
 Use `--kino-font` / `--kino-label-font`. Size in **`vw`** so 9:16 and preview panes stay honest.
 
-Hierarchy: usually **three** levels on a beat — hook (hero), bridge (kicker/unit), detail (chips,
+Hierarchy: usually **three** levels on a beat — hook (hero), bridge (unit label), detail (chips,
 gutter, foot meta). Flat scales look uncommitted; more than three fights the VO.
 
-Short labels (chips, kickers): tight leading, letter-space for uppercase brand chrome.
+Short labels (chips): tight leading, letter-space for uppercase brand chrome.
 Hero numerals / italic display: optically heavy enough to survive H.264.
 
 System/default stacks are fine for product spoofs when brand.md says so; brand film should not
@@ -122,9 +122,9 @@ You are staging one composition, not a dashboard.
   Random gaps read as unfinished.
 - **Cards** — only when the content is truly card-shaped (discrete, scannable units). Nested cards
   and equal feature tiles are usually habit. Prefer type + dividers + one window.
-- **Safe zones** — TikTok/Reels UI eats edges; keep kickers and CTAs inside the readable column.
+- **Safe zones** — TikTok/Reels UI eats edges; keep labels and CTAs inside the readable column.
   `still --platform` / storyboard overlays help.
-- **Mass** — a heavy hero bottom-right needs a counterweight (kicker, mark, or negative space) so the
+- **Mass** — a heavy hero bottom-right needs a counterweight (mark or negative space) so the
   frame does not tip.
 - **Fill budget** — name the container, name what fills it. If content occupies less than ~half the
   container, either shrink the container to the content or add a rest plane *with a stated reason*.
@@ -207,7 +207,7 @@ Common kino odors:
 - Bounce/elastic on every pulse
 - Centered everything because no composition was chosen
 - Domain costume only (journal = cream serif; CLI = pure green phosphor) with zero specific artifact
-- Chrome recycled from the last promo (wrong mark, wrong filename, wrong kicker)
+- Chrome recycled from the last promo (wrong mark, wrong filename)
 
 Wanted instead: a color commitment level, type with a reason, one domain artifact, motion that
 explains speech or settle, and a first frame that could only be this product.

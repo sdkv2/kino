@@ -64,7 +64,7 @@ Inputs:
 Task:
 1. Open each still individually. Note beat label / filename.
 2. Hunt major layout defects. Priority order:
-   🔴 Overlap / collision — caption vs texts overlay, kicker, logo, CTA, motion graphic, or subject
+   🔴 Overlap / collision — caption vs texts overlay, logo, CTA, motion graphic, or subject
    🔴 Overflow — text clipped by frame edge, wrapping into unreadability, cut off at sides
    🔴 Frozen motion — on an --around sheet, typed UI / Lottie / counter / camera looks identical
       across tiles (animation not driving, wrong stretch, opaque Lottie covering the beat)
@@ -88,7 +88,7 @@ Task:
       lower half). Fix: center the content group in its container, or shrink the container to fit.
    🟠 Off-balance — estimate the optical center of mass of all non-background content. If it sits
       outside the middle 40% band (bottom-heavy, top-glued, dumped to one side) with no
-      counterweight (kicker, mark, deliberate negative space), flag it.
+      counterweight (mark, deliberate negative space), flag it.
    🟠 Misalignment — sibling elements (list rows, chips, steps, icon+label pairs) whose left/center
       edges or baselines don't share one axis; ragged indents. Fix: one shared alignment axis per
       repeated group.
@@ -109,7 +109,7 @@ If truly clean: `OK — no major layout issues.`
 
 | Sev | Look for |
 |---|---|
-| 🔴 | Caption overlapping `texts` / kicker / logo / CTA / motion |
+| 🔴 | Caption overlapping `texts` / logo / CTA / motion |
 | 🔴 | Text cut off at frame edge or crushed by wrap |
 | 🔴 | Frozen motion on `--around` sheet (typed UI / Lottie / counter / camera identical across tiles) |
 | 🟠 | Under-animated motion (opacity-only / early freeze / no stagger / no idle life / no VO punch) |

@@ -119,7 +119,7 @@ fire one-shot actions at timestamps. Pair with `kino inspect` word times to sync
 ```
 Easing per keyframe (`ease`): `linear` (default), `easeInOut`, `overshoot`, `spring` — the last two
 exceed the target mid-way then settle (punchy landings). Applies to every keyframe track
-(background / logo / caption / kicker).
+(background / logo / caption).
 
 Provider-specific:
 - `avatarImage` — portrait file (path under project root) used as the source for `hedra`/`replicate`.
@@ -168,8 +168,8 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   dimmer than the white body text — the highlight, the one thing meant to pop, recedes. If the brand's
   signature colour is dark, keep `mint` bright and express the brand colour through the background /
   `texts` overlays instead.
-- **Tween captions/kickers** over time: per-segment `captionKeyframes` (and `kickerKeyframes` on app
-  segments) `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame), and `at`
+- **Tween captions** over time: per-segment `captionKeyframes`
+  `[{ at, params: { x, y, scale, opacity }, ease? }]` — x/y are offsets (% of frame), and `at`
   is **relative to the segment start** (`at: 0` = the caption's entrance). Logo + background keyframes are
   spec-level so their `at` is absolute on the main timeline. `kino elements`. **Default: omit
   `captionKeyframes`.** Per-beat `y`/`scale` variety reads as captions jumping; use only to dodge a

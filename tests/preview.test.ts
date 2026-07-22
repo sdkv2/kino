@@ -8,7 +8,7 @@ const props = {
   background: { kind: "mesh", image: null, customCode: null, colors: [], intensity: 0.5 },
   segments: [
     { kind: "avatar", caption: "hi", startSec: 0, endSec: 2 },
-    { kind: "app", asset: "x.png", caption: "a", startSec: 2.3, endSec: 5, kicker: { text: "86%", color: "#1", fg: "#0" }, captionMode: "words" },
+    { kind: "app", asset: "x.png", caption: "a", startSec: 2.3, endSec: 5, captionMode: "words" },
   ],
 } as unknown as KinoProps;
 
@@ -17,8 +17,8 @@ describe("inspectPlan", () => {
     const p = inspectPlan(props);
     expect(p).toMatchObject({ fps: 30, faceless: true, background: "mesh" });
     expect(p.durationSec).toBeCloseTo(5);
-    expect(p.segments[0]).toMatchObject({ index: 0, kind: "avatar", startSec: 0, endSec: 2, durSec: 2, captionMode: "phrase", hasKicker: false });
-    expect(p.segments[1]).toMatchObject({ index: 1, kind: "app", asset: "x.png", captionMode: "words", hasKicker: true });
+    expect(p.segments[0]).toMatchObject({ index: 0, kind: "avatar", startSec: 0, endSec: 2, durSec: 2, captionMode: "phrase" });
+    expect(p.segments[1]).toMatchObject({ index: 1, kind: "app", asset: "x.png", captionMode: "words" });
   });
 });
 

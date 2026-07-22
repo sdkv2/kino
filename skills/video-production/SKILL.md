@@ -87,8 +87,7 @@ Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-
   "segments": [
     { "kind": "avatar", "text": "spoken (+ lip-synced if an avatar provider is set)", "caption": "on-screen text (optional — omit on any kind for a caption-free beat)", "cta": true },
     { "kind": "app", "asset": "screens/x.png", "text": "spoken (avatar hidden)", "caption": "...",
-      "captionMode": "words", "emphasis": ["claim"],  // optional: spoken text, word-synced + highlighted
-      "kicker": { "text": "86% match", "color": "mint" } } ] }
+      "captionMode": "words", "emphasis": ["claim"] } ] }  // optional: spoken text, word-synced + highlighted
 ```
 
 **Caption-free beats:** omit `caption` → no caption node. Under a **words-mode brand**, also set
@@ -112,7 +111,7 @@ trailers used to start that way. If the first still could be any SaaS ad after y
 
 Opener menu (pick one; bias toward #1 for consumer/app ads):
 
-1. **Cold open (`app`)** — default lean. Strongest clip + one hook line (lower-third + backplate). Optional kicker.
+1. **Cold open (`app`)** — default lean. Strongest clip + one hook line (lower-third + backplate).
    `shot: "push-in"` + `transition: "cut"` reads as a thumb-stop. Caption stays short (`which hold?`, not the full VO).
 2. **Motion title (`motion`)** — brand-forward graphic cold open when the product truth *is* a number/diagram.
 3. **Caption card (`avatar`)** — faceless hero on `background` mesh/glow/aurora. Fine for quiet/luxury brands or
@@ -145,11 +144,10 @@ layout and crowd the top chrome — don't.
 
 | Layer | Default | Don't |
 |---|---|---|
-| Hook / cold open (`app`) | Strongest footage first; short lower-third caption + backplate; optional kicker | Soft mesh card as the default opener; brand-name first line |
+| Hook / cold open (`app`) | Strongest footage first; short lower-third caption + backplate | Soft mesh card as the default opener; brand-name first line |
 | Hook (`avatar`, faceless) | Centered hero caption — big, calm, no `captionKeyframes` (use when caption-card opener is intentional) | Pin to top edge; `y: -16` "for variety"; muddy low-contrast mesh behind a weak line |
 | App / footage captions | Lower-third (engine default) + brand backplate | Per-beat `y`/`scale` jitters |
 | CTA (`cta: true`) | **Centered end card** (hero) — short brand + action; `captionReveal: "all"` or `captionMode: "phrase"` | Park the CTA in the lower-third caption gutter; word-by-word drip on a long App Store line; empty mesh with no brand mark |
-| Kickers | Top pill — fine when the still has empty top chrome | Treat kicker as the end card; **kicker on a feed/chip still that already labels the moment** |
 | `texts[]` labels | Small, `position: "top"` (or clear of caption band) | Second headline fighting the CTA end card |
 | Motion / counters | Stack **mid-frame**: CSS `.wrap { top: 38%–42%; }` (no tiny `translateY(20vw)`), clear of caption band + top UI | Park the graphic in the top ~20% (Following/For You chrome) |
 | Music | Quiet bed `"volume": 0.10–0.14`, `"duck": 0.04`, short `fadeOutSec` | Loud beds fighting VO/captions |
@@ -252,11 +250,11 @@ don't reintroduce per-caption `y` offsets to compensate.
   Spec `backgroundComponent` overrides brand. Tween with `backgroundKeyframes` / `backgroundTriggers`;
   sync to VO via `kino inspect`. See `docs/backgrounds-and-overlays.md`.
 - **Overlay elements tween** (`kino elements`): the logo has `logoSize` (small/medium/big/px) +
-  `logoPosition` (top/bottom/left/right/center/{x,y}%) and `logoKeyframes`; captions + kickers tween via
-  per-segment `captionKeyframes` / `kickerKeyframes` — all x/y/scale/opacity over time, same keyframe system.
+  `logoPosition` (top/bottom/left/right/center/{x,y}%) and `logoKeyframes`; captions tween via
+  per-segment `captionKeyframes` — all x/y/scale/opacity over time, same keyframe system.
 - **Camera push on app footage** (`zoomKeyframes`, per `app` segment): scales/pans the footage **+ frame
   chrome** as one group about centre — the "canvas zoom" for inset iPhone footage. The phone grows/pushes
-  in; captions, kicker, logo and the background stay anchored. **Beat-relative** track (`at` = seconds from
+  in; captions, logo and the background stay anchored. **Beat-relative** track (`at` = seconds from
   the beat's start, `0` = beat start — it rides the beat, so re-timing the video never desyncs it), params
   `scale`/`x`/`y`/`opacity`; one keyframe = static hold, two = animated push. A `frame` disables the inner
   `shot`, so `shot:"static"` + `zoomKeyframes` is the way to move the camera on device footage. See
@@ -486,7 +484,7 @@ handoff detail: `speech-synced-ui`.
   about twenty minutes"). Read the full beat list — spoken lines + any `texts`/motion labels — start
   to finish, script only, before building the storyboard. Also check **VO nouns vs on-screen chips**.
   Same-frame counts too: on a typed beat the surface already paints the VO (`env.words`), so a
-  foot/kicker label repeating that sentence duplicates it in one frame — give the label artifact
+  foot label repeating that sentence duplicates it in one frame — give the label artifact
   meta instead (filename, line count), not the spoken claim.
 - **Target the middle of your runtime range, not the floor**: if `kino inspect`'s mock estimate lands
   at or below your minimum, don't assume the real VO will pace it out to a comfortable length — pad
@@ -523,8 +521,7 @@ clip's duration to the beat's VO length (durations are listed). Needs `PEXELS_AP
 **Caption legibility over footage is not optional:** stock/photographic clips have uncontrolled
 luminance, so before shipping a spec with video (or busy screenshot) cut-ins, make sure the brand
 sets `captionStyle.background` (the translucent lower-third backplate, `appOnly` by default) — ink
-captions straight on dark footage disappear. Same check for kickers: pick a kicker `color` whose
-brand chip contrasts with the footage (preview with `kino still --segment <n>` before a real build).
+captions straight on dark footage disappear (preview with `kino still --segment <n>` before a real build).
 **The backplate helps average luminance, not a bright subject sitting right under the text** — a white
 caption over a white shirt/wall/sky can still fail even with the plate on, if the plate's opacity is
 low or the caption sits squarely on the brightest part of the frame. Check the specific region behind

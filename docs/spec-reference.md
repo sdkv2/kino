@@ -71,7 +71,7 @@ A talking beat — an AI avatar, or faceless VO over a [background](#backgrounds
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 
 ### `app` segment
-A screenshot/app cut-in with an optional caption (and optional kicker label).
+A screenshot/app cut-in with an optional caption.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
@@ -80,7 +80,6 @@ A screenshot/app cut-in with an optional caption (and optional kicker label).
 | `text` | string | ✅ | Spoken VO. |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
-| `kicker` | `{ text, color }` | — | Small label; `color` ∈ `mint\|green\|gold` (default `mint`). |
 | `shot` | [Shot](#enums) | — | Camera move (e.g. `scroll` for long screenshots). |
 | `transition` | [Transition](#enums) | — | In/out transition for the cut-in. |
 | `clipFrom` | number ≥ 0 | — | Start reading a video asset at this source second. |
@@ -91,7 +90,6 @@ A screenshot/app cut-in with an optional caption (and optional kicker label).
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Emphasised words (`words` mode). |
 | `captionKeyframes` | BgKeyframe[] | — | Tween the caption. |
-| `kickerKeyframes` | BgKeyframe[] | — | Tween the kicker. |
 | `zoomKeyframes` | BgKeyframe[] | — | Camera push/pan on the whole footage+chrome group (canvas zoom for inset device footage); beat-relative track like `captionKeyframes` — `at` is seconds from this segment's start, so it rides the beat when VO timing shifts (params `x/y/scale/opacity`). |
 | `motionOverlay` | [MotionRef](#motion-segment) | — | Layer a motion graphic over this beat. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
@@ -182,7 +180,7 @@ Overlays are clamped to their segment (an overlay never outlives its beat) and d
 
 ## Keyframes & triggers
 
-All tweenable layers (background, logo, captions, kickers, motion params) share one keyframe model. Times are **absolute on the main timeline** — read per-word start/end with `kino inspect`.
+All tweenable layers (background, logo, captions, motion params) share one keyframe model. Times are **absolute on the main timeline** — read per-word start/end with `kino inspect`.
 
 ```ts
 BgKeyframe = { at: number, params: Record<string, number | string>, ease?: "linear" | "easeInOut" | "overshoot" | "spring" }
@@ -197,7 +195,7 @@ BgTrigger  = { at: number, action: string }   // e.g. { at: 1.2, action: "pulse"
 
 ## Logo & overlay tweening
 
-`logoSize`/`logoPosition` place the brand mark on faceless talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions and kickers tween the same way via `captionKeyframes`/`kickerKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
+`logoSize`/`logoPosition` place the brand mark on faceless talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions tween the same way via `captionKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
 
 ## Sound effects & music
 
@@ -343,7 +341,6 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
       "asset": "assets/dashboard.png",
       "text": "Acme scores it instantly.",
       "caption": "Instant score",
-      "kicker": { "text": "LIVE", "color": "gold" },
       "shot": "scroll",
       "transition": "fly-up",
       "motionOverlay": { "source": "motion/badge.html", "params": { "pct": 0 }, "keyframes": [{ "at": 0.3, "params": { "pct": 98 }, "ease": "easeInOut" }] }

@@ -36,12 +36,6 @@ import { checkLoopSeam, imageMeanDiff } from "../media/loopSeam.js";
 import { holdLastFrameToMatchAudio } from "../media/avSync.js";
 import { log } from "../log.js";
 
-// Foreground (text) colour for a kicker pill, keyed by the kicker's brand background colour: a
-// near-black ink on the light mint/gold chips, white on the green chip — each picked for contrast.
-// The background colours themselves come from the brand palette (see DEFAULT_BRAND.colors in
-// config/brand.ts).
-const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
-
 // Resolve the portrait image hedra/replicate lip-sync against (heygen uses a hosted look id instead).
 function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider: Provider): string {
   // avatarLook is a hosted look id for heygen; for hedra/replicate it's a portrait path. Only use it
@@ -336,11 +330,7 @@ export async function prepare(
         speed: seg.speed,
         pauseAt: seg.pauseAt,
         frame: seg.frame,
-        kickerKeyframes: seg.kickerKeyframes,
         zoomKeyframes: seg.zoomKeyframes,
-        kicker: seg.kicker
-          ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
-          : undefined,
         motionOverlay: seg.motionOverlay
           ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
           : undefined,

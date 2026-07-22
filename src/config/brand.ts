@@ -119,10 +119,10 @@ export interface Brand {
 // needs a palette colour reads it from a resolved Brand.colors (which is DEFAULT_BRAND.colors merged
 // with any brand.md overrides) rather than redefining it. The slots and their roles:
 //   night  — page/background base (the dark canvas everything sits on).
-//   mint   — primary accent (light); highlights, kicker chips, default background tint.
+//   mint   — primary accent (light); highlights, default background tint.
 //   green  — brand colour / active-word highlight (the brand name + the currently-spoken word).
 //   white  — foreground text and the default caption ink.
-//   gold   — secondary accent; reserved emphasis (--kino-gold), gold kicker chips.
+//   gold   — secondary accent; reserved emphasis (--kino-gold).
 // If you add or repurpose a slot, do it here and update Brand.colors + BrandFrontmatterSchema.colors.
 export const DEFAULT_BRAND: Brand = {
   name: "",
