@@ -3,7 +3,7 @@
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
 // variant-tagging on top.
-import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
@@ -29,7 +29,10 @@ import { renderVideo, renderStills, variantName } from "../render/render.js";
 import type { KinoProps, KinoSegment, MotionGraphicProps, Theme, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
-import { resolveMotionGraphic, type MotionGraphicRefInput } from "../render/motiongraphic.js";
+import { resolveMotionGraphic, lintMotionHtml, type MotionGraphicRefInput } from "../render/motiongraphic.js";
+import { sanitizeMotionHtml } from "../render/sanitizeMotion.js";
+import { extractSceneRefs, svgAspect } from "../render/scene.js";
+import { screenDigest, layerDigest, rasterizeScreen, rasterizeLayer } from "../render/scene/rasterize.js";
 import { beatRelativeWords, resolveWordAnchors } from "../render/motionVars.js";
 import { probeFramePicks, isUnderAnimated } from "../render/motionProbe.js";
 import { checkLoopSeam, imageMeanDiff } from "../media/loopSeam.js";
@@ -409,6 +412,45 @@ export async function prepare(
     beatLabel: string,
   ): Promise<void> => {
     if (!mg?.scene) return;
+    const frames = Math.max(1, durationFrames);
+
+    // Pre-raster maps: digests are pure content hashes (cheap file reads) so the timeline hash is
+    // known up front; the actual Chrome work is deferred to prepareAssets (Blender cache miss only).
+    const refs = extractSceneRefs(mg.scene, mg.params as Record<string, number | string>);
+    if (refs.violations.length) throw new Error(`3D beat "${beatLabel}": ${refs.violations.join("; ")}`);
+    const rasterJobs: (() => Promise<void>)[] = [];
+    const screens: Record<string, { dir: string; frames: number }> = {};
+    const layers: Record<string, { path: string; aspect: number }> = {};
+    for (const rel of refs.screens) {
+      const raw = readFileSync(project.assetPath(rel), "utf8");
+      const bad = lintMotionHtml(raw);
+      if (bad.length) throw new Error(`3D beat "${beatLabel}" screen ${rel}: ${bad.join("; ")}`);
+      const html = sanitizeMotionHtml(raw);
+      const rOpts = {
+        html, words: mg.words ?? [], theme, params: mg.params, keyframes: mg.keyframes,
+        triggers: mg.triggers, fps, durationFrames: frames,
+      };
+      const dir = join("_screens", screenDigest(rOpts));
+      screens[rel] = { dir, frames };
+      const abs = join(publicDir, dir);
+      rasterJobs.push(async () => {
+        if (existsSync(abs) && readdirSync(abs).filter((f) => /^f\d{5}\.png$/.test(f)).length === frames) return;
+        rmSync(abs, { recursive: true, force: true });
+        await rasterizeScreen({ ...rOpts, outDir: abs });
+      });
+    }
+    for (const rel of refs.layers) {
+      const svg = readFileSync(project.assetPath(rel), "utf8");
+      const p = join("_layers", `${layerDigest(svg)}.png`);
+      layers[rel] = { path: p, aspect: svgAspect(svg) };
+      const abs = join(publicDir, p);
+      rasterJobs.push(async () => {
+        if (existsSync(abs)) return;
+        mkdirSync(dirname(abs), { recursive: true });
+        await rasterizeLayer({ svg, outPath: abs });
+      });
+    }
+
     const { timeline, hash } = runScene({
       source: mg.scene,
       params: mg.params as Record<string, number | string>,
@@ -417,10 +459,12 @@ export async function prepare(
       width: sceneW,
       height: sceneH,
       fps,
-      durationFrames: Math.max(1, durationFrames),
+      durationFrames: frames,
       quality,
       keyframes: mg.keyframes,
       triggers: mg.triggers,
+      screens,
+      layers,
     });
     log.info(`  · 3d ${beatLabel} (${quality}, ${timeline.meta.frameCount} frames)`);
     mg.sceneFrames = await ensureSceneStills({
@@ -429,6 +473,7 @@ export async function prepare(
       scene3dDir,
       publicDir,
       beatLabel,
+      prepareAssets: async () => { for (const job of rasterJobs) await job(); },
     });
     // Page renders SceneFrames, not the raw scene source.
     mg.scene = undefined;

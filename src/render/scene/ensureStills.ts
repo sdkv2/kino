@@ -26,6 +26,8 @@ export interface EnsureSceneStillsOpts {
   beatLabel: string; // names the beat in the missing-Blender error
   resolveBlender?: () => { bin: string; version: string } | null;
   renderTimeline?: (opts: { timeline: Timeline; outDir: string; publicDir: string; blenderBin: string }) => Promise<void>;
+  /** Deferred raster work (Chrome screen/layer pngs) — only needed when Blender actually runs. */
+  prepareAssets?: () => Promise<void>;
 }
 
 /** Ensure hash-named PNG stills exist for a scene timeline. Returns the sceneFrames prop shape. */
@@ -44,6 +46,7 @@ export async function ensureSceneStills(opts: EnsureSceneStillsOpts): Promise<{ 
   }
   rmSync(dir, { recursive: true, force: true }); // partial dir from a prior crash must not poison the cache
   mkdirSync(scene3dDir, { recursive: true });
+  await opts.prepareAssets?.();
   await renderTimeline({ timeline, outDir: dir, publicDir, blenderBin: blender.bin });
 
   const after = stillCount(dir);
