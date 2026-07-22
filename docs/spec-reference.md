@@ -21,7 +21,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `title` | string (kebab-case) | ✅ | Output basename; must match `^[a-z0-9-]+$`. |
 | `segments` | [Segment](#segments)[] | ✅ | The beats, in order (≥ 1). |
 | `brand` | string | — | Brand name; falls back to the project's `project.json` brand. |
-| `format` | `("9:16"\|"3:4")[]` | — | Output formats. Default `["9:16"]`. |
+| `format` | `("9:16"\|"3:4"\|"16:9")[]` | — | Output formats. Default `["9:16"]`. 16:9 landscape is early: faceless footage/caption/motion beats only — avatar beats (with a provider) and `frame` chrome are rejected. |
 | `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. |
 | `voiceModel` | string | — | ElevenLabs TTS model. Default is v3 (inline audio tags `[excited]`, `[whispers]`, `[short pause]`, … work in segment `text`; tags are stripped from word-synced captions). Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads. |
 | `film` | number | — | Cinematic-finish intensity (vignette + grain over photographic/app beats), `0..1`. Default `1` (graded film look). Set `0` for clean flat edges — e.g. a light "paper" video where the edge vignette reads as a dark border. Motion-graphic beats are never graded. |

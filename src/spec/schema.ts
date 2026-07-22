@@ -80,6 +80,11 @@ const Music = z
 // forces either); mock builds pace the spec text across the file's true duration.
 const VoFile = z.string().min(1);
 
+// 16:9 landscape is early: faceless footage/caption/motion beats only (avatar clips and frame
+// chrome are portrait-authored — build.ts prepare() rejects them for landscape builds).
+const FormatEnum = z.enum(["9:16", "3:4", "16:9"]);
+export type Format = z.infer<typeof FormatEnum>;
+
 const Segment = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("avatar"),
@@ -163,7 +168,7 @@ export const SpecSchema = z
     brand: z.string().optional(), // falls back to the project's project.json brand
     title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
     kinoVersion: z.string().optional(), // kino version this spec was authored/built against — mismatch warns, doesn't fail
-    format: z.array(z.enum(["9:16", "3:4"])).default(["9:16"]),
+    format: z.array(FormatEnum).default(["9:16"]),
     voice: z.string().optional(),
     // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
     // eleven_multilingual_v2 for metronome-critical / timing-stable reads.

@@ -63,7 +63,7 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
 
   const sel = at ? { at } : opts.segment != null ? { segment: Number(opts.segment) } : {};
   const picks = pickFrames(r.props.segments, r.props.fps, sel);
-  const format = r.formats[0] as "9:16" | "3:4";
+  const format = r.formats[0];
   const frames = picks.map((p) => ({ frame: p.frame, name: slug(p.label) || "frame" }));
   const outDir = join(r.project.outDir(r.spec.title), "stills");
   const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir });

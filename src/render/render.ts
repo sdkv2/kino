@@ -1,5 +1,6 @@
 // Render entry points — the in-house headless-Chrome frame engine (render/native) behind the same
 // API the pipeline has always called.
+import type { Format } from "../spec/schema.js";
 import type { KinoProps } from "./props.js";
 import { renderStillsNative, renderVideoNative } from "./native/engine.js";
 
@@ -12,7 +13,7 @@ export function variantName(title: string, tag?: string): string {
 export interface RenderOpts {
   props: KinoProps;
   publicDir: string; // assets root the render page serves under /public/
-  formats: Array<"9:16" | "3:4">;
+  formats: Format[];
   outDir: string;
   title: string;
   /** x264 preset: "veryfast" for mock/preview builds (2-3x faster encode, ~15% larger files at the
@@ -23,7 +24,7 @@ export interface RenderOpts {
 export interface StillsOpts {
   props: KinoProps;
   publicDir: string;
-  format: "9:16" | "3:4";
+  format: Format;
   frames: Array<{ frame: number; name: string }>;
   outDir: string;
 }

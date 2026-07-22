@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { Brand } from "../config/brand.js";
-import type { Spec } from "./schema.js";
+import type { Format, Spec } from "./schema.js";
 import type { Project } from "../config/project.js";
 import type { Provider } from "../avatar/provider.js";
 import { lintMotionSource } from "../render/motiongraphic.js";
@@ -222,6 +222,26 @@ export function assertVoiceTags(spec: Spec, brand: Brand): void {
     `Audio tags in ${hits.join(", ")} but voiceModel is "${model}" — non-v3 reads tags aloud ` +
       `("short pause", …). Switch to eleven_v3, or drop [brackets] and pause with punctuation.`,
   );
+}
+
+/**
+ * 16:9 landscape ships footage/caption/motion beats only — avatar clips and frame chrome are
+ * portrait-authored (HeyGen/Hedra 9:16 output; frame PNGs objectFit:fill) and would render broken.
+ * Called from prepare() after CLI overrides, since --format/--provider can both change the answer.
+ * ponytail: per-format layout variants are the upgrade path if landscape avatar demand shows up.
+ */
+export function assertLandscapeSupport(spec: Spec, formats: Format[], provider: Provider): void {
+  if (!formats.includes("16:9")) return;
+  if (provider !== "none" && spec.segments.some((s) => s.kind === "avatar")) {
+    throw new Error(
+      '16:9 does not support avatar beats yet (avatar clips are portrait) — set provider "none" (faceless) or drop 16:9',
+    );
+  }
+  const framed = spec.segments.findIndex((s) => s.kind === "app" && s.frame);
+  if (framed !== -1) {
+    throw new Error(`16:9 does not support frame chrome yet (portrait-authored) — drop segment[${framed}].frame or 16:9`);
+  }
+  log.warn("16:9 is early: layout is tuned for portrait — review a storyboard before shipping");
 }
 
 /** Soft warning when the spec was authored/built against a different kino version. */

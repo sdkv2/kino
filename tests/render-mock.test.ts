@@ -42,6 +42,26 @@ describe("renderVideo", () => {
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
 
+  it("renders a faceless 16:9 landscape mp4 at 1920x1080", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "kino-r169-"));
+    const props: KinoProps = {
+      theme,
+      fps: 30,
+      avatar: null,
+      avatarWindows: [],
+      voTrack: null,
+      logo: null,
+      background: { kind: "glow", image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
+      disclosure: "test",
+      segments: [{ kind: "avatar", caption: "wide", startSec: 0, endSec: 1 }],
+    };
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["16:9"], outDir, title: "wide" });
+    expect(outs).toHaveLength(1);
+    expect(outs[0]).toMatch(/16x9\.mp4$/);
+    const probe = await execa(FFMPEG_PATH, ["-i", outs[0]], { reject: false, all: true });
+    expect(probe.all).toMatch(/1920x1080/); // ffmpeg -i prints stream info on stderr
+  }, 180000);
+
   it("places a trimmed avatar clip in its window without crashing", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-rav-"));
     await generateMock(join(outDir, "avatar.mp4")); // staticFile reads avatar.mp4 from publicDir

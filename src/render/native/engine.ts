@@ -7,6 +7,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, renameSync, rmSync } from "node:f
 import { join } from "node:path";
 import type { Browser, Page } from "puppeteer";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
+import type { Format } from "../../spec/schema.js";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
 import { acquireBrowser, releaseBrowser } from "./browser.js";
@@ -15,9 +16,10 @@ import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
 
-const DIMS: Record<string, { width: number; height: number }> = {
+const DIMS: Record<Format, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "3:4": { width: 1080, height: 1440 },
+  "16:9": { width: 1920, height: 1080 },
 };
 
 export type EncodePreset = "medium" | "veryfast";
@@ -287,7 +289,7 @@ async function pointServerAt(opts: {
 export interface NativeRenderOpts {
   props: KinoProps;
   publicDir: string;
-  formats: Array<"9:16" | "3:4">;
+  formats: Format[];
   outDir: string;
   title: string;
   preset?: EncodePreset; // veryfast for mock/preview builds; medium (default) for finals
@@ -355,7 +357,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
 export interface NativeStillsOpts {
   props: KinoProps;
   publicDir: string;
-  format: "9:16" | "3:4";
+  format: Format;
   frames: Array<{ frame: number; name: string }>;
   outDir: string;
 }

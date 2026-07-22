@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { complianceScan, resolveVoiceLook, resolveProvider, resolveVoice, assertCaptionModes } from "../src/spec/validate.js";
+import { complianceScan, resolveVoiceLook, resolveProvider, resolveVoice, assertCaptionModes, assertLandscapeSupport } from "../src/spec/validate.js";
 import type { Brand } from "../src/config/brand.js";
 import type { Spec } from "../src/spec/schema.js";
 
@@ -54,6 +54,27 @@ describe("assertCaptionModes", () => {
       segments: [{ kind: "app", asset: "a.png", text: "Spoken line.", caption: "hook" }],
     } as unknown as Spec;
     expect(warns(spec, brand)).toMatch(/caption is ignored/);
+  });
+});
+
+describe("assertLandscapeSupport", () => {
+  const app = { kind: "app", asset: "a.mp4", text: "t" };
+  const av = { kind: "avatar", text: "t", cta: false };
+  it("no-ops when 16:9 is not requested", () => {
+    const spec = { segments: [av, { ...app, frame: { src: "f.png" } }] } as unknown as Spec;
+    expect(() => assertLandscapeSupport(spec, ["9:16", "3:4"], "heygen")).not.toThrow();
+  });
+  it("rejects avatar beats with a provider", () => {
+    const spec = { segments: [av, app] } as unknown as Spec;
+    expect(() => assertLandscapeSupport(spec, ["16:9"], "heygen")).toThrow(/avatar beats/);
+  });
+  it("allows avatar beats faceless (provider none), rejects frame chrome", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const faceless = { segments: [av, app] } as unknown as Spec;
+    expect(() => assertLandscapeSupport(faceless, ["16:9"], "none")).not.toThrow();
+    const framed = { segments: [app, { ...app, frame: { src: "f.png" } }] } as unknown as Spec;
+    expect(() => assertLandscapeSupport(framed, ["16:9"], "none")).toThrow(/segment\[1\]\.frame/);
+    spy.mockRestore();
   });
 });
 

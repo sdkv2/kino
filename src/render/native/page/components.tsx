@@ -434,7 +434,7 @@ export const AppCutaway: React.FC<{
   // --- transition (outer layer), CapCut-style: spring "fly in" + settle, eased fade-out exit ---
   // ein = entrance spring over ~18 frames (damping 14 / stiffness 130 / mass 0.6 → fast settle with a
   // small overshoot). eout = exit ramp 0→1 over the last 12 frames, cubic-eased.
-  const { fps } = useVideoConfig();
+  const { fps, width } = useVideoConfig();
   const ein = spring({ frame: f, fps, config: { damping: 14, stiffness: 130, mass: 0.6 }, durationInFrames: 18 });
   const eIO = Math.min(1, ein); // clamped (no overshoot) for opacity/scale
   const eout = holdExit
@@ -498,7 +498,7 @@ export const AppCutaway: React.FC<{
         transform: `translate(${tx}%, ${ty}%) scale(${scale})`,
         filter: "brightness(1.08) contrast(1.04) saturate(1.05)",
       }
-    : { width: 1080, height: "100%", objectFit: "cover", transform: `translate(${tx}%, ${ty}%) scale(${scale})` };
+    : { width, height: "100%", objectFit: "cover", transform: `translate(${tx}%, ${ty}%) scale(${scale})` };
 
   const media = isVideo ? (
     <Freeze frame={freezeAt ?? 0} active={freezeAt != null}>
