@@ -4,7 +4,8 @@
 import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { Theme, MotionGraphicProps, MotionEnv } from "../../props.js";
-import { paramsAt, pulseAt, progressCurves } from "../../bgparams.js";
+import { paramsAt, pulseAt } from "../../bgparams.js";
+import { buildMotionEnv } from "../../motionEnv.js";
 import { buildMotionVars, wordsShownAt } from "../../motionVars.js";
 import { sanitizeMotionHtml } from "../../sanitizeMotion.js";
 import { lottiePlaybackRate } from "../../lottie.js";
@@ -79,28 +80,6 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
 
   return <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />;
 };
-
-/** One env across 2D proc and 3D scenes: pure function of (frame, beat timing, JSON controls). */
-export function buildMotionEnv(a: {
-  frame: number; fps: number; width: number; height: number; durationFrames: number;
-  data: MotionGraphicProps; t: Theme;
-}): MotionEnv {
-  const tt = a.frame / a.fps;
-  const resolved = paramsAt(a.data.params, a.data.keyframes, tt, { implicitBase: true });
-  const curves = progressCurves(a.durationFrames > 0 ? Math.min(1, Math.max(0, a.frame / a.durationFrames)) : 0);
-  return {
-    frame: a.frame, t: tt,
-    progress: a.durationFrames > 0 ? Math.min(1, Math.max(0, a.frame / a.durationFrames)) : 0,
-    out: curves.out, inout: curves.inout, overshoot: curves.overshoot, spring: curves.spring, edge: curves.edge,
-    pulse: pulseAt(a.data.triggers, tt),
-    params: resolved,
-    palette: { mint: a.t.mint, green: a.t.green, night: a.t.night, white: a.t.white, gold: a.t.gold, font: a.t.font },
-    width: a.width, height: a.height,
-    words: a.data.words ?? [],
-    durationFrames: a.durationFrames,
-    duration: a.fps > 0 ? a.durationFrames / a.fps : 0,
-  };
-}
 
 // Full-frame motion-graphic layer. durationFrames maps --progress 0→1 across the beat.
 export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames: number; t: Theme; captionBottom?: number }> = ({
