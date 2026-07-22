@@ -5,6 +5,7 @@ import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../
 import { FFMPEG_PATH, FFPROBE_PATH } from "../media/binPaths.js";
 import { listMusicIds, listSfxIds } from "../media/sfx.js";
 import { launchBrowser, resolveExecutable } from "../render/native/browser.js";
+import { resolveWhisper } from "../vo/whisper.js";
 import { log } from "../log.js";
 
 async function has(cmd: string, args: string[]): Promise<boolean> {
@@ -28,6 +29,7 @@ export async function doctor(): Promise<void> {
       (await has("montage", ["-version"])) || (await has("magick", ["-version"])),
     ],
     ["heygen CLI (provider: heygen)", await has("heygen", ["--version"])],
+    ["whisper-cli (voFile STT without ElevenLabs — optional)", resolveWhisper() != null],
     ["ELEVENLABS_API_KEY", !!process.env.ELEVENLABS_API_KEY],
     ["HEYGEN_API_KEY (provider: heygen)", !!process.env.HEYGEN_API_KEY],
     ["HEDRA_API_KEY (provider: hedra)", !!process.env.HEDRA_API_KEY],

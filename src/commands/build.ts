@@ -111,7 +111,9 @@ export async function prepare(
   const provider = (opts.provider as Provider | undefined) ?? resolveProvider(spec, brand);
   const mock = !!opts.mock;
   const voiceId = resolveVoice(spec, brand);
-  if (!mock && !voiceId) {
+  // A spec whose every beat imports real VO (voFile) needs no TTS voice at all.
+  const needsTts = spec.segments.some((s) => !s.voFile);
+  if (!mock && needsTts && !voiceId) {
     throw new Error("No voice for a real build — set spec.voice or the brand's defaultVoice (or use --mock).");
   }
   const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4">;
@@ -124,10 +126,12 @@ export async function prepare(
     spec,
     voiceId,
     cache,
-    apiKey: mock ? undefined : requireKey("ELEVENLABS_API_KEY"),
+    // All-voFile specs can run keyless (whisper STT); mixed/TTS specs still require the key.
+    apiKey: mock || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
     mock,
     model: resolveVoiceModel(spec, brand),
     needClips: provider !== "none",
+    resolveAsset: (rel) => project.assetPath(rel),
   });
 
   log.step("avatar");

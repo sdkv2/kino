@@ -9,10 +9,12 @@ import type { Spec } from "../spec/schema.js";
 import type { SegmentTiming, VOResult } from "../types.js";
 import type { WordTiming } from "../render/props.js";
 import type { Cache } from "../media/cache.js";
-import { contentHash } from "../media/hash.js";
+import { contentHash, fileHash } from "../media/hash.js";
 import { offsetWords } from "../render/captions.js";
-import { probeDuration, stitchAudio, trailingArtifactCut, trimAudio } from "../media/ffmpeg.js";
+import { extractAudio, probeDuration, stitchAudio, trailingArtifactCut, trimAudio } from "../media/ffmpeg.js";
 import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL, modelSupportsContext } from "./elevenlabs.js";
+import { transcribeAudio, scribeToWords } from "./scribe.js";
+import { pickSttEngine, resolveWhisper, whisperTranscribe } from "./whisper.js";
 
 // Seconds of silence inserted between segments in the stitched track. Also part of the track
 // cache key (contentHash({clips, GAP})) — changing it re-stitches but does not re-bill TTS.
@@ -37,11 +39,24 @@ export interface BuildVOOpts {
   mock: boolean;
   model?: string; // TTS model_id; default DEFAULT_VOICE_MODEL (eleven_v3)
   needClips?: boolean; // avatar providers need per-segment clips — forces the per-segment path
+  resolveAsset?: (rel: string) => string; // project asset resolver for segment voFile paths
 }
 
 // ElevenLabs v3 audio tags ([excited], [short pause], …) are spoken direction, not caption copy —
 // the alignment includes their characters, so drop tag tokens (from a [-starting word through the
 // ]-ending word) before captions see them.
+/** Mock words for an imported voFile: spec text paced evenly across the file's TRUE duration —
+ *  free preview keeps honest beat lengths without any STT call. */
+export function mockWordsForDuration(text: string, durationSec: number): WordTiming[] {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  const per = tokens.length ? durationSec / tokens.length : 0;
+  return tokens.map((word, i) => ({
+    word,
+    start: Math.round(i * per * 1000) / 1000,
+    end: Math.round((i + 1) * per * 1000) / 1000,
+  }));
+}
+
 export function stripTagWords(words: WordTiming[]): WordTiming[] {
   const out: WordTiming[] = [];
   let inTag = false;
@@ -65,9 +80,10 @@ export function stripTagWords(words: WordTiming[]): WordTiming[] {
  * into the Cache dir and a temp dir. Returns the stitched track path, per-clip paths, timings, and
  * timeline-absolute word timings.
  */
-export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needClips }: BuildVOOpts): Promise<VOResult> {
+export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needClips, resolveAsset }: BuildVOOpts): Promise<VOResult> {
   const resolvedModel = model ?? DEFAULT_VOICE_MODEL;
-  if (!mock && !needClips && !modelSupportsContext(resolvedModel)) {
+  const hasVoFiles = spec.segments.some((s) => s.voFile);
+  if (!mock && !needClips && !hasVoFiles && !modelSupportsContext(resolvedModel)) {
     return buildVOSingle(spec, voiceId, cache, apiKey!, resolvedModel);
   }
   const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
@@ -75,6 +91,38 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
   const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
   const useCtx = modelSupportsContext(resolvedModel);
   for (const [i, seg] of spec.segments.entries()) {
+    // Imported real VO: the file IS the clip. Mock paces spec text over the true duration (free,
+    // offline); real builds transcribe once (Scribe with a key, else local whisper.cpp; KINO_STT
+    // forces either) and cache the words by file content.
+    if (seg.voFile) {
+      const abs = resolveAsset ? resolveAsset(seg.voFile) : seg.voFile;
+      clips.push(abs);
+      if (mock) {
+        clipWords.push(mockWordsForDuration(seg.text, await probeDuration(abs)));
+      } else {
+        const engine = pickSttEngine({
+          hasKey: !!apiKey,
+          hasWhisper: resolveWhisper() != null,
+          override: process.env.KINO_STT,
+        });
+        const key = contentHash({ voSha: fileHash(abs), engine, v: "vofile-stt" });
+        let wordsFile = cache.get(key, "json");
+        if (!wordsFile) {
+          const wav = join(dir, `vofile${i}.wav`);
+          await extractAudio(abs, wav);
+          const words =
+            engine === "scribe"
+              ? scribeToWords(await transcribeAudio(apiKey!, wav))
+              : await whisperTranscribe(wav, join(dir, `vofile${i}`));
+          if (!words.length) throw new Error(`segment[${i}] voFile ${seg.voFile}: transcription found no words`);
+          const tmpJson = join(dir, `vofile${i}.json`);
+          writeFileSync(tmpJson, JSON.stringify(words));
+          wordsFile = cache.put(key, "json", tmpJson);
+        }
+        clipWords.push(JSON.parse(readFileSync(wordsFile, "utf8")) as WordTiming[]);
+      }
+      continue;
+    }
     // Neighbor text is sent as previous_text/next_text so ElevenLabs keeps prosody continuous
     // across segment seams (v2-family models only — v3 rejects it, so v3 keys stay context-free
     // and existing v3 caches keep hitting). When sent, it's part of the cache key: editing one
@@ -113,7 +161,8 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
   // off vo.clips) stays stable, and stitchAudio re-encodes to mp3 exactly once.
   const cleanClips = await Promise.all(
     clips.map(async (c, i) => {
-      const cut = mock ? null : await trailingArtifactCut(c);
+      // trailingArtifactCut is an ElevenLabs-artifact heuristic — never trim user-imported voFiles.
+      const cut = mock || spec.segments[i].voFile ? null : await trailingArtifactCut(c);
       if (cut == null) return c;
       const t = join(dir, `clean${i}.wav`);
       await trimAudio(c, cut, t);

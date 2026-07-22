@@ -75,6 +75,9 @@ export function resolveFilm(spec: Spec, brand: Brand): number | undefined {
 
 export function assertAssetsExist(spec: Spec, project: Project): void {
   for (const [i, seg] of spec.segments.entries()) {
+    if (seg.voFile && !existsSync(project.assetPath(seg.voFile))) {
+      throw new Error(`Missing voFile for segment[${i}]: assets/${seg.voFile}`);
+    }
     if (seg.kind !== "app") continue;
     if (!existsSync(project.assetPath(seg.asset))) {
       throw new Error(`Missing asset for segment[${i}]: assets/${seg.asset}`);

@@ -58,6 +58,7 @@ A talking beat — an AI avatar, or faceless VO over a [background](#backgrounds
 | `kind` | `"avatar"` | ✅ | |
 | `text` | string | ✅ | Spoken VO. |
 | `caption` | string | — | On-screen caption; omit for none. |
+| `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
 | `cta` | boolean | — | Mark as a call-to-action / end-card beat. Faceless: centered hero (not lower-third). Default `false`. |
 | `shot` | [Shot](#enums) | — | Camera move. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
@@ -78,6 +79,7 @@ A screenshot/app cut-in with an optional caption (and optional kicker label).
 | `asset` | string | ✅ | Path to the screenshot/asset. |
 | `text` | string | ✅ | Spoken VO. |
 | `caption` | string | — | On-screen caption; omit for none. |
+| `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
 | `kicker` | `{ text, color }` | — | Small label; `color` ∈ `mint\|green\|gold` (default `mint`). |
 | `shot` | [Shot](#enums) | — | Camera move (e.g. `scroll` for long screenshots). |
 | `transition` | [Transition](#enums) | — | In/out transition for the cut-in. |
@@ -108,6 +110,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `source` | string | ✅ | Path under the project (`motion/hook.html`) **or** a bare library id with no `/` or `.` (e.g. `"prompt-type"` → `assets-lib/motion/prompt-type.js`). See `kino motion` for bundled ids. |
 | `text` | string | ✅ | Spoken VO for the beat. |
 | `caption` | string | — | Optional on-screen caption. |
+| `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
 | `loop` | boolean | — | Tier-3 Lottie: loop at native speed instead of stretching once across the beat (default). |
 | `params` | `Record<string, number\|string>` | — | Base CSS-variable values (read as `--<key>`). Also an **implicit t=0 keyframe**: a lone keyframe tweens from the base value instead of holding. |
 | `keyframes` | MotionKeyframe[] | — | Tween params over the beat. Each entry sets exactly one of `at` (beat-relative seconds) or **`atWord`** (a spoken word — first case/punctuation-insensitive occurrence — or a word index), resolved against the build's VO timings so anchors ride real TTS with no retune. |

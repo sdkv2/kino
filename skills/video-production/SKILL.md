@@ -582,6 +582,11 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   use punctuation for pauses (`…` / `.`) and drop bracket tags entirely. Faceless only for now:
   with an avatar provider the tagged text also reaches lip-sync, untested.
 - **Timing comes from the generated VO**, not your guesses — don't put timestamps in the spec.
+- **Recorded VO instead of TTS**: set segment `voFile` (project audio asset) — the file is the
+  beat verbatim; word timings come from STT (Scribe with the ElevenLabs key, else local
+  whisper.cpp). Keep `text` matching the recording; STT normalizes tokens ("thirty"→"30"), so
+  `atWord` anchors bind to the *transcribed* words (a miss fails the build listing them).
+  See docs/audio.md § Imported real voiceover.
 - Use `--mock` while iterating to avoid avatar credit spend; real builds cache VO+avatar so edits to
   captions don't re-bill. Faceless real builds spend only ElevenLabs (no avatar credits at all).
 - **Suspect a rendering bug (not a spec mistake)? Stop and say so before patching render source.**

@@ -31,6 +31,33 @@ Every segment's `text` is spoken. Pick the voice once at the top of the spec:
 
 Get exact per-word VO timings with `kino inspect <spec> --real` — use them to place `sfx[].at`, cuts, and background keyframes on the words.
 
+## Imported real voiceover (`voFile`)
+
+Any beat can use a **recorded voiceover file** instead of TTS — your own read, a client's VO, a
+podcast clip — by pointing `voFile` at a project audio asset:
+
+```json
+{ "kind": "motion", "source": "motion/stat.html",
+  "text": "Eighty six percent match, before you hit apply.",
+  "voFile": "vo/stat-take3.mp3" }
+```
+
+- The file (any ffmpeg-readable format) becomes the beat's clip verbatim — never trimmed or
+  re-paced; the beat's length is the file's length. `voFile` and TTS beats mix freely, and
+  `voFile` audio drives avatar lip-sync like any other clip.
+- **Word timings come from speech-to-text on real builds**: ElevenLabs **Scribe** when
+  `ELEVENLABS_API_KEY` is set, else **local whisper.cpp** (`brew install whisper-cpp`; the
+  ggml-base.en model auto-downloads once to `~/.kino/whisper/`). Force either with
+  `KINO_STT=whisper|scribe`, point at a custom binary/model with `KINO_WHISPER` /
+  `KINO_WHISPER_MODEL`. Transcripts are content-hash cached — re-builds don't re-transcribe.
+- A spec whose **every** beat has a `voFile` needs no ElevenLabs key and no `voice` at all — a
+  fully keyless real build.
+- **Mock builds stay free/offline**: the beat gets the file's true duration with the spec `text`
+  paced evenly across it (no STT call).
+- Keep the segment `text` matching what the recording says — captions and `atWord` anchors use the
+  **transcribed** words, and STT normalizes some tokens ("thirty" → "30"); an `atWord` miss fails
+  the build listing the transcribed words, so anchor to those (or a word index).
+
 ## Music beds
 
 One bed plays under the entire video. It **ducks automatically** whenever a segment is speaking, so you never hand-key volume around the VO:

@@ -16,6 +16,10 @@ versioning; the authoritative version is the `version` field in `package.json`.
   segment `caption` is authored under a resolved words-mode (it would never paint).
 - `kino update` — self-update matched to the install: repo clone pulls + rebuilds, global npm
   reinstalls `@latest`, npx explains there's nothing to update.
+- Segment `voFile` — import a recorded voiceover per beat instead of TTS. Word timings via
+  ElevenLabs Scribe or **local whisper.cpp** (`KINO_STT` selects; model auto-downloads once);
+  all-`voFile` specs build real with no ElevenLabs key. Mock builds pace spec text over the
+  file's true duration, free and offline.
 
 ## [1.21.1] — node 20 floor
 - **Node ≥20 required**: `engines` bumped from 18 (EOL) to 20; setup.sh, docs, and badge now agree.

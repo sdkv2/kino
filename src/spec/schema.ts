@@ -75,10 +75,16 @@ const Music = z
   })
   .strict();
 
+// Imported real voiceover for a beat: a project audio asset used instead of TTS. Word timings
+// come from STT on real builds (Scribe with an ElevenLabs key, else local whisper.cpp; KINO_STT
+// forces either); mock builds pace the spec text across the file's true duration.
+const VoFile = z.string().min(1);
+
 const Segment = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("avatar"),
     text: z.string().min(1),
+    voFile: VoFile.optional(),
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     cta: z.boolean().default(false),
     shot: Shot.optional(),
@@ -96,6 +102,7 @@ const Segment = z.discriminatedUnion("kind", [
     kind: z.literal("app"),
     asset: z.string().min(1),
     text: z.string().min(1),
+    voFile: VoFile.optional(),
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     kicker: Kicker.optional(),
     shot: Shot.optional(),
@@ -136,6 +143,7 @@ const Segment = z.discriminatedUnion("kind", [
     kind: z.literal("motion"),
     ...motionFields,
     text: z.string().min(1),
+    voFile: VoFile.optional(),
     caption: z.string().optional(),
     cta: z.boolean().default(false), // semantic end-card marker; a full-screen wordmark motion beat is itself the CTA
 
