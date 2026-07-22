@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, existsSync } from "node:fs";
+import { mkdtempSync, existsSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,6 +45,47 @@ return (env) => { b.rotation.y = env.progress; cam.dolly(6); };`;
     await renderTimeline({ timeline: t, outDir: dir, publicDir: dir, blenderBin: blender!.bin });
     expect(existsSync(join(dir, "f00001.png"))).toBe(true);
   }, 300000);
+
+  it("renders a layer plane from an alpha png", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-layer-"));
+    mkdirSync(join(dir, "_layers"), { recursive: true });
+    execFileSync("magick", ["-size", "64x32", "xc:rgba(255,0,0,1)", join(dir, "_layers", "l.png")]);
+    const src = `api.layer("svg/logo.svg", { z: 0, width: 2 });
+api.env("studio");
+const cam = api.camera({ fov: 40 });
+return (env) => { cam.dolly(4); };`;
+    const { timeline } = runScene({
+      source: src, params: {}, words: [], theme, width: 270, height: 480, fps: 30,
+      durationFrames: 1, quality: "draft",
+      layers: { "svg/logo.svg": { path: "_layers/l.png", aspect: 0.5 } },
+    });
+    const out = mkdtempSync(join(tmpdir(), "kino-layer-out-"));
+    await renderTimeline({ timeline, outDir: out, publicDir: dir, blenderBin: blender!.bin });
+    expect(existsSync(join(out, "f00001.png"))).toBe(true);
+    // Red layer must actually appear: mean red channel of the render is non-trivial.
+    const mean = execFileSync("magick", [join(out, "f00001.png"), "-channel", "R", "-format", "%[fx:mean]", "info:"]).toString();
+    expect(Number(mean)).toBeGreaterThan(0.02);
+  }, 120000);
+
+  it("animated screen sequence advances across frames", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-seq-"));
+    const seqDir = join(dir, "_screens", "d1");
+    mkdirSync(seqDir, { recursive: true });
+    execFileSync("magick", ["-size", "72x156", "xc:red", join(seqDir, "f00001.png")]);
+    execFileSync("magick", ["-size", "72x156", "xc:blue", join(seqDir, "f00002.png")]);
+    const src = `api.devicePhone({ screen: api.screen("screens/ui.html") });
+api.env("studio");
+const cam = api.camera({ fov: 40 });
+return (env) => { cam.dolly(5); };`;
+    const { timeline } = runScene({
+      source: src, params: {}, words: [], theme, width: 270, height: 480, fps: 30,
+      durationFrames: 2, quality: "draft",
+      screens: { "screens/ui.html": { dir: "_screens/d1", frames: 2 } },
+    });
+    const out = mkdtempSync(join(tmpdir(), "kino-seq-out-"));
+    await renderTimeline({ timeline, outDir: out, publicDir: dir, blenderBin: blender!.bin });
+    expect(rgbaSha(join(out, "f00001.png"))).not.toBe(rgbaSha(join(out, "f00002.png")));
+  }, 120000);
 });
 
 describe("resolveBlender", () => {

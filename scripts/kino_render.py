@@ -214,21 +214,31 @@ def build_dark_body_material(name):
     return mat
 
 
-def build_screen_material(image_path, name):
-    """Emission-mixed screenshot texture; missing/unreadable asset -> dark emission fallback, never
-    raises (a broken beat asset shouldn't crash a whole build)."""
+def build_screen_material(image_path, name, frame_count=0):
+    """Emission-mixed screenshot texture; a directory (frame_count > 0) mounts f%05d.png as an
+    image SEQUENCE that advances with scene.frame_set. Missing/unreadable asset -> dark emission
+    fallback, never raises (a broken beat asset shouldn't crash a whole build)."""
     mat = new_material(name)
     nt = mat.node_tree
     out = nt.nodes.new("ShaderNodeOutputMaterial")
     emission = nt.nodes.new("ShaderNodeEmission")
     emission.inputs["Strength"].default_value = 1.4
     loaded = False
-    if image_path and os.path.isfile(image_path):
+    load_path = image_path
+    if image_path and frame_count > 0 and os.path.isdir(image_path):
+        load_path = os.path.join(image_path, "f00001.png")
+    if load_path and os.path.isfile(load_path):
         try:
-            img = bpy.data.images.load(image_path, check_existing=True)
+            img = bpy.data.images.load(load_path, check_existing=True)
             img.colorspace_settings.name = "sRGB"
             tex = nt.nodes.new("ShaderNodeTexImage")
             tex.image = img
+            if frame_count > 0 and load_path != image_path:
+                img.source = "SEQUENCE"
+                tex.image_user.frame_duration = frame_count
+                tex.image_user.frame_start = 1
+                tex.image_user.frame_offset = 0
+                tex.image_user.use_auto_refresh = True
             nt.links.new(tex.outputs["Color"], emission.inputs["Color"])
             loaded = True
         except Exception:
@@ -412,10 +422,69 @@ def build_device_phone(spec, public_dir):
     full_path = None
     if screen_path:
         full_path = screen_path if os.path.isabs(screen_path) else os.path.join(public_dir, screen_path)
-    screen.data.materials.append(build_screen_material(full_path, spec["id"] + "_screen_mat"))
+    screen.data.materials.append(
+        build_screen_material(full_path, spec["id"] + "_screen_mat", int(o.get("screenFrames", 0)))
+    )
     screen.parent = empty
 
     return empty
+
+
+def build_layer_material(image_path, name, material_kind, emission_strength):
+    """Rasterized SVG plane: texture color -> emission (unlit look, both engines), texture alpha ×
+    per-frame KinoAlpha -> transparent mix. Missing asset -> fully transparent plane."""
+    mat = new_material(name)
+    nt = mat.node_tree
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    emission = nt.nodes.new("ShaderNodeEmission")
+    emission.inputs["Strength"].default_value = emission_strength if material_kind == "emissive" else 1.0
+    transparent = nt.nodes.new("ShaderNodeBsdfTransparent")
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    alpha_mul = nt.nodes.new("ShaderNodeMath")
+    alpha_mul.operation = "MULTIPLY"
+    alpha_node = add_alpha_value_node(mat)
+    loaded = False
+    if image_path and os.path.isfile(image_path):
+        try:
+            img = bpy.data.images.load(image_path, check_existing=True)
+            img.colorspace_settings.name = "sRGB"
+            tex = nt.nodes.new("ShaderNodeTexImage")
+            tex.image = img
+            nt.links.new(tex.outputs["Color"], emission.inputs["Color"])
+            nt.links.new(tex.outputs["Alpha"], alpha_mul.inputs[0])
+            loaded = True
+        except Exception:
+            loaded = False
+    if not loaded:
+        alpha_mul.inputs[0].default_value = 0.0
+    nt.links.new(alpha_node.outputs[0], alpha_mul.inputs[1])
+    nt.links.new(alpha_mul.outputs[0], mix.inputs["Fac"])
+    nt.links.new(transparent.outputs[0], mix.inputs[1])
+    nt.links.new(emission.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], out.inputs["Surface"])
+    set_material_transparent(mat, True)
+    return mat
+
+
+def build_layer(spec, public_dir):
+    o = spec["opts"]
+    w = float(o.get("width", 1))
+    h = w * float(o.get("aspect", 1))
+    bpy.ops.mesh.primitive_plane_add(size=1)
+    obj = bpy.context.active_object
+    obj.name = spec["id"]
+    obj.dimensions = (w, h, 0)
+    bpy.context.view_layer.update()
+    apply_scale(obj)
+    # apply_frame resets root rotation to kino_to_blender_euler([0, 0, 0]) == identity, so bake
+    # the plane's facing into its mesh instead of storing it in obj.rotation_euler.
+    obj.data.transform(Euler((math.radians(90), 0.0, 0.0)).to_matrix().to_4x4())
+    path = o.get("path", "")
+    full = path if os.path.isabs(path) else os.path.join(public_dir, path)
+    obj.data.materials.append(
+        build_layer_material(full, spec["id"] + "_mat", o.get("material", "unlit"), float(o.get("emission", 1)))
+    )
+    return obj
 
 
 FONT_CACHE = {}
@@ -714,6 +783,8 @@ def build_object(spec, timeline, public_dir, engine):
         return obj
     if t == "devicePhone":
         return build_device_phone(spec, public_dir)
+    if t == "layer":
+        return build_layer(spec, public_dir)
     if t == "text3d":
         return build_text3d(spec, timeline, public_dir)
     if t == "gltf":
@@ -965,6 +1036,7 @@ def main():
     setup_post(scene, timeline.get("post"), engine)
 
     for i, frame in enumerate(timeline["frames"]):
+        scene.frame_set(i + 1)
         apply_frame(frame, objects_by_id, object_types_by_id, camera_obj)
         scene.render.filepath = os.path.join(out_dir, f"f{i + 1:05d}.png")
         bpy.ops.render.render(write_still=True)
@@ -977,7 +1049,7 @@ if __name__ == "__main__":
     try:
         import json
         import bpy
-        from mathutils import Vector
+        from mathutils import Euler, Vector
         main()
     except Exception:
         traceback.print_exc()
