@@ -181,6 +181,10 @@ export function createSceneApi(opts: {
     if (o.far !== undefined) cam.far = o.far;
     if (o.position) cam.position.set(...o.position);
     cam.updateProjectionMatrix();
+    // Every rig method is an ABSOLUTE setter (writes final state from its args, never reads prior
+    // camera state). update(env) must be a pure function of env — kino reruns it every frame, so a
+    // relative op (e.g. translateZ) would accumulate across frames and make position frame-history-
+    // dependent. Same call twice ⇒ same camera.
     const rig = {
       three: cam,
       /** Place camera on a horizontal ring of `radius` at height `y`, angle in radians, looking at origin. */
@@ -190,9 +194,9 @@ export function createSceneApi(opts: {
         cam.lookAt(0, 0, 0);
         return rig;
       },
-      /** Move along the current view axis (+z pulls back from the target). */
+      /** Set the camera's world-Z distance (absolute, not relative — larger z pulls back from origin). */
       dolly(z: number) {
-        cam.translateZ(z);
+        cam.position.z = z;
         return rig;
       },
       /** Aim the camera at a world point. */

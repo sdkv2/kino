@@ -27,6 +27,13 @@ describe("scene api", () => {
     expect(cam.three.position.y).toBeCloseTo(1);
     expect(cam.three.position.z).toBeCloseTo(0, 5);
   });
+  it("camera dolly is absolute (idempotent across frames, not accumulating)", () => {
+    const c = ctx();
+    const cam = c.api.camera({ fov: 35 });
+    cam.dolly(5);
+    cam.dolly(5); // update(env) reruns every frame — a relative op would accumulate
+    expect(cam.three.position.z).toBe(5);
+  });
   it("api.random(seed) is deterministic", () => {
     const c = ctx();
     const a = c.api.random(7), b = c.api.random(7);
