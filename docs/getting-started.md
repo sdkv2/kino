@@ -26,9 +26,10 @@ Quickest path — from inside your project directory:
 ```bash
 cd <your-project>
 bash ~/kino/setup.sh          # installs the `kino` command + writes a project .env
+node ~/kino/setup.mjs         # same installer, pure Node — use this on Windows
 ```
 
-`setup.sh` is a guided installer: it checks prerequisites (Node 20+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. Keys can also be supplied via the environment to run non-interactively:
+`setup.mjs` (which `setup.sh` execs) is a guided installer: it checks prerequisites (Node 20+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt/winget), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. Re-running it keeps any keys already in the `.env` (press Enter at the prompt). Keys can also be supplied via the environment to run non-interactively:
 
 ```bash
 ELEVENLABS_API_KEY=sk_... bash ~/kino/setup.sh
@@ -43,7 +44,7 @@ cd ~/kino && npm install && npm run build && npm link   # provides the `kino` co
 ## Verify your environment
 
 ```bash
-kino doctor      # checks deps (ffmpeg/ffprobe, heygen CLI) + which API keys are present
+kino doctor      # checks deps (node, ffmpeg/ffprobe, ImageMagick, headless Chrome, heygen CLI) + which API keys are present
 ```
 
 ## Scaffold a project

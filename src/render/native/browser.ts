@@ -13,7 +13,7 @@ const SYSTEM_CHROME = [
   "/usr/bin/chromium-browser",
 ];
 
-async function resolveExecutable(): Promise<string | undefined> {
+export async function resolveExecutable(): Promise<string | undefined> {
   if (process.env.KINO_CHROME) return process.env.KINO_CHROME;
   // Chrome-for-Testing has no linux-arm64 builds; puppeteer downloads an x86-64 binary there
   // (crashes at launch with free(): invalid pointer). Use the system's native Chromium instead.

@@ -4,6 +4,7 @@ import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../media/binPaths.js";
 import { listMusicIds, listSfxIds } from "../media/sfx.js";
+import { launchBrowser, resolveExecutable } from "../render/native/browser.js";
 import { log } from "../log.js";
 
 async function has(cmd: string, args: string[]): Promise<boolean> {
@@ -17,10 +18,15 @@ async function has(cmd: string, args: string[]): Promise<boolean> {
 
 export async function doctor(): Promise<void> {
   loadEnv(resolveWorkspace().workspaceRoot);
+  const nodeMajor = Number(process.version.slice(1).split(".")[0]);
   const checks: Array<[string, boolean]> = [
-    ["node", true],
+    [`node ${process.version} (need 20+)`, nodeMajor >= 20],
     ["ffmpeg", await has(FFMPEG_PATH, ["-version"])],
     ["ffprobe", await has(FFPROBE_PATH, ["-version"])],
+    [
+      "ImageMagick (storyboard/frames contact sheets)",
+      (await has("montage", ["-version"])) || (await has("magick", ["-version"])),
+    ],
     ["heygen CLI (provider: heygen)", await has("heygen", ["--version"])],
     ["ELEVENLABS_API_KEY", !!process.env.ELEVENLABS_API_KEY],
     ["HEYGEN_API_KEY (provider: heygen)", !!process.env.HEYGEN_API_KEY],
@@ -30,6 +36,18 @@ export async function doctor(): Promise<void> {
     ["FREESOUND_API_KEY (kino music search — optional)", !!process.env.FREESOUND_API_KEY],
   ];
   for (const [n, ok] of checks) ok ? log.ok(n) : log.warn(`${n} missing`);
+
+  // Launch-check headless Chrome: a resolvable-but-broken binary (e.g. puppeteer's x86-64
+  // download on linux-arm64) otherwise only surfaces at the first real render.
+  try {
+    const chrome = await resolveExecutable();
+    const browser = await launchBrowser();
+    await browser.close();
+    log.ok(`headless Chrome (${chrome ?? "puppeteer bundled"})`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
+    log.warn(`headless Chrome failed to launch — renders will fail. Point KINO_CHROME at a working Chrome/Chromium. (${msg})`);
+  }
 
   const sfx = listSfxIds();
   const music = listMusicIds();
