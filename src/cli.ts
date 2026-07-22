@@ -40,6 +40,11 @@ program
   .action(async (o) => (await import("./commands/projects.js")).projects(o));
 
 program
+  .command("update")
+  .description("Update kino in place (repo install: git pull + rebuild; global: npm -g @latest)")
+  .action(async () => (await import("./commands/update.js")).update());
+
+program
   .command("still <spec>")
   .description("Render still(s) fast (no encode): --at | --segment | --around <sec> | (per beat)")
   .option("--at <list>", "comma-separated timestamps in seconds")

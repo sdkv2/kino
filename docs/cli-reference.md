@@ -7,7 +7,7 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 **Commands**
 
 - Build & preview — [`build`](#build) · [`still`](#still) · [`storyboard`](#storyboard) · [`retune`](#retune) · [`batch`](#batch) · [`inspect`](#inspect)
-- Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor) · [`skills`](#skills)
+- Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor) · [`skills`](#skills) · [`update`](#update)
 - Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion) · [`pexels`](#pexels) · [`photos`](#photos) · [`music`](#music)
 - Reference-video analysis (research only) — [`transcribe`](#transcribe) · [`scan`](#scan) · [`frames`](#frames)
 - Audio analysis — [`audio-markers`](#audio-markers)
@@ -202,6 +202,15 @@ for Cursor / Claude / Codex / `.agents`.
 
 ```
 kino doctor
+```
+
+### `update`
+Update kino in place, matched to how it was installed: a repo install (git clone + `npm link`)
+does `git pull --ff-only` + `npm install` + `npm run build`; a global npm install runs
+`npm install -g @sdkv2/kino@latest`; under `npx` there is nothing to update.
+
+```
+kino update
 ```
 
 ### `skills`

@@ -14,6 +14,8 @@ versioning; the authoritative version is the `version` field in `package.json`.
   (background/zoom/caption tracks keep the one-keyframe-holds idiom).
 - Build warns when a full-screen motion beat barely animates (3-point probe-frame diff) and when a
   segment `caption` is authored under a resolved words-mode (it would never paint).
+- `kino update` — self-update matched to the install: repo clone pulls + rebuilds, global npm
+  reinstalls `@latest`, npx explains there's nothing to update.
 
 ## [1.21.1] — node 20 floor
 - **Node ≥20 required**: `engines` bumped from 18 (EOL) to 20; setup.sh, docs, and badge now agree.

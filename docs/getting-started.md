@@ -45,6 +45,7 @@ cd ~/kino && npm install && npm run build && npm link   # provides the `kino` co
 
 ```bash
 kino doctor      # checks deps (node, ffmpeg/ffprobe, ImageMagick, headless Chrome, heygen CLI) + which API keys are present
+kino update      # later: pull + rebuild a repo install (or npm -g @latest for a global one)
 ```
 
 ## Scaffold a project
