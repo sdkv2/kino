@@ -23,9 +23,9 @@ render engine.
 
 <table>
 <tr>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.webp" width="240" alt="kino writing its own advert.json spec, live"></a></td>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-clip.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-mg2.webp" width="240" alt="The Descent — motion graphics from a long-form kino build"></a></td>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.webp" width="240" alt="Lunara — quiet mood piece"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta-hq.webp" width="240" alt="kino writing its own advert.json spec, live"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-clip.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-mg3.webp" width="240" alt="The Descent — motion graphics from a long-form kino build"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara-hq.webp" width="240" alt="Lunara — quiet mood piece"></a></td>
 </tr>
 <tr>
 <td align="center"><b>The self-demo</b><br><sub>kino types its own <code>advert.json</code> and builds the ad you're watching</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4">▶ watch with sound</a></td>
@@ -49,9 +49,11 @@ No LLM inside the CLI: every step is deterministic, so the same spec renders the
 git clone https://github.com/sdkv2/kino.git ~/kino     # clone the toolchain once
 cd <your-project> && bash ~/kino/setup.sh              # install `kino` + write a project .env
 ```
-`setup.sh` is a guided installer: prerequisite checks (Node 20+, ffmpeg, ImageMagick — offers to
-install what's missing), `npm install` / `build` / `link`, then an API-key walkthrough (written to a
-`chmod 600`, git-ignored `.env`). Manual install:
+On Windows (or anywhere without bash): `node ~/kino/setup.mjs` — same installer, pure Node.
+`setup.sh`/`setup.mjs` is a guided installer: prerequisite checks (Node 20+, ffmpeg, ImageMagick —
+offers to install what's missing via brew/apt/winget), `npm install` / `build` / `link`, then an
+API-key walkthrough (written to a `chmod 600`, git-ignored `.env`; re-runs keep existing keys).
+Manual install:
 ```bash
 cd ~/kino && npm install && npm run build && npm link
 ```
@@ -119,6 +121,42 @@ Agent fan-out dirs stay off git so they do not clutter the tree. Details: [`skil
 - **Brands & projects** — `brands/<name>/brand.md` (markdown frontmatter + guidelines) is shared;
   every build runs inside a `projects/<name>/` (its own specs/assets/out + a `project.json` that
   assigns a brand). `kino init <brand>` scaffolds the first one; `kino projects --new` adds more.
+
+## How kino drives motion graphics
+
+There is no running timeline: kino seeks headless Chrome to frame *N*, sets CSS custom properties
+on the graphic, and screenshots — every frame. The JSON spec owns the clock; the graphic is a
+stateless canvas that reads the variables and paints that one frame, so the same spec always
+renders the same pixels.
+
+Each frame the graphic receives:
+
+- `--progress` (`0 → 1` across the beat) plus eased curves — `--kino-out`, `--kino-inout`,
+  `--kino-overshoot`, `--kino-spring`, and seam-safe `--kino-edge`
+- `--pulse` — a fast-attack, decaying envelope fired by spec `triggers` (punches timed to VO words)
+- `--<param>` — every key in the spec's `params`, tweened by `keyframes`
+- brand palette + fonts (`--kino-mint`, `--kino-font`, …) and per-word voiceover timings
+  (`--kino-words-shown` / `env.words`), so typed UIs land characters in sync with the speech
+
+```json
+{ "kind": "motion", "source": "motion/stat.html", "text": "Eighty-six percent match.",
+  "params": { "pct": 0 },
+  "keyframes": [{ "at": 0.2, "params": { "pct": 86 }, "ease": "overshoot" }],
+  "triggers":  [{ "at": 0.2, "action": "pulse" }] }
+```
+
+Real CSS `@keyframes` work too: kino force-pauses all animations and scrubs `.kino-anim` elements
+across the beat via a `--progress`-driven negative `animation-delay`. Three tiers by file extension:
+
+| Source | Model |
+|---|---|
+| `.html` | declarative CSS reading the variable contract |
+| `.js` | pure `render(env) → HTML`, re-evaluated per frame (loops, computed geometry) |
+| `.json` | Lottie, frame-seeked with `goToAndStop` — stretched, looped, or word-fired by `triggers` |
+
+Every graphic is lint-checked for determinism (no `transition`, timers, `Date.now`,
+`Math.random`, network) and sanitized into a Shadow DOM before render. Full contract:
+[docs/motion-graphics.md](docs/motion-graphics.md).
 
 ## Documentation
 Longer guides are in [`docs/`](docs/):
