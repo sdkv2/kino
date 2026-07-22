@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // kino setup — guided install: prerequisites (Node 20+, ffmpeg, ImageMagick), the `kino`
 // command, and your API keys. Runs anywhere Node does, including Windows:
 //

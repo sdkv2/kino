@@ -1,19 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { detectInstallKind } from "../src/commands/update.js";
+import { join, sep } from "node:path";
+import { detectInstallKind, classifyWorkingTree } from "../src/commands/update.js";
 
 describe("detectInstallKind", () => {
+  const root = join(sep, "u", "kino"); // native separators — CI runs this on windows too
   it("detects a git clone install (repo root has .git)", () => {
-    expect(detectInstallKind("/Users/x/kino", (p) => p === "/Users/x/kino/.git")).toBe("git");
+    expect(detectInstallKind(root, (p) => p === join(root, ".git"))).toBe("git");
   });
   it("detects an npx cache install (nothing to update)", () => {
-    expect(detectInstallKind("/Users/x/.npm/_npx/abc123/node_modules/@sdkv2/kino", () => false)).toBe("npx");
+    const npxRoot = ["", "u", ".npm", "_npx", "abc123", "node_modules", "@sdkv2", "kino"].join(sep);
+    expect(detectInstallKind(npxRoot, () => false)).toBe("npx");
+  });
+  it("detects _npx regardless of separator style", () => {
+    expect(detectInstallKind("C:\\u\\.npm\\_npx\\abc\\node_modules\\@sdkv2\\kino", () => false)).toBe("npx");
+    expect(detectInstallKind("/u/.npm/_npx/abc/node_modules/@sdkv2/kino", () => false)).toBe("npx");
   });
   it("falls back to a global npm install", () => {
-    expect(detectInstallKind("/usr/local/lib/node_modules/@sdkv2/kino", () => false)).toBe("global");
+    expect(detectInstallKind(join(sep, "usr", "lib", "node_modules", "@sdkv2", "kino"), () => false)).toBe("global");
   });
 });
-
-import { classifyWorkingTree } from "../src/commands/update.js";
 
 describe("classifyWorkingTree", () => {
   it("proceeds on a clean tree", () => {

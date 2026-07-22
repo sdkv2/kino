@@ -10,10 +10,11 @@ import { log } from "../log.js";
 
 export type InstallKind = "git" | "global" | "npx";
 
-/** How this kino was installed, from its package root. `exists` injectable for tests. */
+/** How this kino was installed, from its package root. `exists` injectable for tests.
+ *  Split on both separators — Windows paths mix `\` and `/` depending on who built them. */
 export function detectInstallKind(packageRoot: string, exists: (p: string) => boolean = existsSync): InstallKind {
   if (exists(join(packageRoot, ".git"))) return "git";
-  if (packageRoot.split(sep).includes("_npx")) return "npx";
+  if (packageRoot.split(/[\\/]/).includes("_npx")) return "npx";
   return "global";
 }
 
