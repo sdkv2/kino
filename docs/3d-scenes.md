@@ -145,7 +145,7 @@ resolve to the brand palette; anything else is a raw CSS color.
 
 | Member | What it does |
 |---|---|
-| `api.devicePhone({ screen, width?, height?, depth?, radius? })` | Procedural rounded-slab phone: dark PBR body + an **unlit** screen plane showing the `screen` texture (not tone-mapped). No glTF asset to license or ship. |
+| `api.devicePhone({ screen, width?, height?, depth?, radius? })` | Procedural rounded-slab phone: dark **clearcoat** body (physical material, glossy device-shell sheen) + an **unlit** screen plane showing the `screen` texture (not tone-mapped). No glTF asset to license or ship. |
 
 ### Models
 
@@ -163,7 +163,7 @@ resolve to the brand palette; anything else is a raw CSS color.
 
 | Member | What it does |
 |---|---|
-| `api.pbr({ color?, metalness?, roughness?, envMapIntensity?, transparent?, opacity?, map? })` | Physically-based material (defaults metalness 0.1, roughness 0.6, `envMapIntensity` 1). |
+| `api.pbr({ color?, metalness?, roughness?, envMapIntensity?, transparent?, opacity?, map?, clearcoat?, clearcoatRoughness? })` | Physically-based material (defaults metalness 0.1, roughness 0.6, `envMapIntensity` 1). Setting **`clearcoat`** or **`clearcoatRoughness`** upgrades it to a MeshPhysicalMaterial — a glossy lacquer coat over the base (the premium "wet" sheen of a phone shell); all other options carry over. Without them it's a MeshStandardMaterial as before. |
 | `api.basic({ color?, map?, transparent?, opacity? })` | Unlit material (ignores lighting) — screenshots / emissive-flat surfaces. |
 | `api.emissive({ color?, intensity? })` | Self-lit material that glows without a light; `color` is the emission. |
 
@@ -176,7 +176,19 @@ resolve to the brand palette; anything else is a raw CSS color.
 | `api.dirLight({ color?, intensity?, position? })` | Directional (sun) light. |
 | `api.ambient({ color?, intensity? })` | Ambient fill (uniform, no direction; default intensity 0.4). |
 | `api.hemi({ sky?, ground?, intensity? })` | Hemisphere light: sky color above, ground color below. |
-| `api.env("studio" \| "night" \| "none")` | Select the image-based environment (procedural `RoomEnvironment` via PMREM — deterministic, no HDR asset). |
+| `api.env("studio" \| "night" \| "none")` | Select the image-based environment. `"studio"` is a **procedural softbox studio** — a dim gradient dome plus bright **strip** softboxes (key + rims), PMREM'd into an env map for real, shaped speculars on metal/clearcoat. Deterministic, no HDR asset. `"night"` reuses the same env at 0.35 intensity (dimmer reflections, same shapes). Strips (not broad cards) are deliberate: a flat metal face mirrors a wide card as a full-face white wash that bloom blows to a blob, whereas a narrow strip only ever reflects a thin highlight streak. |
+
+### Grounding
+
+| Member | What it does |
+|---|---|
+| `api.contactShadow({ radius?, opacity?, y? })` | **Fake** blurred ground shadow: a flat disc with a radial-alpha texture laid in the XZ plane under the subject (defaults radius 1.4, opacity 0.35, y −1). Grounds a product shot cheaply. **Not light-coupled** — it doesn't move with any light, respect occluders, or cast anything. Returns the mesh; animate `.material.opacity` / `.scale` / `.position` from `update(env)`. |
+
+### Post-processing
+
+| Member | What it does |
+|---|---|
+| `api.post({ bloom: { strength?, radius?, threshold? } })` | Opt-in post FX (call in the scene **body**). When `bloom` is set, Scene3D swaps the direct render for an **EffectComposer** chain (RenderPass → UnrealBloomPass → OutputPass) — bright speculars glow. `threshold` is a **linear-HDR** cutoff (bloom runs pre-tone-map): raise it so only true hotspots bloom, not broad mid-grey areas. Alpha is preserved (the composer clears transparent), so the 2D layers beneath the canvas still show through. Bloom works on SwiftShader too (a little slower). |
 
 ### Particles
 
@@ -228,12 +240,14 @@ Paths must be relative project-asset paths (no leading `/`, no `..`, no `scheme:
 appear **inside comments or string literals are ignored** (comment/string spans are blanked before
 the scan) — so an example in a comment won't conjure a phantom asset the build then demands.
 
-**Engine note.** 3D needs a WebGL context. kino launches Chrome with `--disable-gpu`, so the context
-comes from **SwiftShader** (pure software rasterizer) — recent Chrome gates that deprecated fallback
-behind **`--enable-unsafe-swiftshader`**, which the engine sets ([`src/render/native/browser.ts`](../src/render/native/browser.ts)).
+**Engine note.** 3D needs a WebGL context. By default kino launches Chrome with `--disable-gpu`, so the
+context comes from **SwiftShader** (pure software rasterizer) — recent Chrome gates that deprecated
+fallback behind **`--enable-unsafe-swiftshader`**, which the engine sets ([`src/render/native/browser.ts`](../src/render/native/browser.ts)).
 Software GL is deterministic on a given machine (same machine + same Chrome ⇒ same pixels), so there
 are **no golden-pixel assertions across the CI matrix** — a few low bits may differ per platform,
-same tolerance as footage.
+same tolerance as footage. Set **`KINO_GPU=1`** to opt into a real GPU context instead (ANGLE/Metal on
+darwin) for quality and speed — it trades that bit-determinism guarantee, and Scene3D supersamples 2×
+in this mode (see [GPU mode & supersampling](#perf-budget--limits)).
 
 ## Preset gallery
 
@@ -243,24 +257,31 @@ examples; read the files.
 
 | Preset | What it is | Params |
 |---|---|---|
-| `phone-orbit.scene.js` | Device product shot: rounded-slab phone with a screenshot on its screen, orbit + progress push-in, pulse pop on the device. | `screenshot` (required asset path, build-time) · `spin` (turns, default 0.35, per-frame) · `zoom` (default 1, per-frame) |
-| `depth-particles.scene.js` | Abstract depth field: seeded particle cloud, slow dolly, palette fog. **Seam-safe** — all motion is `env.edge`-driven so first/last frames match (loops clean). | `intensity` (0..1, default 0.6, per-frame) · `color` (field color, palette name, **build-time**, default `"mint"`) |
-| `wordmark-3d.scene.js` | CTA end card: extruded metallic wordmark, studio reflections, orbit-and-settle. Progress-driven full rotation → `seamlessLoop`-compatible. | `text` (**build-time**, default `"KINO"`) · `depth` (**build-time**, default 0.3) |
+| `phone-orbit.scene.js` | Device product shot: **clearcoat**-body phone with a screenshot on its screen, orbit + progress push-in, pulse pop, grounded by a fake **contact shadow**. | `screenshot` (required asset path, build-time) · `spin` (turns, default 0.35, per-frame) · `zoom` (default 1, per-frame) |
+| `depth-particles.scene.js` | Abstract depth field: seeded particle cloud, slow dolly, palette fog, low-strength **bloom** so the points glow. **Seam-safe** — all motion is `env.edge`-driven so first/last frames match (loops clean). | `intensity` (0..1, default 0.6, per-frame) · `color` (field color, palette name, **build-time**, default `"mint"`) |
+| `wordmark-3d.scene.js` | CTA end card: extruded brushed-metal wordmark, softbox reflections, **bloom** glints on the speculars, fake **contact shadow**. Full rotation with a double-smoothstep easing (long readable holds at the facing ends) → `seamlessLoop`-compatible. | `text` (**build-time**, default `"KINO"`) · `depth` (**build-time**, default 0.3) |
 
 ## Perf budget & limits
 
-SwiftShader is software — keep scenes light so renders stay fast:
+The default engine mode is software (SwiftShader) — keep scenes light so renders stay fast:
 
-- **≤ ~50k triangles**, **one directional light**, **no shadow maps** (fake contact shadows with a
-  gradient plane if you need them). The presets stay inside this.
+- **≤ ~50k triangles**, **one directional light**, **no shadow maps** (use `api.contactShadow` for a
+  fake ground shadow instead). The presets stay inside this. **Bloom** (`api.post`) works in software
+  but adds a post pass per frame; it's fine for the presets but noticeably heavier than a plain scene.
+
+**GPU mode & supersampling.** With `KINO_GPU=1` (real ANGLE/Metal context — see the [engine note](#determinism--safety-the-lint))
+Scene3D renders the WebGL buffer at **2×** and lets the canvas downscale it (cheap SSAA — cleaner
+edges and speculars). Software mode stays 1×. The render mode is in the frame-cache signature, so GPU
+and software frames never cross-serve. Nothing in a `.scene.js` changes between modes — the page reads
+the flag from the render config.
 
 v1 limits (seam-ready — see the design doc's Future section):
 
 - **No skinned / animated glTF** — mesh + material + node-transform subset only (node transforms you
   set are fine; skinning/morph animation isn't).
-- **No shadow maps.**
+- **No shadow maps** — `api.contactShadow` is a fake (no light coupling).
 - **Default typeface only** — `text3d` uses the bundled Helvetiker face; brand-font 3D extrusion
   isn't supported in v1.
-- **No HDR environment assets** — `api.env` is the procedural `RoomEnvironment` (`studio`/`night`/`none`).
+- **No HDR environment assets** — `api.env` is a procedural softbox studio (`studio`/`night`/`none`).
 
 See also: [Motion graphics](motion-graphics.md) · [Spec reference](spec-reference.md) · [Build & preview](build-and-preview.md).

@@ -67,4 +67,31 @@ describe("scene api", () => {
     const d = c.api.devicePhone({ screen: c.api.texture("a.png") });
     expect(d.children.length).toBeGreaterThanOrEqual(2); // body + screen
   });
+  it("api.pbr with clearcoat upgrades to MeshPhysicalMaterial", () => {
+    const c = ctx();
+    const mat = c.api.pbr({ color: "white", metalness: 0.8, clearcoat: 0.6, clearcoatRoughness: 0.25 });
+    expect((mat as { isMeshPhysicalMaterial?: boolean }).isMeshPhysicalMaterial).toBe(true);
+    expect((mat as { clearcoat: number }).clearcoat).toBeCloseTo(0.6);
+    expect(mat.metalness).toBeCloseTo(0.8); // existing options still apply
+  });
+  it("api.pbr without clearcoat stays MeshStandardMaterial", () => {
+    const c = ctx();
+    const mat = c.api.pbr({ color: "gold" });
+    expect((mat as { isMeshPhysicalMaterial?: boolean }).isMeshPhysicalMaterial).toBeUndefined();
+    expect(mat.isMeshStandardMaterial).toBe(true);
+  });
+  it("api.contactShadow returns a mesh added to root (fake, no light)", () => {
+    const c = ctx();
+    const s = c.api.contactShadow({ radius: 1.2, opacity: 0.4, y: -0.9 });
+    expect(c.root.children).toContain(s);
+    expect((s as { isMesh?: boolean }).isMesh).toBe(true);
+    expect(s.material.transparent).toBe(true);
+  });
+  it("api.post stores bloom config retrievable by the Scene3D contract", () => {
+    const c = ctx();
+    expect(c.post()).toBeNull(); // nothing declared → direct render path
+    c.api.post({ bloom: { strength: 0.7, radius: 0.4, threshold: 0.85 } });
+    expect(c.post()?.bloom?.strength).toBeCloseTo(0.7);
+    expect(c.post()?.bloom?.threshold).toBeCloseTo(0.85);
+  });
 });

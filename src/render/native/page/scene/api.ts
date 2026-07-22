@@ -7,7 +7,6 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { FontLoader, type Font, type FontData } from "three/examples/jsm/loaders/FontLoader.js";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 // Vendored: three@0.185's npm tarball omits examples/fonts, so the typeface lives beside this file.
 import typefaceDefault from "./helvetiker_regular.typeface.json";
 
@@ -61,6 +60,55 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+/** Post-processing config an api.post() call stores; Scene3D reads it to choose the render path. */
+export interface PostConfig {
+  bloom?: { strength?: number; radius?: number; threshold?: number };
+}
+
+/**
+ * Deterministic radial-alpha texture (RGBA, black, alpha = smoothstepped falloff center→edge).
+ * Drawn from fixed math — no canvas, no randomness — so it works headless (tests) and page-side.
+ * Used as the contact-shadow disc's map: a fake soft ground shadow, no light coupling.
+ */
+function radialAlphaTexture(size = 64): THREE.DataTexture {
+  const data = new Uint8Array(size * size * 4);
+  const c = (size - 1) / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x - c, y - c) / c; // 0 center → 1 at the inscribed edge
+      const t = Math.min(1, Math.max(0, 1 - d));
+      const a = t * t * (3 - 2 * t); // smoothstep for a soft, non-linear falloff
+      const i = (y * size + x) * 4;
+      data[i + 3] = Math.round(a * 255); // RGB stays 0 (black shadow); alpha carries the shape
+    }
+  }
+  const tex = new THREE.DataTexture(data, size, size);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Deterministic vertical-gradient texture (1×N, `top`→`bottom` linear ramp). Backs the studio env
+ * dome so reflections carry a soft top-down falloff. No canvas — DataTexture from fixed math.
+ */
+function verticalGradientTexture(top: THREE.Color, bottom: THREE.Color, h = 64): THREE.DataTexture {
+  const data = new Uint8Array(h * 4);
+  for (let y = 0; y < h; y++) {
+    const t = y / (h - 1);
+    const r = bottom.r + (top.r - bottom.r) * t;
+    const g = bottom.g + (top.g - bottom.g) * t;
+    const b = bottom.b + (top.b - bottom.b) * t;
+    const i = y * 4;
+    data[i] = Math.round(r * 255);
+    data[i + 1] = Math.round(g * 255);
+    data[i + 2] = Math.round(b * 255);
+    data[i + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, 1, h);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /** Build the curated scene API + its three.js scene graph. Returned to Scene3D (Task 5). */
 export function createSceneApi(opts: {
   baseParams: Record<string, number | string>;
@@ -75,6 +123,8 @@ export function createSceneApi(opts: {
   const cam = new THREE.PerspectiveCamera(40, width / height, 0.1, 200);
   cam.position.set(0, 0, 6);
   let envPreset: "studio" | "night" | "none" = "none";
+  /** Post-processing declared by api.post(); read once by Scene3D to pick the render path. */
+  let postConfig: PostConfig | null = null;
 
   // Palette names ("mint"/"green"/"night"/"white"/"gold") resolve; anything else is a raw CSS color.
   const color = (v: string | number | undefined, fallback = "#ffffff") =>
@@ -90,7 +140,12 @@ export function createSceneApi(opts: {
   };
 
   // --- materials -------------------------------------------------------------------------------
-  /** Physically-based material; color name resolved from palette. */
+  /**
+   * Physically-based material; color name resolved from palette. Setting `clearcoat` or
+   * `clearcoatRoughness` upgrades to MeshPhysicalMaterial (a glossy lacquer coat over the base —
+   * the "wet"/premium sheen of a phone body); otherwise MeshStandardMaterial as before. All other
+   * options carry over either way (Physical extends Standard).
+   */
   const pbr = (o: {
     color?: string | number;
     metalness?: number;
@@ -99,8 +154,10 @@ export function createSceneApi(opts: {
     transparent?: boolean;
     opacity?: number;
     map?: THREE.Texture;
-  } = {}) =>
-    new THREE.MeshStandardMaterial({
+    clearcoat?: number;
+    clearcoatRoughness?: number;
+  } = {}) => {
+    const base = {
       color: color(o.color),
       metalness: o.metalness ?? 0.1,
       roughness: o.roughness ?? 0.6,
@@ -108,7 +165,11 @@ export function createSceneApi(opts: {
       transparent: o.transparent ?? false,
       opacity: o.opacity ?? 1,
       ...(o.map ? { map: o.map } : {}),
-    });
+    };
+    if (o.clearcoat !== undefined || o.clearcoatRoughness !== undefined)
+      return new THREE.MeshPhysicalMaterial({ ...base, clearcoat: o.clearcoat ?? 0, clearcoatRoughness: o.clearcoatRoughness ?? 0 });
+    return new THREE.MeshStandardMaterial(base);
+  };
   /** Unlit material (ignores lighting) — use for screenshots/emissive-flat surfaces. */
   const basic = (o: { color?: string | number; map?: THREE.Texture; transparent?: boolean; opacity?: number } = {}) =>
     new THREE.MeshBasicMaterial({
@@ -172,6 +233,32 @@ export function createSceneApi(opts: {
   /** Select the image-based environment; realised once per renderer by applyEnv (Scene3D calls it). */
   const env = (preset: "studio" | "night" | "none") => {
     envPreset = preset;
+  };
+
+  /**
+   * Fake blurred ground shadow: a flat disc with a radial-alpha texture, laid in the XZ plane under
+   * the subject. Grounds a product shot cheaply. It is NOT light-coupled — it doesn't move with any
+   * light, doesn't respect occluders, and casts nothing; position/size/opacity are all you control.
+   * Returns the mesh (animate `.material.opacity` / `.scale` / `.position` from update(env)).
+   */
+  const contactShadow = (o: { radius?: number; opacity?: number; y?: number } = {}) => {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      map: radialAlphaTexture(),
+      transparent: true,
+      opacity: o.opacity ?? 0.35,
+      depthWrite: false, // a ground shadow must never occlude the subject in the depth buffer
+    });
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(o.radius ?? 1.4, 48), mat);
+    disc.rotation.x = -Math.PI / 2; // face up: lie flat on the ground plane
+    disc.position.y = o.y ?? -1;
+    disc.renderOrder = -1; // draw before the subject so its transparency composites underneath
+    return add(disc);
+  };
+
+  /** Declare post-processing (opt-in). Scene3D uses EffectComposer+UnrealBloomPass when bloom is set. */
+  const post = (cfg: PostConfig) => {
+    postConfig = cfg;
   };
 
   /** Camera rig over the single scene camera: orbit/dolly/lookAt/zoom, plus `.three` for raw access. */
@@ -296,7 +383,8 @@ export function createSceneApi(opts: {
     const h = o.height ?? 2.16;
     const d = o.depth ?? 0.08;
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 4, o.radius ?? 0.09), pbr({ color: "#101216", metalness: 0.6, roughness: 0.35 })));
+    // Clearcoat on the body: the glossy lacquer sheen of a real device shell (physical material).
+    g.add(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 4, o.radius ?? 0.09), pbr({ color: "#101216", metalness: 0.6, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.25 })));
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.94, h * 0.94), new THREE.MeshBasicMaterial({ map: o.screen, toneMapped: false }));
     screen.position.z = d / 2 + 0.001;
     g.add(screen);
@@ -318,6 +406,8 @@ export function createSceneApi(opts: {
     ambient,
     hemi,
     env,
+    contactShadow,
+    post,
     camera,
     texture,
     gltf,
@@ -336,13 +426,49 @@ export function createSceneApi(opts: {
     params: baseParams as Readonly<Record<string, number | string>>,
   };
 
+  /**
+   * Procedural softbox studio: a dim vertical-gradient dome (soft top-down falloff in reflections)
+   * plus bright **strip** softboxes — narrow tall cards, key + side rims + a back edge — as unlit
+   * HDR-bright planes. PMREM'd into an env map for shaped speculars on metal/clearcoat. Strips (not
+   * broad cards) are deliberate: a flat metal face mirrors a wide card as a full-face white wash that
+   * bloom then blows to a blob, whereas a narrow strip only ever reflects as a thin highlight streak
+   * at any rotation — the premium "studio glint" look, bloom-safe. Fully deterministic (fixed
+   * geometry + DataTexture gradient); no HDR asset, no randomness. "night" reuses the same env at
+   * 0.35 environmentIntensity (dimmer reflections, same shapes).
+   */
+  function buildStudioEnv(): THREE.Scene {
+    const s = new THREE.Scene();
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(40, 24, 12),
+      new THREE.MeshBasicMaterial({ map: verticalGradientTexture(new THREE.Color(0x2a3240), new THREE.Color(0x05070c)), side: THREE.BackSide }),
+    );
+    s.add(dome);
+    // A strip softbox: unlit plane whose color exceeds 1 (HDR-bright) so PMREM reads it as a light.
+    const strip = (w: number, h: number, pos: [number, number, number], intensity: number) => {
+      const card = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(intensity, intensity, intensity) }),
+      );
+      card.position.set(...pos);
+      card.lookAt(0, 0, 0);
+      s.add(card);
+    };
+    strip(2.4, 11, [6, 3, 7], 4); // key: tall strip, front-right
+    strip(1.8, 10, [-8, 2, 3], 2.6); // left rim strip
+    strip(1.8, 10, [8, 1, -3], 2.6); // right rim strip
+    strip(2.6, 9, [-1, 5, -9], 3); // back-top edge strip
+    return s;
+  }
+
   /** Build the PMREM environment map for this renderer (Scene3D calls once after renderer creation). */
   function applyEnv(renderer: THREE.WebGLRenderer): void {
     if (envPreset === "none") return;
     const pmrem = new THREE.PMREMGenerator(renderer);
-    root.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const envScene = buildStudioEnv();
+    root.environment = pmrem.fromScene(envScene, 0.04).texture;
     root.environmentIntensity = envPreset === "night" ? 0.35 : 1;
+    pmrem.dispose(); // the generator's scratch targets; the produced env texture outlives it
   }
 
-  return { api, root, camera: () => cam, applyEnv };
+  return { api, root, camera: () => cam, applyEnv, post: () => postConfig };
 }

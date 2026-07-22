@@ -19,6 +19,7 @@ interface RenderConfig {
   height: number;
   durationInFrames: number;
   media: MediaMap;
+  gpu?: boolean; // KINO_GPU render mode; forwarded to Scene3D for 2× supersampling
 }
 
 declare global {
@@ -87,7 +88,7 @@ let root: Root | null = null;
 let current: RenderConfig | null = null;
 
 const App: React.FC<{ cfg: RenderConfig; frame: number }> = ({ cfg, frame }) => {
-  const config: VideoConfig = { fps: cfg.props.fps, width: cfg.width, height: cfg.height, durationInFrames: cfg.durationInFrames };
+  const config: VideoConfig = { fps: cfg.props.fps, width: cfg.width, height: cfg.height, durationInFrames: cfg.durationInFrames, gpu: cfg.gpu };
   return (
     <MediaProvider media={cfg.media}>
       <FrameProvider frame={frame} config={config}>

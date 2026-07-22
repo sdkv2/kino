@@ -11,6 +11,8 @@ export interface VideoConfig {
   width: number;
   height: number;
   durationInFrames: number;
+  /** GPU render mode (KINO_GPU=1). Plumbed from the render config so Scene3D can supersample 2×. */
+  gpu?: boolean;
 }
 
 const FrameCtx = React.createContext(0);
