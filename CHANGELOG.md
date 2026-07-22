@@ -4,12 +4,12 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
-- **3D scenes** — `*.scene.js` motion sources: three.js scenes behind a small curated kino scene
-  API, authored as `scene(api)` → `update(env)` and driven per-frame by the same JSON
-  `params`/`keyframes`/`triggers` (and `atWord`) as 2D motion. Deterministic (software WebGL),
-  composited into the existing motion slot, works full-screen or as a `motionOverlay`. Three presets
-  ship in `assets-lib/motion/` (`phone-orbit`, `depth-particles`, `wordmark-3d`). See
-  [docs/3d-scenes.md](docs/3d-scenes.md).
+- **Blender 3D backend** — `.scene.js` beats render via Blender (Eevee drafts / Cycles finals) to
+  transparent PNG stills; the three.js/WebGL page path is **removed**. Same `api.*` surface
+  (`src/render/scene/recordApi.ts` + `scripts/kino_render.py`). Requires Blender ≥ 4.2
+  (`brew install --cask blender` or `KINO_BLENDER`). Spec `quality: draft|final|max`; CLI
+  `kino build --draft`, `kino still|storyboard --final`. Cache: `out/<title>/_scene3d/<hash>/`.
+  **Breaking:** 3D beats need Blender installed; `KINO_GPU` / SwiftShader flags are gone.
 - `atWord` anchors on motion `keyframes`/`triggers` (word text or index) — resolved against each
   build's VO timings, so word-synced moments never need a mock→real retune.
 - `kino still --segment N --word <w>` centers a sheet on a spoken word; `--grid` overlays a

@@ -11,6 +11,7 @@ This guide takes you from a clean checkout to your first rendered video. For the
 | **Node 20+** | runtime (the CLI is ESM) |
 | **ffmpeg / ffprobe** | audio muxing, frame extraction |
 | **ImageMagick** (`magick`) | storyboard contact sheets + frame montages |
+| **Blender ≥ 4.2** (optional) | 3D `.scene.js` beats only — `brew install --cask blender` or `KINO_BLENDER` |
 | **ElevenLabs API key** | voiceover (required for real renders — faceless and most avatar setups) |
 | HeyGen / Hedra / Replicate key | only if you use an AI avatar (optional) |
 
@@ -44,7 +45,7 @@ cd ~/kino && npm install && npm run build && npm link   # provides the `kino` co
 ## Verify your environment
 
 ```bash
-kino doctor      # checks deps (node, ffmpeg/ffprobe, ImageMagick, headless Chrome, heygen CLI) + which API keys are present
+kino doctor      # checks deps (node, ffmpeg/ffprobe, ImageMagick, Blender, headless Chrome, heygen CLI) + API keys
 kino update      # later: pull + rebuild a repo install (or npm -g @latest for a global one)
 ```
 

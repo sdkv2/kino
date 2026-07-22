@@ -215,15 +215,19 @@ explains speech or settle, and a first frame that could only be this product.
 ## 3D scenes (`.scene.js`)
 
 When a beat needs **real 3D** — a device product shot, a depth/particle background, a 3D wordmark end
-card — author a `.scene.js` source instead of forcing it in CSS. It's the body of `scene(api)`
-returning `update(env)`; a small curated scene API hides three.js, driven per frame by the same
-`env` and the same JSON `params`/`keyframes`/`triggers` as 2D motion.
+card — author a `.scene.js` source instead of forcing it in CSS. Body of `scene(api)` → `update(env)`;
+same JSON `params`/`keyframes`/`triggers` as 2D. **Backend is Blender** (Eevee drafts / Cycles
+finals) — install Blender ≥ 4.2 (`brew install --cask blender` or `KINO_BLENDER`), confirm with
+`kino doctor`.
 
-Before authoring, **read `docs/3d-scenes.md` and `src/render/native/page/scene/api.ts`** (that file is
-ground truth — this skill doesn't restate the surface). The three presets cover the common cases via
-params — reach for them first: `phone-orbit` (device + screenshot), `depth-particles` (abstract
-background), `wordmark-3d` (CTA end card). Design taste is the same as 2D — one artifact, a color
-commitment, motion that explains or settles, seam-safe loops (`env.edge`, absolute camera setters).
+**Workflow:** iterate with `kino storyboard` / `kino still` (Eevee drafts by default) → ship with
+`kino build` (Cycles `final` unless `--draft`) or `kino still … --final` for a single beat. Cache
+hits under `_scene3d/` skip unchanged beats.
+
+Before authoring, **read `docs/3d-scenes.md` and `src/render/scene/recordApi.ts`** (ground truth —
+this skill doesn't restate the surface). Presets: `phone-orbit`, `depth-particles`, `wordmark-3d`.
+Design taste is the same as 2D — one artifact, a color commitment, motion that explains or settles,
+seam-safe loops (`env.edge`, absolute camera setters).
 
 ## Craft loop (truthful completion)
 

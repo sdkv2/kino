@@ -32,11 +32,13 @@ kino build <spec> [options]
 | `--font <name>` | font name | Override `brand.font` for this render (see [`fonts`](#fonts)). |
 | `--project <name>` | project | Use `projects/<name>` (else inferred from the spec path). |
 | `--tag <label>` | label | Suffix the output filename so variants are kept (auto-set from `--background`/`--font`). |
+| `--draft` | — | Force Eevee drafts for every 3D scene beat (fast iterate). Default build quality for unauthored scene beats is Cycles `final`. |
 
 ```bash
 kino build specs/lie-test.json --mock                 # free preview, no API spend
 kino build specs/lie-test.json                        # real render → out/lie-test/
 kino build specs/lie-test.json --background aurora --format 9:16,3:4
+kino build specs/gate.json --draft                    # 3D beats via Eevee (fast)
 ```
 
 Output: `out/<title>/<title>[-<tag>]-<format>.mp4`.
@@ -63,6 +65,7 @@ kino still <spec> [options]
 | `--real` | — | Use real VO/avatar + true timing (default: mock, free). |
 | `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA. Still-only — not on `build`. |
 | `--grid` | — | Overlay a rule-of-thirds grid for composition QA (fill budget / dead bands). Still-only — not on `build`. |
+| `--final` | — | Cycles finals for 3D beats (default on `still`/`storyboard`: Eevee draft). |
 
 ```bash
 kino still specs/lie-test.json --segment 0
@@ -73,6 +76,7 @@ kino still specs/lie-test.json --at 1,1.5,2 --montage
 kino still specs/lie-test.json --segment 0 --platform tiktok
 kino still specs/lie-test.json --segment 2 --word match   # sheet centered where "match" is spoken
 kino still specs/lie-test.json --segment 0 --grid          # rule-of-thirds composition check
+kino still specs/gate.json --segment 1 --final             # Cycles final for a 3D beat
 ```
 
 ### `storyboard`
@@ -90,10 +94,12 @@ kino storyboard <spec> [options]
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Real VO/avatar + true timing (default: mock, free). |
 | `--platform <name>` | `tiktok\|reels\|shorts` | Same safe-zone overlay as [`still`](#still). |
+| `--final` | — | Cycles finals for 3D beats (default: Eevee draft). |
 
 ```bash
 kino storyboard specs/lie-test.json
 kino storyboard specs/lie-test.json --platform reels
+kino storyboard specs/gate.json --final
 ```
 
 ### `retune`
