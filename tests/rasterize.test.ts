@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { screenDigest, layerDigest, rasterizeScreen, rasterizeLayer, SCREEN_W, SCREEN_H } from "../src/render/scene/rasterize.js";
+import { KINO_SCRUB_STYLE, KINO_DEFS } from "../src/render/motionCss.js";
 import { resolveExecutable } from "../src/render/native/browser.js";
+
+const RASTER_V = 1;
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9 };
 const base = {
@@ -23,6 +27,30 @@ describe("digests (pure)", () => {
     const svg = `<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>`;
     expect(layerDigest(svg)).toBe(layerDigest(svg));
     expect(layerDigest(svg)).not.toBe(layerDigest(svg + " "));
+  });
+  it("screenDigest includes motionCss bytes (cache busts on KINO_SCRUB_STYLE/KINO_DEFS change)", () => {
+    const d = screenDigest(base);
+    const manual = createHash("sha1")
+      .update(
+        JSON.stringify([
+          RASTER_V,
+          SCREEN_W,
+          SCREEN_H,
+          KINO_SCRUB_STYLE,
+          KINO_DEFS,
+          base.html,
+          base.words,
+          base.theme,
+          base.params,
+          base.keyframes,
+          base.triggers,
+          base.fps,
+          base.durationFrames,
+        ]),
+      )
+      .digest("hex");
+    expect(d).toBe(manual);
+    expect(d).toBe(screenDigest({ ...base })); // stable with current motionCss constants
   });
 });
 

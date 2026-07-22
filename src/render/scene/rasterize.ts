@@ -34,12 +34,30 @@ export interface ScreenRasterOpts {
 
 export function screenDigest(o: ScreenRasterOpts): string {
   return createHash("sha1")
-    .update(JSON.stringify([RASTER_V, SCREEN_W, SCREEN_H, o.html, o.words, o.theme, o.params, o.keyframes, o.triggers, o.fps, o.durationFrames]))
+    .update(
+      JSON.stringify([
+        RASTER_V,
+        SCREEN_W,
+        SCREEN_H,
+        KINO_SCRUB_STYLE,
+        KINO_DEFS,
+        o.html,
+        o.words,
+        o.theme,
+        o.params,
+        o.keyframes,
+        o.triggers,
+        o.fps,
+        o.durationFrames,
+      ]),
+    )
     .digest("hex");
 }
 
 export function layerDigest(svg: string): string {
-  return createHash("sha1").update(JSON.stringify([RASTER_V, LAYER_MAX_DIM, svg])).digest("hex");
+  return createHash("sha1")
+    .update(JSON.stringify([RASTER_V, LAYER_MAX_DIM, KINO_SCRUB_STYLE, KINO_DEFS, svg]))
+    .digest("hex");
 }
 
 // The shadow-DOM host page: same injection order as MotionGraphic's ShadowHtml (scrub style +

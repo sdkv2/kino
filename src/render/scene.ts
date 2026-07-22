@@ -61,7 +61,7 @@ export function extractSceneAssets(
       path = v;
     }
     if (!path) {
-      violations.push(`empty asset path in api.texture/api.gltf`);
+      violations.push(`empty asset path in api.texture/api.gltf/api.screen/api.layer`);
       continue;
     }
     if (badPath(path)) {
@@ -75,7 +75,7 @@ export function extractSceneAssets(
   // an extractable literal/api.param form landed short of `extracted` and surfaces here.
   const sites = stripped.match(CALL_SITE_RE)?.length ?? 0;
   if (sites > extracted) {
-    violations.push(`api.texture/api.gltf arguments must be string literals or api.param("name") — kino resolves and caches assets before render`);
+    violations.push(`api.texture/api.gltf/api.screen/api.layer arguments must be string literals or api.param("name") — kino resolves and caches assets before render`);
   }
   return { assets: [...assets], violations };
 }
