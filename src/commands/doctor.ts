@@ -3,6 +3,7 @@ import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../media/binPaths.js";
+import { resolveBlender } from "../media/blender.js";
 import { listMusicIds, listSfxIds } from "../media/sfx.js";
 import { launchBrowser, resolveExecutable } from "../render/native/browser.js";
 import { resolveWhisper } from "../vo/whisper.js";
@@ -37,6 +38,11 @@ export async function doctor(): Promise<void> {
     ["PEXELS_API_KEY (kino pexels — stock b-roll)", !!process.env.PEXELS_API_KEY],
     ["FREESOUND_API_KEY (kino music search — optional)", !!process.env.FREESOUND_API_KEY],
   ];
+  {
+    const b = resolveBlender();
+    if (b) log.ok(`Blender ${b.version} (${b.bin})`);
+    else log.warn("Blender ≥ 4.2 missing — needed for 3D beats. brew install --cask blender (or set KINO_BLENDER)");
+  }
   for (const [n, ok] of checks) ok ? log.ok(n) : log.warn(`${n} missing`);
 
   // Launch-check headless Chrome: a resolvable-but-broken binary (e.g. puppeteer's x86-64

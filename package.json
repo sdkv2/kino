@@ -32,7 +32,8 @@
     "dist",
     "bin",
     "skills",
-    "assets-lib"
+    "assets-lib",
+    "scripts/kino_render.py"
   ],
   "engines": {
     "node": ">=20"
