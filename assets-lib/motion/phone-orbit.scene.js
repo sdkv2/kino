@@ -1,6 +1,8 @@
-// Device product shot: rounded-slab phone, spec screenshot on screen, swept 3/4 reveal + push-in.
+// Device product shot: rounded-slab phone (clearcoat body), spec screenshot on screen, swept 3/4
+// reveal + push-in, grounded by a fake contact shadow.
 // params: screenshot (required asset path) · spin (yaw sweep in half-turns, default 0.35 ≈ 63°) · zoom (default 1)
 const phone = api.devicePhone({ screen: api.texture(api.param("screenshot")) });
+const shadow = api.contactShadow({ radius: 1.0, opacity: 0.42, y: -1.05 });
 api.env("studio");
 api.dirLight({ intensity: 2.4, position: [2.5, 3, 2] });
 api.hemi({ intensity: 0.5 });
@@ -16,6 +18,9 @@ return (env) => {
   // caption never parks on the screen.
   phone.position.y = 0.25 + (1 - env.out) * -0.85;
   phone.scale.setScalar(1 + env.pulse * 0.05);
+  // Shadow tracks the device settling in and fades up with it (fake, so we drive it by hand).
+  shadow.material.opacity = 0.42 * env.out;
+  shadow.scale.setScalar(0.8 + env.out * 0.3);
   // 9:16 portrait: device ~2/3 frame height at radius 6.4; spec zoom keyframes push in (min-clamped
   // so a keyframed zoom can't shove the camera inside the device).
   cam.orbit({ radius: 6.4 / Math.max(0.5, Number(env.params.zoom ?? 1)), y: 0.35, angle: 0.18 - env.progress * 0.3 });
