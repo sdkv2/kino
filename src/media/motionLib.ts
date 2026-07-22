@@ -8,7 +8,9 @@ import { dirname, join, resolve } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 export const MOTION_LIB_DIR = resolve(here, "../../assets-lib/motion");
 
-const LIB_EXTS = [".js", ".html", ".json"] as const;
+// ".scene.js" before ".js": listMotionIds strips the FIRST matching ext, and "x.scene.js"
+// endsWith ".js" — order is the correctness, not a preference.
+const LIB_EXTS = [".scene.js", ".js", ".html", ".json"] as const;
 
 function isBareId(src: string): boolean {
   return !src.includes("/") && !src.includes(".");
@@ -27,11 +29,15 @@ export function listMotionIds(): string[] {
 }
 
 function findInLib(id: string): string | null {
-  for (const ext of LIB_EXTS) {
-    const p = join(MOTION_LIB_DIR, id + ext);
-    if (existsSync(p)) return p;
+  const hits = LIB_EXTS.map((ext) => join(MOTION_LIB_DIR, id + ext)).filter((p) => existsSync(p));
+  if (hits.length > 1) {
+    throw new Error(
+      `Motion id "${id}" is ambiguous — both ${hits
+        .map((h) => h.split(/[/\\]/).pop())
+        .join(" and ")} exist in assets-lib/motion/. Rename one.`,
+    );
   }
-  return null;
+  return hits[0] ?? null;
 }
 
 export type ResolvedMotionSource = {

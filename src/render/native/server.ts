@@ -26,6 +26,9 @@ const MIME: Record<string, string> = {
   ".wav": "audio/wav",
   ".mp4": "video/mp4",
   ".mov": "video/quicktime",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json",
+  ".bin": "application/octet-stream",
 };
 
 // border-box globally: a padded AbsoluteFill (width:100% + padding) must not overflow its frame —
