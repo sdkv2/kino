@@ -9,6 +9,7 @@ import { buildMotionVars, wordsShownAt } from "../../motionVars.js";
 import { sanitizeMotionHtml } from "../../sanitizeMotion.js";
 import { lottiePlaybackRate } from "../../lottie.js";
 import { LottieFrame, lottieMeta } from "./lottie";
+import { Scene3D } from "./scene/Scene3D";
 
 // Trusted stylesheet injected into every motion-graphic shadow root. All of it is determinism-safe:
 // animations are force-paused and scrubbed by --progress (no wall clock), helpers read frame-driven
@@ -80,6 +81,28 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
   return <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />;
 };
 
+/** One env across 2D proc and 3D scenes: pure function of (frame, beat timing, JSON controls). */
+export function buildMotionEnv(a: {
+  frame: number; fps: number; width: number; height: number; durationFrames: number;
+  data: MotionGraphicProps; t: Theme;
+}): MotionEnv {
+  const tt = a.frame / a.fps;
+  const resolved = paramsAt(a.data.params, a.data.keyframes, tt, { implicitBase: true });
+  const curves = progressCurves(a.durationFrames > 0 ? Math.min(1, Math.max(0, a.frame / a.durationFrames)) : 0);
+  return {
+    frame: a.frame, t: tt,
+    progress: a.durationFrames > 0 ? Math.min(1, Math.max(0, a.frame / a.durationFrames)) : 0,
+    out: curves.out, inout: curves.inout, overshoot: curves.overshoot, spring: curves.spring, edge: curves.edge,
+    pulse: pulseAt(a.data.triggers, tt),
+    params: resolved,
+    palette: { mint: a.t.mint, green: a.t.green, night: a.t.night, white: a.t.white, gold: a.t.gold, font: a.t.font },
+    width: a.width, height: a.height,
+    words: a.data.words ?? [],
+    durationFrames: a.durationFrames,
+    duration: a.fps > 0 ? a.durationFrames / a.fps : 0,
+  };
+}
+
 // Full-frame motion-graphic layer. durationFrames maps --progress 0→1 across the beat.
 export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames: number; t: Theme; captionBottom?: number }> = ({
   data,
@@ -93,7 +116,6 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   const resolved = paramsAt(data.params, data.keyframes, tt, { implicitBase: true });
   const pulse = pulseAt(data.triggers, tt);
   const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
-  const curves = progressCurves(progress);
 
   const words = data.words ?? [];
   const wordsShown = wordsShownAt(words, tt);
@@ -121,26 +143,14 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
         : null,
     [data.proc, data.lottie],
   );
+
+  if (data.scene) {
+    return <Scene3D data={data} durationFrames={durationFrames} t={t} />;
+  }
+
   let html = data.html;
   if (procFn) {
-    const env: MotionEnv = {
-      frame,
-      t: tt,
-      progress,
-      out: curves.out,
-      inout: curves.inout,
-      overshoot: curves.overshoot,
-      spring: curves.spring,
-      edge: curves.edge,
-      pulse,
-      params: resolved,
-      palette: { mint: t.mint, green: t.green, night: t.night, white: t.white, gold: t.gold, font: t.font },
-      width,
-      height,
-      words,
-      durationFrames,
-      duration: fps > 0 ? durationFrames / fps : 0,
-    };
+    const env = buildMotionEnv({ frame, fps, width, height, durationFrames, data, t });
     try {
       // Sanitize the per-frame procedural output: it goes straight to innerHTML, so unlike the static
       // .html (sanitized once at resolve time) its markup is dynamic and could smuggle event handlers.
