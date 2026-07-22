@@ -40,8 +40,14 @@ export function extractSceneAssets(
 ): { assets: string[]; violations: string[] } {
   const violations: string[] = [];
   const assets = new Set<string>();
+  // stripJsNoise blanks comment/string spans in place (offsets preserved). Match on raw src to read
+  // the real path arg, but skip any call whose head is blanked in `stripped` — i.e. one written
+  // inside a comment or string literal. Without this, `// api.texture("x.png")` extracts a phantom
+  // asset that Task 3 would then require to exist, breaking builds on an ordinary example comment.
+  const stripped = stripJsNoise(src);
   let extracted = 0;
   for (const m of src.matchAll(CALL_RE)) {
+    if (stripped.slice(m.index ?? 0, (m.index ?? 0) + 3) !== "api") continue;
     extracted++;
     const literal = m[1] ?? m[2];
     const paramName = m[3] ?? m[4];
@@ -64,9 +70,10 @@ export function extractSceneAssets(
     }
     assets.add(path);
   }
-  // Call sites counted on noise-stripped code (comments/strings can't fake them); every real
-  // call must have matched an extractable arg form above.
-  const sites = stripJsNoise(src).match(CALL_SITE_RE)?.length ?? 0;
+  // Both extraction (above) and this site count run against noise-stripped code, so a call inside a
+  // comment/string is ignored by both and the tallies stay consistent. Any real call whose arg wasn't
+  // an extractable literal/api.param form landed short of `extracted` and surfaces here.
+  const sites = stripped.match(CALL_SITE_RE)?.length ?? 0;
   if (sites > extracted) {
     violations.push(`api.texture/api.gltf arguments must be string literals or api.param("name") — kino resolves and caches assets before render`);
   }

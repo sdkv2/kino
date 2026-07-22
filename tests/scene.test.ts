@@ -38,6 +38,18 @@ describe("extractSceneAssets", () => {
     const r = extractSceneAssets(`const p = "a.png"; api.texture(p); return () => {};`, {});
     expect(r.violations.join()).toMatch(/string literal|api\.param/);
   });
+  it("ignores asset calls inside comments", () => {
+    const src = `// api.texture("fake.png")\napi.texture("real.png"); return () => {};`;
+    const r = extractSceneAssets(src, {});
+    expect(r.assets).toEqual(["real.png"]);
+    expect(r.violations).toEqual([]);
+  });
+  it("ignores asset calls embedded in string literals", () => {
+    const src = `const s = "api.gltf('phantom.glb')"; return () => {};`;
+    const r = extractSceneAssets(src, {});
+    expect(r.assets).toEqual([]);
+    expect(r.violations).toEqual([]);
+  });
   it("dedupes repeated paths", () => {
     const src = `api.texture("a.png"); api.texture("a.png"); return () => {};`;
     expect(extractSceneAssets(src, {}).assets).toEqual(["a.png"]);
