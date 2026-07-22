@@ -97,6 +97,8 @@ export interface MotionGraphicProps {
   proc?: string; // Tier 2: linted JS source — body of render(env) → HTML string, evaluated per frame
   lottie?: LottieData; // Tier 3: parsed animationData
   loop?: boolean; // Tier 3 playback (inert for html/proc); default false
+  scene?: string; // 3D: linted source — body of scene(api) → update(env) (docs/3d-scenes.md)
+  sceneAssets?: string[]; // 3D: statically-extracted /public asset paths (staged + cache-hashed)
   params: Record<string, BgParamValue>; // base CSS-variable values
   keyframes: BgKeyframe[]; // tween params over time (--<name>)
   triggers: BgTrigger[]; // one-shot pulses (--pulse)

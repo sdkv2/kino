@@ -222,6 +222,6 @@ describe("resolveMotionGraphic — Lottie (.json) dispatch", () => {
 
   it("rejects an unknown extension instead of silently treating it as HTML", () => {
     const project = projWith("motion/x.png", "not markup");
-    expect(() => resolveMotionGraphic({ source: "motion/x.png" }, project)).toThrow(/must be \.html, \.js, or \.json/i);
+    expect(() => resolveMotionGraphic({ source: "motion/x.png" }, project)).toThrow(/must be \.html, \.js, \.scene\.js, or \.json/i);
   });
 });

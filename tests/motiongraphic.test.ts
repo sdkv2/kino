@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lintMotionHtml, sanitizeMotionHtml, resolveMotionGraphic, lintMotionJs } from "../src/render/motiongraphic.js";
+import { lintMotionHtml, sanitizeMotionHtml, resolveMotionGraphic, lintMotionJs, lintMotionSource } from "../src/render/motiongraphic.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -178,6 +178,45 @@ describe("resolveMotionGraphic", () => {
   });
 });
 
+describe("scene resolve", () => {
+  const sceneSrc = `const t = api.texture("shots/dash.png"); return (env) => {};`;
+  // Fixture: a project root under which we write a .scene.js file and any assets it references.
+  function proj(files: Record<string, string>) {
+    const root = mkdtempSync(join(tmpdir(), "kino-scene-"));
+    for (const [rel, contents] of Object.entries(files)) {
+      const abs = join(root, rel);
+      mkdirSync(join(abs, ".."), { recursive: true });
+      writeFileSync(abs, contents);
+    }
+    return { assetPath: (rel: string) => join(root, rel) };
+  }
+  it("resolves a .scene.js into { scene, sceneAssets }", () => {
+    const project = proj({ "motion/orbit.scene.js": sceneSrc, "shots/dash.png": "PNGBYTES" });
+    const r = resolveMotionGraphic({ source: "motion/orbit.scene.js" }, project);
+    expect(r.scene).toBe(sceneSrc);
+    expect(r.sceneAssets).toEqual(["shots/dash.png"]);
+    expect(r.html).toBe("");
+    expect(r.proc).toBeUndefined();
+  });
+  it("throws when a referenced asset is missing", () => {
+    const project = proj({ "motion/missing.scene.js": `api.texture("shots/nope.png"); return () => {};` });
+    expect(() => resolveMotionGraphic({ source: "motion/missing.scene.js" }, project)).toThrow(/nope\.png/);
+  });
+  it("throws on lint violations with the display path", () => {
+    const project = proj({ "motion/bad.scene.js": `const r = Math.random(); return () => {};` });
+    expect(() => resolveMotionGraphic({ source: "motion/bad.scene.js" }, project)).toThrow(/Math\.random/);
+  });
+  it("resolves api.param asset refs from spec params", () => {
+    const src = `api.texture(api.param("shot")); return () => {};`;
+    const project = proj({ "motion/p.scene.js": src, "shots/a.png": "A" });
+    const r = resolveMotionGraphic({ source: "motion/p.scene.js", params: { shot: "shots/a.png" } }, project);
+    expect(r.sceneAssets).toEqual(["shots/a.png"]);
+  });
+  it("lintMotionSource dispatches .scene.js before .js", () => {
+    expect(lintMotionSource("x.scene.js", "Math.random()")).toEqual([expect.stringContaining("api.random")]);
+  });
+});
+
 import { assertMotionGraphics } from "../src/spec/validate.js";
 import type { Spec } from "../src/spec/schema.js";
 
@@ -228,7 +267,7 @@ describe("assertMotionGraphics", () => {
   it("rejects an unknown motion extension at validation time", () => {
     const project = projWith("motion/x.png", "not markup");
     const spec = { segments: [{ kind: "motion", source: "motion/x.png", text: "x" }] } as unknown as Spec;
-    expect(() => assertMotionGraphics(spec, project)).toThrow(/must be \.html, \.js, or \.json/i);
+    expect(() => assertMotionGraphics(spec, project)).toThrow(/must be \.html, \.js, \.scene\.js, or \.json/i);
   });
 });
 

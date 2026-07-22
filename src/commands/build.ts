@@ -26,7 +26,7 @@ import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { KinoProps, WordTiming } from "../render/props.js";
+import type { KinoProps, KinoSegment, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic, type MotionGraphicRefInput } from "../render/motiongraphic.js";
@@ -358,6 +358,12 @@ export async function prepare(
       },
     };
   });
+
+  // 3D scene assets referenced by literals/params inside .scene.js sources — staged like footage.
+  for (const seg of renderSegments as KinoSegment[]) {
+    for (const rel of seg.motion?.sceneAssets ?? []) stageAsset(rel);
+    for (const rel of seg.motionOverlay?.sceneAssets ?? []) stageAsset(rel);
+  }
 
   const props: KinoProps = {
     theme: {

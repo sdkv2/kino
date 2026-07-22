@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { MotionGraphicProps, BgKeyframe, BgTrigger, BgParamValue } from "./props.js";
 import { resolveMotionSource } from "../media/motionLib.js";
 import { sanitizeMotionHtml } from "./sanitizeMotion.js";
 import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
+import { lintSceneJs, extractSceneAssets } from "./scene.js";
 
 // Re-exported for back-compat (callers/tests import it from here).
 export { sanitizeMotionHtml };
@@ -207,6 +208,7 @@ export function lintMotionJs(src: string): string[] {
 // set in sync with resolveMotionGraphic if a new extension is added.
 export function lintMotionSource(source: string, raw: string): string[] {
   const ext = source.toLowerCase();
+  if (ext.endsWith(".scene.js")) return lintSceneJs(raw);
   if (ext.endsWith(".js")) return lintMotionJs(raw);
   if (ext.endsWith(".json")) {
     try {
@@ -217,7 +219,7 @@ export function lintMotionSource(source: string, raw: string): string[] {
     }
   }
   if (ext.endsWith(".html")) return lintMotionHtml(raw);
-  return ["motion source must be .html, .js, or .json"];
+  return ["motion source must be .html, .js, .scene.js, or .json"];
 }
 
 export interface MotionGraphicRefInput {
@@ -243,6 +245,18 @@ export function resolveMotionGraphic(
     loop: ref.loop,
   };
   const ext = fileName.toLowerCase();
+  if (ext.endsWith(".scene.js")) {
+    // 3D scene: lint for determinism/safety, statically resolve asset refs, verify they exist
+    // node-side (fail at build, not mid-render). Source is baked verbatim like Tier-2 proc.
+    const violations = lintSceneJs(raw);
+    const extracted = extractSceneAssets(raw, ref.params ?? {});
+    violations.push(...extracted.violations);
+    if (violations.length) throw new Error(`Motion graphic ${display}: ${violations.join("; ")}`);
+    for (const rel of extracted.assets) {
+      if (!existsSync(project.assetPath(rel))) throw new Error(`Motion graphic ${display}: missing scene asset assets/${rel}`);
+    }
+    return { html: "", scene: raw, sceneAssets: extracted.assets, ...base };
+  }
   if (ext.endsWith(".js")) {
     // Tier 2: procedural source. Lint for determinism/safety; bake the JS verbatim (not sanitized —
     // it's code, not markup; its per-frame output is trusted like the custom-background draw fn).
@@ -263,5 +277,5 @@ export function resolveMotionGraphic(
     if (violations.length) throw new Error(`Motion graphic ${display}: ${violations.join("; ")}`);
     return { html: sanitizeMotionHtml(raw), ...base };
   }
-  throw new Error(`Motion graphic ${display}: motion source must be .html, .js, or .json`);
+  throw new Error(`Motion graphic ${display}: motion source must be .html, .js, .scene.js, or .json`);
 }

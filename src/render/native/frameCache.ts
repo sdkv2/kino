@@ -54,11 +54,14 @@ export function frameSignatures(opts: {
       props: { ...props, segments: undefined, music: undefined },
     }),
   );
-  const ranges = props.segments.map((s) => ({
-    from: f(s.startSec) - PAD,
-    to: f(s.endSec) + PAD,
-    sig: sha1(JSON.stringify(s) + ("asset" in s && s.asset ? `|${statSig(join(publicDir, s.asset))}` : "")),
-  }));
+  const ranges = props.segments.map((s) => {
+    const assetSigs = [
+      "asset" in s && s.asset ? statSig(join(publicDir, s.asset)) : "",
+      ...(s.motion?.sceneAssets ?? []).map((a) => statSig(join(publicDir, a))),
+      ...(s.motionOverlay?.sceneAssets ?? []).map((a) => statSig(join(publicDir, a))),
+    ].join("|");
+    return { from: f(s.startSec) - PAD, to: f(s.endSec) + PAD, sig: sha1(JSON.stringify(s) + assetSigs) };
+  });
   const sigs: string[] = new Array(total);
   for (let n = 0; n < total; n++) {
     let acc = globalSig;
