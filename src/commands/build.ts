@@ -79,7 +79,7 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
 export interface PrepareResult {
   props: KinoProps;
   publicDir: string;
-  formats: Array<"9:16" | "3:4">;
+  formats: Array<"9:16" | "3:4" | "16:9">;
   project: Project;
   spec: Spec;
   labelFont: string | null; // absolute TTF path for storyboard/montage labels, if resolved
@@ -116,7 +116,7 @@ export async function prepare(
   if (!mock && needsTts && !voiceId) {
     throw new Error("No voice for a real build — set spec.voice or the brand's defaultVoice (or use --mock).");
   }
-  const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4">;
+  const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4" | "16:9">;
   const cache = new Cache(project.cache);
 
   log.info(`Building ${spec.title} · ${provider}${mock ? " · MOCK — no API spend" : ""}`);

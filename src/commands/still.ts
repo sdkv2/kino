@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { prepare } from "./build.js";
-import { renderStills } from "../render/render.js";
+import { renderStills, type FrameMeasure } from "../render/render.js";
 import { pickFrames, parseTimes, timesAround, inspectPlan } from "../render/preview.js";
 import { montage } from "../media/montage.js";
 import { parsePlatform } from "../render/platform.js";
@@ -23,6 +23,7 @@ export type StillOpts = {
   platform?: string;
   word?: string;
   grid?: boolean;
+  measure?: boolean;
 };
 
 // Render one (or a few) still frames — fast preview, no video encode.
@@ -63,11 +64,33 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
 
   const sel = at ? { at } : opts.segment != null ? { segment: Number(opts.segment) } : {};
   const picks = pickFrames(r.props.segments, r.props.fps, sel);
-  const format = r.formats[0] as "9:16" | "3:4";
+  const format = r.formats[0] as "9:16" | "3:4" | "16:9";
   const frames = picks.map((p) => ({ frame: p.frame, name: slug(p.label) || "frame" }));
   const outDir = join(r.project.outDir(r.spec.title), "stills");
-  const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir });
+  const measurements: FrameMeasure[] = [];
+  const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir, measureSink: opts.measure ? measurements : undefined });
   outs.forEach((o) => log.ok(o));
+
+  // --measure: deterministic element geometry so alignment is read as numbers, not eyeballed.
+  // Δx/Δy are the element center's signed offset from frame center in % (0 = dead-center).
+  if (opts.measure) {
+    for (const fm of measurements) {
+      if (!fm.elements.length) {
+        log.warn(`measure @ ${fm.name}: no [data-measure] elements — tag nodes with data-measure="name" to probe them`);
+        continue;
+      }
+      log.info(`measure @ ${fm.name} (${fm.width}×${fm.height}, center ${fm.width / 2},${fm.height / 2}):`);
+      for (const e of fm.elements) {
+        const sx = e.dxPct >= 0 ? "+" : "";
+        const sy = e.dyPct >= 0 ? "+" : "";
+        log.info(
+          `  ${e.label.padEnd(16)} cx ${e.cxPct.toFixed(1).padStart(5)}% (Δx ${sx}${e.dxPct.toFixed(1)})  ` +
+            `cy ${e.cyPct.toFixed(1).padStart(5)}% (Δy ${sy}${e.dyPct.toFixed(1)})  ` +
+            `box [${Math.round(e.x)},${Math.round(e.y)} ${Math.round(e.w)}×${Math.round(e.h)}]`,
+        );
+      }
+    }
+  }
 
   // --around/--word read a moment as a strip; tile by default. --montage tiles any multi-frame still.
   const wantMontage = opts.montage || opts.around != null || opts.word != null;

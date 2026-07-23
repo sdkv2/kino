@@ -60,6 +60,7 @@ program
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
   .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
   .option("--grid", "overlay a rule-of-thirds grid for composition QA")
+  .option("--measure", "print exact geometry (center X/Y + Δ-from-center) of every [data-measure] element — deterministic alignment QA")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
 program

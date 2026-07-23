@@ -18,6 +18,7 @@ import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from 
 const DIMS: Record<string, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "3:4": { width: 1080, height: 1440 },
+  "16:9": { width: 1920, height: 1080 },
 };
 
 export type EncodePreset = "medium" | "veryfast";
@@ -287,7 +288,7 @@ async function pointServerAt(opts: {
 export interface NativeRenderOpts {
   props: KinoProps;
   publicDir: string;
-  formats: Array<"9:16" | "3:4">;
+  formats: Array<"9:16" | "3:4" | "16:9">;
   outDir: string;
   title: string;
   preset?: EncodePreset; // veryfast for mock/preview builds; medium (default) for finals
@@ -352,19 +353,65 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   }
 }
 
+// Deterministic layout geometry for one element (a `[data-measure]`-tagged node), so alignment is
+// read as numbers instead of eyeballed off a screenshot. All px are frame px (viewport is set at
+// deviceScaleFactor 1, so CSS px == canvas px); dxPct/dyPct are the signed offset of the element
+// center from the frame center (0 = dead center).
+export interface ElementMeasure {
+  label: string;
+  x: number; y: number; w: number; h: number;
+  cx: number; cy: number;
+  cxPct: number; cyPct: number;
+  dxPct: number; dyPct: number;
+}
+export interface FrameMeasure {
+  name: string;
+  width: number; height: number;
+  elements: ElementMeasure[];
+}
+
+// Serialized into the render page and run after a seek: walk the light DOM + every shadow root and
+// report the geometry of each element carrying a `data-measure` attribute. Pure browser code (no
+// Node refs) so puppeteer can .toString() it across the boundary.
+function collectMeasurements(): { width: number; height: number; elements: ElementMeasure[] } {
+  const W = window.innerWidth, H = window.innerHeight;
+  const out: ElementMeasure[] = [];
+  const walk = (root: Document | ShadowRoot): void => {
+    root.querySelectorAll("[data-measure]").forEach((el) => {
+      const r = (el as HTMLElement).getBoundingClientRect();
+      const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+      out.push({
+        label: el.getAttribute("data-measure") || el.tagName.toLowerCase(),
+        x: r.x, y: r.y, w: r.width, h: r.height, cx, cy,
+        cxPct: (cx / W) * 100, cyPct: (cy / H) * 100,
+        dxPct: (cx / W) * 100 - 50, dyPct: (cy / H) * 100 - 50,
+      });
+    });
+    root.querySelectorAll("*").forEach((el) => {
+      const sr = (el as HTMLElement).shadowRoot;
+      if (sr) walk(sr);
+    });
+  };
+  walk(document);
+  return { width: W, height: H, elements: out };
+}
+
 export interface NativeStillsOpts {
   props: KinoProps;
   publicDir: string;
-  format: "9:16" | "3:4";
+  format: "9:16" | "3:4" | "16:9";
   frames: Array<{ frame: number; name: string }>;
   outDir: string;
+  // If provided, the engine collects [data-measure] element geometry at each rendered frame and
+  // pushes one FrameMeasure per frame into this array (out-param — keeps the string[] return stable).
+  measureSink?: FrameMeasure[];
 }
 
 export function renderStillsNative(opts: NativeStillsOpts): Promise<string[]> {
   return withRenderLock(() => renderStillsLocked(opts));
 }
 
-async function renderStillsLocked({ props, publicDir, format, frames, outDir }: NativeStillsOpts): Promise<string[]> {
+async function renderStillsLocked({ props, publicDir, format, frames, outDir, measureSink }: NativeStillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), "kino-native-still-"));
   try {
@@ -399,6 +446,10 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir }: 
         const out = join(outDir, `${name}.png`);
         await handle.page.screenshot({ type: "png", path: out as `${string}.png` });
         outs.push(out);
+        if (measureSink) {
+          const m = await handle.page.evaluate(collectMeasurements);
+          measureSink.push({ name, width: m.width, height: m.height, elements: m.elements });
+        }
       }
       return outs;
     } finally {
