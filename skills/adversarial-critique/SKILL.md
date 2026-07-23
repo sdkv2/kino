@@ -75,8 +75,11 @@ Task:
       continues; or steps light ahead of / behind the spoken nouns (should gate on env.words)
    🟠 Copy/VO mismatch — on-screen chip/label nouns ≠ spoken words (e.g. "compose" vs "motion")
    🟠 Bad positioning — caption pinned to top edge; CTA left as a tiny lower-third subtitle on empty
-      mesh (should be centered end card with `cta: true`); elements stacked in the same band;
-      unsafe margin to TikTok/Reels UI (top/right/bottom)
+      mesh (should be centered end card with `cta: true`); elements stacked in the same band.
+      **Platform safe zones (`still --platform`) are a guide, not a mandate** — flag only when
+      *important* content (hook, CTA, hero caption, kicker, primary claim) sits where feed chrome
+      would obscure it. Non-critical chrome (tab bars, nav icons, decorative dock, secondary labels)
+      may sit in the TikTok/Reels UI bands by design.
    🟠 Legibility — light text on light subject, missing/weak caption backplate over busy footage,
       active-word colour that disappears into the ground
    🟠 Loop seam — for looping ads: first≠last ready-state, fade-from/to black, or animated mesh
@@ -115,7 +118,7 @@ If truly clean: `OK — no major layout issues.`
 | 🟠 | Under-animated motion (opacity-only / early freeze / no stagger / no idle life / no VO punch) |
 | 🟠 | Dead tail / steps not word-synced; on-screen nouns ≠ VO nouns |
 | 🟠 | CTA as tiny lower-third on empty mesh (should be centered end card with `cta: true`) |
-| 🟠 | Caption glued to top edge; stacked bands; platform UI collision zone |
+| 🟠 | Caption glued to top edge; stacked bands; **important** content hidden by feed chrome (see platform guide below) |
 | 🟠 | Unreadable over bright footage / no backplate |
 | 🟠 | Motion/Lottie beat only reviewed at a single midpoint (no `--around` sheet) |
 | 🟠 | Loop seam broken (fade ends, mesh drift, first≠last ready poster) |
@@ -124,6 +127,11 @@ If truly clean: `OK — no major layout issues.`
 | 🟠 | Misalignment (list rows / chips / icon+label off a shared axis; ragged indent) |
 | 🟠 | Container void (card/window content fills <50% of its own area) |
 | 🟡 | Too many text layers; multi-word emphasis; position jitter across beats |
+
+**Platform safe zones (`still --platform tiktok|reels|shorts`):** overlay is a **composition guide**,
+not a hard keep-out. Protect hooks, CTAs, hero captions, kickers, and primary claims from chrome that
+would hide them. **Non-important UI** (bottom tab bars, nav icons, decorative docks, secondary labels)
+is allowed in the shaded bands — do not flag 🟠 solely because chrome overlaps those elements.
 
 ## After findings
 

@@ -58,7 +58,7 @@ program
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
-  .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
+  .option("--platform <name>", "overlay in-feed safe zones (guide only): tiktok | reels | shorts")
   .option("--grid", "overlay a rule-of-thirds grid for composition QA")
   .option("--measure", "print exact geometry (center X/Y + Δ-from-center) of every [data-measure] element — deterministic alignment QA")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
@@ -71,7 +71,7 @@ program
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
-  .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
+  .option("--platform <name>", "overlay in-feed safe zones (guide only): tiktok | reels | shorts")
   .action(async (s, o) => (await import("./commands/storyboard.js")).storyboard(s, o));
 
 program

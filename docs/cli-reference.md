@@ -61,7 +61,7 @@ kino still <spec> [options]
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Use real VO/avatar + true timing (default: mock, free). |
-| `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA. Still-only — not on `build`. |
+| `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA — **guide only**; non-critical chrome (nav bars, docks) may sit in the shaded bands. Still-only — not on `build`. |
 | `--grid` | — | Overlay a rule-of-thirds grid for composition QA (fill budget / dead bands). Still-only — not on `build`. |
 
 ```bash
@@ -89,7 +89,7 @@ kino storyboard <spec> [options]
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Real VO/avatar + true timing (default: mock, free). |
-| `--platform <name>` | `tiktok\|reels\|shorts` | Same safe-zone overlay as [`still`](#still). |
+| `--platform <name>` | `tiktok\|reels\|shorts` | Same safe-zone overlay as [`still`](#still) — guide only; protect hooks/CTAs, not decorative chrome. |
 
 ```bash
 kino storyboard specs/lie-test.json

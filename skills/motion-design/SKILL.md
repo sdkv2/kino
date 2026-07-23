@@ -122,8 +122,9 @@ You are staging one composition, not a dashboard.
   Random gaps read as unfinished.
 - **Cards** — only when the content is truly card-shaped (discrete, scannable units). Nested cards
   and equal feature tiles are usually habit. Prefer type + dividers + one window.
-- **Safe zones** — TikTok/Reels UI eats edges; keep kickers and CTAs inside the readable column.
-  `still --platform` / storyboard overlays help.
+- **Safe zones** — `still --platform` / storyboard overlays show where TikTok/Reels chrome tends to
+  sit — **a guide, not a mandate**. Keep hooks, CTAs, hero captions, and kickers inside the readable
+  column. Non-important chrome (tab bars, nav icons, decorative docks) may live in the shaded bands.
 - **Mass** — a heavy hero bottom-right needs a counterweight (kicker, mark, or negative space) so the
   frame does not tip.
 - **Fill budget** — name the container, name what fills it. If content occupies less than ~half the
@@ -163,8 +164,39 @@ Prefer **eased progress** over linear `--progress` for entrances and camera:
 | `--kino-spring` / `env.spring` | elastic-out (may >1) | Rare punchy brand moments |
 | `--kino-edge` / `env.edge` | `sin(π·progress)` | Seam-safe wash/breath (0 at beat edges) |
 
-`--pulse` attacks in ~45ms then decays — pair with `.kino-pulse` or additive chip emphasis. Do not
-hand-roll `(1-p)*(1-p)` when `env.out` / `--kino-out` already exists.
+`--pulse` attacks in ~45ms then decays — pair with `.kino-pulse` on **accent-only** elements (dots,
+chips, rings), or drive `var(--pulse)` in your own CSS for subtle reacts. **Never** `.kino-pulse` on
+always-visible primary chrome — it sets `opacity: var(--pulse, 0)` and hides the control between
+triggers. Do not hand-roll `(1-p)*(1-p)` when `env.out` / `--kino-out` already exists.
+
+### Real-time clocks (`--t`, not `--progress`)
+
+**`--progress`** spans `0 → 1` over the **whole beat** — right for entrances, camera, and ambient
+wash. **Wrong** for UI that should tick 1:1 with render time (scrubbers, elapsed timers, playback
+position).
+
+**`--t`** is **seconds within the beat** (same clock as the render). Use it for anything that should
+advance one real second per video second:
+
+```css
+.player {
+  --track-secs: 198;    /* total duration, e.g. 3:18 */
+  --start-secs: 42;     /* position when beat begins, e.g. 0:42 */
+  --elapsed: calc(var(--start-secs) + var(--t));
+}
+.scrub .fill { width: calc(var(--elapsed) / var(--track-secs) * 100%); }
+.scrub .knob  { left:   calc(var(--elapsed) / var(--track-secs) * 100%); }
+/* timestamp counters read the same --elapsed */
+```
+
+**Rules:**
+- **One clock** for the label and the scrubber — both from `--elapsed`, never separate formulas.
+- **Do not** drive elapsed time with `var(--progress) * N` — when mock VO ≠ real VO the beat length
+  changes and the bar outruns (or lags) the timestamp.
+- **Do not** hard-code bar `%` offsets (`21% + progress * 52%`) — derive position from
+  `elapsed / track × 100%` so knob and label stay locked.
+- Ambient motion (album wash, Ken Burns) can stay on `--progress` or `--t` — only the **clock UI**
+  must use `--t`.
 
 Motion may say: this arrived, this is the spoken step, this is processing, this settled for loop,
 this is the pulse on that noun. Motion may not say “look at me” with no cause.
@@ -203,6 +235,28 @@ Empty and “done” must look intentional. A half-typed field with a dead caret
 
 On-screen microcopy follows `ad-voice`: one clear verb on CTAs, no filler, sentence case, no
 desperate punctuation. Chrome labels must use the **same nouns the VO speaks** or chips will lie.
+
+## Liquid glass (real refraction, not frosted blur)
+
+`backdrop-filter: blur()` is *frosted* glass (glassmorphism) — a uniform fog. Apple **Liquid Glass**
+*refracts*: it bends/magnifies the background at the rounded edges, disperses color, and catches light on
+a lit rim. kino can do the real thing (Chromium render; `feImage` + `data:` URIs are allowed in motion
+HTML). Copyable reference: **`assets-lib/motion/liquid-glass.html`** (bare id `liquid-glass`).
+
+What separates it from frosted:
+- **Refraction** — `backdrop-filter: url(#lg)` where `#lg` is an SVG `feDisplacementMap` fed a
+  convex-squircle displacement map (R=X-shift, G=Y-shift, 128=neutral) baked as a `data:image/svg+xml`
+  URI. Edge-concentrated → lenses at the rim, clear in the center. `scale` = lens strength.
+- **Chromatic aberration** — run the displacement 3× (R/G/B at ~±4% scale), recombine → colored edge fringe.
+- **Lit, not a dark card** — luminous fill `rgba(255,255,255,~0.13)` (NOT ~0.04); `backdrop-filter: …
+  saturate(1.8) brightness(1.08)`; a bright ~`0.55` border; a wrapping edge-rim highlight (`::after` inset
+  box-shadow) and a diagonal specular sheen (`::before`). The lit edge + luminance is the signature — a
+  dark translucent card reads as frosted, not liquid.
+- **Needs content to refract** — put it over a STRUCTURED, colorful background (a shader like `liquid-orb`),
+  never a flat field; refraction of a flat plane is invisible.
+
+Deterministic (static map + frame-driven), sanitizer-clean. It's a statement material — don't reach for it
+on every panel; frosted `blur()` is still right for quiet, dense UI.
 
 ## Generic-tell sniff (fix the reflex, not the pixel)
 

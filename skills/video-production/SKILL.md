@@ -152,6 +152,13 @@ layout and crowd the top chrome — don't.
 | Kickers | Top pill — fine when the still has empty top chrome | Treat kicker as the end card; **kicker on a feed/chip still that already labels the moment** |
 | `texts[]` labels | Small, `position: "top"` (or clear of caption band) | Second headline fighting the CTA end card |
 | Motion / counters | Stack **mid-frame**: CSS `.wrap { top: 38%–42%; }` (no tiny `translateY(20vw)`), clear of caption band + top UI | Park the graphic in the top ~20% (Following/For You chrome) |
+| Platform chrome | `still --platform` overlay is a **guide** — protect hooks/CTAs/captions; tab bars & nav docks may sit in the shaded bands | Treat safe-zone overlay as a hard keep-out for every element |
+
+**`--platform` safe zones are a guide, not a mandate.** The overlay shows where feed UI *tends* to sit.
+Hooks, CTAs, hero captions, and kickers should stay readable. Non-critical chrome (bottom nav, tab
+bars, decorative docks, secondary labels) is allowed in those bands — don't lift them just to clear
+the tint.
+
 | Music | Quiet bed `"volume": 0.10–0.14`, `"duck": 0.04`, short `fadeOutSec` | Loud beds fighting VO/captions |
 | Logo | `logoPosition: top` on talking runs; CTA `center` only if mark clears hero type | Omit logo when CTA caption already names the brand (double mark); tiny lower-third as the whole ending |
 

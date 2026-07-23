@@ -34,8 +34,8 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 | Variable | Value |
 |---|---|
 | `--frame` | integer frame within the beat |
-| `--t` | seconds within the beat |
-| `--progress` | `0 → 1` across the beat (linear — prefer eased vars below for entrances) |
+| `--t` | seconds within the beat — **use for real-time clocks** (scrubbers, elapsed timers); ticks 1:1 with render time |
+| `--progress` | `0 → 1` across the beat (linear — prefer eased vars below for entrances; **not** for playback clocks) |
 | `--kino-out` | ease-out cubic of `--progress` (soft landings) |
 | `--kino-inout` | smoothstep of `--progress` |
 | `--kino-overshoot` | back-out of `--progress` (may briefly exceed `1` — great for `scale`) |
@@ -248,6 +248,12 @@ kino injects a small, opt-in utility kit so you don't re-derive common motion. E
 
 **`kino-pulse`** — maps the `--pulse` envelope to an opacity + scale pop. Place spec `triggers` with `action:"pulse"` at the VO word times (from `kino inspect`) and the element punches on each word. The envelope attacks in ~45ms then decays (punchier than a soft half-life fade).
 
+**Do not put `kino-pulse` on always-visible primary chrome** (play buttons, nav bars, hero labels).
+The class sets `opacity: var(--pulse, 0)` — the element is **hidden** whenever `--pulse` is 0 (almost
+the entire beat). Use it only on accent elements meant to flash on a spoken word (dots, chips, rings
+behind a control). For a persistent control that should subtly react to a trigger, drive
+`transform`/`box-shadow` off `var(--pulse)` in your own class instead.
+
 ```html
 <style>.dot { width:24vw; height:24vw; border-radius:50%; background:var(--kino-green); }</style>
 <div class="dot kino-pulse"></div>
@@ -266,6 +272,20 @@ kino injects a small, opt-in utility kit so you don't re-derive common motion. E
 ```
 
 Tier-2 gets the same numbers as `env.out` / `env.inout` / `env.overshoot` / `env.spring` / `env.edge`.
+
+**Playback clocks (scrubbers, elapsed timers)** — drive from `--t`, not `--progress`. `--progress`
+maps the whole beat to `0→1`; a scrubber keyed to `progress * N` outruns the timestamp when real VO
+changes beat length. Use one shared elapsed clock for both the label and the bar:
+
+```css
+.wrap {
+  --track-secs: 198;   /* e.g. 3:18 */
+  --start-secs: 42;    /* e.g. 0:42 at beat start */
+  --elapsed: calc(var(--start-secs) + var(--t));
+}
+.bar  { width: calc(var(--elapsed) / var(--track-secs) * 100%); }
+.knob { left:   calc(var(--elapsed) / var(--track-secs) * 100%); }
+```
 
 **`kino-fade-edges`** — a top/bottom mask gradient that feathers overflowing or scrolling content so it doesn't hard-cut at the frame edge.
 
