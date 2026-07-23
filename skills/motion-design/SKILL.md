@@ -283,8 +283,11 @@ Craft rules:
 - Morph demos: square container with room for tilt; set `border-radius` for the rect corner size.
 - Needs a STRUCTURED, colorful background (shader like `liquid-orb`, or a Canvas2D draw fn) —
   refraction of a flat field is invisible. Over avatar/app footage the mirror skips gracefully.
+  Authoring the stage itself → `skills/shader-backgrounds` (vesper / old-light craft bar).
 - Stress-test with a straight-line background (grid/stripes shader): rim must BEND lines into
   curves, not shear or ghost them.
+- **`--glass-fit`** (0.3..1, optional) — override SDF fit when a *known-static* tilted card
+  should fill tighter than the default tilt→0.7 AABB; untilted shapes already fit `1.0`.
 
 Deterministic (synchronous WebGL inside the seek), sanitizer-clean (it's just a class). It's a
 statement material — don't reach for it on every panel; frosted `blur()` is still right for quiet,
@@ -331,4 +334,5 @@ pass on the beat, run the full checklist above.
 - `skills/speech-synced-ui` — typing grain, camera, seamless loop, retune
 - `skills/video-production` — trailer structure, brand discovery, ship gate
 - `skills/adversarial-critique` — overlap / safe-zone frame QA
+- `skills/shader-backgrounds` — WebGL `.frag` stages, texture sampling, glass pairing
 - `assets-lib/motion/` — copyable pages to adapt, not paste blindly

@@ -20,7 +20,7 @@ Select the engine with `background` (spec) / `--background` (CLI) / `brand.backg
 | `particles` | ✅ | Floating brand-coloured particles. |
 | `grid` | ✅ | Perspective/▦ grid motion. |
 | `solid` | — | Static night + glow (**loop-safe**; ignores frame drift). |
-| `custom` | ✅ | Your own Canvas2D draw fn (`backgroundComponent` on spec or brand). |
+| `custom` | ✅ | Canvas2D draw fn **or** WebGL `.frag`/`.glsl` (`backgroundComponent`). |
 
 The four animated presets (`mesh`, `aurora`, `particles`, `grid`) share the same controllable params and one action:
 
@@ -55,15 +55,15 @@ Tween params over time with `backgroundKeyframes` and fire one-shot `backgroundT
 
 ## Custom backgrounds
 
-**Prefer `custom` over stock `mesh`/`aurora` when the brand should feel authored** — custom draw fns
-use the same `backgroundKeyframes` / `backgroundTriggers` surface as presets.
+**Prefer `custom` over stock `mesh`/`aurora` when the brand should feel authored** — custom
+components use the same `backgroundKeyframes` / `backgroundTriggers` surface as presets.
 
 1. Set `"background": "custom"`.
-2. Point `backgroundComponent` at a draw fn — **spec overrides brand**:
-   - Bare id → `assets-lib/backgrounds/<id>.js` (start with `"brand-wash"`)
-   - Project path → `assets/backgrounds/my-wash.js`
+2. Point `backgroundComponent` — **spec overrides brand**:
+   - Bare id → `assets-lib/backgrounds/<id>.{js,frag,glsl}` (first hit; start with `"brand-wash"` or `"aurora-flow"`)
+   - Project path → `assets/backgrounds/my-wash.js` or `….frag`
    - Brand path → workspace-relative file from `brand.md` frontmatter
-3. Animate with the same params (`colorA`/`B`/`C`, `intensity`) + `pulse` triggers.
+3. Animate with `colorA`/`B`/`C`, `intensity`, extras + `pulse` triggers.
 
 ```json
 {
@@ -77,18 +77,26 @@ use the same `backgroundKeyframes` / `backgroundTriggers` surface as presets.
 }
 ```
 
-The file body **is** `draw(ctx, env)` (kino wraps it). It must be **deterministic** — derive motion
-from `env.frame` / `env.params` / `env.pulse`, never `Date.now()` or unseeded `Math.random()`.
+**Canvas2D (`.js`)** — file body **is** `draw(ctx, env)`. Deterministic: `env.frame` /
+`env.params` / `env.pulse` only — never `Date.now()` or unseeded `Math.random()`.
+
+**WebGL (`.frag` / `.glsl`)** — author ShaderToy `mainImage` only. `iTime = frame/fps`;
+optional `backgroundTextures` → `uTex0`..`uTex3`. Cover-fit + mirror helpers and `u_<param>`
+aliases are injected at assemble time. Full contract: [Spec reference → Shader backgrounds](spec-reference.md#shader-backgrounds-frag--glsl).
+Craft playbook: `skills/shader-backgrounds`. Library ids in `assets-lib/backgrounds/README.md`.
+
 Run `kino backgrounds` for the picker + library ids.
 
 For richer full-screen UI (typed terminals, pipelines), prefer [motion graphics](motion-graphics.md)
 and paint a full-bleed `.bg` inside the graphic — that occludes the faceless layer entirely.
+Pair `kino-glass` with a **structured** shader field (not a flat night), not frosted CSS blur.
 
 | When | Use |
 |---|---|
-| Brand identity on faceless / caption cards | `custom` + `backgroundComponent` |
-| Seamless loop / settle | `solid` (or custom that ignores `env.frame` at edges) + motion `.bg` |
-| Real photo backdrop | `image` + `facelessBackdrop` |
+| Brand identity on faceless / caption cards | `custom` + `backgroundComponent` (`.js` or `.frag`) |
+| Raymarch / plasma / photo refraction | `.frag` + `skills/shader-backgrounds` |
+| Seamless loop / settle | `solid` (or custom that ignores frame drift at edges) + motion `.bg` |
+| Real photo backdrop (static) | `image` + `facelessBackdrop` |
 | Quick draft | `glow` / `mesh` / `aurora` — replace before ship if the frame is the brand |
 
 ## Overlay elements

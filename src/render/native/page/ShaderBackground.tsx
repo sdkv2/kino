@@ -74,11 +74,16 @@ interface Program {
 // GL_MAX_TEXTURE_SIZE. A full-resolution stock original can be 7680px and silently fail
 // texImage2D on GPUs (incl. CI software renderers) that cap at 4096/8192 — clamp so any
 // image an author points a channel at just works. Assumes UNPACK_FLIP_Y already set.
+// Use the source's *pixel* size (canvas.width / img.naturalWidth), not LoadedTex.css-px —
+// HTML channels rasterize at 2× so css dims understate the upload by RASTER_SCALE.
 function uploadTex(gl: WebGL2RenderingContext, t: { source: unknown; width: number; height: number }): void {
+  const srcIn = t.source as { width?: number; height?: number; naturalWidth?: number; naturalHeight?: number };
+  const srcW = srcIn.naturalWidth ?? srcIn.width ?? t.width;
+  const srcH = srcIn.naturalHeight ?? srcIn.height ?? t.height;
   const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
-  const [w, h] = fitTextureDims(t.width, t.height, max);
+  const [w, h] = fitTextureDims(srcW, srcH, max);
   let src = t.source as TexImageSource;
-  if (w !== t.width || h !== t.height) {
+  if (w !== srcW || h !== srcH) {
     const c = document.createElement("canvas");
     c.width = w;
     c.height = h;
@@ -89,6 +94,19 @@ function uploadTex(gl: WebGL2RenderingContext, t: { source: unknown; width: numb
     }
   }
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+}
+
+/** 1×1 transparent black so unbound uTexI samples (0,0,0,0) — not the default incomplete-texture opaque black. */
+function bindTransparent1x1(gl: WebGL2RenderingContext, unit: number): WebGLTexture {
+  const handle = gl.createTexture()!;
+  gl.activeTexture(gl.TEXTURE0 + unit);
+  gl.bindTexture(gl.TEXTURE_2D, handle);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return handle;
 }
 
 function compile(canvas: HTMLCanvasElement, fragSrc: string): Program | string {
@@ -152,7 +170,11 @@ function compile(canvas: HTMLCanvasElement, fragSrc: string): Program | string {
     const uTex = gl.getUniformLocation(prog, `uTex${i}`);
     const uSize = gl.getUniformLocation(prog, `uTexSize${i}`);
     if (!t) {
+      // Keep sampler bound + size 0 so kinoCoverUV skips reframe and texture() is transparent black.
+      const empty = bindTransparent1x1(gl, i);
+      if (uTex) gl.uniform1i(uTex, i);
       if (uSize) gl.uniform2f(uSize, 0, 0);
+      texHandles[i] = empty;
       continue;
     }
     const handle = gl.createTexture();
@@ -189,6 +211,8 @@ function ensureFbo(p: Program, W: number, H: number): void {
   gl.bindFramebuffer(gl.FRAMEBUFFER, p.fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, p.fboTex, 0);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  // Unbind from the active unit — rendering into a texture still bound for sampling is undefined.
+  gl.bindTexture(gl.TEXTURE_2D, null);
   p.fboW = W;
   p.fboH = H;
 }
@@ -232,8 +256,10 @@ export const ShaderBackground: React.FC<{
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas || errRef.current) return;
+    // Stable across frames — must match the aliases baked into the compiled program.
+    const extras = extraParamNames(params, keyframes);
     if (!progRef.current) {
-      const built = compile(canvas, assembleShaderSource(shaderSrc, extraParamNames(params, keyframes)));
+      const built = compile(canvas, assembleShaderSource(shaderSrc, extras));
       if (typeof built === "string") {
         errRef.current = built;
         if (frame === 0) console.error("ShaderBackground compile failed:\n" + built);
@@ -249,7 +275,7 @@ export const ShaderBackground: React.FC<{
     // downsampled, anti-aliased result.
     const SS = shaderSS();
     const W = width * SS, H = height * SS;
-    const u = resolveUniforms(paramsAt(params, keyframes, tt), { frame, fps, width: W, height: H, pulse: pulseAt(triggers, tt) });
+    const u = resolveUniforms(paramsAt(params, keyframes, tt), { frame, fps, width: W, height: H, pulse: pulseAt(triggers, tt) }, extras);
 
     if (canvas.width !== W || canvas.height !== H) {
       canvas.width = W;
@@ -257,7 +283,12 @@ export const ShaderBackground: React.FC<{
     }
     // Pass 1 — the authored shader, into the FBO (when FXAA is on) or straight to the canvas.
     const useFxaa = shaderFXAA() && p.fxaa !== null;
-    if (useFxaa) ensureFbo(p, W, H);
+    if (useFxaa) {
+      ensureFbo(p, W, H);
+      // Pass 2 left fboTex bound on FXAA_UNIT; unbind every frame or pass 1 feedback-loops.
+      gl.activeTexture(gl.TEXTURE0 + FXAA_UNIT);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, useFxaa ? p.fbo : null);
     gl.viewport(0, 0, W, H);
     gl.useProgram(prog);

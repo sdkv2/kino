@@ -22,20 +22,22 @@ export interface LoadedTex {
   revision: number; // bumped when `source` pixels change (animated) → re-upload to GL
 }
 
-let loaded: LoadedTex[] = [];
+// Sparse by channel index: a failed load leaves `null` so later defs do not shift into earlier
+// uTex slots (backgroundTextures[i] must stay uTexI even when [i-1] 404s).
+let loaded: (LoadedTex | null)[] = [];
 
 // Animated-channel state: everything needed to re-rasterize at an arbitrary scrub value without
 // re-measuring (template built once at load), plus a small LRU of baked scrub values.
 interface AnimTex {
   index: number; // channel slot in `loaded`
   param: string;
-  makeSvg: (t: number) => string;
+  makeSvg: (scrubCss: string) => string;
   cache: Map<string, HTMLCanvasElement>; // scrub value (fixed precision) → raster
 }
 const animTexes: AnimTex[] = [];
 const ANIM_CACHE_MAX = 48;
 
-export function getBgTextures(): LoadedTex[] {
+export function getBgTextures(): (LoadedTex | null)[] {
   return loaded;
 }
 
@@ -155,12 +157,14 @@ async function rasterAt(tpl: HtmlTemplate, t: number, cache: Map<string, HTMLCan
 export async function loadBgTextures(props: KinoProps): Promise<void> {
   animTexes.length = 0; // page reuse across render calls re-registers channels
   const defs = props.background.textures ?? [];
-  const out: LoadedTex[] = [];
-  for (const def of defs) {
+  // Fixed-length by def index — failures stay null so channel i never slides into uTex{i-1}.
+  const out: (LoadedTex | null)[] = defs.map(() => null);
+  for (let i = 0; i < defs.length; i++) {
+    const def = defs[i];
     if (def.kind === "image" && def.src) {
       try {
         const img = await loadImage("/public/" + def.src);
-        out.push({ source: img, width: img.naturalWidth, height: img.naturalHeight, revision: 0 });
+        out[i] = { source: img, width: img.naturalWidth, height: img.naturalHeight, revision: 0 };
       } catch (err) {
         console.error(String(err));
       }
@@ -172,12 +176,12 @@ export async function loadBgTextures(props: KinoProps): Promise<void> {
         const cache = new Map<string, HTMLCanvasElement>();
         const first = await rasterAt(tpl, 0, cache);
         if (first) {
-          const idx = out.push({ source: first, width: tpl.w, height: tpl.h, revision: 0 }) - 1;
-          animTexes.push({ index: idx, param: def.param, makeSvg: tpl.makeSvg, cache });
+          out[i] = { source: first, width: tpl.w, height: tpl.h, revision: 0 };
+          animTexes.push({ index: i, param: def.param, makeSvg: tpl.makeSvg, cache });
         }
       } else {
         const raster = await rasterAt(tpl, 0, null);
-        if (raster) out.push({ source: raster, width: tpl.w, height: tpl.h, revision: 0 });
+        if (raster) out[i] = { source: raster, width: tpl.w, height: tpl.h, revision: 0 };
       }
     }
   }

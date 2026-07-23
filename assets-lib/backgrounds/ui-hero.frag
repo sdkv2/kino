@@ -1,13 +1,15 @@
 // ui-hero — a DOM texture (uTex0, spec backgroundTextures) as the hero object of a 3D scene:
 // the rasterized UI card floats in perspective with a soft cloth sway, materializes out of
-// ember shards (drive the `reveal` param 0→1 with backgroundKeyframes → uParam0), and lands on
+// ember shards (drive the `reveal` param 0→1 with backgroundKeyframes → u_reveal), and lands on
 // a glossy floor reflection. Atmosphere: brand-lit gradient, back-glow, drifting dust.
 // Deterministic: camera, sway, shards and dust all ride iTime; reveal rides the spec keyframes.
 //
-//   params (alphabetical → uParam slots):
-//     fill   0..1  (uParam0) — scrubs the card's own CSS animation (live per-frame raster)
-//     reveal 0..1  (uParam1) — 0 = fully dissolved, 1 = intact card
+//   params (alphabetical → uParam slots; prefer u_<name> aliases, not raw indices):
+//     fill   0..1  (u_fill)   — scrubs the card's own CSS animation (live per-frame raster)
+//     reveal 0..1  (u_reveal) — 0 = fully dissolved, 1 = intact card
 //   texture: backgroundTextures[0] — the UI card ({ source, param: "fill" } live-scrub mode)
+//   Note: uTex0 here is a floating PANEL (panel-space UVs), not a full-bleed backdrop —
+//   do NOT use kinoBackdrop; that helper is for screen-filling plates.
 
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 
@@ -86,7 +88,13 @@ vec4 panelHit(vec3 ro, vec3 rd, float reveal, out float tHit) {
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec2 uv = (fragCoord - 0.5 * iResolution.xy) / iResolution.y;
+  // Prefer u_reveal when `reveal` is a keyframed param (alias injected); else sorted slot uParam1
+  // (fill+reveal → reveal is slot 1; reveal-only → slot 0 — name the param so the alias wins).
+#ifdef u_reveal
+  float reveal = clamp(u_reveal, 0.0, 1.0);
+#else
   float reveal = clamp(uParam1, 0.0, 1.0);
+#endif
 
   // Gentle orbit camera looking at the card.
   vec3 ro = vec3(sin(iTime * 0.18) * 0.35, 0.34, 2.6);

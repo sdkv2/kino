@@ -104,7 +104,12 @@ describe("extraParamNames + u_ aliases", () => {
     expect(src).toContain("#define u_bloom uParam0");
     expect(src).toContain("#define u_push uParam1");
     // matches resolveUniforms: bloom→[0], push→[1]
-    expect(resolveUniforms({ bloom: 7, push: 9 }, { frame: 0, fps: 30, width: 1, height: 1, pulse: 0 }).uParams.slice(0, 2)).toEqual([7, 9]);
+    expect(resolveUniforms({ bloom: 7, push: 9 }, { frame: 0, fps: 30, width: 1, height: 1, pulse: 0 }, names).uParams.slice(0, 2)).toEqual([7, 9]);
+  });
+  it("packs by extraNames even when the frame dict is missing a key (no slot drift)", () => {
+    const names = extraParamNames({}, [{ params: { bloom: 0, push: 1 } }]);
+    // push alone would sort to uParam0 if we re-derived — aliases still say bloom→0, push→1
+    expect(resolveUniforms({ push: 9 }, { frame: 0, fps: 30, width: 1, height: 1, pulse: 0 }, names).uParams.slice(0, 2)).toEqual([0, 9]);
   });
   it("skips names that are not valid GLSL identifiers", () => {
     const src = assembleShaderSource(BODY, ["bad-name", "ok"]);

@@ -26,9 +26,22 @@
 //   --glass-from       optional shape id 0|1|2; ≥0 enables direct pair morph
 //   --glass-to         pair-mode target shape id 0|1|2       (default 2)
 //   --glass-tilt       SDF rotation in degrees               (default 0; element stays unrotated)
+//   --glass-fit        shape scale 0.3..1 (default adaptive: 1 untilted, 0.70 when tilted)
 // Supersample (SS) comes from render-config / window.__kinoShaderSS (mock defaults to 1).
 
 import { shaderSS } from "../shaderQuality.js";
+
+/** Pure fit selector for the liquid-glass SDF (`uFit`). Exported for unit tests.
+ *  A plain card that never opts into tilt/morph FILLS the element (1.0) so its lens matches the element
+ *  edge — a CSS border/decoration no longer ghosts a 2nd rounded rect outside a 70%-inset lens. Once
+ *  the author drives `--glass-tilt`/`--glass-morph` (a shape that may rotate/morph) fall back to the
+ *  worst-case 45° AABB (0.70). Keyed off *whether the feature is used* (static CSS → deterministic),
+ *  not the per-frame tilt value: keying off the value would pulse the size between a rect-hold (tilt 0)
+ *  and its spin — exactly what a constant 0.70 was chosen to avoid. `--glass-fit` overrides either way. */
+export function resolveGlassFit(usesTiltMorph: boolean, fitOverride = -1): number {
+  if (fitOverride > 0) return Math.min(1, Math.max(0.3, fitOverride));
+  return usesTiltMorph ? 0.7 : 1.0;
+}
 
 interface Backdrop {
   source: CanvasImageSource;
@@ -61,6 +74,7 @@ uniform float uMorph;      // continuum 0..2, or 0..1 blend when uMorphFrom >= 0
 uniform float uMorphFrom;  // <0 = continuum; else discrete shape id 0|1|2
 uniform float uMorphTo;    // pair-mode target shape id 0|1|2
 uniform float uTilt;       // radians
+uniform float uFit;        // shape scale vs element (1 = fill; <1 keeps a tilted/morphing AABB off the edge)
 uniform float uSS;         // supersample factor
 out vec4 outColor;
 
@@ -90,9 +104,9 @@ float sdTriangle(vec2 p, vec2 center, vec2 half_) {
 }
 
 float shapeSd(vec2 p) {
-  // Constant fit (worst-case 45° AABB), not angle-dependent — dynamic tiltFit made full
-  // spins pulse/shrink every quarter turn. Soft SDF + pad keep the rim off the canvas edge.
-  float fit = 0.70;
+  // Shape scale vs element. JS drives uFit: 1.0 untilted (fill; kills doubled-rect vs CSS chrome),
+  // 0.70 when tilted (worst-case 45° AABB). Per-frame angle-exact fit would pulse during spins.
+  float fit = uFit;
   float pad = 8.0;
   vec2 center = 0.5 * uSize;
   vec2 half_ = max(center * fit - vec2(pad), vec2(8.0));
@@ -266,6 +280,7 @@ function makeState(): GlassState | null {
     "uMorphFrom",
     "uMorphTo",
     "uTilt",
+    "uFit",
     "uSS",
   ];
   const loc: Record<string, WebGLUniformLocation | null> = {};
@@ -405,6 +420,13 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     const tiltDeg = cssVar(cs, "--glass-tilt", 0);
     const tilt = (tiltDeg * Math.PI) / 180;
 
+    // Adaptive fit → uFit. A plain card fills (1.0) so its lens matches the element edge (no doubled
+    // rect vs CSS chrome); once the author drives --glass-tilt/--glass-morph → worst-case 0.70 (no
+    // size pulse between a rect-hold and its spin). `--glass-fit` overrides. See resolveGlassFit.
+    const usesTiltMorph =
+      cs.getPropertyValue("--glass-tilt").trim() !== "" || cs.getPropertyValue("--glass-morph").trim() !== "";
+    const fit = resolveGlassFit(usesTiltMorph, cssVar(cs, "--glass-fit", -1));
+
     gl.viewport(0, 0, w * SS, h * SS);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied
@@ -430,6 +452,7 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     gl.uniform1f(loc.uMorphFrom, morphFrom);
     gl.uniform1f(loc.uMorphTo, morphTo);
     gl.uniform1f(loc.uTilt, tilt);
+    gl.uniform1f(loc.uFit, fit);
     gl.uniform1f(loc.uSS, SS);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish(); // complete before the frame screenshot

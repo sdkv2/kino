@@ -143,15 +143,21 @@ export interface UniformValues {
 const numOf = (v: unknown, d: number): number => (typeof v === "number" ? v : Number(v) || d);
 const colOf = (v: unknown): [number, number, number] => hexToVec3(typeof v === "string" ? v : "#ffffff");
 
-/** Resolved (already-tweened) params + frame context → concrete uniform values. Pure. */
+/** Resolved (already-tweened) params + frame context → concrete uniform values. Pure.
+ *  Pass `extraNames` from `extraParamNames(base, keyframes)` so uParam slots match the
+ *  `#define u_<name>` aliases baked at compile time — never re-derive from a partial frame dict. */
 export function resolveUniforms(
   params: Record<string, number | string>,
   ctx: { frame: number; fps: number; width: number; height: number; pulse: number },
+  extraNames?: string[],
 ): UniformValues {
-  const extras = Object.keys(params)
-    .filter((k) => !RESERVED.has(k) && typeof params[k] === "number")
-    .sort();
-  const uParams = Array.from({ length: EXTRA_PARAM_SLOTS }, (_, i) => (i < extras.length ? (params[extras[i]] as number) : 0));
+  const extras =
+    extraNames ??
+    Object.keys(params)
+      .filter((k) => !RESERVED.has(k) && typeof params[k] === "number")
+      .sort()
+      .slice(0, EXTRA_PARAM_SLOTS);
+  const uParams = Array.from({ length: EXTRA_PARAM_SLOTS }, (_, i) => (i < extras.length ? numOf(params[extras[i]], 0) : 0));
   return {
     iResolution: [ctx.width, ctx.height, 1],
     iTime: ctx.fps > 0 ? ctx.frame / ctx.fps : 0,

@@ -65,6 +65,7 @@ Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Env levers:
 |---|---|
 | `KINO_GPU=1` | Hardware ANGLE (Metal on macOS) instead of SwiftShader CPU GL. Faster; not bit-identical across machines. Frame cache keys `gpu` vs `sw` separately. |
 | `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
+| `KINO_SHADER_FXAA=0` | Disable the default FXAA edge post-pass on shader backgrounds. |
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
 | `KINO_CONCURRENCY=N` | Chrome worker count (default cap 8 short / 12 long). |
 
