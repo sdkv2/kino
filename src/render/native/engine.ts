@@ -447,7 +447,29 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
         await handle.page.screenshot({ type: "png", path: out as `${string}.png` });
         outs.push(out);
         if (measureSink) {
-          const m = await handle.page.evaluate(collectMeasurements);
+          // String form avoids tsx __name injection on nested fns passed to puppeteer.
+          const m = (await handle.page.evaluate(`(() => {
+            const W = window.innerWidth, H = window.innerHeight;
+            const out = [];
+            function walk(root) {
+              root.querySelectorAll("[data-measure]").forEach(function(el) {
+                const r = el.getBoundingClientRect();
+                const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+                out.push({
+                  label: el.getAttribute("data-measure") || el.tagName.toLowerCase(),
+                  x: r.x, y: r.y, w: r.width, h: r.height, cx: cx, cy: cy,
+                  cxPct: (cx / W) * 100, cyPct: (cy / H) * 100,
+                  dxPct: (cx / W) * 100 - 50, dyPct: (cy / H) * 100 - 50
+                });
+              });
+              root.querySelectorAll("*").forEach(function(el) {
+                const sr = el.shadowRoot;
+                if (sr) walk(sr);
+              });
+            }
+            walk(document);
+            return { width: W, height: H, elements: out };
+          })()`)) as { width: number; height: number; elements: ElementMeasure[] };
           measureSink.push({ name, width: m.width, height: m.height, elements: m.elements });
         }
       }

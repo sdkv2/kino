@@ -15,6 +15,13 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
+// Supersample factor: render the backing store at SS× and let CSS downscale to composition size —
+// cheap SSAA for the raymarched SDF silhouettes. A fullscreen-quad shader has no polygon edges, so
+// MSAA (antialias:true) does nothing; the aliasing lives inside the fragment (hit/miss boundary),
+// which only more samples per output pixel can smooth. 2× = 4 samples/output pixel (4× fragment cost;
+// fine offline). ponytail: bump to 3 if 2× still shows jaggies on thin high-contrast features.
+const SS = 2;
+
 interface Program {
   gl: WebGL2RenderingContext;
   prog: WebGLProgram;
@@ -74,9 +81,13 @@ export const ShaderBackground: React.FC<{
     }
     const { gl, prog, loc } = progRef.current;
     const tt = fps > 0 ? frame / fps : 0;
-    const u = resolveUniforms(paramsAt(params, keyframes, tt), { frame, fps, width, height, pulse: pulseAt(triggers, tt) });
+    // Render at the supersampled backing resolution; CSS scales the canvas back down to composition
+    // size, so the shader sees SS× pixels (iResolution + viewport) and the screenshot captures the
+    // downsampled, anti-aliased result.
+    const W = width * SS, H = height * SS;
+    const u = resolveUniforms(paramsAt(params, keyframes, tt), { frame, fps, width: W, height: H, pulse: pulseAt(triggers, tt) });
 
-    gl.viewport(0, 0, width, height);
+    gl.viewport(0, 0, W, H);
     gl.useProgram(prog);
     gl.uniform3f(loc.iResolution, u.iResolution[0], u.iResolution[1], u.iResolution[2]);
     gl.uniform1f(loc.iTime, u.iTime);
@@ -98,7 +109,7 @@ export const ShaderBackground: React.FC<{
 
   return (
     <AbsoluteFill style={{ backgroundColor: t.night }}>
-      <canvas ref={ref} width={width} height={height} style={{ width: "100%", height: "100%" }} />
+      <canvas ref={ref} width={width * SS} height={height * SS} style={{ width: "100%", height: "100%" }} />
     </AbsoluteFill>
   );
 };

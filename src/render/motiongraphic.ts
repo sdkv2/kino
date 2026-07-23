@@ -21,7 +21,10 @@ const BANNED: { re: RegExp; msg: string }[] = [
   { re: /\b(requestAnimationFrame|setInterval|setTimeout)\b/i, msg: "timers/RAF are not allowed — motion is frame-driven by kino" },
   { re: /\b(Date\.now|Math\.random)\b/, msg: "Date.now/Math.random break determinism" },
   { re: /\bfetch\s*\(|\bXMLHttpRequest\b/i, msg: "network access is not allowed during render" },
-  { re: /url\(\s*['"]?(?!data:|#)[^)\s'"]/i, msg: "url(...) must be a data: URI or #fragment — external/relative refs don't resolve" },
+  // Allow #fragment refs raw or percent-encoded (%23): a data: URI SVG (e.g. an feImage displacement
+  // map for liquid-glass refraction) internally references its own gradients as url(#id), which
+  // encodeURIComponent turns into url(%23id) — a self-contained fragment, not an external fetch.
+  { re: /url\(\s*['"]?(?!data:|#|%23)[^)\s'"]/i, msg: "url(...) must be a data: URI or #fragment (raw or %23-encoded) — external/relative refs don't resolve" },
   { re: /@import\b/i, msg: "@import is not allowed — bundle all styles inline (no external CSS)" },
 ];
 

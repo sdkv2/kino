@@ -7,8 +7,16 @@ import DOMPurify from "isomorphic-dompurify";
 export function sanitizeMotionHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ADD_TAGS: ["style"],
+    // Keep href on SVG filter primitives (feImage) — DOMPurify would otherwise drop it.
+    ADD_ATTR: ["href"],
     FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "base"],
     ALLOW_DATA_ATTR: true,
+    // Default safe-scheme allowlist PLUS self-contained data:image/ URIs — needed for an feImage
+    // displacement map (real liquid-glass refraction) baked as data:image/svg+xml. An image/feImage
+    // context rasterizes, never executes script, so this stays safe; still blocks javascript: and
+    // data:text/html. (Motion sources are trusted local config that already passed the determinism lint.)
+    ALLOWED_URI_REGEXP:
+      /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|data:image\/|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
     FORCE_BODY: true,
   });
 }

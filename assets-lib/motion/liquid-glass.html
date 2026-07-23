@@ -1,0 +1,60 @@
+<!-- liquid-glass — a real Apple-style Liquid Glass panel (refraction, not frosted blur).
+     Copy into a project's assets/motion/ and edit the .card content/size. Needs a STRUCTURED, colorful
+     background behind it to refract (pair with a shader background, e.g. backgroundComponent:"liquid-orb").
+     How it works:
+       • #lg SVG filter is the backdrop-filter (NOT blur): feDisplacementMap bends the backdrop using a
+         convex-squircle displacement map (R=X-shift, G=Y-shift, 128=neutral) baked as a data:image URI —
+         edge-concentrated, so it lenses at the rounded rim and stays clear in the center.
+       • Chromatic aberration: the displacement runs 3× (R/G/B at slightly different scales) and recombines.
+       • saturate()+brightness() on the backdrop, a luminous white fill, a bright border, a wrapping
+         edge-rim highlight (::after) and a diagonal specular sheen (::before) make it read as lit glass.
+     Deterministic (static map + frame-driven), sanitizer-clean. Tune: feDisplacementMap scale = lens
+     strength; chroma spread = the 0.96/1.04 multipliers; fill/saturate/brightness = luminance. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="lg" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+    <feImage href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22256%22%20height%3D%22256%22%20viewBox%3D%220%200%20256%20256%22%3E%0A%3Crect%20width%3D%22256%22%20height%3D%22256%22%20fill%3D%22rgb(0%2C0%2C128)%22%2F%3E%0A%3Cdefs%3E%0A%3ClinearGradient%20id%3D%22rx%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%220%22%3E%0A%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb(240%2C0%2C0)%22%2F%3E%3Cstop%20offset%3D%220.24%22%20stop-color%3D%22rgb(128%2C0%2C0)%22%2F%3E%0A%3Cstop%20offset%3D%220.76%22%20stop-color%3D%22rgb(128%2C0%2C0)%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb(16%2C0%2C0)%22%2F%3E%0A%3C%2FlinearGradient%3E%0A%3ClinearGradient%20id%3D%22gy%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%3Cstop%20offset%3D%220%22%20stop-color%3D%22rgb(0%2C240%2C0)%22%2F%3E%3Cstop%20offset%3D%220.24%22%20stop-color%3D%22rgb(0%2C128%2C0)%22%2F%3E%0A%3Cstop%20offset%3D%220.76%22%20stop-color%3D%22rgb(0%2C128%2C0)%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22rgb(0%2C16%2C0)%22%2F%3E%0A%3C%2FlinearGradient%3E%0A%3C%2Fdefs%3E%0A%3Crect%20width%3D%22256%22%20height%3D%22256%22%20fill%3D%22url(%23rx)%22%20style%3D%22mix-blend-mode%3Ascreen%22%2F%3E%0A%3Crect%20width%3D%22256%22%20height%3D%22256%22%20fill%3D%22url(%23gy)%22%20style%3D%22mix-blend-mode%3Ascreen%22%2F%3E%0A%3C%2Fsvg%3E" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="map"/>
+    <feDisplacementMap in="SourceGraphic" in2="map" scale="115.2" xChannelSelector="R" yChannelSelector="G" result="dr"/>
+    <feColorMatrix in="dr" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cr"/>
+    <feDisplacementMap in="SourceGraphic" in2="map" scale="120.0" xChannelSelector="R" yChannelSelector="G" result="dg"/>
+    <feColorMatrix in="dg" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="cg"/>
+    <feDisplacementMap in="SourceGraphic" in2="map" scale="124.8" xChannelSelector="R" yChannelSelector="G" result="db"/>
+    <feColorMatrix in="db" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="cb"/>
+    <feComposite in="cr" in2="cg" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="crg"/>
+    <feComposite in="crg" in2="cb" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="crgb"/>
+    <feGaussianBlur in="crgb" stdDeviation="1.4"/>
+  </filter>
+</svg>
+<style>
+  .stage { position: absolute; inset: 0; font-family: var(--kino-font, -apple-system, sans-serif); color: #fff; }
+  .card {
+    position: absolute; left: 0; right: 0; margin-inline: auto; top: 30%; width: 76%; height: 30%;
+    box-sizing: border-box; border-radius: 8vw; overflow: hidden;
+    /* Refraction + chromatic (url), then boost the transmitted color + luminance so it reads as lit
+       glass, not a dark card, over any backdrop. */
+    backdrop-filter: url(#lg) saturate(1.8) brightness(1.08);
+    -webkit-backdrop-filter: url(#lg) saturate(1.8) brightness(1.08);
+    background: rgba(255,255,255,0.13);           /* luminous white film, not near-transparent */
+    border: 1px solid rgba(255,255,255,0.55);     /* bright lit edge */
+    box-shadow: 0 30px 60px rgba(0,0,0,0.34),
+                inset 0 4px 22px rgba(255,255,255,0.26);  /* soft top inner glow */
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6.4vw; font-weight: 800; letter-spacing: -0.02em; text-shadow: 0 2px 16px rgba(0,0,0,0.45);
+  }
+  /* Bright refractive edge rim that wraps the rounded rect (the signature liquid-glass lit edge). */
+  .card::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    box-shadow: inset 7px 7px 8px -9px rgba(255,255,255,0.95),
+                inset -8px -8px 8px -9px rgba(255,255,255,0.95),
+                inset 0 0 0 1px rgba(255,255,255,0.16);
+    filter: brightness(1.12);
+  }
+  /* Diagonal specular sheen sliding across the surface. */
+  .card::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(125deg,
+      rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.08) 20%,
+      rgba(255,255,255,0) 44%, rgba(255,255,255,0) 76%, rgba(255,255,255,0.16) 100%);
+    mix-blend-mode: screen;
+  }
+</style>
+<div class="stage" data-measure="stage"><div class="card" data-measure="card"><span style="position:relative;z-index:1">Liquid Glass</span></div></div>

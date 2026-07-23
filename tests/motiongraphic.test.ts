@@ -25,6 +25,14 @@ describe("lintMotionHtml", () => {
     expect(lintMotionHtml(`<div>requestAnimationFrame</div>`).length).toBeGreaterThan(0);
     expect(lintMotionHtml(`<div>Math.random()</div>`).length).toBeGreaterThan(0);
   });
+  it("keeps an feImage data:image/ href (liquid-glass displacement map) through sanitize", () => {
+    const clean = sanitizeMotionHtml(`<svg><filter id="lg"><feImage href="data:image/svg+xml,%3Csvg/%3E"/></filter></svg>`);
+    expect(clean).toContain("href");
+    expect(clean).toContain("data:image/svg+xml");
+    // but a scripting scheme is still stripped
+    expect(sanitizeMotionHtml(`<img src="data:text/html,<script>1</script>">`)).not.toContain("data:text/html");
+  });
+
   it("rejects external/relative url() but allows data: and #fragment", () => {
     expect(lintMotionHtml(`<style>.b{background:url(https://x/y.png)}</style>`).length).toBe(1);
     expect(lintMotionHtml(`<style>.b{background:url(foo.png)}</style>`).length).toBe(1);
@@ -32,6 +40,11 @@ describe("lintMotionHtml", () => {
     expect(lintMotionHtml(`<style>.b{fill:url(#grad)}</style>`)).toEqual([]);
     // the injected SVG-texture filters are referenced by #fragment, so they pass the lint
     expect(lintMotionHtml(`<style>.b{filter:url(#kino-grain)}.c{filter:url(#kino-displace)}</style>`)).toEqual([]);
+    // percent-encoded #fragment inside a data: URI SVG (liquid-glass feImage map references its own
+    // gradients as url(%23id) after encodeURIComponent) — self-contained, must pass
+    expect(lintMotionHtml(`<filter><feImage href="data:image/svg+xml,%3Crect%20fill='url(%23rx)'/%3E"/></filter>`)).toEqual([]);
+    // but a real encoded external path must still be rejected
+    expect(lintMotionHtml(`<style>.b{background:url(%2Fx.png)}</style>`).length).toBe(1);
   });
   it("rejects each remaining non-deterministic / network construct", () => {
     for (const bad of [
