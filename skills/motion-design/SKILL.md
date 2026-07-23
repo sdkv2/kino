@@ -133,6 +133,17 @@ You are staging one composition, not a dashboard.
 - **Alignment axis** — every repeated group (list rows, chips, steps, icon+label pairs) shares one
   declared axis; nothing floats a few px off. Dynamic/revealed lists **group-center in their available
   space** — never top-align rows inside a fixed-tall shell (they sink and open a void below the title).
+- **Measure, don't eyeball centering** — vision misreads sub-10% offsets (a card at 55% "looks
+  centered"). Tag panels `data-measure="name"` and run `kino still --segment N --measure`: it prints
+  each tagged element's center X/Y and signed Δ-from-frame-center (%), walking into shadow roots.
+  `Δx +0.0` = dead center; any number IS the misalignment. Trust that readout over a screenshot for
+  alignment QA.
+- **kino-`*` entrances own `transform`** (footgun) — `.kino-rise` / `.kino-pop` / … animate `transform`
+  and settle it to `none`, which **clobbers any `transform` you set for layout**. Never center with
+  `transform: translateX(-50%)` on an element that also carries a kino entrance class — it snaps back to
+  `left:50%` and is shoved right by half its width. Center with `left:0; right:0; margin-inline:auto`
+  (or a flex parent), and set `box-sizing: border-box` so `width:%` panels don't overflow their column
+  and drift. (`--measure` catches both instantly.)
 
 Wrappers that exist only to “contain” create dead margins. If removing a shell does not hurt
 reading, remove it.
@@ -218,6 +229,8 @@ explains speech or settle, and a first frame that could only be this product.
 2. Implement in `assets/motion/…` using brand tokens + `vw`.
 3. `kino still <spec> --segment N` — hierarchy / safe zone / caption clearance. Overlay a mental
    3×3 grid: any empty row/column or ≥25% dead band → fix fill budget + alignment before moving on.
+   For centering/alignment specifically, add `--measure` (with `data-measure` tags) and read the exact
+   Δ-from-center — don't eyeball it.
 4. `kino still … --around <t>` (or harness) — entrance, speech lock, camera, pulse.
 5. Real VO → `inspect --real` → `retune` → `frames <mp4> --around <t>`.
 6. Loop ads: still at 0 vs settle end; trust PSNR/seam, not raw AE.
