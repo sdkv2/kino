@@ -27,6 +27,7 @@ export async function backgrounds(): Promise<void> {
   process.stdout.write('    "backgroundComponent": "brand-wash",\n');
   process.stdout.write('    "backgroundKeyframes": [ { "at": 0, "params": { "intensity": 0.4 } } ],\n');
   process.stdout.write('    "backgroundTriggers": [ { "at": 1.2, "action": "pulse" } ]\n');
+  process.stdout.write('    · shader (.frag): author mainImage(); uniforms iTime/iResolution/uColorA-C/uIntensity/uPulse\n');
   process.stdout.write("\n");
   process.stdout.write("  Draw-fn contract: file body is draw(ctx, env) — env.frame / env.params / env.pulse only.\n");
   process.stdout.write("  Project-local: assets/backgrounds/my.js → \"backgroundComponent\": \"backgrounds/my.js\"\n");

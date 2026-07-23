@@ -80,7 +80,10 @@ export async function launchBrowser(): Promise<Browser> {
     protocolTimeout: 120000,
     args: [
       "--force-color-profile=srgb",
-      "--disable-gpu",
+      // Software WebGL2 (SwiftShader) — --disable-gpu alone blocks all GL contexts; shaders need this.
+      "--use-gl=angle",
+      "--use-angle=swiftshader-webgl",
+      "--enable-unsafe-swiftshader",
       "--force-device-scale-factor=1",
       "--hide-scrollbars",
       "--mute-audio",

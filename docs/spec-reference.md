@@ -195,6 +195,35 @@ BgTrigger  = { at: number, action: string }   // e.g. { at: 1.2, action: "pulse"
 
 `background` selects the faceless engine; `backgroundKeyframes`/`backgroundTriggers` animate it; `backgroundIntensity` sets motion strength. Per-preset params and actions are documented in [Backgrounds & overlays](backgrounds-and-overlays.md).
 
+### Shader backgrounds (`.frag` / `.glsl`)
+
+When `background` is `"custom"` and `backgroundComponent` points at a `.frag` or `.glsl` file, kino renders a WebGL2 fullscreen-quad shader instead of a Canvas2D draw fn. Author only the ShaderToy entry point:
+
+```glsl
+void mainImage(out vec4 fragColor, in vec2 fragCoord) { /* … */ }
+```
+
+| Uniform | Type | Source |
+|---------|------|--------|
+| `iResolution` | `vec3` | `[width, height, 1]` |
+| `iTime` | `float` | `frame / fps` (frame-derived — no wall clock) |
+| `iFrame` | `int` | current frame index |
+| `iTimeDelta` | `float` | `1 / fps` |
+| `uPulse` | `float` | trigger envelope from `backgroundTriggers` |
+| `uColorA` / `uColorB` / `uColorC` | `vec3` | brand `backgroundColors` (hex → RGB) |
+| `uIntensity` | `float` | `backgroundIntensity` (0..1) |
+| `uParam0`..`uParam3` | `float` | extra numeric params (sorted by key) |
+
+Motion is deterministic: `iTime` comes only from the frame index, same contract as Canvas2D backgrounds. Bare library id or project path both work:
+
+```json
+{ "background": "custom", "backgroundComponent": "aurora-flow" }
+```
+
+```json
+{ "background": "custom", "backgroundComponent": "backgrounds/my-plasma.frag" }
+```
+
 ## Logo & overlay tweening
 
 `logoSize`/`logoPosition` place the brand mark on faceless talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions and kickers tween the same way via `captionKeyframes`/`kickerKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
