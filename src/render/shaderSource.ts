@@ -21,7 +21,49 @@ const UNIFORM_HEADER = [
   "uniform float uParam1;",
   "uniform float uParam2;",
   "uniform float uParam3;",
+  // Texture channels (spec backgroundTextures[i] → uTexI). Unbound channels sample transparent
+  // black; uTexSizeI is the source's css-px size (0,0 when unbound). v=0 is the BOTTOM row
+  // (flipped at upload) so uv orientation matches fragCoord.
+  "uniform sampler2D uTex0;",
+  "uniform sampler2D uTex1;",
+  "uniform sampler2D uTex2;",
+  "uniform sampler2D uTex3;",
+  "uniform vec2 uTexSize0;",
+  "uniform vec2 uTexSize1;",
+  "uniform vec2 uTexSize2;",
+  "uniform vec2 uTexSize3;",
+  // Animated (flipbook) channels: uTexFramesN = frame count (1 = static), uTexGridN = atlas
+  // cols/rows. Sample a frame with the kinoTexFrame helper below.
+  "uniform float uTexFrames0;",
+  "uniform float uTexFrames1;",
+  "uniform float uTexFrames2;",
+  "uniform float uTexFrames3;",
+  "uniform vec2 uTexGrid0;",
+  "uniform vec2 uTexGrid1;",
+  "uniform vec2 uTexGrid2;",
+  "uniform vec2 uTexGrid3;",
 ].join("\n");
+
+// Flipbook sampler: pick atlas cell for `frame` (0..frames-1) and sample uv within it.
+// Atlas rows are baked top-down but the upload is Y-flipped (v=0 = bottom), so rows address
+// from the bottom here. Static textures (frames=1, grid=1x1) reduce to a plain texture().
+const TEX_HELPERS = `
+vec4 kinoTexFrame(sampler2D tex, vec2 grid, float frames, vec2 uv, float frame) {
+  float f = clamp(floor(frame + 0.5), 0.0, max(frames, 1.0) - 1.0);
+  vec2 cell = vec2(mod(f, grid.x), (grid.y - 1.0) - floor(f / grid.x));
+  return texture(tex, (cell + clamp(uv, 0.0, 1.0)) / max(grid, vec2(1.0)));
+}
+// Smooth variant: crossfades adjacent flipbook frames by the fractional frame index, so a
+// continuous drive value plays back without visible stepping. Use for anything that moves.
+vec4 kinoTexFrameLerp(sampler2D tex, vec2 grid, float frames, vec2 uv, float frame) {
+  float fmax = max(frames, 1.0) - 1.0;
+  float f0 = clamp(floor(frame), 0.0, fmax);
+  float f1 = min(f0 + 1.0, fmax);
+  vec4 a = kinoTexFrame(tex, grid, frames, uv, f0);
+  vec4 b = kinoTexFrame(tex, grid, frames, uv, f1);
+  return mix(a, b, clamp(frame - f0, 0.0, 1.0));
+}
+`;
 
 /** Wrap an agent-authored ShaderToy `mainImage` body into a compilable GLSL ES 3.00 fragment shader. */
 export function assembleShaderSource(body: string): string {
@@ -29,7 +71,8 @@ export function assembleShaderSource(body: string): string {
     "#version 300 es\n" +
     "precision highp float;\n\n" +
     UNIFORM_HEADER +
-    "\n\nout vec4 kino_fragColor;\n\n" +
+    "\n" + TEX_HELPERS +
+    "\nout vec4 kino_fragColor;\n\n" +
     "// ---- authored body ----\n" +
     body +
     "\n// ---- kino entry ----\n" +

@@ -3,7 +3,7 @@
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
 // variant-tagging on top.
-import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
@@ -26,10 +26,10 @@ import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { KinoProps, WordTiming } from "../render/props.js";
+import type { BgTexture, KinoProps, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
-import { resolveMotionGraphic, type MotionGraphicRefInput } from "../render/motiongraphic.js";
+import { resolveMotionGraphic, sanitizeMotionHtml, type MotionGraphicRefInput } from "../render/motiongraphic.js";
 import { beatRelativeWords, resolveWordAnchors } from "../render/motionVars.js";
 import { probeFramePicks, isUnderAnimated } from "../render/motionProbe.js";
 import { checkLoopSeam, imageMeanDiff } from "../media/loopSeam.js";
@@ -166,6 +166,15 @@ export async function prepare(
       if (seg.frame) stageAsset(seg.frame.src);
     }
   }
+  // Motion HTML can't use relative url() in CSS (determinism lint) — raster siblings are served via
+  // <img src="/public/motion/..."> and staged here.
+  const motionAssets = join(project.projectRoot, "assets", "motion");
+  if (existsSync(motionAssets)) {
+    for (const f of readdirSync(motionAssets)) {
+      if (/\.(html|js|json)$/i.test(f)) continue;
+      stageAsset(`motion/${f}`);
+    }
+  }
   if (avatarRel && avatarPath) copyFileSync(avatarPath, join(publicDir, avatarRel));
   copyFileSync(vo.trackPath, join(publicDir, "vo.mp3"));
   // SFX + music bed: resolve (library id or project asset), stage into _public, warn on
@@ -230,12 +239,38 @@ export async function prepare(
     if (isShaderPath(compPath)) bgShaderCode = code;
     else bgCustomCode = code;
   }
+  // Shader texture channels (uTex0..uTex3): images staged into /public, motion HTML sanitized and
+  // rasterized page-side at load. Only meaningful when the background is a shader.
+  const bgTextures: BgTexture[] = [];
+  if (spec.backgroundTextures?.length) {
+    if (!bgShaderCode) {
+      throw new Error('backgroundTextures needs a shader background (backgroundComponent → .frag/.glsl)');
+    }
+    spec.backgroundTextures.forEach((entry, i) => {
+      const ref = typeof entry === "string" ? entry : entry.source;
+      const frames = typeof entry === "string" ? undefined : "frames" in entry ? entry.frames : undefined;
+      const param = typeof entry === "string" ? undefined : "param" in entry ? entry.param : undefined;
+      const asAsset = project.assetPath(ref);
+      const abs = existsSync(asAsset) ? asAsset : isAbsolute(ref) ? ref : join(project.workspaceRoot, ref);
+      if (!existsSync(abs)) throw new Error(`backgroundTextures[${i}] not found: tried assets/${ref} and ${ref}`);
+      const ext = extname(abs).toLowerCase();
+      if (ext === ".html") {
+        bgTextures.push({ kind: "html", src: null, html: sanitizeMotionHtml(readFileSync(abs, "utf8")), frames, param });
+      } else {
+        if (frames || param) throw new Error(`backgroundTextures[${i}]: frames/param only apply to .html sources`);
+        const staged = `bg-tex-${i}${ext}`;
+        copyFileSync(abs, join(publicDir, staged));
+        bgTextures.push({ kind: "image", src: staged, html: null });
+      }
+    });
+  }
   const bgColors = resolveBackgroundColors(brand);
   const background = {
     kind: bgKind,
     image: bgImageRel,
     customCode: bgCustomCode,
     shaderCode: bgShaderCode,
+    textures: bgTextures,
     params: {
       colorA: bgColors[0],
       colorB: bgColors[1],
@@ -298,7 +333,7 @@ export async function prepare(
       ref: {
         source: string;
         params?: Record<string, number | string>;
-        keyframes?: { at?: number; atWord?: string | number; params: Record<string, number | string>; ease?: "linear" | "easeInOut" | "overshoot" | "spring" }[];
+        keyframes?: { at?: number; atWord?: string | number; params: Record<string, number | string>; ease?: import("../render/bgparams.js").Ease }[];
         triggers?: { at?: number; atWord?: string | number; action: string }[];
         loop?: boolean;
       },

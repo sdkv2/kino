@@ -4,6 +4,8 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- Workspace detection accepts `projects/` or `brands/` (brands optional since 1.21) — projects-only
+  workspaces no longer fail with "No brands/ found".
 - `atWord` anchors on motion `keyframes`/`triggers` (word text or index) — resolved against each
   build's VO timings, so word-synced moments never need a mock→real retune.
 - `kino still --segment N --word <w>` centers a sheet on a spoken word; `--grid` overlays a

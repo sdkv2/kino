@@ -9,11 +9,19 @@ import type { Browser, Page } from "puppeteer";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
-import { acquireBrowser, releaseBrowser } from "./browser.js";
+import { acquireBrowser, glMode, releaseBrowser } from "./browser.js";
 import { frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
+
+/** 1–4 supersample. Default 2. Mock/draft → 1 unless KINO_SHADER_SSAA overrides. */
+function resolveShaderSS(env: NodeJS.ProcessEnv = process.env, opts?: { mock?: boolean }): number {
+  const e = Number(env.KINO_SHADER_SSAA);
+  if (Number.isFinite(e) && e >= 1 && e <= 4) return Math.round(e);
+  if (opts?.mock || env.KINO_SHADER_DRAFT === "1") return 1;
+  return 2;
+}
 
 const DIMS: Record<string, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
@@ -55,10 +63,10 @@ function concurrency(totalFrames: number): number {
   const env = Number(process.env.KINO_CONCURRENCY);
   if (Number.isFinite(env) && env >= 1) return Math.round(env);
   // Capture parallelism scales per browser process (see browser.ts), but each worker costs a
-  // Chrome launch + page boot — only long renders amortize a big pool. Short clips (tests,
-  // per-beat previews) keep 4; 20s+ videos take up to 8. Two cores stay free for encode/extract.
-  const cap = totalFrames > 600 ? 8 : 4;
-  return Math.min(cap, Math.max(1, cpus().length - 2));
+  // Chrome launch + page boot — only long renders amortize a big pool. Short clips keep 8;
+  // 20s+ videos take up to 12. Leave one core for encode/extract.
+  const cap = totalFrames > 600 ? 12 : 8;
+  return Math.min(cap, Math.max(1, cpus().length - 1));
 }
 
 // The render server and its config are process-wide singletons the pages re-read via kinoLoad();
@@ -269,6 +277,7 @@ async function pointServerAt(opts: {
   width: number;
   height: number;
   total: number;
+  shaderSS: number;
 }): Promise<{ url: string }> {
   const pageJs = await getPageBundle();
   return ensureRenderServer({
@@ -281,6 +290,7 @@ async function pointServerAt(opts: {
       height: opts.height,
       durationInFrames: opts.total,
       media: opts.media,
+      shaderSS: opts.shaderSS,
     }),
   });
 }
@@ -310,6 +320,9 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   const total = durationInFrames(props);
   const n = Math.min(concurrency(total), total);
   const slots = Array.from({ length: n }, (_, i) => i);
+  // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
+  const ss = resolveShaderSS(process.env, { mock: preset === "veryfast" });
+  const mode = glMode();
   try {
     const endSec = total / props.fps;
     // Browser launches overlap frame extraction + the audio mix — none depend on each other.
@@ -324,13 +337,22 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     try {
       for (const fmt of formats) {
         const { width, height } = DIMS[fmt];
-        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss });
         const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
         lap(`pages-boot ${fmt}`);
         // Capture cache: unchanged beats reuse their stored JPEGs; only dirty frames hit Chrome.
-        // Keyed per encode preset — mock (veryfast) and final (medium) share captures fine, but the
-        // cache lives beside the outputs, so a preview and a final build read the same store.
-        const sigs = frameSignatures({ props, publicDir, pageJsHash: await getPageBundleHash(), width, height, total, fps: props.fps });
+        // mode + shaderSS are in the global sig so GPU/SW and SS=1/2 never cross-serve.
+        const sigs = frameSignatures({
+          props,
+          publicDir,
+          pageJsHash: await getPageBundleHash(),
+          width,
+          height,
+          total,
+          fps: props.fps,
+          mode,
+          shaderSS: ss,
+        });
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset });
@@ -438,7 +460,8 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
 
     const { width, height } = DIMS[format];
     try {
-      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+      const ss = resolveShaderSS(process.env);
+      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss });
       const handle = await workerPage(0, browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {

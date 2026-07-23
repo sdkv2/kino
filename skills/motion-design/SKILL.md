@@ -215,9 +215,24 @@ rare brand joke, not a default on every pulse.
 Stagger only when order must be understood (pipeline steps, chip list synced to VO). Uniform
 mechanical delays feel generated — vary slightly or drive from word starts.
 
-Camera lives in a `.cam` wrapper driven by **time** (`env.out` / `env.edge`), not by typed character
-count (`speech-synced-ui`). Soft mid-beat breath; native scale at beat edges so dissolves do not
-zoom-pop.
+Camera lives in a `.cam` wrapper driven by a **`cam` param** (`0→1` over 1.5–2.5s). **One camera move
+per beat** — no chained pan-then-counter-pan acts. Add `.kino-camera` for velocity-blur (peaks
+mid-move, sharp on settle). After `cam` reaches 1, micro-life uses `--t` / `--kino-edge` only — no
+more scale changes.
+
+**Camera easing** — set `ease` on the `cam` keyframe (spec `keyframes`, not CSS):
+
+| Ease | Feel | Use |
+|---|---|---|
+| `easeOut` / `easeOutCubic` | fast start, soft land | default zoom-out settle |
+| `easeOutQuart` | heavier decel | premium product reveals |
+| `easeOutExpo` | snap then glide | punchy cold opens |
+| `easeIn` / `easeInCubic` | slow start, fast finish | pull-back exits |
+| `easeInOut` / `easeInOutCubic` | symmetric S-curve | gentle both-ends |
+| `easeInQuad` / `easeOutQuad` | lighter than cubic | subtle nudges |
+| `overshoot` / `spring` | bounce past target | playful brands only |
+
+Also available in CSS: `--kino-in`, `--kino-out`, `--kino-inout`, `--kino-ease-in`, `--kino-ease-out`.
 
 ## Spoof UI as interaction theater
 
@@ -239,24 +254,38 @@ desperate punctuation. Chrome labels must use the **same nouns the VO speaks** o
 ## Liquid glass (real refraction, not frosted blur)
 
 `backdrop-filter: blur()` is *frosted* glass (glassmorphism) — a uniform fog. Apple **Liquid Glass**
-*refracts*: it bends/magnifies the background at the rounded edges, disperses color, and catches light on
-a lit rim. kino can do the real thing (Chromium render; `feImage` + `data:` URIs are allowed in motion
-HTML). Copyable reference: **`assets-lib/motion/liquid-glass.html`** (bare id `liquid-glass`).
+*refracts*: it bends/magnifies the background at the edges, disperses color, and catches light on
+a lit rim. In kino this is an engine material: add **`class="kino-glass"`** to a positioned
+element and the engine renders a true per-pixel refraction mirror behind it (WebGL SDF lens —
+default rounded-rect, morphable to circle/triangle — over the frame's background canvas: warp at
+the rim, clear center, chromatic dispersion, luminous film). Copyable reference:
+**`assets-lib/motion/liquid-glass.html`** (bare id `liquid-glass`).
 
-What separates it from frosted:
-- **Refraction** — `backdrop-filter: url(#lg)` where `#lg` is an SVG `feDisplacementMap` fed a
-  convex-squircle displacement map (R=X-shift, G=Y-shift, 128=neutral) baked as a `data:image/svg+xml`
-  URI. Edge-concentrated → lenses at the rim, clear in the center. `scale` = lens strength.
-- **Chromatic aberration** — run the displacement 3× (R/G/B at ~±4% scale), recombine → colored edge fringe.
-- **Lit, not a dark card** — luminous fill `rgba(255,255,255,~0.13)` (NOT ~0.04); `backdrop-filter: …
-  saturate(1.8) brightness(1.08)`; a bright ~`0.55` border; a wrapping edge-rim highlight (`::after` inset
-  box-shadow) and a diagonal specular sheen (`::before`). The lit edge + luminance is the signature — a
-  dark translucent card reads as frosted, not liquid.
-- **Needs content to refract** — put it over a STRUCTURED, colorful background (a shader like `liquid-orb`),
-  never a flat field; refraction of a flat plane is invisible.
+Do NOT hand-roll it with backdrop-filter: Chromium's compositor cannot run `feImage` displacement
+maps in backdrop chains (they silently degrade to a uniform shift with mirror-fold artifacts), and
+feOffset strip approximations ghost on hard edges. `kino-glass` is the only correct path.
 
-Deterministic (static map + frame-driven), sanitizer-clean. It's a statement material — don't reach for it
-on every panel; frosted `blur()` is still right for quiet, dense UI.
+Craft rules:
+- Element background stays transparent — the film lives in the mirror (`--glass-film`); content at
+  `z-index ≥ 1`; for quiet rect cards pair with a bright ~`0.55` border + diagonal sheen
+  (`::before`). Morphing shapes get an SDF lit rim from the engine — skip CSS `::after` borders
+  that only fit rects.
+- Knobs (per-frame CSS vars, tweenable via params/keyframes): `--glass-strength` (px, 26),
+  `--glass-band` (px, max(radius,48)), `--glass-chroma` (0.07), `--glass-profile` (2.2),
+  `--glass-frost` (px, 0 — body frost), `--glass-edge-blur` (px, 0 — extra rim blur),
+  `--glass-film`, `--glass-saturate` (1.25), `--glass-brightness` (1.06),
+  **`--glass-morph`** (`0` triangle → `1` circle → `2` round-rect, default `2`),
+  **`--glass-tilt`** (degrees, default `0` — rotate the SDF in-shader; never CSS-rotate the
+  glass element, that breaks backdrop sampling).
+- Morph demos: square container with room for tilt; set `border-radius` for the rect corner size.
+- Needs a STRUCTURED, colorful background (shader like `liquid-orb`, or a Canvas2D draw fn) —
+  refraction of a flat field is invisible. Over avatar/app footage the mirror skips gracefully.
+- Stress-test with a straight-line background (grid/stripes shader): rim must BEND lines into
+  curves, not shear or ghost them.
+
+Deterministic (synchronous WebGL inside the seek), sanitizer-clean (it's just a class). It's a
+statement material — don't reach for it on every panel; frosted `blur()` is still right for quiet,
+dense UI.
 
 ## Generic-tell sniff (fix the reflex, not the pixel)
 

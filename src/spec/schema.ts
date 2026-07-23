@@ -5,6 +5,9 @@
 // (resolved against frame/fps in the render layer).
 import { z } from "zod";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS } from "../render/textStyles.js";
+import { EASE_NAMES } from "../render/bgparams.js";
+
+const EaseEnum = z.enum(EASE_NAMES);
 
 const CaptionStyle = z.enum(CAPTION_STYLES);
 const CaptionAnimation = z.enum(CAPTION_ANIMATIONS);
@@ -28,7 +31,7 @@ const CaptionMode = z.enum(["phrase", "words"]);
 const BgKeyframe = z.object({
   at: z.number(),
   params: z.record(z.union([z.number(), z.string()])),
-  ease: z.enum(["linear", "easeInOut", "overshoot", "spring"]).optional(),
+  ease: EaseEnum.optional(),
 });
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
 // Motion tracks may anchor to a spoken word instead of hand-copied seconds: atWord "match" (first
@@ -43,7 +46,7 @@ const MotionKeyframe = z
     at: z.number().optional(),
     atWord: AtWord.optional(),
     params: z.record(z.union([z.number(), z.string()])),
-    ease: z.enum(["linear", "easeInOut", "overshoot", "spring"]).optional(),
+    ease: EaseEnum.optional(),
   })
   .refine(oneAnchor, anchorMsg);
 const MotionTrigger = z.object({ at: z.number().optional(), atWord: AtWord.optional(), action: z.string() }).refine(oneAnchor, anchorMsg);
@@ -184,6 +187,23 @@ export const SpecSchema = z
     // Custom Canvas2D draw fn when background is "custom". Bare id → assets-lib/backgrounds/;
     // path → project assets/ or workspace (overrides brand.backgroundComponent).
     backgroundComponent: z.string().min(1).optional(),
+    // Texture channels for shader backgrounds (uTex0..uTex3): project asset paths. Images
+    // (.png/.jpg/.webp) upload as-is; motion HTML (.html) is sanitized and rasterized once at
+    // load (foreignObject) — brand fonts + palette vars apply. An object entry with `frames`
+    // scrub-bakes the html's CSS @keyframes (1s convention) into an N-frame atlas the shader
+    // steps through (kinoTexFrame). See docs/spec-reference.md.
+    backgroundTextures: z
+      .array(
+        z.union([
+          z.string().min(1),
+          z.object({ source: z.string().min(1), frames: z.number().int().min(2).max(64) }),
+          // Live scrub: re-rasterize the html each frame at the value of this background param
+          // (0..1 → the markup's 1s CSS @keyframes). Smoothest option — no flipbook stepping.
+          z.object({ source: z.string().min(1), param: z.string().min(1) }),
+        ]),
+      )
+      .max(4)
+      .optional(),
     captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)
     captionAnimation: CaptionAnimation.optional(), // caption entrance preset (overrides brand.captionStyle.animation)
     captionReveal: CaptionReveal.optional(), // words-mode reveal: "word" (default) | "all" (whole line laid out, highlight tracks VO)

@@ -9,6 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { FrameProvider, type VideoConfig } from "./runtime";
 import { MediaProvider, type MediaMap } from "./media";
+import { loadBgTextures, prepareBgTextures } from "./bgTextures";
 import { KinoVideo } from "./KinoVideo";
 import type { KinoProps } from "../../props.js";
 
@@ -18,6 +19,7 @@ interface RenderConfig {
   height: number;
   durationInFrames: number;
   media: MediaMap;
+  shaderSS?: number;
 }
 
 declare global {
@@ -26,6 +28,7 @@ declare global {
     kinoSeek: (frame: number) => Promise<void>;
     __kinoReady: boolean;
     __kinoError?: string;
+    __kinoShaderSS?: number;
   }
 }
 
@@ -99,6 +102,9 @@ const App: React.FC<{ cfg: RenderConfig; frame: number }> = ({ cfg, frame }) => 
 async function kinoSeek(frame: number): Promise<void> {
   const cfg = current;
   if (!cfg || !root) throw new Error("kinoSeek before kinoLoad");
+  // Live-scrub DOM textures rasterize for THIS frame before the commit, so the shader's upload
+  // inside the flushSync sees the fresh pixels (per-frame smooth, no flipbook stepping).
+  await prepareBgTextures(cfg.props, frame, cfg.props.fps);
   flushSync(() => root!.render(<App cfg={cfg} frame={frame} />));
   await settleImages();
 }
@@ -117,6 +123,10 @@ async function kinoLoad(): Promise<void> {
   // Fonts must be resolvable before frame 0 — a fallback-font first frame is a determinism and
   // layout bug, not a cosmetic one.
   await syncFonts(cfg.props);
+  // Shader texture channels decode/rasterize once here; frames sample them synchronously.
+  await loadBgTextures(cfg.props);
+  // Shader/glass supersample (1–4). Mock builds default to 1; finals default to 2.
+  window.__kinoShaderSS = cfg.shaderSS ?? 2;
   root ??= createRoot(container);
   current = cfg;
   await kinoSeek(0);

@@ -14,7 +14,7 @@ import type { KinoProps } from "../props.js";
 // Longest pixel bleed across a beat boundary: 24-frame dissolve entry / 15-frame motion xfade /
 // 12-frame chained-app extension — 30 covers all with margin.
 const PAD = 30;
-const VERSION = 1;
+const VERSION = 2;
 
 const sha1 = (s: string) => createHash("sha1").update(s).digest("hex");
 
@@ -39,8 +39,14 @@ export function frameSignatures(opts: {
   height: number;
   total: number;
   fps: number;
+  /** GL backend — gpu/sw frames must not cross-serve (default from KINO_GPU). */
+  mode?: "gpu" | "sw";
+  /** Shader/glass supersample factor — SS=1 vs 2 are different pixels. */
+  shaderSS?: number;
 }): string[] {
   const { props, publicDir, pageJsHash, width, height, total, fps } = opts;
+  const mode = opts.mode ?? (process.env.KINO_GPU === "1" ? "gpu" : "sw");
+  const shaderSS = opts.shaderSS ?? 2;
   const f = (s: number) => Math.round(s * fps);
   const globalSig = sha1(
     JSON.stringify({
@@ -50,6 +56,8 @@ export function frameSignatures(opts: {
       fps,
       total,
       pageJsHash,
+      mode,
+      shaderSS,
       avatar: props.avatar ? statSig(join(publicDir, props.avatar)) : "none",
       props: { ...props, segments: undefined, music: undefined },
     }),

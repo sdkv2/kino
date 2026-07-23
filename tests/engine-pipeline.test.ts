@@ -93,6 +93,20 @@ describe("frame cache", () => {
     for (let n = 0; n < 300; n++) expect(b[n]).not.toBe(a[n]);
   });
 
+  it("gpu vs sw and shaderSS split the global signature", () => {
+    const segs = [{ kind: "motion", startSec: 0, endSec: 10, proc: "one" }];
+    const base = { ...sigOpts, props: props(segs) };
+    const sw = frameSignatures({ ...base, mode: "sw", shaderSS: 2 });
+    const gpu = frameSignatures({ ...base, mode: "gpu", shaderSS: 2 });
+    const draft = frameSignatures({ ...base, mode: "sw", shaderSS: 1 });
+    for (let n = 0; n < 300; n++) {
+      expect(gpu[n]).not.toBe(sw[n]);
+      expect(draft[n]).not.toBe(sw[n]);
+    }
+    const sw2 = frameSignatures({ ...base, mode: "sw", shaderSS: 2 });
+    expect(sw2[0]).toBe(sw[0]);
+  });
+
   it("renderFrameRange serves cached frames without touching the page and stores misses", async () => {
     const total = 60;
     const seeks: number[] = [];

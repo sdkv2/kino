@@ -7,9 +7,18 @@ export interface MotionVarDynamics {
   progress: number;
   pulse: number;
   params: Record<string, BgParamValue>;
+  fps?: number;
+  /** Resolved params at t − 1/fps — used for camera velocity. Omit on frame 0. */
+  prevParams?: Record<string, BgParamValue>;
+  /** Resolved params at t + 1/fps — opening-frame velocity lookahead. Omit on last frame. */
+  nextParams?: Record<string, BgParamValue>;
+  /** True when the spec defines a `cam` param (base or keyframes). */
+  hasCam?: boolean;
   captionBottom?: number; // px from frame bottom where the caption band sits (0 = no caption this beat)
   wordsShown?: number; // spoken words whose start has been reached at this frame (0 when no VO words)
   wordCount?: number; // total spoken words in this beat (0 when no VO words)
+  width?: number; // composition px (for aspect-aware layout)
+  height?: number;
 }
 
 /** Rebase absolute-timeline VO word spans to beat-relative (env.t / --progress are beat-relative,
@@ -74,6 +83,34 @@ export function resolveWordAnchors<T extends { at?: number; atWord?: string | nu
   });
 }
 
+const CAM_BLUR_DEFAULT = 12;
+const CAM_BLUR_MAX = 18;
+/** Soft opening haze at cam=0 (fraction of camBlur strength). */
+const CAM_BLUR_REST_MIX = 0.22;
+
+/** Velocity-blur vars for `.kino-camera` — pure, unit-tested. */
+export function cameraBlurVars(
+  params: Record<string, BgParamValue>,
+  prevParams: Record<string, BgParamValue> | undefined,
+  nextParams: Record<string, BgParamValue> | undefined,
+  fps: number,
+  hasCam: boolean,
+): { camVel: number; camBlur: number } {
+  if (!hasCam || typeof params.cam !== "number") return { camVel: 0, camBlur: 0 };
+  const cam = params.cam;
+  const prevCam = typeof prevParams?.cam === "number" ? prevParams.cam : cam;
+  const nextCam = typeof nextParams?.cam === "number" ? nextParams.cam : cam;
+  const velBack = prevParams === undefined || fps <= 0 ? 0 : Math.abs(cam - prevCam) * fps;
+  const velFwd = nextParams === undefined || fps <= 0 ? 0 : Math.abs(nextCam - cam) * fps;
+  const camVel = Math.max(velBack, velFwd);
+  const strength = typeof params.camBlur === "number" ? params.camBlur : CAM_BLUR_DEFAULT;
+  const open = 1 - cam;
+  const restBlur = strength * CAM_BLUR_REST_MIX * open;
+  const motionBlur = strength * camVel * open;
+  const camBlur = Math.min(CAM_BLUR_MAX, restBlur + motionBlur);
+  return { camVel, camBlur };
+}
+
 // Build the CSS custom properties set on a motion-graphic host every frame. The agent's shadow-scoped
 // CSS reads these (they inherit across the shadow boundary): the frame-driven vars, every resolved
 // spec param as --<key>, and the brand palette. Pure so it's unit-testable.
@@ -87,6 +124,7 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     "--progress": dyn.progress.toFixed(4),
     // Eased progress (same curves as keyframe ease). Prefer these over linear --progress for
     // entrances/camera. overshoot/spring may briefly exceed 1 — fine for scale; clamp for opacity.
+    "--kino-in": curves.in.toFixed(4),
     "--kino-out": curves.out.toFixed(4),
     "--kino-inout": curves.inout.toFixed(4),
     "--kino-overshoot": curves.overshoot.toFixed(4),
@@ -112,6 +150,16 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     "--kino-words-shown": String(Math.round((dyn.wordsShown ?? 0) * 1000) / 1000),
     "--kino-word-count": String(dyn.wordCount ?? 0),
   };
+  if (dyn.width && dyn.height) vars["--kino-aspect"] = (dyn.width / dyn.height).toFixed(4);
   for (const [k, v] of Object.entries(dyn.params)) vars[`--${k}`] = String(v);
+  const { camVel, camBlur } = cameraBlurVars(
+    dyn.params,
+    dyn.prevParams,
+    dyn.nextParams,
+    dyn.fps ?? 0,
+    dyn.hasCam ?? false,
+  );
+  vars["--cam-vel"] = camVel.toFixed(4);
+  vars["--cam-blur"] = camBlur.toFixed(4);
   return vars;
 }

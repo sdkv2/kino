@@ -57,6 +57,19 @@ Paid, slow outputs are content-cached under `.kino-cache/` and keyed by a hash o
 
 So the second build after a small edit is fast and cheap — only the changed beats re-hit an API.
 
+## Render speed (shader / glass)
+
+Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Env levers:
+
+| Env | Effect |
+|---|---|
+| `KINO_GPU=1` | Hardware ANGLE (Metal on macOS) instead of SwiftShader CPU GL. Faster; not bit-identical across machines. Frame cache keys `gpu` vs `sw` separately. |
+| `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
+| `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
+| `KINO_CONCURRENCY=N` | Chrome worker count (default cap 8 short / 12 long). |
+
+Example: `KINO_GPU=1 kino build specs/foo.json --mock`
+
 ## Variants & batch
 
 Render many cuts in one shot with [`batch`](cli-reference.md#batch). The **variants** form patches one base spec N ways and builds each tagged:

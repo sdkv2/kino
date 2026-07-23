@@ -61,9 +61,27 @@ describe("paramsAt", () => {
 
 describe("applyEase / progressCurves", () => {
   it("ease-out cubic lands soft (above linear mid)", () => {
-    expect(applyEase("out", 0.5)).toBeGreaterThan(0.5);
-    expect(applyEase("out", 0)).toBe(0);
-    expect(applyEase("out", 1)).toBe(1);
+    expect(applyEase("easeOut", 0.5)).toBeGreaterThan(0.5);
+    expect(applyEase("out", 0.5)).toBeCloseTo(applyEase("easeOut", 0.5));
+    expect(applyEase("easeOut", 0)).toBe(0);
+    expect(applyEase("easeOut", 1)).toBe(1);
+  });
+  it("ease-in cubic starts slow (below linear mid)", () => {
+    expect(applyEase("easeIn", 0.5)).toBeLessThan(0.5);
+    expect(applyEase("easeInCubic", 0.5)).toBeCloseTo(applyEase("easeIn", 0.5));
+  });
+  it("quad is gentler than quart at the same point", () => {
+    expect(applyEase("easeOutQuad", 0.5)).toBeLessThan(applyEase("easeOutQuart", 0.5));
+    expect(applyEase("easeInQuad", 0.5)).toBeGreaterThan(applyEase("easeInQuart", 0.5));
+  });
+  it("easeInOutCubic is symmetric at midpoint", () => {
+    expect(applyEase("easeInOutCubic", 0.5)).toBeCloseTo(0.5);
+  });
+  it("expo eases pin endpoints", () => {
+    expect(applyEase("easeInExpo", 0)).toBe(0);
+    expect(applyEase("easeOutExpo", 1)).toBe(1);
+    expect(applyEase("easeInExpo", 0.5)).toBeLessThan(0.1);
+    expect(applyEase("easeOutExpo", 0.5)).toBeGreaterThan(0.9);
   });
   it("edge is 0 at ends and 1 at mid", () => {
     const a = progressCurves(0);
@@ -72,7 +90,8 @@ describe("applyEase / progressCurves", () => {
     expect(a.edge).toBeCloseTo(0);
     expect(b.edge).toBeCloseTo(1);
     expect(c.edge).toBeCloseTo(0);
-    expect(b.out).toBeCloseTo(applyEase("out", 0.5));
+    expect(b.in).toBeCloseTo(applyEase("easeIn", 0.5));
+    expect(b.out).toBeCloseTo(applyEase("easeOut", 0.5));
   });
 });
 

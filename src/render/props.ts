@@ -1,6 +1,7 @@
 // Shared prop types for the render composition. Lives in compiled-land so both the
 // CLI (render.ts, build.ts) and the render page .tsx (bundled by esbuild) can import it.
 import type { CaptionStyle, CaptionAnimation, CaptionReveal, ResolvedText } from "./textStyles.js";
+import type { Ease } from "./bgparams.js";
 
 export interface Theme {
   font: string;
@@ -74,17 +75,29 @@ export type BgParamValue = number | string;
 export interface BgKeyframe {
   at: number;
   params: Record<string, BgParamValue>;
-  ease?: "linear" | "easeInOut" | "overshoot" | "spring";
+  ease?: Ease;
 }
 export interface BgTrigger {
   at: number;
   action: string;
 }
+// A shader-background texture channel (uTex0..uTex3), resolved at build time.
+// kind="image": staged file under /public. kind="html": sanitized motion-style markup the page
+// rasterizes once at load (foreignObject) — brand fonts and --kino-* palette vars apply.
+export interface BgTexture {
+  kind: "image" | "html";
+  src: string | null; // public-relative file, for kind="image"
+  html: string | null; // sanitized markup, for kind="html"
+  frames?: number; // html only: scrub-bake the markup's 1s CSS @keyframes into an N-frame atlas
+  param?: string; // html only: live per-frame scrub driven by this background param (0..1)
+}
+
 export interface BackgroundProps {
   kind: "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "solid" | "custom";
   image: string | null; // staticFile-relative path, for kind="image"
   customCode: string | null; // Canvas2D draw-fn source, for kind="custom" (.js)
   shaderCode: string | null; // GLSL mainImage body, for kind="custom" (.frag/.glsl)
+  textures?: BgTexture[]; // shader texture channels uTex0..uTex3 (empty/absent for non-shader kinds)
   params: Record<string, BgParamValue>; // base param values (tweened by keyframes)
   keyframes: BgKeyframe[]; // agent-authored param tweens over time
   triggers: BgTrigger[]; // agent-authored one-shot actions (e.g. pulse)
@@ -111,7 +124,9 @@ export interface MotionEnv {
   frame: number; // integer frame within the beat
   t: number; // seconds within the beat
   progress: number; // 0 → 1 across the beat (linear)
-  /** Ease-out cubic of progress — soft landings without hand-rolled (1-p)^n. */
+  /** Ease-in cubic of progress — slow start, fast finish. */
+  in: number;
+  /** Ease-out cubic of progress — fast start, soft landing. */
   out: number;
   /** Smoothstep of progress. */
   inout: number;
@@ -123,6 +138,10 @@ export interface MotionEnv {
   edge: number;
   pulse: number; // 0 → 1 trigger envelope (fast attack, exponential decay)
   params: Record<string, BgParamValue>; // resolved spec params at this frame
+  /** |cam[t] − cam[t−1]| × fps when the spec defines `cam`; else 0. */
+  camVel: number;
+  /** px-ready blur strength for `.kino-camera` (0 when settled or no `cam` param). */
+  camBlur: number;
   palette: { mint: string; green: string; night: string; white: string; gold: string; font: string };
   width: number; // canvas px (1080 for 9:16)
   height: number; // canvas px (1920 for 9:16)

@@ -1,6 +1,29 @@
 // Pure keyframe tweening + trigger envelope for agent-driven backgrounds. Frame-deterministic.
 export type ParamValue = number | string;
-export type Ease = "linear" | "easeInOut" | "overshoot" | "spring";
+
+/** All keyframe `ease` values — single source for schema + applyEase. */
+export const EASE_NAMES = [
+  "linear",
+  "easeIn",
+  "easeOut",
+  "easeInOut",
+  "easeInQuad",
+  "easeOutQuad",
+  "easeInOutQuad",
+  "easeInCubic",
+  "easeOutCubic",
+  "easeInOutCubic",
+  "easeInQuart",
+  "easeOutQuart",
+  "easeInOutQuart",
+  "easeInExpo",
+  "easeOutExpo",
+  "easeInOutExpo",
+  "overshoot",
+  "spring",
+] as const;
+export type Ease = (typeof EASE_NAMES)[number];
+
 export interface Keyframe {
   at: number;
   params: Record<string, ParamValue>;
@@ -11,27 +34,69 @@ export interface Trigger {
   action: string;
 }
 
+function clamp01(p: number): number {
+  return Math.min(1, Math.max(0, p));
+}
+function easeInPow(x: number, n: number): number {
+  return Math.pow(x, n);
+}
+function easeOutPow(x: number, n: number): number {
+  return 1 - Math.pow(1 - x, n);
+}
+function easeInOutPow(x: number, n: number): number {
+  return x < 0.5 ? Math.pow(2 * x, n) / 2 : 1 - Math.pow(2 * (1 - x), n) / 2;
+}
+function easeInExpo(x: number): number {
+  return x === 0 ? 0 : Math.pow(2, 10 * x - 10);
+}
+function easeOutExpo(x: number): number {
+  return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+}
+function easeInOutExpo(x: number): number {
+  if (x === 0 || x === 1) return x;
+  return x < 0.5 ? Math.pow(2, 20 * x - 10) / 2 : (2 - Math.pow(2, -20 * x + 10)) / 2;
+}
+
 /** Map linear 0→1 through a named curve. overshoot/spring may briefly leave [0,1]. */
 export function applyEase(name: Ease | "out" | undefined, p: number): number {
-  const x = Math.min(1, Math.max(0, p));
+  const x = clamp01(p);
   switch (name) {
+    case "easeIn":
+    case "easeInCubic":
+      return easeInPow(x, 3);
+    case "easeOut":
+    case "easeOutCubic":
     case "out":
-      // Ease-out cubic — entrances that land soft without scrubbed @keyframes.
-      return 1 - Math.pow(1 - x, 3);
+      return easeOutPow(x, 3);
+    case "easeInOutCubic":
+      return easeInOutPow(x, 3);
     case "easeInOut":
-      // Smoothstep: 3p² − 2p³ — the classic S-curve (zero slope at both ends, no overshoot).
+      // Smoothstep: 3p² − 2p³ — zero slope at both ends, no overshoot.
       return x * x * (3 - 2 * x);
+    case "easeInQuad":
+      return easeInPow(x, 2);
+    case "easeOutQuad":
+      return easeOutPow(x, 2);
+    case "easeInOutQuad":
+      return easeInOutPow(x, 2);
+    case "easeInQuart":
+      return easeInPow(x, 4);
+    case "easeOutQuart":
+      return easeOutPow(x, 4);
+    case "easeInOutQuart":
+      return easeInOutPow(x, 4);
+    case "easeInExpo":
+      return easeInExpo(x);
+    case "easeOutExpo":
+      return easeOutExpo(x);
+    case "easeInOutExpo":
+      return easeInOutExpo(x);
     case "overshoot": {
-      // "Back-out" ease (Penner): pulls past 1 then settles. 1.70158 is the standard back-ease
-      // overshoot constant (≈10% overshoot); c3 = c1 + 1 is the cubic coefficient that pairs with it.
       const c1 = 1.70158;
       const c3 = c1 + 1;
       return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
     }
     case "spring": {
-      // Elastic-out ease (Penner): a decaying sine wobble that converges on 1. c4 = 2π/3 is the
-      // elastic period; 2^(−10p) is the exponential decay envelope. Endpoints are pinned so they're
-      // exactly 0 and 1 (the raw formula lands at ~1.0005 at p=1, not precisely 1).
       if (x === 0 || x === 1) return x;
       const c4 = (2 * Math.PI) / 3;
       return Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
@@ -43,6 +108,7 @@ export function applyEase(name: Ease | "out" | undefined, p: number): number {
 
 /** Precomputed progress curves for motion graphics (CSS vars + env.*). */
 export function progressCurves(progress: number): {
+  in: number;
   out: number;
   inout: number;
   overshoot: number;
@@ -50,12 +116,12 @@ export function progressCurves(progress: number): {
   edge: number;
 } {
   return {
-    out: applyEase("out", progress),
+    in: applyEase("easeIn", progress),
+    out: applyEase("easeOut", progress),
     inout: applyEase("easeInOut", progress),
     overshoot: applyEase("overshoot", progress),
     spring: applyEase("spring", progress),
-    // 0 at beat start/end, 1 at mid — seam-safe life / breath without hand-rolled sin().
-    edge: Math.sin(Math.min(1, Math.max(0, progress)) * Math.PI),
+    edge: Math.sin(clamp01(progress) * Math.PI),
   };
 }
 
@@ -74,13 +140,9 @@ function lerpValue(a: ParamValue, b: ParamValue, p: number): ParamValue {
     const cb = rgb(b);
     if (ca && cb) return `#${hex2(ca[0] + (cb[0] - ca[0]) * p)}${hex2(ca[1] + (cb[1] - ca[1]) * p)}${hex2(ca[2] + (cb[2] - ca[2]) * p)}`;
   }
-  return p < 1 ? a : b; // non-tweenable → snap to the later keyframe
+  return p < 1 ? a : b;
 }
 
-// Resolve every param at time t: base values overridden by per-param keyframe tracks (clamped at
-// ends). `implicitBase` treats the base value as a t=0 keyframe so a lone keyframe tweens from it
-// instead of holding (motion graphics opt in — the "dead counter" trap); background/zoom/caption
-// tracks keep the documented "one keyframe = constant/hold" idiom.
 export function paramsAt(
   base: Record<string, ParamValue>,
   keyframes: Keyframe[],
@@ -93,7 +155,6 @@ export function paramsAt(
   for (const key of keys) {
     const track = keyframes.filter((k) => key in k.params).sort((a, b) => a.at - b.at);
     if (!track.length) continue;
-    // Ease on the implicit tween comes from the first real keyframe, matching the a→b convention below.
     if (opts?.implicitBase && track[0].at > 0 && key in base) track.unshift({ at: 0, params: { [key]: base[key] } });
     if (t <= track[0].at) {
       out[key] = track[0].params[key];
@@ -114,22 +175,13 @@ export function paramsAt(
 }
 
 export type PulseOpts = {
-  /** Seconds to reach peak after trigger (default 0.045). */
   attack?: number;
-  /** Exponential decay time-constant after peak (default 0.28). */
   decay?: number;
 };
 
-/**
- * One-shot pulse envelope: fast attack to 1, then exponential decay. Max over overlapping triggers.
- * Older API took `halfLife` as the 3rd arg (time to fall to 0.5); still accepted for callers/tests.
- */
 export function pulseAt(triggers: Trigger[], t: number, halfLifeOrOpts: number | PulseOpts = 0.28): number {
   const opts: PulseOpts =
-    typeof halfLifeOrOpts === "number"
-      ? // half-life → decay τ where e^(-hl/τ)=0.5 → τ = hl / ln(2)
-        { decay: halfLifeOrOpts / Math.LN2 }
-      : halfLifeOrOpts;
+    typeof halfLifeOrOpts === "number" ? { decay: halfLifeOrOpts / Math.LN2 } : halfLifeOrOpts;
   const attack = opts.attack ?? 0.045;
   const decay = opts.decay ?? 0.28;
   let v = 0;

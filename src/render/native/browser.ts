@@ -1,6 +1,7 @@
 // Headless-Chrome lifecycle for the native engine. puppeteer manages its own Chrome-for-Testing
 // install; KINO_CHROME (or a system Chrome) overrides for environments where that download is
-// unavailable. Flags pin the deterministic surface: sRGB color, software raster, fixed scale.
+// unavailable. Flags pin the deterministic surface: sRGB color, fixed scale; GL backend is
+// SwiftShader by default (bit-stable across machines) or hardware ANGLE when KINO_GPU=1.
 import puppeteer, { type Browser } from "puppeteer";
 import { existsSync } from "node:fs";
 
@@ -27,6 +28,45 @@ export async function resolveExecutable(): Promise<string | undefined> {
     // fall through to system installs
   }
   return SYSTEM_CHROME.find((p) => existsSync(p));
+}
+
+/** GL + determinism launch flags. Pure of env/platform so tests can assert without launching. */
+export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string[] {
+  const shared = [
+    "--force-color-profile=srgb",
+    "--force-device-scale-factor=1",
+    "--hide-scrollbars",
+    "--mute-audio",
+    "--disable-extensions",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    // Worker pages are background tabs; without these Chrome throttles their timers/rAF and a
+    // non-frontmost page can stall indefinitely.
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows",
+  ];
+  // KINO_GPU=1 → hardware ANGLE (Metal on darwin). Trades cross-machine bit-determinism for
+  // speed on raymarch/SSAA. Software SwiftShader stays the default canonical path.
+  if (env.KINO_GPU === "1") {
+    return [
+      ...shared,
+      "--use-gl=angle",
+      platform === "darwin" ? "--use-angle=metal" : "--use-angle",
+    ];
+  }
+  return [
+    ...shared,
+    // Software WebGL2 — --disable-gpu alone blocks all GL contexts; shaders need this.
+    "--use-gl=angle",
+    "--use-angle=swiftshader-webgl",
+    "--enable-unsafe-swiftshader",
+  ];
+}
+
+/** Cache / signature tag for the active GL backend. */
+export function glMode(env: NodeJS.ProcessEnv = process.env): "gpu" | "sw" {
+  return env.KINO_GPU === "1" ? "gpu" : "sw";
 }
 
 // Browser pool with an idle grace period. One browser per render WORKER, not per render: CDP
@@ -78,23 +118,6 @@ export async function launchBrowser(): Promise<Browser> {
     headless: true,
     executablePath,
     protocolTimeout: 120000,
-    args: [
-      "--force-color-profile=srgb",
-      // Software WebGL2 (SwiftShader) — --disable-gpu alone blocks all GL contexts; shaders need this.
-      "--use-gl=angle",
-      "--use-angle=swiftshader-webgl",
-      "--enable-unsafe-swiftshader",
-      "--force-device-scale-factor=1",
-      "--hide-scrollbars",
-      "--mute-audio",
-      "--disable-extensions",
-      "--no-default-browser-check",
-      "--disable-background-networking",
-      // Worker pages are background tabs; without these Chrome throttles their timers/rAF and a
-      // non-frontmost page can stall indefinitely.
-      "--disable-background-timer-throttling",
-      "--disable-renderer-backgrounding",
-      "--disable-backgrounding-occluded-windows",
-    ],
+    args: launchArgs(),
   });
 }

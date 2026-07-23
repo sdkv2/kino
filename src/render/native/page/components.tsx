@@ -177,8 +177,9 @@ const ImageBg: React.FC<{ src: string; t: Theme }> = ({ src, t }) => {
 };
 
 // Dispatcher: glow = CSS drift; image = Ken-Burns photo; mesh/aurora/particles/grid/solid = canvas
-// presets (solid is the loop-safe static one); custom = the brand's own draw fn. Animated backgrounds
-// get the legibility scrim.
+// presets (solid is the loop-safe static one); custom = brand draw fn or .frag shader.
+// Canvas/image get a legibility Scrim. Shader backgrounds do NOT — the frag owns exposure, and
+// liquid-glass samples the raw canvas (a CSS scrim would darken the scene while glass stayed bright).
 export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps }> = ({ t, background }) => {
   const { kind, customCode, shaderCode, params, keyframes, triggers, image } = background;
   const draw = React.useMemo<DrawFn | undefined>(() => {
@@ -204,7 +205,6 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
     return (
       <AbsoluteFill>
         <ShaderBackground shaderSrc={shaderCode} params={params} keyframes={keyframes} triggers={triggers} t={t} />
-        <Scrim t={t} />
       </AbsoluteFill>
     );
   }
