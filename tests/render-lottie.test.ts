@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { KinoProps } from "../src/render/props.js";
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9 };
-const bg = { kind: "glow" as const, image: null, customCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] };
+const bg = { kind: "glow" as const, image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] };
 const sampleCenter = (png: string) => magick([png, "-format", "%[pixel:p{540,960}]", "info:"]).trim();
 const greenOf = (s: string) => {
   const m = s.match(/srgb\((\d+),\s*(\d+),\s*(\d+)\)/);

@@ -24,7 +24,7 @@ import { ensureFont } from "../fonts/manager.js";
 import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
-import { resolveBackgroundComponent } from "../media/backgroundLib.js";
+import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
 import type { KinoProps, WordTiming } from "../render/props.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
@@ -211,6 +211,7 @@ export async function prepare(
   const bgKind = (opts.background as ReturnType<typeof resolveBackgroundKind> | undefined) ?? resolveBackgroundKind(brand, spec);
   let bgImageRel: string | null = null;
   let bgCustomCode: string | null = null;
+  let bgShaderCode: string | null = null;
   if (bgKind === "image") {
     const imgAbs = resolveBrandFile(brand.facelessBackdrop, project);
     if (!imgAbs) throw new Error('background "image" needs brand.facelessBackdrop');
@@ -224,13 +225,17 @@ export async function prepare(
           '(bare id e.g. "brand-wash", or a path). See `kino backgrounds`.',
       );
     }
-    bgCustomCode = readFileSync(resolveBackgroundComponent(compRef, project), "utf8");
+    const compPath = resolveBackgroundComponent(compRef, project);
+    const code = readFileSync(compPath, "utf8");
+    if (isShaderPath(compPath)) bgShaderCode = code;
+    else bgCustomCode = code;
   }
   const bgColors = resolveBackgroundColors(brand);
   const background = {
     kind: bgKind,
     image: bgImageRel,
     customCode: bgCustomCode,
+    shaderCode: bgShaderCode,
     params: {
       colorA: bgColors[0],
       colorB: bgColors[1],

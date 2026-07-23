@@ -83,7 +83,8 @@ export interface BgTrigger {
 export interface BackgroundProps {
   kind: "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "solid" | "custom";
   image: string | null; // staticFile-relative path, for kind="image"
-  customCode: string | null; // draw-fn source, for kind="custom"
+  customCode: string | null; // Canvas2D draw-fn source, for kind="custom" (.js)
+  shaderCode: string | null; // GLSL mainImage body, for kind="custom" (.frag/.glsl)
   params: Record<string, BgParamValue>; // base param values (tweened by keyframes)
   keyframes: BgKeyframe[]; // agent-authored param tweens over time
   triggers: BgTrigger[]; // agent-authored one-shot actions (e.g. pulse)
