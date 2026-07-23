@@ -21,6 +21,9 @@ versioning; the authoritative version is the `version` field in `package.json`.
   all-`voFile` specs build real with no ElevenLabs key. Mock builds pace spec text over the
   file's true duration, free and offline.
 
+## [1.21.2] — version bump
+- Bumped the main package version and regenerated Node package metadata.
+
 ## [1.21.1] — node 20 floor
 - **Node ≥20 required**: `engines` bumped from 18 (EOL) to 20; setup.sh, docs, and badge now agree.
 
