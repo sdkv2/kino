@@ -4,6 +4,7 @@ out/
 .env
 *.log
 dist/
+__pycache__/
 scratchpad/
 projects/
 brands/

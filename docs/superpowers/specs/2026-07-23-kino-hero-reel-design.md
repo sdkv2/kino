@@ -23,7 +23,19 @@ velocity blur, `data-measure` alignment QA, dual-format.
 - **Faceless:** `provider: none`, VO over shader backgrounds
 - **Brand rules:** `film: 0`, `voiceModel: "eleven_multilingual_v2"` (metronome-stable — required when on-screen motion locks to VO)
 - **Runtime:** ~26s, 6 beats
-- **Location:** `projects/kino-hero-reel/` (`project.json → brand: kino`)
+- **Location:** `projects/kino-hero-reel/` (`project.json → brand: kino-reel`)
+- **Brand:** `kino-reel` = the `kino` brand minus the auto-placed faceless logo (the R2 logo PNG
+  is a light boxed wordmark, wrong as an overlay mark; the reel renders "kino" as styled text on
+  the surfaces instead) and with a smaller caption size (56) for lower-third kickers.
+
+### Structure — stitched reel (one shader per spec)
+
+kino resolves `background`/`backgroundComponent` **top-level only** (`schema.ts` rejects them as
+segment fields), and `batch` renders many specs but does not concatenate. So five shader
+*backgrounds* cannot share one `kino build`. The reel is therefore **six single-beat section
+specs**, each in its native shader background, stitched by `build-reel.sh` (render ×6 →
+ffmpeg xfade + acrossfade → `nothing-here-was-filmed-<fmt>.mp4`, per format). Deliverable command
+is `./build-reel.sh` (with a free `--mock` dry-run), not `kino build advert.json`.
 
 ## Palette — "kino-aurora"
 
@@ -38,7 +50,7 @@ punches (pure mint/green reads monochrome-teal). Set per beat via `backgroundKey
 |---|----|---------|----------------|------------|
 | 1 | 3 | `aurora-flow` bg (avatar) | aurora-flow shader | "Nothing here was filmed." |
 | 2 | 4 | `liquid-orb` bg (avatar) | raymarched metaball, fresnel rim, orbit cam, `uPulse` | "Every frame is 3D — raymarched from one spec file." |
-| 3 | 5 | `ui-hero` bg + tex (avatar) | texture **live-scrub** + `reveal` shard-dissolve + floor reflection | "That card? A real UI element, handed to the shader as a texture." |
+| 3 | 7 | `card-render` (custom .frag) bg + tex (avatar) | texture **live-scrub typewriter** — scan bar draws the empty editor, then the spec **types itself in char-by-char** | "This card is the actual spec — a real interface element, handed straight to the shader as a texture." |
 | 4 | 4 | `orb-badge` bg + tex (avatar) | texture **static** + 3D cylindrical decal wrap + correct occlusion | "So your own interface can ride a live 3D surface." |
 | 5 | 5 | `player.html` (motion) | **`--t` real clock** + cam easing + `.kino-camera` blur + `--kino-aspect` | "Same spec in, same frames out — every single time." |
 | 6 | 5 | `liquid-glass` bg + `kino-glass` overlay (avatar) | refractive drop **+ real-refraction material stacked** | "Cinematic 3D. One build command." |
@@ -51,11 +63,18 @@ punches (pure mint/green reads monochrome-teal). Set per beat via `backgroundKey
 - **2 — liquid-orb.** `background: custom / liquid-orb`, `backgroundIntensity: 0.85`. `backgroundKeyframes`
   set the palette; one `backgroundTrigger` `pulse` flashes the fresnel rim on a beat accent. Sparse
   kicker overlay ("raymarched · deterministic").
-- **3 — ui-hero.** `background: custom / ui-hero`. `backgroundTextures: [{ source: "motion/render-card.html", param: "fill" }]`
-  (live-scrub). `backgroundKeyframes`: `reveal` 0 (hold to ~0.6s) → 1 by ~3s (`easeOutCubic`, the shard
-  materialize); `fill` 0 → 1 across the beat (the card's own CSS progress). The card is the content — no
-  extra caption. *Note:* `backgroundKeyframes` are absolute-seconds only (no `atWord`), so `reveal` timing
-  is estimated from VO length and may need a small retune at the real build.
+- **3 — spec card (`card-render`).** *(v2 — the `ui-hero` shard-dissolve + floor-reflection presentation
+  was rejected; replaced with a purpose-built shader.)* `background: custom / backgrounds/card-render.frag`
+  — a project-local shader that floats the DOM card on a gently-yawing 3D plane and **draws it in with a
+  bright scan bar** (top→bottom, driven by a `scan` param), plus faint scanlines + a lit edge rim; **no
+  dissolve, no floor reflection.** The card (`motion/spec-card.html`) is the `advert.json` **spec itself**
+  — a mini code editor whose highlighted `"backgroundComponent": "card-render"` line names the very shader
+  drawing it. `backgroundTextures: [{ source: "motion/spec-card.html", param: "fill" }]`. **`fill` drives a
+  real CSS typewriter**: each code line is a monospace overflow-clip whose width `steps()` 0→Nch across its
+  slice of the 1s scrub timeline, with a mint caret riding the frontier via `border-right` — so the spec
+  types itself in character-by-character, per-frame, through the live-scrub. `backgroundKeyframes`: `scan`
+  0 → 1 over ~0.3–1.1s (window frame scans in first), then `fill` 0 → 1 over ~1.3–6.4s (the typing). The
+  strongest possible demo of live-scrub: DOM re-rasterized every frame, not a static texture.
 - **4 — orb-badge.** `background: custom / orb-badge`. `backgroundTextures: ["motion/badge.html"]` (static).
   Decal spins on `iTime`; palette via `backgroundKeyframes`.
 - **5 — player (determinism).** `kind: motion`, `source: "motion/player.html"`. `params: { cam: 0, enter: 0 }`;
@@ -70,7 +89,9 @@ punches (pure mint/green reads monochrome-teal). Set per beat via `backgroundKey
 
 ## Feature coverage
 
-Covered by beats: `aurora-flow`, `liquid-orb`, `ui-hero`, `orb-badge`, `liquid-glass` (all 5 shaders);
+Covered by beats: `aurora-flow`, `liquid-orb`, `orb-badge`, `liquid-glass` (4 bundled shaders) + a custom
+`card-render.frag` (beat 3; the bundled `ui-hero` was dropped by user request — the custom shader still
+covers the shader-background + texture-channel features and additionally dogfoods authoring a `.frag`);
 texture channels **live-scrub** (beat 3) + **static** (beat 4); `kino-glass` material (beat 6); `--t`
 real clock + cam easing + `.kino-camera` blur (beat 5); 16:9 dual-format + `--kino-aspect`.
 
@@ -82,12 +103,13 @@ workspace detection` is infra, not video-visible (exercised just by running insi
 
 ## Assets to build (fresh, high-craft)
 
-1. `motion/render-card.html` — kino render-status card, live-scrub `fill`, real brand copy.
+1. `motion/spec-card.html` — the `advert.json` spec as a mini code editor (live-scrub caret) + `backgrounds/card-render.frag` — the scan-wipe presentation shader. *(v2; replaced `render-card.html` + `ui-hero`.)*
 2. `motion/badge.html` — kino wordmark chip (IBM Plex Mono + mint dot), static decal.
 3. `motion/player.html` — `--t` determinism timeline UI, `.kino-camera`, aspect-aware.
 4. `motion/cta-glass.html` — SDF-rim `kino-glass` CTA card over the liquid-glass shader.
 
-Plus `specs/nothing-here-was-filmed.json` and `project.json`.
+Plus the six section specs (`specs/reel-{1..6}-*.json`), `project.json`, the `kino-reel` brand
+(`brands/kino-reel/brand.md`), and `build-reel.sh` (render ×6 → xfade concat per format).
 
 ## QA plan (no VO, mock timing)
 
@@ -100,17 +122,30 @@ Plus `specs/nothing-here-was-filmed.json` and `project.json`.
 
 `atWord` anchors and real VO timing resolve at the real `kino build`; QA uses mock timing + `still --around`.
 
-## Risks
+## Risks & how they resolved during the build
 
-1. **kino-glass over a shader background via `motionOverlay`** (beat 6) — the least-tested combo. The
-   `motion-design` skill says `kino-glass` "works over shader (.frag) backgrounds," so it should sample the
-   shader canvas. **QA beat 6 first.** Fallback if the mirror doesn't sample: split beat 6 into a
-   liquid-glass hero (no overlay) + a `kino-glass` CTA over a Canvas2D `brand-wash` bg.
-2. **16:9 framing** — the shaders lift the form toward the upper-third for 9:16 lower-third captions; in
-   wide the negative space differs and captions re-center. Accept looser wide framing; motion beats adapt
-   via `--kino-aspect`.
-3. **`reveal`/`fill` seconds-based timing** (beat 3) — no `atWord` on `backgroundKeyframes`; estimated
-   from VO length, retune at real build.
+1. **kino-glass over a shader background via `motionOverlay`** (beat 6) — **RESOLVED, works.** The glass
+   CTA card genuinely refracts the liquid-glass shader behind it (glass refracting glass). Fallback
+   (kino-glass over Canvas2D `brand-wash`) not needed.
+2. **16:9 framing** — **fine.** Motion beats (player, CTA) widen via `--kino-aspect`; shader beats render
+   centered/reflected in wide and read well.
+3. **`scan`/`fill` seconds-based timing** (beat 3) — estimated from VO length; retune at real build.
+
+Beat-3 gotcha (v2): `white-space:pre` on a code-editor card renders the **source newlines/indentation
+between the `<div>` rows as literal blank lines** in the raster → the card showed only 2 lines with a big
+gap. Fix: no `pre` on the container; indent with `padding-left`, `white-space:nowrap` per row.
+
+Issues found & fixed during QA (not anticipated):
+
+- **One-shader-per-spec** (see Structure above) → switched to the stitched-reel architecture.
+- **Missing brand logo asset** — the `kino` brand points at `logo/kino-logo-web.png` (an R2 asset absent
+  from the checkout); faceless beats hard-crash without it. Restored the file, then dropped the logo via
+  the `kino-reel` brand (it rendered as an ugly light sticker anyway).
+- **Oversized center-locked captions** collided with the hero surfaces (esp. beat 3's card) → removed the
+  beat captions, using small `position:"bottom"` `texts` kickers where a label helps.
+- **`still --segment` is 0-indexed with no bounds guard** (`preview.ts:69`) — `--segment 1` on a
+  single-segment spec crashes with `reading 'startSec' of undefined`. Use `--segment 0`. (Minor kino
+  papercut, unrelated to the reel.)
 
 ## Deviation note
 

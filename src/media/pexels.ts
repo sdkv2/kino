@@ -102,10 +102,14 @@ export function pickFile(v: PexelsVideo, targetWidth = 1080): PexelsVideoFile | 
   return covering[0] ?? mp4s.sort((a, b) => b.width - a.width)[0];
 }
 
-/** Download URL for a still — orientation crop when present, else large2x, else original. */
+/** Download URL for a still — the full-resolution `original`. The photo search is already
+ *  filtered by orientation, so Pexels' oriented crop (`src.landscape`/`src.portrait`) adds
+ *  nothing but a silent ~1200px downscale of the listed native size (looks obviously low-res
+ *  once a shader magnifies it). Prefer `original`, then the largest fixed sizes, then the
+ *  oriented crop as a last resort. */
 export function pickPhotoUrl(p: PexelsPhoto, orientation: Orientation = "portrait"): string {
   const oriented = orientation === "landscape" ? p.src.landscape : p.src.portrait;
-  return oriented || p.src.large2x || p.src.large || p.src.original;
+  return p.src.original || p.src.large2x || p.src.large || oriented || p.src.medium || p.src.small;
 }
 
 /** Tiny preview for agent screening (before downloading the full still). */

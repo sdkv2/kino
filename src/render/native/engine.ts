@@ -23,6 +23,12 @@ function resolveShaderSS(env: NodeJS.ProcessEnv = process.env, opts?: { mock?: b
   return 2;
 }
 
+/** FXAA edge post-pass on every shader background — cheap analytic AA on top of SS, so silhouettes
+ *  stay clean without a higher (costlier) SS. On by default; KINO_SHADER_FXAA=0 disables. */
+function resolveShaderFXAA(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.KINO_SHADER_FXAA !== "0";
+}
+
 const DIMS: Record<string, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "3:4": { width: 1080, height: 1440 },
@@ -278,6 +284,7 @@ async function pointServerAt(opts: {
   height: number;
   total: number;
   shaderSS: number;
+  shaderFXAA: boolean;
 }): Promise<{ url: string }> {
   const pageJs = await getPageBundle();
   return ensureRenderServer({
@@ -291,6 +298,7 @@ async function pointServerAt(opts: {
       durationInFrames: opts.total,
       media: opts.media,
       shaderSS: opts.shaderSS,
+      shaderFXAA: opts.shaderFXAA,
     }),
   });
 }
@@ -322,6 +330,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   const slots = Array.from({ length: n }, (_, i) => i);
   // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
   const ss = resolveShaderSS(process.env, { mock: preset === "veryfast" });
+  const fx = resolveShaderFXAA(process.env);
   const mode = glMode();
   try {
     const endSec = total / props.fps;
@@ -337,7 +346,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     try {
       for (const fmt of formats) {
         const { width, height } = DIMS[fmt];
-        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss });
+        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx });
         const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
         lap(`pages-boot ${fmt}`);
         // Capture cache: unchanged beats reuse their stored JPEGs; only dirty frames hit Chrome.
@@ -352,6 +361,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           fps: props.fps,
           mode,
           shaderSS: ss,
+          shaderFXAA: fx,
         });
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
@@ -461,7 +471,8 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
     const { width, height } = DIMS[format];
     try {
       const ss = resolveShaderSS(process.env);
-      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss });
+      const fx = resolveShaderFXAA(process.env);
+      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx });
       const handle = await workerPage(0, browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {

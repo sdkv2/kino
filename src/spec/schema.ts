@@ -88,6 +88,7 @@ const Segment = z.discriminatedUnion("kind", [
     kind: z.literal("avatar"),
     text: z.string().min(1),
     voFile: VoFile.optional(),
+    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     cta: z.boolean().default(false),
     shot: Shot.optional(),
@@ -106,6 +107,7 @@ const Segment = z.discriminatedUnion("kind", [
     asset: z.string().min(1),
     text: z.string().min(1),
     voFile: VoFile.optional(),
+    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     kicker: Kicker.optional(),
     shot: Shot.optional(),
@@ -147,6 +149,7 @@ const Segment = z.discriminatedUnion("kind", [
     ...motionFields,
     text: z.string().min(1),
     voFile: VoFile.optional(),
+    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
     caption: z.string().optional(),
     cta: z.boolean().default(false), // semantic end-card marker; a full-screen wordmark motion beat is itself the CTA
 
@@ -189,19 +192,11 @@ export const SpecSchema = z
     backgroundComponent: z.string().min(1).optional(),
     // Texture channels for shader backgrounds (uTex0..uTex3): project asset paths. Images
     // (.png/.jpg/.webp) upload as-is; motion HTML (.html) is sanitized and rasterized once at
-    // load (foreignObject) — brand fonts + palette vars apply. An object entry with `frames`
-    // scrub-bakes the html's CSS @keyframes (1s convention) into an N-frame atlas the shader
-    // steps through (kinoTexFrame). See docs/spec-reference.md.
+    // load (foreignObject) — brand fonts + palette vars apply. An object entry with `param`
+    // re-rasterizes the html EVERY FRAME at that background param's value (0..1 → the markup's
+    // 1s CSS @keyframes) — true per-frame animation, no stepping. See docs/spec-reference.md.
     backgroundTextures: z
-      .array(
-        z.union([
-          z.string().min(1),
-          z.object({ source: z.string().min(1), frames: z.number().int().min(2).max(64) }),
-          // Live scrub: re-rasterize the html each frame at the value of this background param
-          // (0..1 → the markup's 1s CSS @keyframes). Smoothest option — no flipbook stepping.
-          z.object({ source: z.string().min(1), param: z.string().min(1) }),
-        ]),
-      )
+      .array(z.union([z.string().min(1), z.object({ source: z.string().min(1), param: z.string().min(1) })]))
       .max(4)
       .optional(),
     captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)

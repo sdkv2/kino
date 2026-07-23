@@ -378,8 +378,12 @@ Rules and knobs:
 | `--glass-film` | `rgba(255,255,255,0.13)` | luminous film over the refraction |
 | `--glass-saturate` | `1.25` | backdrop saturation boost |
 | `--glass-brightness` | `1.06` | backdrop brightness boost |
-| `--glass-morph` | `2` | shape: `0` triangle → `1` circle → `2` round-rect (blend between) |
+| `--glass-morph` | `2` | continuum: `0` triangle → `1` circle → `2` round-rect. **Pair mode** (when `--glass-from` ≥ 0): `0..1` blend between from→to |
+| `--glass-from` | _(unset / `-1`)_ | optional shape id `0\|1\|2`. Set ≥0 to morph **directly** between two shapes (skips the continuum middle) |
+| `--glass-to` | `2` | pair-mode target shape id `0\|1\|2` |
 | `--glass-tilt` | `0` | SDF rotation in degrees (no CSS rotate) |
+
+Pair-mode morph is `0→1` along one edge only. To chain (rect→tri→circ), finish the first blend (`morph: 1`), then **retarget** `from`/`to`/`morph: 0` on the next keyframe with `"ease": "hold"` so shape ids snap instead of lerping through illegal middles.
 
 Pair with a bright border / diagonal sheen for quiet rect cards; morphing shapes get a soft lit rim
 from the SDF itself. Copyable reference: `assets-lib/motion/liquid-glass.html` (bare id

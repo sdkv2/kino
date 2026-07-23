@@ -83,13 +83,14 @@ export interface BgTrigger {
 }
 // A shader-background texture channel (uTex0..uTex3), resolved at build time.
 // kind="image": staged file under /public. kind="html": sanitized motion-style markup the page
-// rasterizes once at load (foreignObject) — brand fonts and --kino-* palette vars apply.
+// rasterizes (foreignObject) — brand fonts and --kino-* palette vars apply. With `param` set, the
+// markup is re-rasterized EVERY FRAME at that background param's value (0..1 → the markup's 1s
+// CSS @keyframes) — true per-frame animation. Without it, a single static raster.
 export interface BgTexture {
   kind: "image" | "html";
   src: string | null; // public-relative file, for kind="image"
   html: string | null; // sanitized markup, for kind="html"
-  frames?: number; // html only: scrub-bake the markup's 1s CSS @keyframes into an N-frame atlas
-  param?: string; // html only: live per-frame scrub driven by this background param (0..1)
+  param?: string; // html only: per-frame scrub driven by this background param (0..1)
 }
 
 export interface BackgroundProps {

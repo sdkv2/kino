@@ -21,7 +21,10 @@
 //   --glass-brightness backdrop brightness boost             (default 1.06)
 //   --glass-frost      body frost blur radius in px          (default 0)
 //   --glass-edge-blur  extra blur at the rim in px           (default 0)
-//   --glass-morph      0=triangle → 1=circle → 2=round-rect  (default 2)
+//   --glass-morph      continuum: 0=tri → 1=circ → 2=rect (default 2);
+//                      pair mode (--glass-from ≥ 0): 0..1 blend from→to
+//   --glass-from       optional shape id 0|1|2; ≥0 enables direct pair morph
+//   --glass-to         pair-mode target shape id 0|1|2       (default 2)
 //   --glass-tilt       SDF rotation in degrees               (default 0; element stays unrotated)
 // Supersample (SS) comes from render-config / window.__kinoShaderSS (mock defaults to 1).
 
@@ -54,7 +57,9 @@ uniform float uSaturate;
 uniform float uBrightness;
 uniform float uFrost;      // body frost blur px
 uniform float uEdgeBlur;   // extra rim blur px
-uniform float uMorph;      // 0=triangle, 1=circle, 2=round-rect
+uniform float uMorph;      // continuum 0..2, or 0..1 blend when uMorphFrom >= 0
+uniform float uMorphFrom;  // <0 = continuum; else discrete shape id 0|1|2
+uniform float uMorphTo;    // pair-mode target shape id 0|1|2
 uniform float uTilt;       // radians
 uniform float uSS;         // supersample factor
 out vec4 outColor;
@@ -96,6 +101,17 @@ float shapeSd(vec2 p) {
   float dTri = sdTriangle(p, center, half_);
   float dCirc = sdCircle(p, center, rCirc);
   float dRect = sdRoundRect(p, center, half_, rRect);
+  // Pair morph (--glass-from ≥ 0): blend two discrete shapes so rect↔tri skips circle.
+  if (uMorphFrom >= 0.0) {
+    float a = floor(clamp(uMorphFrom, 0.0, 2.0) + 0.5);
+    float b = floor(clamp(uMorphTo, 0.0, 2.0) + 0.5);
+    float dA = a < 0.5 ? dTri : (a < 1.5 ? dCirc : dRect);
+    float dB = b < 0.5 ? dTri : (b < 1.5 ? dCirc : dRect);
+    // Smoothstep the blend — linear mix reads as two stacked silhouettes mid-way.
+    float t = clamp(uMorph, 0.0, 1.0);
+    t = t * t * (3.0 - 2.0 * t);
+    return mix(dA, dB, t);
+  }
   float m = clamp(uMorph, 0.0, 2.0);
   if (m < 1.0) return mix(dTri, dCirc, m);
   return mix(dCirc, dRect, m - 1.0);
@@ -247,6 +263,8 @@ function makeState(): GlassState | null {
     "uFrost",
     "uEdgeBlur",
     "uMorph",
+    "uMorphFrom",
+    "uMorphTo",
     "uTilt",
     "uSS",
   ];
@@ -382,6 +400,8 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     const frost = cssVarPx(el, "--glass-frost", 0);
     const edgeBlur = cssVarPx(el, "--glass-edge-blur", 0);
     const morph = cssVar(cs, "--glass-morph", 2); // default round-rect = prior behavior
+    const morphFrom = cssVar(cs, "--glass-from", -1); // <0 = continuum mode
+    const morphTo = cssVar(cs, "--glass-to", 2);
     const tiltDeg = cssVar(cs, "--glass-tilt", 0);
     const tilt = (tiltDeg * Math.PI) / 180;
 
@@ -407,6 +427,8 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     gl.uniform1f(loc.uFrost, frost);
     gl.uniform1f(loc.uEdgeBlur, edgeBlur);
     gl.uniform1f(loc.uMorph, morph);
+    gl.uniform1f(loc.uMorphFrom, morphFrom);
+    gl.uniform1f(loc.uMorphTo, morphTo);
     gl.uniform1f(loc.uTilt, tilt);
     gl.uniform1f(loc.uSS, SS);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

@@ -20,6 +20,7 @@ interface RenderConfig {
   durationInFrames: number;
   media: MediaMap;
   shaderSS?: number;
+  shaderFXAA?: boolean;
 }
 
 declare global {
@@ -29,6 +30,7 @@ declare global {
     __kinoReady: boolean;
     __kinoError?: string;
     __kinoShaderSS?: number;
+    __kinoShaderFXAA?: boolean;
   }
 }
 
@@ -127,6 +129,8 @@ async function kinoLoad(): Promise<void> {
   await loadBgTextures(cfg.props);
   // Shader/glass supersample (1–4). Mock builds default to 1; finals default to 2.
   window.__kinoShaderSS = cfg.shaderSS ?? 2;
+  // FXAA edge post-pass on shader backgrounds. Default on (KINO_SHADER_FXAA=0 disables).
+  window.__kinoShaderFXAA = cfg.shaderFXAA ?? true;
   root ??= createRoot(container);
   current = cfg;
   await kinoSeek(0);

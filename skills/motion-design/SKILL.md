@@ -274,7 +274,10 @@ Craft rules:
   `--glass-band` (px, max(radius,48)), `--glass-chroma` (0.07), `--glass-profile` (2.2),
   `--glass-frost` (px, 0 — body frost), `--glass-edge-blur` (px, 0 — extra rim blur),
   `--glass-film`, `--glass-saturate` (1.25), `--glass-brightness` (1.06),
-  **`--glass-morph`** (`0` triangle → `1` circle → `2` round-rect, default `2`),
+  **`--glass-morph`** (`0` triangle → `1` circle → `2` round-rect continuum, default `2`),
+  **`--glass-from` / `--glass-to`** (optional shape ids `0\|1\|2` — when `from` ≥ 0, morph is a
+  `0..1` blend **directly** between those two shapes, so rect↔triangle does not travel through
+  circle),
   **`--glass-tilt`** (degrees, default `0` — rotate the SDF in-shader; never CSS-rotate the
   glass element, that breaks backdrop sampling).
 - Morph demos: square container with room for tilt; set `border-radius` for the rect corner size.

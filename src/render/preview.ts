@@ -67,6 +67,7 @@ export function pickFrames(segments: SegLike[], fps: number, sel: FrameSelection
   }
   if (sel.segment != null) {
     const s = segments[sel.segment];
+    if (!s) throw new Error(`--segment ${sel.segment} out of range (spec has ${segments.length} segments, 0-indexed 0..${segments.length - 1})`);
     return [{ frame: mid(s, fps), label: `${sel.segment} ${s.kind}` }];
   }
   // Default (storyboard): perBeat frames per beat. perBeat===1 keeps the legacy single midpoint.

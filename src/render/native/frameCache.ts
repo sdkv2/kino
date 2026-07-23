@@ -43,10 +43,13 @@ export function frameSignatures(opts: {
   mode?: "gpu" | "sw";
   /** Shader/glass supersample factor — SS=1 vs 2 are different pixels. */
   shaderSS?: number;
+  /** FXAA edge post-pass on/off — different pixels. */
+  shaderFXAA?: boolean;
 }): string[] {
   const { props, publicDir, pageJsHash, width, height, total, fps } = opts;
   const mode = opts.mode ?? (process.env.KINO_GPU === "1" ? "gpu" : "sw");
   const shaderSS = opts.shaderSS ?? 2;
+  const shaderFXAA = opts.shaderFXAA ?? true;
   const f = (s: number) => Math.round(s * fps);
   const globalSig = sha1(
     JSON.stringify({
@@ -58,6 +61,7 @@ export function frameSignatures(opts: {
       pageJsHash,
       mode,
       shaderSS,
+      shaderFXAA,
       avatar: props.avatar ? statSig(join(publicDir, props.avatar)) : "none",
       props: { ...props, segments: undefined, music: undefined },
     }),

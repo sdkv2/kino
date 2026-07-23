@@ -14,8 +14,11 @@ program.name("kino").description("Agent-driven short-form video production").ver
 program
   .command("build <spec>")
   .description("Generate a video from a spec (vo → avatar → render)")
-  .option("--mock", "skip all paid APIs (silent VO + placeholder avatar)")
-  .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4")
+  .option("--draft", "fast, free preview: silent VO + placeholder avatar + low-quality encode")
+  .option("--no-tts", "skip voiceover — full-quality SILENT render (music/SFX still play)")
+  .option("--no-avatar", "skip the presenter — full-quality FACELESS render")
+  .option("--mock", "alias of --draft (deprecated)")
+  .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4,16:9")
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
   .option("--background <kind>", "override faceless background: glow|image|mesh|aurora|particles|grid|custom")
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
@@ -54,7 +57,7 @@ program
   .option("--montage", "tile multiple stills into one contact sheet")
   .option("--segment <n>", "render the midpoint of segment n")
   .option("--word <word>", "center the sheet on a spoken word's start (with --segment; implies montage)")
-  .option("--format <fmt>", "9:16 or 3:4")
+  .option("--format <fmt>", "9:16 | 3:4 | 16:9")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
@@ -66,7 +69,7 @@ program
 program
   .command("storyboard <spec>")
   .description("Render per-beat stills (composition + full reveal), tiled into a labeled contact sheet")
-  .option("--format <fmt>", "9:16 or 3:4")
+  .option("--format <fmt>", "9:16 | 3:4 | 16:9")
   .option("--frames <n>", "frames per beat (default 2: composition + fully-revealed end-state; the ·full tile shows overflow/overlaps)")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
@@ -141,7 +144,7 @@ program
 
 program
   .command("pexels <query>")
-  .description("Search Pexels stock videos (portrait by default); --get <n> downloads into assets/pexels/")
+  .description("Search Pexels stock VIDEOS (portrait by default); --get <n> downloads into assets/pexels/. For still images use `kino photos`.")
   .option("--get <n>", "download result #n from the search")
   .option("--count <n>", "results to list (default 8)")
   .option("--landscape", "search landscape instead of portrait")
@@ -151,7 +154,7 @@ program
 
 program
   .command("photos <query>")
-  .description("Search Pexels stock photos (portrait by default); --get <n> downloads into assets/pexels/")
+  .description("Search Pexels stock PHOTOS (portrait by default); --get <n> downloads the full-res original into assets/pexels/. For video clips use `kino pexels`.")
   .option("--get <n>", "download result #n from the search")
   .option("--count <n>", "results to list (default 8)")
   .option("--landscape", "search landscape instead of portrait")

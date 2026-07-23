@@ -5,7 +5,7 @@
 // variant-tagging on top.
 import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, isAbsolute } from "node:path";
+import { basename, dirname, extname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
@@ -57,6 +57,18 @@ function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider
   return abs;
 }
 
+// Let a spec path be given relative to its project, not just cwd: `still specs/x.json --project p`
+// now resolves `projects/p/specs/x.json`. Tries as-given first (abs / cwd-relative), then under the
+// project root, then its specs/ dir. Falls through unchanged so a genuinely missing file still
+// throws a clear ENOENT downstream.
+function resolveSpecPathIn(specPath: string, project: Project): string {
+  if (existsSync(specPath)) return specPath;
+  for (const cand of [join(project.projectRoot, specPath), join(project.projectRoot, "specs", basename(specPath))]) {
+    if (existsSync(cand)) return cand;
+  }
+  return specPath;
+}
+
 // Resolve an optional brand asset (logo/backdrop) — brands are shared, so paths are workspace-relative.
 function resolveBrandFile(p: string | undefined, project: Project): string | null {
   if (!p) return null;
@@ -90,9 +102,20 @@ export interface PrepareResult {
 // inspection commands (still/storyboard/inspect) so they share the exact pipeline.
 export async function prepare(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; project?: string },
+  opts: {
+    mock?: boolean; // deprecated alias of `draft`
+    draft?: boolean;
+    tts?: boolean; // default true on a full render; false = silent (full quality). commander --no-tts.
+    avatar?: boolean; // default true on a full render; false = faceless. commander --no-avatar.
+    format?: string;
+    provider?: string;
+    background?: string;
+    font?: string;
+    project?: string;
+  },
 ): Promise<PrepareResult> {
   const project = resolveProject({ specPath, project: opts.project });
+  specPath = resolveSpecPathIn(specPath, project);
   loadEnv(project.workspaceRoot);
   const spec = parseSpec(JSON.parse(readFileSync(specPath, "utf8")));
 
@@ -108,27 +131,37 @@ export async function prepare(
     captionMode: pc?.captionMode ?? rawBrand.captionMode,
   };
   validateSpec(spec, brand, project);
-  const provider = (opts.provider as Provider | undefined) ?? resolveProvider(spec, brand);
-  const mock = !!opts.mock;
+  // Three independent build axes (draft/mock is just the all-off, no-spend preset):
+  //   draft  → fast free preview: silent VO + placeholder avatar + veryfast/low-SS encode
+  //   tts    → real voiceover (off = silent, but FULL quality). commander --no-tts.
+  //   avatar → real presenter  (off = faceless, full quality; forced off whenever tts is off,
+  //            since a lip-synced avatar has nothing to sync to). commander --no-avatar.
+  const draft = !!(opts.draft || opts.mock);
+  const tts = !draft && opts.tts !== false;
+  const wantAvatar = tts && opts.avatar !== false;
+  // --no-avatar (or silent) routes through the existing faceless path by forcing provider "none".
+  const provider = wantAvatar ? ((opts.provider as Provider | undefined) ?? resolveProvider(spec, brand)) : "none";
   const voiceId = resolveVoice(spec, brand);
   // A spec whose every beat imports real VO (voFile) needs no TTS voice at all.
   const needsTts = spec.segments.some((s) => !s.voFile);
-  if (!mock && needsTts && !voiceId) {
-    throw new Error("No voice for a real build — set spec.voice or the brand's defaultVoice (or use --mock).");
+  if (tts && needsTts && !voiceId) {
+    throw new Error("No voice for a speaking build — set spec.voice or the brand's defaultVoice (or use --no-tts / --draft).");
   }
   const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4" | "16:9">;
   const cache = new Cache(project.cache);
 
-  log.info(`Building ${spec.title} · ${provider}${mock ? " · MOCK — no API spend" : ""}`);
+  const modeNote = draft ? " · draft (fast preview, no API spend)" : tts ? "" : " · no VO (silent, full quality)";
+  log.info(`Building ${spec.title} · ${provider}${modeNote}`);
 
   log.step("voiceover");
   const vo = await buildVO({
     spec,
     voiceId,
     cache,
-    // All-voFile specs can run keyless (whisper STT); mixed/TTS specs still require the key.
-    apiKey: mock || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
-    mock,
+    // No TTS → silent placeholder track (buildVO mock path), no key. All-voFile specs can run
+    // keyless (whisper STT); mixed/TTS specs still require the key.
+    apiKey: !tts || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
+    mock: !tts,
     model: resolveVoiceModel(spec, brand),
     needClips: provider !== "none",
     resolveAsset: (rel) => project.assetPath(rel),
@@ -144,7 +177,7 @@ export async function prepare(
   } else {
     const avTrack = await stitchAvatarTrack(vo.clips, plan.avatarIndices, cache);
     const source = provider === "heygen" ? resolveVoiceLook(spec, brand).lookId : resolveSourceImage(spec, brand, project, provider);
-    avatarPath = await buildAvatar({ provider, audioPath: avTrack, source, brand, cache, mock });
+    avatarPath = await buildAvatar({ provider, audioPath: avTrack, source, brand, cache, mock: false });
     avatarRel = "avatar.mp4";
     log.info(`  · ${plan.avatarIndices.length}/${spec.segments.length} segments on camera (trimmed)`);
   }
@@ -248,16 +281,15 @@ export async function prepare(
     }
     spec.backgroundTextures.forEach((entry, i) => {
       const ref = typeof entry === "string" ? entry : entry.source;
-      const frames = typeof entry === "string" ? undefined : "frames" in entry ? entry.frames : undefined;
-      const param = typeof entry === "string" ? undefined : "param" in entry ? entry.param : undefined;
+      const param = typeof entry === "string" ? undefined : entry.param;
       const asAsset = project.assetPath(ref);
       const abs = existsSync(asAsset) ? asAsset : isAbsolute(ref) ? ref : join(project.workspaceRoot, ref);
       if (!existsSync(abs)) throw new Error(`backgroundTextures[${i}] not found: tried assets/${ref} and ${ref}`);
       const ext = extname(abs).toLowerCase();
       if (ext === ".html") {
-        bgTextures.push({ kind: "html", src: null, html: sanitizeMotionHtml(readFileSync(abs, "utf8")), frames, param });
+        bgTextures.push({ kind: "html", src: null, html: sanitizeMotionHtml(readFileSync(abs, "utf8")), param });
       } else {
-        if (frames || param) throw new Error(`backgroundTextures[${i}]: frames/param only apply to .html sources`);
+        if (param) throw new Error(`backgroundTextures[${i}]: param only applies to .html sources`);
         const staged = `bg-tex-${i}${ext}`;
         copyFileSync(abs, join(publicDir, staged));
         bgTextures.push({ kind: "image", src: staged, html: null });
@@ -441,9 +473,23 @@ export async function prepare(
 
 export async function build(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; tag?: string; project?: string },
+  opts: {
+    mock?: boolean; // deprecated alias of draft
+    draft?: boolean;
+    tts?: boolean;
+    avatar?: boolean;
+    format?: string;
+    provider?: string;
+    background?: string;
+    font?: string;
+    tag?: string;
+    project?: string;
+  },
 ): Promise<string[]> {
   const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
+  // Only a draft is low-quality; a full render — even a silent (--no-tts) or faceless (--no-avatar)
+  // one — keeps final quality and a clean, untagged filename.
+  const draft = !!(opts.draft || opts.mock);
   // Under-animation probe: sample each full-screen motion beat at a few progress points and warn
   // when the frames barely differ — a poster with a dissolve, not motion. Never fails the build.
   try {
@@ -471,16 +517,16 @@ export async function build(
     log.warn(`motion probe skipped: ${(e as Error).message}`);
   }
   log.step("render");
-  // Tag variant renders (explicit --tag, else a --background/--font override, else mock) so a
+  // Tag variant renders (explicit --tag, else a --background/--font override, else draft) so a
   // preview or variant never overwrites the shipped default render.
   const autoTag =
     opts.tag ??
     opts.background ??
     (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined) ??
-    (opts.mock ? "mock" : undefined);
+    (draft ? "draft" : undefined);
   const outName = variantName(spec.title, autoTag);
-  // Mock builds are previews — take the fast encode preset; real builds keep the final quality.
-  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: opts.mock ? "veryfast" : "medium" });
+  // Drafts are previews — take the fast encode preset; full renders keep the final quality.
+  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: draft ? "veryfast" : "medium" });
   for (const o of outs) {
     // AAC pad past the last video frame → players flash black at EOF (and break seamless loops).
     try {

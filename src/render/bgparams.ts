@@ -4,6 +4,7 @@ export type ParamValue = number | string;
 /** All keyframe `ease` values — single source for schema + applyEase. */
 export const EASE_NAMES = [
   "linear",
+  "hold",
   "easeIn",
   "easeOut",
   "easeInOut",
@@ -61,6 +62,10 @@ function easeInOutExpo(x: number): number {
 export function applyEase(name: Ease | "out" | undefined, p: number): number {
   const x = clamp01(p);
   switch (name) {
+    case "hold":
+      // Step at the keyframe: keep prior value until `at`, then snap. For discrete params
+      // (shape ids, mode flags) that must not lerp through illegal middles.
+      return x >= 1 ? 1 : 0;
     case "easeIn":
     case "easeInCubic":
       return easeInPow(x, 3);

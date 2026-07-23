@@ -4,6 +4,7 @@
 declare global {
   interface Window {
     __kinoShaderSS?: number;
+    __kinoShaderFXAA?: boolean;
   }
 }
 
@@ -11,4 +12,9 @@ declare global {
 export function shaderSS(): number {
   const n = typeof window !== "undefined" ? Number(window.__kinoShaderSS) : NaN;
   return Number.isFinite(n) && n >= 1 && n <= 4 ? Math.round(n) : 2;
+}
+
+/** Browser-side: FXAA edge post-pass on shader backgrounds. On unless kinoLoad set it false. */
+export function shaderFXAA(): boolean {
+  return typeof window === "undefined" ? true : window.__kinoShaderFXAA !== false;
 }

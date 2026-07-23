@@ -44,6 +44,7 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
   if (opts.word != null) {
     if (opts.segment == null) throw new Error("kino still --word needs --segment <n> (the beat that speaks it)");
     const segIdx = Number(opts.segment);
+    if (!r.words[segIdx]) throw new Error(`--segment ${segIdx} out of range (spec has ${r.words.length} segments, 0-indexed 0..${r.words.length - 1})`);
     const anchored = resolveWordAnchors([{ atWord: opts.word, action: "seek" }], r.words[segIdx], `segment[${segIdx}]`);
     wordCenter = anchored![0].at;
   }

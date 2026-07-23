@@ -43,6 +43,9 @@ describe("pickFrames", () => {
   it("segment → the midpoint frame of that segment", () => {
     expect(pickFrames(segs, 30, { segment: 1 })).toEqual([{ frame: Math.round(3.65 * 30), label: "1 app" }]);
   });
+  it("out-of-range segment → clear error, not undefined deref", () => {
+    expect(() => pickFrames(segs, 30, { segment: 2 })).toThrow(/--segment 2 out of range .*2 segments.*0\.\.1/);
+  });
   it("default → one midpoint frame per beat (storyboard)", () => {
     const r = pickFrames(segs, 30, {});
     expect(r).toHaveLength(2);

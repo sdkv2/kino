@@ -32,52 +32,90 @@ const UNIFORM_HEADER = [
   "uniform vec2 uTexSize1;",
   "uniform vec2 uTexSize2;",
   "uniform vec2 uTexSize3;",
-  // Animated (flipbook) channels: uTexFramesN = frame count (1 = static), uTexGridN = atlas
-  // cols/rows. Sample a frame with the kinoTexFrame helper below.
-  "uniform float uTexFrames0;",
-  "uniform float uTexFrames1;",
-  "uniform float uTexFrames2;",
-  "uniform float uTexFrames3;",
-  "uniform vec2 uTexGrid0;",
-  "uniform vec2 uTexGrid1;",
-  "uniform vec2 uTexGrid2;",
-  "uniform vec2 uTexGrid3;",
 ].join("\n");
 
-// Flipbook sampler: pick atlas cell for `frame` (0..frames-1) and sample uv within it.
-// Atlas rows are baked top-down but the upload is Y-flipped (v=0 = bottom), so rows address
-// from the bottom here. Static textures (frames=1, grid=1x1) reduce to a plain texture().
-const TEX_HELPERS = `
-vec4 kinoTexFrame(sampler2D tex, vec2 grid, float frames, vec2 uv, float frame) {
-  float f = clamp(floor(frame + 0.5), 0.0, max(frames, 1.0) - 1.0);
-  vec2 cell = vec2(mod(f, grid.x), (grid.y - 1.0) - floor(f / grid.x));
-  return texture(tex, (cell + clamp(uv, 0.0, 1.0)) / max(grid, vec2(1.0)));
+// Injected GLSL helpers for sampling a texture channel as a full-frame backdrop. Encodes the
+// cover-fit + mirror-wrap math authors kept getting wrong by hand (a screen→centre-slice mapping
+// magnifies ~25% of the image and blurs it; CLAMP_TO_EDGE offsets smear the border into streaks).
+// Unused functions compile away — cheap to always inject.
+const GLSL_HELPERS = `
+// Analytic edge AA: smoothstep across ~1px of a value's screen-space derivative. Use aastep(edge, x)
+// instead of step(edge, x) on any hard threshold (masks, rings, stripes, SDF silhouette cutoffs) to
+// kill jaggies without more supersampling. A whole-frame FXAA pass also runs after the shader, so AA
+// is free by default — reach for aastep only where you want an edge extra-crisp.
+float aastep(float edge, float x){ float w = max(fwidth(x), 1e-5); return smoothstep(edge - w, edge + w, x); }
+vec2 kinoMirrorUV(vec2 uv){ return 1.0 - abs(1.0 - fract(uv * 0.5) * 2.0); }
+vec2 kinoCoverUV(vec2 texSize, vec2 fragCoord){
+  vec2 res = iResolution.xy;
+  float ra = res.x / max(res.y, 1.0);
+  float ta = texSize.x > 0.5 ? texSize.x / max(texSize.y, 1.0) : ra; // unbound → no reframe
+  vec2 s = (ra > ta) ? vec2(1.0, ta / ra) : vec2(ra / ta, 1.0);
+  return (fragCoord / res - 0.5) * s + 0.5;
 }
-// Smooth variant: crossfades adjacent flipbook frames by the fractional frame index, so a
-// continuous drive value plays back without visible stepping. Use for anything that moves.
-vec4 kinoTexFrameLerp(sampler2D tex, vec2 grid, float frames, vec2 uv, float frame) {
-  float fmax = max(frames, 1.0) - 1.0;
-  float f0 = clamp(floor(frame), 0.0, fmax);
-  float f1 = min(f0 + 1.0, fmax);
-  vec4 a = kinoTexFrame(tex, grid, frames, uv, f0);
-  vec4 b = kinoTexFrame(tex, grid, frames, uv, f1);
-  return mix(a, b, clamp(frame - f0, 0.0, 1.0));
+// Full-frame cover-fit sample of a channel (aspect-correct, sharp, mirror-wrapped edges).
+vec4 kinoBackdrop(sampler2D tex, vec2 texSize, vec2 fragCoord){
+  return texture(tex, kinoMirrorUV(kinoCoverUV(texSize, fragCoord)));
+}
+// Same backdrop, displaced by a bent (refracted/reflected) ray's xy — the refraction/lens lookup.
+vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset){
+  return texture(tex, kinoMirrorUV(kinoCoverUV(texSize, fragCoord) + offset));
 }
 `;
 
-/** Wrap an agent-authored ShaderToy `mainImage` body into a compilable GLSL ES 3.00 fragment shader. */
-export function assembleShaderSource(body: string): string {
+const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Sorted numeric author-param names that pack into uParam0..N — the same set and order
+ *  resolveUniforms uses, derived from the base params + all keyframes so it is stable across
+ *  frames (paramsAt always carries the full key set). Drives the readable `u_<name>` aliases. */
+export function extraParamNames(
+  base: Record<string, number | string> = {},
+  keyframes: { params: Record<string, number | string> }[] = [],
+): string[] {
+  const numeric = new Set<string>();
+  const add = (o: Record<string, number | string>) => {
+    for (const [k, v] of Object.entries(o)) if (!RESERVED.has(k) && typeof v === "number") numeric.add(k);
+  };
+  add(base);
+  for (const k of keyframes) add(k.params);
+  return [...numeric].sort().slice(0, EXTRA_PARAM_SLOTS);
+}
+
+/** Wrap an agent-authored ShaderToy `mainImage` body into a compilable GLSL ES 3.00 fragment
+ *  shader. `extraNames` (from extraParamNames) get readable `#define u_<name> uParamI` aliases so
+ *  authors reference `u_bloom` instead of memorising which alphabetical slot `bloom` spilled into. */
+export function assembleShaderSource(body: string, extraNames: string[] = []): string {
+  // Prefixed so an alias can never collide with a bare local: existing shaders write
+  // `float reveal = uParam1;` — `reveal` is untouched by `#define u_reveal ...`.
+  const aliases = extraNames
+    .map((n, i) => (IDENT.test(n) ? `#define u_${n} uParam${i}` : ""))
+    .filter(Boolean)
+    .join("\n");
   return (
     "#version 300 es\n" +
     "precision highp float;\n\n" +
     UNIFORM_HEADER +
-    "\n" + TEX_HELPERS +
+    (aliases ? "\n" + aliases : "") +
+    "\n" +
+    GLSL_HELPERS +
     "\nout vec4 kino_fragColor;\n\n" +
     "// ---- authored body ----\n" +
     body +
     "\n// ---- kino entry ----\n" +
     "void main() { mainImage(kino_fragColor, gl_FragCoord.xy); }\n"
   );
+}
+
+/** Largest [w,h] (same aspect) that fits within `max` on both axes, else the original if it
+ *  already fits. Guards texture uploads against a GPU's GL_MAX_TEXTURE_SIZE — a full-res stock
+ *  original (e.g. 7680px) silently fails texImage2D on GPUs that cap at 4096/8192. Pure so it
+ *  unit-tests in Node; the canvas downscale itself lives in ShaderBackground. */
+export function fitTextureDims(w: number, h: number, max: number): [number, number] {
+  if (max <= 0 || (w <= max && h <= max)) return [w, h];
+  const s = max / Math.max(w, h);
+  // round (not floor) + cap: the long edge is exactly `max` in real math but FP can land at
+  // max-ε and floor to max-1; round lands on max and the min() keeps every result ≤ max.
+  const fit = (n: number) => Math.min(max, Math.max(1, Math.round(n * s)));
+  return [fit(w), fit(h)];
 }
 
 /** `#rrggbb` / `#rgb` → normalized [r,g,b]; anything unparseable → white. */

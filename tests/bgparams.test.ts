@@ -83,6 +83,11 @@ describe("applyEase / progressCurves", () => {
     expect(applyEase("easeInExpo", 0.5)).toBeLessThan(0.1);
     expect(applyEase("easeOutExpo", 0.5)).toBeGreaterThan(0.9);
   });
+  it("hold steps at the keyframe (no mid lerp)", () => {
+    expect(applyEase("hold", 0)).toBe(0);
+    expect(applyEase("hold", 0.99)).toBe(0);
+    expect(applyEase("hold", 1)).toBe(1);
+  });
   it("edge is 0 at ends and 1 at mid", () => {
     const a = progressCurves(0);
     const b = progressCurves(0.5);
