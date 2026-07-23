@@ -12,6 +12,7 @@ import { shotTransform, type Shot, type Transition } from "../../motion.js";
 import { activeWordIndex, isHighlightWord, normWord } from "../../captions.js";
 import { paramsAt } from "../../bgparams.js";
 import { CanvasBackground } from "./CanvasBackground";
+import { ShaderBackground } from "./ShaderBackground";
 import { getPreset, type DrawFn } from "../../backgrounds/presets.js";
 import { CAPTION_BOTTOM } from "../../captionLayout.js";
 import { luminance, filmFinishParams } from "../../filmFinish.js";
@@ -179,7 +180,7 @@ const ImageBg: React.FC<{ src: string; t: Theme }> = ({ src, t }) => {
 // presets (solid is the loop-safe static one); custom = the brand's own draw fn. Animated backgrounds
 // get the legibility scrim.
 export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps }> = ({ t, background }) => {
-  const { kind, customCode, params, keyframes, triggers, image } = background;
+  const { kind, customCode, shaderCode, params, keyframes, triggers, image } = background;
   const draw = React.useMemo<DrawFn | undefined>(() => {
     if (kind === "custom" && customCode) {
       // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
@@ -195,6 +196,14 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
     return (
       <AbsoluteFill>
         <ImageBg src={staticFile(image)} t={t} />
+        <Scrim t={t} />
+      </AbsoluteFill>
+    );
+  }
+  if (kind === "custom" && shaderCode) {
+    return (
+      <AbsoluteFill>
+        <ShaderBackground shaderSrc={shaderCode} params={params} keyframes={keyframes} triggers={triggers} t={t} />
         <Scrim t={t} />
       </AbsoluteFill>
     );
