@@ -177,11 +177,22 @@ void main() {
     return;
   }
 
-  // Outward gradient via central differences on the tilted SDF.
-  vec2 e = vec2(1.2, 0.0);
-  vec2 grad = normalize(vec2(
+  // Refraction normal via WIDE-step central differences on the tilted SDF. The exact SDF
+  // gradient hard-flips across the field's medial-axis kinks (where the nearest edge switches —
+  // the short ends of a wide card), which tears a triangular refraction seam whenever uBand
+  // reaches that deep. Differencing at ~1/3 of the band instead averages the field across the
+  // kink, so the lens normal sweeps continuously around the ends like a real glass slab.
+  // Where the wide samples cancel (flat medial interior) the vector→0: damp displacement to
+  // zero there rather than normalize (an epsilon-normalized flip would re-tear the seam,
+  // and true normalize(0) is NaN — which would poison pixels even at f=0).
+  float gs = clamp(uBand * 0.35, 1.2, 0.4 * min(uSize.x, uSize.y));
+  vec2 e = vec2(gs, 0.0);
+  vec2 gv = vec2(
     shapeSd(pl + e.xy) - shapeSd(pl - e.xy),
-    shapeSd(pl + e.yx) - shapeSd(pl - e.yx)));
+    shapeSd(pl + e.yx) - shapeSd(pl - e.yx));
+  // Straight-edge baseline magnitude is 2*gs (unit slope); smoothstep keeps direction intact
+  // on real rims and only fades displacement in the cancel zone.
+  vec2 grad = gv / max(length(gv), 1e-4) * smoothstep(0.15, 0.6, length(gv) / (2.0 * gs));
 
   float edgeU = clamp(1.0 - d / max(uBand, 1.0), 0.0, 1.0); // 1 at rim, 0 deep inside
   float f = pow(edgeU, uProfile) * uStrength;
