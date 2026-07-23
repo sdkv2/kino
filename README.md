@@ -7,8 +7,10 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://github.com/sdkv2/kino/actions/workflows/ci.yml"><img src="https://github.com/sdkv2/kino/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/@sdkv2/kino"><img src="https://img.shields.io/npm/v/@sdkv2/kino.svg?logo=npm&color=cb3837" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/@sdkv2/kino"><img src="https://img.shields.io/npm/dw/@sdkv2/kino.svg?color=cb3837" alt="npm downloads"></a>
+  <a href="https://www.npmjs.com/package/@sdkv2/kino"><img src="https://img.shields.io/npm/v/%40sdkv2%2Fkino.svg?logo=npm&color=cb3837" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@sdkv2/kino"><img src="https://img.shields.io/npm/dw/%40sdkv2%2Fkino.svg?color=cb3837" alt="npm downloads"></a>
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg" alt="Node ≥20">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/output-9%3A16%20MP4-black.svg" alt="9:16 MP4 output">
