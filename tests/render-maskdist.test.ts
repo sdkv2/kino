@@ -1,6 +1,7 @@
 // kinoMaskDist through a REAL render. Every other test of this helper is a string assertion on the
-// assembled source, which cannot catch a helper that returns a constant, saturates at the radius, or
-// inverts its sign — all three compile and all three read identically as text. So: draw a disc mask,
+// assembled source, which cannot catch a helper that returns a constant, saturates at the radius,
+// inverts its sign, or returns the right shape at the wrong scale — all four compile and all four
+// read identically as text. So: draw a disc mask,
 // shade the frame by predicates on the signed distance, and measure how much of the frame lights up.
 import { describe, it, expect } from "vitest";
 import { renderStills } from "../src/render/render.js";
@@ -32,8 +33,8 @@ const W = 1080, H = 1920, CX = 540, CY = 960, R = 300;
 const probe = (name: string, radius: number) =>
   `  float ${name} = kinoMaskDist(uMask0, uChannel0, f, ${radius.toFixed(1)});`;
 
-// Both probes ride ONE frame on separate colour channels — r = the boundary band, g = the deep
-// interior. Not merely cheaper than a render each: the render page is cached per process and
+// All three probes ride ONE frame on separate colour channels — r = the boundary band, g = the deep
+// interior, b = the magnitude ramp. Not merely cheaper than a render each: the page is cached and
 // RegionShader compiles its program once per component instance, so a second renderStills call with
 // the same segment shape reuses the FIRST call's GLSL and silently measures it twice.
 const body =
@@ -43,7 +44,15 @@ const body =
   probe("dInside", 16.0) +
   "\n" +
   // |d| <= 2 → a ~4px ring on the mask boundary. d < -8 → everything deeper than 8px INSIDE the disc.
-  "  c = vec4(1.0 - step(2.0, abs(dRing)), 1.0 - step(-8.0, dInside), 0.0, 1.0);\n}";
+  // b = the SHORTFALL of a graded ramp, gated to the disc's interior: 1 at the boundary falling to
+  // 0 at 16px inside, and 0 everywhere outside. The two step() probes above are insensitive to the
+  // SCALE of d — eroding a 300px disc by 8px is a 5% area change, so a helper returning 3*d still
+  // lands inside every one of their bounds. This channel's mean is an integral of the distance
+  // field itself over a 16px annulus, so it moves with the scale. The interior gate is what makes
+  // it sensitive: without it the constant 13.6% disc area rides along and dilutes the signal 25x.
+  // Radius 16 is reused deliberately — the ramp's width may not exceed the search radius.
+  "  c = vec4(1.0 - step(2.0, abs(dRing)), 1.0 - step(-8.0, dInside),\n" +
+  "           step(dInside, 0.0) * (1.0 - clamp(-dInside / 16.0, 0.0, 1.0)), 1.0);\n}";
 
 // BOTH region bodies get the same body, so the reading does not depend on which side of the mask a
 // pixel falls on — that is what lets a single frame observe distance across the boundary.
@@ -74,9 +83,9 @@ describe("kinoMaskDist", () => {
       frames: [{ frame: 10, name: "probe" }, { frame: 10, name: "probe2" }],
       outDir: mkdtempSync(join(tmpdir(), "kino-maskdist-out-")),
     });
-    const [ring, inside] = rgb(out[0]);
+    const [ring, inside, ramp] = rgb(out[0]);
     const jitter = meanDiff(out[0], out[1]);
-    console.log(`kinoMaskDist coverage: ring=${ring} inside=${inside} jitter=${jitter}`);
+    console.log(`kinoMaskDist coverage: ring=${ring} inside=${inside} ramp=${ramp} jitter=${jitter}`);
 
     // Circumference 2*pi*300 * ~4px over a 1080x1920 frame is ~0.4% coverage. A constant return
     // would light the whole frame; saturation at ±radius would light none.
@@ -91,8 +100,20 @@ describe("kinoMaskDist", () => {
     // The interior must dominate the boundary band by a wide margin.
     expect(inside).toBeGreaterThan(ring * 5);
 
-    // Same frame index twice → byte-identical pixels. The helper reads only the texture, the
-    // coordinate and derivatives, so nothing here may drift between captures.
+    // MAGNITUDE. Everything above is scale-blind; this is the only assertion that says 8 pixels is
+    // 8 pixels. The blue shortfall integrates the distance field over the 16px annulus inside the
+    // rim, so it scales roughly INVERSELY with a mis-scaled distance: measured 0.0055 correct,
+    // 0.0014 if the helper returned 3*d (the ramp saturates 3x too early), 0.0929 if it returned
+    // d/3 (the ramp barely climbs). Geometry predicts 0.0071; the real number is lower because the
+    // spiral fallback over-reports distance just inside the rim (same effect as the thin ring).
+    // The band is ~2x clear of both failures, which is as tight as the fallback's resolution allows.
+    expect(ramp).toBeGreaterThan(0.003);
+    expect(ramp).toBeLessThan(0.012);
+
+    // Two seeks to the SAME frame index, in one process against one cached page, are byte-identical.
+    // That is seek determinism only — it says nothing about a fresh process, a fresh page, or a
+    // different render. It rules out per-draw drift in the probe: a helper that fed wall-clock time,
+    // a frame counter or an unseeded random into the distance would differ between the two captures.
     expect(jitter).toBe(0);
   }, 180000);
 
