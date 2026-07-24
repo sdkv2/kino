@@ -159,6 +159,16 @@ def apply_pre_ampere_workarounds(target, device):
     torch.Tensor.to = to
 
 
+def _tight_vram(device: str) -> bool:
+    """True on boards where SAM3's defaults don't fit. The weights alone are 3.25 GiB
+    resident, so an 11 GiB card has ~6.5 GiB for everything else."""
+    import torch
+
+    if device != "cuda":
+        return False
+    return torch.cuda.get_device_properties(0).total_memory / 2**30 < 16
+
+
 def _tune_vram(model, device: str):
     """Shrink the detector's frame-batch to fit small boards.
 
@@ -183,9 +193,53 @@ def _tune_vram(model, device: str):
         # ponytail: coarse 3-step ladder off measured headroom, not a per-GPU table.
         # Raise KINO_SAM_GROUNDING_BATCH if you have room; lower it if you still OOM.
         n = 1 if gib < 16 else (4 if gib < 32 else 16)
+    n = max(1, n)
     if n != getattr(model, "batched_grounding_batch_size", n):
         log(f"grounding batch {model.batched_grounding_batch_size} -> {n} (VRAM fit)")
     model.batched_grounding_batch_size = n
+
+    tracker = getattr(model, "tracker", None)
+    if not _tight_vram(device) or tracker is None:
+        return
+    # Park the tracker's per-frame state on the host. The tracker retains every past frame's
+    # results so it can attend back over them — measured per frame at 1080x1920 with 3
+    # objects: ~2 MiB of full-res bool masks, ~2.5 MiB of memory-bank features, ~0.8 MiB of
+    # maskmem. That is ~16 MB/frame of pure retention, which is what makes peak VRAM climb
+    # with clip length rather than with per-frame cost. sam3 routes all three through
+    # inference_state["storage_device"], and its init_state takes an offload_state_to_cpu
+    # flag that flips that to CPU — but every call site inside the multiplex model omits it,
+    # so it can only be reached by wrapping the tracker's init_state here.
+    #
+    # It is a device move only; masks are bit-identical. sam3's own note: "saves the GPU
+    # memory at the cost of a lower tracking fps".
+    #
+    # Deliberately NOT touching trim_past_non_cond_mem_for_eval, the other memory knob: that
+    # one *discards* past non-conditioning outputs and asserts only frame 0 is ever prompted,
+    # which seed_prompt + both-direction propagation break.
+    _orig_ts = tracker.init_state
+
+    def _init_state(*a, **k):
+        k.setdefault("offload_state_to_cpu", True)
+        return _orig_ts(*a, **k)
+
+    tracker.init_state = _init_state
+
+    # Nobody upstream turns that flag on for the multiplex model, so its masklet-reconditioning
+    # path was never run against host-side state and assumes both sides are already colocated:
+    #   video_tracking_multiplex._merge:  d1[k1][d2_idx] = d2[k2].to(dtype=d1[k1].dtype)
+    # d1 is the stored state (now CPU), d2 a fresh GPU output — it matches dtype but not
+    # device, so the assignment raises "Expected all tensors to be on the same device". Same
+    # cast, with the device carried across too.
+    import sam3.model.video_tracking_multiplex as vtm
+
+    def _merge(d1, d2, k1, k2, d2_idx, strict=True):
+        if k1 not in d1:
+            assert not strict, f"{k1} not found"
+            return
+        d1[k1][d2_idx] = d2[k2].to(dtype=d1[k1].dtype, device=d1[k1].device)
+
+    vtm._merge = _merge
+    log("tracker state offloaded to host (VRAM fit)")
 
 
 def log(*a):
@@ -502,7 +556,17 @@ def run_video(args, n_want):
 
         predictor.model.init_state = _init_state
 
-    resp = predictor.handle_request(dict(type="start_session", resource_path=args.input))
+    # offload_video_to_cpu: init_state otherwise preloads EVERY decoded frame onto the GPU as
+    # a normalized float tensor and holds it for the whole session — ~2.5 GiB for a 5s 30fps
+    # clip at sam3's 1152px working size, growing linearly with clip length regardless of how
+    # cheap the per-frame inference is. Staged back per frame instead; the extra host-to-device
+    # copy is noise next to the encoder pass. Left off on big boards, where it is a pure
+    # slowdown. (start_session forwards this straight into init_state.)
+    resp = predictor.handle_request(dict(
+        type="start_session",
+        resource_path=args.input,
+        offload_video_to_cpu=_tight_vram(args.device),
+    ))
     sid = resp["session_id"]
     # AMP model — inference runs under autocast (GPU=cuda, verify=cpu). The predictor entered
     # a cuda-autocast at init (a no-op off-GPU); this nested one matches the device.
@@ -533,19 +597,34 @@ def run_video(args, n_want):
         fail("propagate_in_video yielded no frames")
 
     frame_idxs = sorted(outputs_per_frame)
-    # Choose which tracked objects get channels: deterministic, first-seen order.
-    chan_ids = []
+    # Choose which tracked objects get channels. Bidirectional propagation hands the SAME
+    # physical object a different obj_id per direction — the forward pass from the seed frame
+    # is one id, the backward pass covering everything before it is another — so "first-seen
+    # in frame order" reliably picks the backward fragment (it owns frame 0) and throws the
+    # longer forward track away. Measured on a 3s ocean clip: id 0 carried 103 frames, id 1
+    # carried 29, first-seen chose id 1 and the mask was empty on 155 of 184 frames.
+    #
+    # Rank by how many frames each id actually carries a mask on, so a channel is spent on a
+    # real track rather than whichever fragment happened to start first.
+    span = {}
     for fi in frame_idxs:
-        for oid in outputs_per_frame[fi]["out_obj_ids"]:
-            if oid not in chan_ids:
-                chan_ids.append(int(oid))
-            if len(chan_ids) >= vch:
-                break
-        if len(chan_ids) >= vch:
-            break
-    if not chan_ids:
+        out = outputs_per_frame[fi]
+        bm = out["masks"]
+        for idx, oid in enumerate(out["out_obj_ids"]):
+            if bm[idx].any():
+                span[int(oid)] = span.get(int(oid), 0) + 1
+    if not span:
         fail(f"no tracked objects for prompt {args.prompt!r}")
-    id_to_chan = {oid: i for i, oid in enumerate(chan_ids)}
+    ranked = sorted(span, key=lambda o: (-span[o], o))
+    if vch == 1:
+        # One grayscale channel was requested, so there is nothing to keep the direction-split
+        # ids apart in — union every track into it, matching how the image path unions the
+        # objects it keeps into a single mask.png.
+        chan_ids = ranked
+        log(f"union of {len(chan_ids)} track(s) -> gray: frames per id {[span[o] for o in ranked]}")
+    else:
+        chan_ids = ranked[:vch]
+    id_to_chan = {oid: (0 if vch == 1 else i) for i, oid in enumerate(chan_ids)}
     log(f"tracking {len(chan_ids)} object(s) over {len(frame_idxs)} frames @ {fps:.3f}fps ({vw}x{vh})")
 
     with tempfile.TemporaryDirectory() as work:
