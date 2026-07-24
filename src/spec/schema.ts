@@ -129,6 +129,18 @@ const Segment = z.discriminatedUnion("kind", [
         }),
       })
       .optional(),
+    // Per-mask-region shaders: the segmentation mask splits this beat's frame — the subject region
+    // (mask>0.5) runs one .frag body, the background region (mask<=0.5) another. `mask` is a mask
+    // asset dir (manifest.json + mask.png/mask.mp4); `object` picks the manifest object → channel.
+    regionShader: z
+      .object({
+        mask: z.string().min(1), // mask asset dir, e.g. "masks/clip"
+        subject: z.string().min(1).optional(), // .frag/.glsl body; region where mask>0.5
+        background: z.string().min(1).optional(), // .frag/.glsl body; region where mask<=0.5
+        object: z.number().int().min(0).max(3).default(0),
+      })
+      .refine((v) => v.subject || v.background, { message: "regionShader needs at least one of subject/background" })
+      .optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
     captionKeyframes: z.array(BgKeyframe).optional(),

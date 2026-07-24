@@ -33,6 +33,18 @@ export interface AppFrame {
   inset: { x: number; y: number; w: number; h: number }; // % of composition
 }
 
+// Per-mask-region shaders for an app beat: the segmentation mask splits the frame into a subject
+// region (mask>0.5) and a background region (mask<=0.5), each running its own GLSL body (or a
+// null passthrough of the asset pixels). maskSrc is a public-relative mask.png/mask.mp4; channel
+// (from the mask manifest object) says which texel channel carries this object's coverage.
+export interface RegionShaderProps {
+  maskSrc: string; // public-relative mask.png (image) or mask.mp4 (video)
+  maskKind: "image" | "video";
+  subjectCode: string | null; // GLSL mainImage body for mask>0.5, or null = passthrough asset pixels
+  backgroundCode: string | null; // GLSL mainImage body for mask<=0.5, or null = passthrough
+  channel: "r" | "g" | "b" | "a" | "gray"; // manifest object's coverage channel
+}
+
 export interface KinoSegment {
   kind: "avatar" | "app" | "motion";
   asset?: string;
@@ -49,6 +61,7 @@ export interface KinoSegment {
   speed?: number; // playbackRate; default 1
   pauseAt?: number; // seconds from segment start → freeze for rest of beat
   frame?: AppFrame;
+  regionShader?: RegionShaderProps; // mask-split dual shader for this app beat (subject vs background regions)
   captionMode?: "phrase" | "words"; // "words" = spoken text revealed word-by-word, synced to VO
   words?: WordTiming[]; // absolute word timings (present for captionMode "words")
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode

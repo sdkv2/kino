@@ -26,7 +26,8 @@ import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { BgTexture, KinoProps, WordTiming } from "../render/props.js";
+import type { BgTexture, KinoProps, RegionShaderProps, WordTiming } from "../render/props.js";
+import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic, sanitizeMotionHtml, type MotionGraphicRefInput } from "../render/motiongraphic.js";
@@ -41,6 +42,32 @@ import { log } from "../log.js";
 // The background colours themselves come from the brand palette (see DEFAULT_BRAND.colors in
 // config/brand.ts).
 const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
+
+// Resolve an app beat's regionShader spec → RegionShaderProps: read the mask manifest for kind +
+// the chosen object's channel, stage the mask file into /public (like frame.src / asset), and load
+// each region's .frag/.glsl body the same way a custom shader background is loaded.
+// ponytail: full compositing wiring (uMask bind + mix) lands in T11; this resolves the prop only.
+function resolveRegionShader(
+  rs: { mask: string; subject?: string; background?: string; object: number },
+  project: Project,
+  stageAsset: (rel: string) => void,
+): RegionShaderProps {
+  const manifest = readManifest(project.assetPath(rs.mask));
+  const obj = manifest.objects[rs.object];
+  if (!obj) {
+    throw new Error(`regionShader.object ${rs.object} out of range for mask "${rs.mask}" (${manifest.objects.length} objects)`);
+  }
+  const maskRel = `${rs.mask}/${manifest.kind === "video" ? "mask.mp4" : "mask.png"}`;
+  stageAsset(maskRel);
+  const loadBody = (ref: string | undefined) => (ref ? readFileSync(resolveBackgroundComponent(ref, project), "utf8") : null);
+  return {
+    maskSrc: maskRel,
+    maskKind: manifest.kind,
+    subjectCode: loadBody(rs.subject),
+    backgroundCode: loadBody(rs.background),
+    channel: obj.channel,
+  };
+}
 
 // Resolve the portrait image hedra/replicate lip-sync against (heygen uses a hosted look id instead).
 function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider: Provider): string {
@@ -409,6 +436,7 @@ export async function prepare(
         speed: seg.speed,
         pauseAt: seg.pauseAt,
         frame: seg.frame,
+        regionShader: seg.regionShader ? resolveRegionShader(seg.regionShader, project, stageAsset) : undefined,
         kickerKeyframes: seg.kickerKeyframes,
         zoomKeyframes: seg.zoomKeyframes,
         kicker: seg.kicker
