@@ -18,6 +18,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 // dist/segment/coreml.js (and src/segment/coreml.ts) sit two levels under the package root.
 const RUNNER = resolve(here, "../../scripts/sam_runner.py");
 
+const VIDEO_EXT = /\.(mp4|mov|webm|mkv)$/i;
+
 const HF_REPO = "AllanVester/SAM3.1-CoreML-FP16";
 // mlpackage dir stems in the HF repo; each gated by existsSync so re-downloads are skipped.
 const PACKAGES = ["SAM3.1_ImageEncoder_FP16", "SAM3.1_TextEncoder_FP16", "SAM3.1_Detector_FP16"];
@@ -89,12 +91,15 @@ export const coremlBackend: Backend = {
   name: "coreml",
   async run(req: SegmentRequest): Promise<SegmentResult> {
     const py = await ensureSamEnv();
-    // Task 7 is image-only; the runner writes video with --video in Task 8.
-    await execa(
-      py,
-      [RUNNER, "--input", req.input, "--prompt", req.prompt, "--out", req.outDir, "--objects", String(req.objects)],
-      { stdio: ["ignore", "inherit", "inherit"] },
-    );
+    const args = [RUNNER, "--input", req.input, "--prompt", req.prompt, "--out", req.outDir, "--objects", String(req.objects)];
+    if (VIDEO_EXT.test(req.input)) {
+      // No CoreML export exists for the tracker's conditioning-frame memory encode (see
+      // .superpowers/sdd/coreml-io-reference.md + docs/segmentation-tracking-todo.md), so video is
+      // per-frame image seg — masks are independent per frame; fast motion can flicker. Never tracked:true.
+      args.push("--video");
+      log.step("coreml video: per-frame segmentation (no temporal tracking; flicker possible on fast motion)");
+    }
+    await execa(py, args, { stdio: ["ignore", "inherit", "inherit"] });
     const manifest = readManifest(req.outDir);
     return { manifest, outDir: req.outDir };
   },
