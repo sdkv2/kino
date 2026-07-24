@@ -59,7 +59,7 @@ The CoreML runner (`scripts/sam_runner.py`) needs a Python env with `coremltools
 export KINO_SAM_PYTHON=/path/to/venv/bin/python
 ```
 
-Models auto-download from Hugging Face on first run (image: `AllanVester/SAM3.1-CoreML-FP16`; tracker: `sdkv2/sam3.1-coreml-tracker-spike`; vision backbone: `sdkv2/sam3.1-coreml-vision-backbone`). Per-frame features prefer **MLX** when `KINO_SAM_MLX_PYTHON` points at a venv with `mlx` + `mlx-vlm==0.4.3` (`mlx-community/sam3.1-bf16`); else the CoreML backbone package; else PyTorch CPU. Force with `KINO_SAM_BACKBONE_ENGINE=mlx|coreml|pytorch`. Override models dir with `KINO_SAM_MODEL`.
+Models auto-download from Hugging Face on first run (image: `AllanVester/SAM3.1-CoreML-FP16`; tracker: `sdkv2/sam3.1-coreml (tracker/)`; vision backbone: `sdkv2/sam3.1-coreml (backbone/)`). Per-frame features prefer **MLX** when `KINO_SAM_MLX_PYTHON` points at a venv with `mlx` + `mlx-vlm==0.4.3` (`mlx-community/sam3.1-bf16`); else the CoreML backbone package; else PyTorch CPU. Force with `KINO_SAM_BACKBONE_ENGINE=mlx|coreml|pytorch`. Override models dir with `KINO_SAM_MODEL`.
 
 ### Setup (cuda backend)
 
@@ -133,7 +133,7 @@ Both real backends do **real temporal tracking** by default (`tracked: true`):
 
 - **coreml** — the frame-0 text→mask (CoreML image seg) seeds a PyTorch mask-prompt init; each frame's vision features (**MLX preferred** → CoreML `sam3_vision_backbone.mlpackage` → PyTorch CPU) feed the **stateful CoreML tracker** (`dense_sam3_trackstep.mlpackage`). `--no-track` forces the fast per-frame path (`tracked:false`), where each frame is segmented independently and fast motion can flicker.
 
-  > **Cost:** **~1.9s/frame** measured with CoreML backbone + `KINO_SAM_BACKBONE_EVERY=2` (default; encode 4/7 frames on the disc fixture, identical 210px centroid travel vs every=1’s ~2.9s). MLX backbone (when `KINO_SAM_MLX_PYTHON` set) is ~3s/encode on this Mac, faster on published M3 Max (~0.8s ViT). Set `KINO_SAM_BACKBONE_ENGINE=coreml` to force CoreML. PyTorch released after frame-0 init. Export: `scripts/export_sam_backbone_coreml.py`. HF: `sdkv2/sam3.1-coreml-vision-backbone`.
+  > **Cost:** **~1.9s/frame** measured with CoreML backbone + `KINO_SAM_BACKBONE_EVERY=2` (default; encode 4/7 frames on the disc fixture, identical 210px centroid travel vs every=1’s ~2.9s). MLX backbone (when `KINO_SAM_MLX_PYTHON` set) is ~3s/encode on this Mac, faster on published M3 Max (~0.8s ViT). Set `KINO_SAM_BACKBONE_ENGINE=coreml` to force CoreML. PyTorch released after frame-0 init. Export: `scripts/export_sam_backbone_coreml.py`. HF: `sdkv2/sam3.1-coreml (backbone/)`.
   >
   > **Verification status (2026-07-24):** verified end-to-end on this Mac — moving-disc clip → `mask.mp4`, `tracked:true`, centroid follows disc (every=1/2/3/5 all PASS the >100px travel gate; every=5 travel drops 210→175). CoreML-backbone vs PyTorch: fp16 cosine ≥ 0.99997. Tracker + backbone auto-download from HF.
 - **cuda** — the full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on frame 0 and propagated through the clip, so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent.

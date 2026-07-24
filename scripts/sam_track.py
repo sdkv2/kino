@@ -142,7 +142,7 @@ def tracker_package(models_dir):
         return hits[0]
     raise FileNotFoundError(
         f"CoreML tracker package (dense_sam3_trackstep.mlpackage) not found under {models_dir} — "
-        "run `kino segment` once to auto-download from HF sdkv2/sam3.1-coreml-tracker-spike, "
+        "run `kino segment` once to auto-download from HF sdkv2/sam3.1-coreml (tracker/), "
         "or set KINO_SAM_TRACKER"
     )
 
@@ -151,7 +151,7 @@ def backbone_package(models_dir):
     """CoreML vision-backbone mlpackage path, or None if absent (MLX/PyTorch fallback).
 
     KINO_SAM_BACKBONE override, else models_dir[/models]/sam3_vision_backbone.mlpackage.
-    Auto-downloaded by ensureSamEnv from sdkv2/sam3.1-coreml-vision-backbone.
+    Auto-downloaded by ensureSamEnv from sdkv2/sam3.1-coreml (backbone/).
     """
     env = os.environ.get("KINO_SAM_BACKBONE")
     if env:

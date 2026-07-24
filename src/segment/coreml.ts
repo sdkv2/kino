@@ -4,8 +4,7 @@
 // once into ~/.kino/sam/, and (like whisper.cpp) the heavy Python runtime is a documented
 // prerequisite rather than something we auto-build — coremltools 9.0 + torch 2.7.0 + the patched
 // sam3 tokenizer is not reliably scriptable, so we resolve/verify a venv and error with guidance.
-import { existsSync } from "node:fs";
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,14 +23,14 @@ const HF_REPO = "AllanVester/SAM3.1-CoreML-FP16";
 // mlpackage dir stems in the HF repo; each gated by existsSync so re-downloads are skipped.
 const PACKAGES = ["SAM3.1_ImageEncoder_FP16", "SAM3.1_TextEncoder_FP16", "SAM3.1_Detector_FP16"];
 
-// Stateful CoreML tracker for REAL video tracking (public spike repo). Lands under
-// modelsDir/models/ (the repo nests it there); sam_track.py resolves it from either spot.
-const TRACKER_REPO = "sdkv2/sam3.1-coreml-tracker-spike";
+// Stateful CoreML tracker for REAL video tracking (public repo, tracker/ subdir). Lands under
+// modelsDir/models/ (locally flattened); sam_track.py resolves it from either spot.
+const MODEL_REPO = "sdkv2/sam3.1-coreml";
 const TRACKER_PKG = "dense_sam3_trackstep.mlpackage";
 const trackerPath = (dir: string): string => join(dir, "models", TRACKER_PKG);
 
-// Per-frame vision backbone (trunk + propagation FPN + conv_s0/s1) — same models/ nest.
-const BACKBONE_REPO = "sdkv2/sam3.1-coreml-vision-backbone";
+// Per-frame vision backbone (trunk + propagation FPN + conv_s0/s1) — backbone/ subdir upstream,
+// same models/ nest locally.
 const BACKBONE_PKG = "sam3_vision_backbone.mlpackage";
 const backbonePath = (dir: string): string => join(dir, "models", BACKBONE_PKG);
 const backbonePresent = (dir: string): boolean =>
@@ -94,17 +93,18 @@ export async function ensureSamEnv(): Promise<string> {
     if (!(await pyCanImport(py, "huggingface_hub"))) {
       throw new Error(
         `sam_tracker_missing: ${TRACKER_PKG} absent from ${dir} and ${py} lacks huggingface_hub — ` +
-          `pip install huggingface_hub, or huggingface-cli download --local-dir ${dir} ${TRACKER_REPO}`,
+          `pip install huggingface_hub, or huggingface-cli download --local-dir ${dir} ${MODEL_REPO}`,
       );
     }
     log.step(`downloading SAM3.1 CoreML tracker (~86MB, one-time) → ${dir}`);
     await execa(py, [
       "-c",
       "import sys;from huggingface_hub import snapshot_download;" +
-        `snapshot_download(sys.argv[1], local_dir=sys.argv[2], allow_patterns=['models/${TRACKER_PKG}/*'])`,
-      TRACKER_REPO,
+        `snapshot_download(sys.argv[1], local_dir=sys.argv[2], allow_patterns=['tracker/models/${TRACKER_PKG}/*'])`,
+      MODEL_REPO,
       dir,
     ]);
+    flattenDownload(dir, "tracker");
   }
 
   // Vision backbone (~875MB fp16) for per-frame features — MLX preferred at runtime when
@@ -113,19 +113,31 @@ export async function ensureSamEnv(): Promise<string> {
     if (!(await pyCanImport(py, "huggingface_hub"))) {
       throw new Error(
         `sam_backbone_missing: ${BACKBONE_PKG} absent from ${dir} and ${py} lacks huggingface_hub — ` +
-          `pip install huggingface_hub, or huggingface-cli download --local-dir ${dir} ${BACKBONE_REPO}`,
+          `pip install huggingface_hub, or huggingface-cli download --local-dir ${dir} ${MODEL_REPO}`,
       );
     }
     log.step(`downloading SAM3.1 CoreML vision backbone (~875MB, one-time) → ${dir}`);
     await execa(py, [
       "-c",
       "import sys;from huggingface_hub import snapshot_download;" +
-        `snapshot_download(sys.argv[1], local_dir=sys.argv[2], allow_patterns=['models/${BACKBONE_PKG}/*'])`,
-      BACKBONE_REPO,
+        `snapshot_download(sys.argv[1], local_dir=sys.argv[2], allow_patterns=['backbone/models/${BACKBONE_PKG}/*'])`,
+      MODEL_REPO,
       dir,
     ]);
+    flattenDownload(dir, "backbone");
   }
   return py;
+}
+
+/** The merged HF repo nests packages under tracker/models/ and backbone/models/; flatten the
+ *  just-downloaded subdir's models/ into dir/models/ so trackerPath/backbonePath keep working. */
+function flattenDownload(dir: string, subdir: string): void {
+  const src = join(dir, subdir, "models");
+  const dest = join(dir, "models");
+  if (!existsSync(src)) return;
+  mkdirSync(dest, { recursive: true });
+  for (const name of readdirSync(src)) renameSync(join(src, name), join(dest, name));
+  rmSync(join(dir, subdir), { recursive: true, force: true });
 }
 
 async function pyCanImport(py: string, mod: string): Promise<boolean> {

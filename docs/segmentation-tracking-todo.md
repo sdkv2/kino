@@ -9,7 +9,7 @@ below for why real tracking is not yet wired.
 
 ## Why it's per-frame (the video-tracking gap)
 
-The deployed tracker package (`sdkv2/sam3.1-coreml-tracker-spike` /
+The deployed tracker package (`sdkv2/sam3.1-coreml (tracker/)` /
 `scratchpad/sam3-coreml/dense_sam3_trackstep.mlpackage`) does **propagation only**. Its stateful
 `predict` loop needs three per-session conditioning tensors from the *prompt frame*:
 
