@@ -101,6 +101,10 @@ On an `app` beat, `regionShader` splits the beat's own asset by the mask: the **
 
 Each `.frag` is an ordinary ShaderToy-style `mainImage` body (the same format as a shader background) — normal shaders work as region shaders unchanged. Omit `subject` or `background` to pass that region's original asset pixels through. `object` picks which mask object (its R/G/B/A channel) does the split.
 
+A **video** mask (`mask.mp4`) and a **video** beat asset both animate — each render frame re-seeks the source to `frame/fps` and re-splits — so a moving subject stays masked. Image masks and image assets are static.
+
+**Multi-object addressing is video-only.** Image masks pack every object into one grayscale `mask.png`, so `object` must be `0` for an image mask (build errors otherwise). Distinct objects need a video mask, where they occupy separate R/G/B channels.
+
 Inside a region shader you can sample:
 - `uTex0` — the beat's own asset (the thing being segmented).
 - the shader's own params/uniforms (`u_*` aliases, `iTime`, etc.) as any shader.

@@ -74,7 +74,7 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
 // Hidden <video> for a mask channel. `loadeddata` guarantees the first frame is decodable
 // (videoWidth/Height known, drawImage safe). Same-origin (/public) → the canvas stays untainted, so
 // texImage2D can read it back.
-async function loadVideo(url: string): Promise<HTMLVideoElement> {
+export async function loadVideo(url: string): Promise<HTMLVideoElement> {
   const vid = document.createElement("video");
   vid.muted = true;
   vid.preload = "auto";
@@ -90,7 +90,7 @@ async function loadVideo(url: string): Promise<HTMLVideoElement> {
 // end never fires `seeked`, so late composition frames hold the last mask frame.
 // ponytail: <video> seeking is not guaranteed frame-exact (kino extracts footage frames node-side
 // for that reason). Acceptable for a smooth mask; upgrade path = route mask.mp4 through videoFrames.ts.
-function seekVideo(vid: HTMLVideoElement, t: number): Promise<void> {
+export function seekVideo(vid: HTMLVideoElement, t: number): Promise<void> {
   const dur = Number.isFinite(vid.duration) ? vid.duration : t;
   const target = Math.max(0, Math.min(t, dur - 1e-3));
   if (Math.abs(vid.currentTime - target) < 1e-4) return Promise.resolve();

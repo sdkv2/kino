@@ -53,6 +53,12 @@ function resolveRegionShader(
   stageAsset: (rel: string) => void,
 ): RegionShaderProps {
   const manifest = readManifest(project.assetPath(rs.mask));
+  // Image masks carry every object in the single union mask.png (all channel "gray"); per-object
+  // image selection isn't wired, so object>0 would silently pick the same union — reject it loudly.
+  // Multi-object addressing lives on video masks (distinct R/G/B channels).
+  if (manifest.kind === "image" && rs.object > 0) {
+    throw new Error(`regionShader.object must be 0 for image mask "${rs.mask}" — per-object selection is only supported on video masks.`);
+  }
   const obj = manifest.objects[rs.object];
   if (!obj) {
     throw new Error(`regionShader.object ${rs.object} out of range for mask "${rs.mask}" (${manifest.objects.length} objects)`);

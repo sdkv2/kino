@@ -10,6 +10,7 @@ import { flushSync } from "react-dom";
 import { FrameProvider, type VideoConfig } from "./runtime";
 import { MediaProvider, type MediaMap } from "./media";
 import { loadBgTextures, prepareBgTextures } from "./bgTextures";
+import { awaitRegionShaders } from "./RegionShader";
 import { KinoVideo } from "./KinoVideo";
 import type { KinoProps } from "../../props.js";
 
@@ -108,7 +109,9 @@ async function kinoSeek(frame: number): Promise<void> {
   // inside the flushSync sees the fresh pixels (per-frame smooth, no flipbook stepping).
   await prepareBgTextures(cfg.props, frame, cfg.props.fps);
   flushSync(() => root!.render(<App cfg={cfg} frame={frame} />));
-  await settleImages();
+  // RegionShader beats load textures / re-seek video sources in their layout effect (off-DOM, so
+  // settleImages can't see them) — await that work too before the frame is considered complete.
+  await Promise.all([settleImages(), awaitRegionShaders()]);
 }
 
 async function kinoLoad(): Promise<void> {

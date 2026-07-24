@@ -67,7 +67,9 @@ export const mockBackend: Backend = {
       ...(frames !== undefined ? { frames } : {}),
       objects: [{ id: 0, label: req.prompt, channel: isVideo ? "r" : "gray" }],
       backend: "mock",
-      tracked: req.track,
+      // The mock produces a static per-frame ellipse — zero temporal tracking. Report the capability
+      // honestly (false), never the caller's request. (coreml hardwires false the same way.)
+      tracked: false,
     };
     writeManifest(req.outDir, manifest);
 
