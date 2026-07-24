@@ -63,7 +63,14 @@ Models auto-download from Hugging Face on first run (image: `AllanVester/SAM3.1-
 
 ### Setup (cuda backend)
 
-The PyTorch runner (`scripts/sam_runner_cuda.py`) needs a Python env with a **CUDA-enabled `torch`** and the **`sam3` package** installed. kino does **not** build this GPU env for you:
+The PyTorch runner (`scripts/sam_runner_cuda.py`) needs a Python env with a **CUDA-enabled `torch`** and the **`sam3` package** installed. This is a separate, opt-in pathway — deliberately not part of `setup.sh`/`setup.mjs` or the npm install, since it's a heavy GPU env most kino installs never touch.
+
+```bash
+scripts/setup_sam_cuda.sh                 # builds ~/.kino/sam/venv, clones+installs sam3
+export KINO_SAM_PYTHON=~/.kino/sam/venv/bin/python
+```
+
+The script pins torch+torchvision to a matched CUDA build in one install call and fills in sam3's under-declared runtime deps (einops, pycocotools, psutil) — see comments in the script for the failure modes each step avoids. Run it again to update an existing venv/checkout in place. For manual setup instead:
 
 ```bash
 git clone https://github.com/facebookresearch/sam3 && pip install -e sam3   # + a CUDA torch

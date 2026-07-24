@@ -33,8 +33,8 @@ function resolvePython(): string | null {
 }
 
 const SETUP_HINT =
-  "no usable SAM Python — point KINO_SAM_PYTHON at a venv with a CUDA-enabled torch and the sam3 " +
-  "package (`pip install -e sam3` from github.com/facebookresearch/sam3), or create ~/.kino/sam/venv. " +
+  "no usable SAM Python — run scripts/setup_sam_cuda.sh to build ~/.kino/sam/venv, or point " +
+  "KINO_SAM_PYTHON at your own venv with a CUDA-enabled torch + the sam3 package. " +
   "See docs/segmentation.md.";
 
 async function pyCanImport(py: string, mod: string): Promise<boolean> {
