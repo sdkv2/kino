@@ -45,7 +45,7 @@ Image input → `mask.png` (8-bit grayscale, white = object). Video input → `m
 
 ### Backends
 
-- **coreml** (macOS/Apple Silicon) — real SAM3.1 segmentation via CoreML. Video defaults to **real temporal tracking** (`tracked:true`) — frame 0's text→mask seeds the stateful CoreML tracker, which propagates each object across the clip. `--no-track` selects the fast per-frame path (`tracked:false`). Tracking is **~1.9s/frame** with the CoreML vision backbone + `backbone_every=2` (re-encode every other frame; set `KINO_SAM_BACKBONE_EVERY=1` for per-frame encode at ~2.9s); falls back to ~7–8s/frame if the backbone package is absent. Downloads models once to `~/.kino/sam/models/`. Needs a Python env; see Setup.
+- **coreml** (macOS/Apple Silicon) — real SAM3.1 segmentation via CoreML. Video defaults to **real temporal tracking** (`tracked:true`) — frame 0's text→mask seeds the stateful CoreML tracker, which propagates each object across the clip. `--no-track` selects the fast per-frame path (`tracked:false`). Tracking is **~1.9s/frame** with vision backbone + `backbone_every=2` (re-encode every other frame; set `KINO_SAM_BACKBONE_EVERY=1` for per-frame encode at ~2.9s); falls back to ~7–8s/frame on PyTorch CPU. Downloads models once to `~/.kino/sam/models/`. Needs a Python env; see Setup.
 - **cuda** (Linux/Windows + NVIDIA) — the **full** SAM3.1 model in native PyTorch (`scripts/sam_runner_cuda.py`). The multiplex video predictor tracks each object across frames, so video masks are temporally coherent (`tracked:true`). Needs a Python env with a CUDA-enabled `torch` + the `sam3` package; see Setup.
 - **mock** — deterministic synthetic ellipse mask, no model, any platform. For pipeline/CI tests and for authoring specs on a non-Mac machine.
 
@@ -59,7 +59,7 @@ The CoreML runner (`scripts/sam_runner.py`) needs a Python env with `coremltools
 export KINO_SAM_PYTHON=/path/to/venv/bin/python
 ```
 
-Models auto-download from Hugging Face on first run (image: `AllanVester/SAM3.1-CoreML-FP16`; tracker: `sdkv2/sam3.1-coreml-tracker-spike`). The per-frame vision backbone (`sam3_vision_backbone.mlpackage`) is resolved from the same models dir when present (export via `scripts/export_sam_backbone_coreml.py`; HF auto-download is a follow-up) — without it, tracking falls back to the PyTorch CPU backbone. Override the models dir with `KINO_SAM_MODEL`.
+Models auto-download from Hugging Face on first run (image: `AllanVester/SAM3.1-CoreML-FP16`; tracker: `sdkv2/sam3.1-coreml-tracker-spike`; vision backbone: `sdkv2/sam3.1-coreml-vision-backbone`). Per-frame features prefer **MLX** when `KINO_SAM_MLX_PYTHON` points at a venv with `mlx` + `mlx-vlm==0.4.3` (`mlx-community/sam3.1-bf16`); else the CoreML backbone package; else PyTorch CPU. Force with `KINO_SAM_BACKBONE_ENGINE=mlx|coreml|pytorch`. Override models dir with `KINO_SAM_MODEL`.
 
 ### Setup (cuda backend)
 
@@ -131,11 +131,11 @@ Inside a region shader you can sample:
 
 Both real backends do **real temporal tracking** by default (`tracked: true`):
 
-- **coreml** — the frame-0 text→mask (CoreML image seg) seeds a PyTorch mask-prompt init; each frame's **CoreML vision backbone** (`sam3_vision_backbone.mlpackage`, trunk + propagation neck + `conv_s0/s1`) feeds the **stateful CoreML tracker** (`dense_sam3_trackstep.mlpackage`), which propagates every object's mask across the clip. Without the backbone package, per-frame features fall back to PyTorch CPU. `--no-track` forces the fast per-frame path (`tracked:false`), where each frame is segmented independently and fast motion can flicker.
+- **coreml** — the frame-0 text→mask (CoreML image seg) seeds a PyTorch mask-prompt init; each frame's vision features (**MLX preferred** → CoreML `sam3_vision_backbone.mlpackage` → PyTorch CPU) feed the **stateful CoreML tracker** (`dense_sam3_trackstep.mlpackage`). `--no-track` forces the fast per-frame path (`tracked:false`), where each frame is segmented independently and fast motion can flicker.
 
-  > **Cost:** **~1.9s/frame** measured with CoreML backbone + `KINO_SAM_BACKBONE_EVERY=2` (default; encode 4/7 frames on the disc fixture, identical 210px centroid travel vs every=1’s ~2.9s). Set `=1` for per-frame encode. PyTorch released after frame-0 init (co-residency was ~6.7s). Old PyTorch-CPU path ~7.6s/frame (~4×). Export: `scripts/export_sam_backbone_coreml.py`. Follow-up: HF auto-download of the backbone package.
+  > **Cost:** **~1.9s/frame** measured with CoreML backbone + `KINO_SAM_BACKBONE_EVERY=2` (default; encode 4/7 frames on the disc fixture, identical 210px centroid travel vs every=1’s ~2.9s). MLX backbone (when `KINO_SAM_MLX_PYTHON` set) is ~3s/encode on this Mac, faster on published M3 Max (~0.8s ViT). Set `KINO_SAM_BACKBONE_ENGINE=coreml` to force CoreML. PyTorch released after frame-0 init. Export: `scripts/export_sam_backbone_coreml.py`. HF: `sdkv2/sam3.1-coreml-vision-backbone`.
   >
-  > **Verification status (2026-07-24):** verified end-to-end on this Mac — moving-disc clip → `mask.mp4`, `tracked:true`, centroid follows disc (every=1/2/3/5 all PASS the >100px travel gate; every=5 travel drops 210→175). CoreML-backbone vs PyTorch: fp16 cosine ≥ 0.99997. Tracker auto-downloads; backbone (~875MB fp16) local until HF publish.
+  > **Verification status (2026-07-24):** verified end-to-end on this Mac — moving-disc clip → `mask.mp4`, `tracked:true`, centroid follows disc (every=1/2/3/5 all PASS the >100px travel gate; every=5 travel drops 210→175). CoreML-backbone vs PyTorch: fp16 cosine ≥ 0.99997. Tracker + backbone auto-download from HF.
 - **cuda** — the full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on frame 0 and propagated through the clip, so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent.
 
   > **Verification status (2026-07-24):** the CUDA image path is CPU-verified (real `backend:cuda` mask). The video-tracking pipeline is confirmed to *run* end-to-end on CPU (session start → `add_prompt` → `propagate_in_video` all execute), but a full tracked `mask.mp4` has **not** been produced-and-checked yet: CPU propagation is ~45 min/frame (unusable) and needs a real NVIDIA GPU + a realistic clip to verify. Run it on GPU to confirm `tracked:true` output before relying on it. The runner fails cleanly (`exit 2`) if the detector finds no objects — it never fabricates a mask.

@@ -30,6 +30,13 @@ const TRACKER_REPO = "sdkv2/sam3.1-coreml-tracker-spike";
 const TRACKER_PKG = "dense_sam3_trackstep.mlpackage";
 const trackerPath = (dir: string): string => join(dir, "models", TRACKER_PKG);
 
+// Per-frame vision backbone (trunk + propagation FPN + conv_s0/s1) — same models/ nest.
+const BACKBONE_REPO = "sdkv2/sam3.1-coreml-vision-backbone";
+const BACKBONE_PKG = "sam3_vision_backbone.mlpackage";
+const backbonePath = (dir: string): string => join(dir, "models", BACKBONE_PKG);
+const backbonePresent = (dir: string): boolean =>
+  existsSync(backbonePath(dir)) || existsSync(join(dir, BACKBONE_PKG));
+
 const samDir = (): string => join(homedir(), ".kino", "sam");
 const modelsDir = (): string => process.env.KINO_SAM_MODEL ?? join(samDir(), "models");
 
@@ -99,6 +106,25 @@ export async function ensureSamEnv(): Promise<string> {
       dir,
     ]);
   }
+
+  // Vision backbone (~875MB fp16) for per-frame features — MLX preferred at runtime when
+  // KINO_SAM_MLX_PYTHON is set; this CoreML package is the default Apple-Silicon fallback.
+  if (!backbonePresent(dir)) {
+    if (!(await pyCanImport(py, "huggingface_hub"))) {
+      throw new Error(
+        `sam_backbone_missing: ${BACKBONE_PKG} absent from ${dir} and ${py} lacks huggingface_hub — ` +
+          `pip install huggingface_hub, or huggingface-cli download --local-dir ${dir} ${BACKBONE_REPO}`,
+      );
+    }
+    log.step(`downloading SAM3.1 CoreML vision backbone (~875MB, one-time) → ${dir}`);
+    await execa(py, [
+      "-c",
+      "import sys;from huggingface_hub import snapshot_download;" +
+        `snapshot_download(sys.argv[1], local_dir=sys.argv[2], allow_patterns=['models/${BACKBONE_PKG}/*'])`,
+      BACKBONE_REPO,
+      dir,
+    ]);
+  }
   return py;
 }
 
@@ -119,9 +145,9 @@ export const coremlBackend: Backend = {
     if (VIDEO_EXT.test(req.input)) {
       args.push("--video");
       if (req.track) {
-        // REAL temporal tracking: frame-0 text→mask seeds the PyTorch mask-prompt init, then the
-        // stateful CoreML tracker propagates each object across frames (manifest tracked:true).
-        // ~1.9s/frame measured (CoreML backbone + every=2); ~2.9s at every=1; ~7–8s PyTorch fallback.
+        // REAL temporal tracking: frame-0 text→mask seeds the PyTorch mask-prompt init, then
+        // MLX (preferred) or CoreML vision backbone → stateful CoreML tracker (tracked:true).
+        // ~1.9s/frame measured (CoreML + every=2); MLX when KINO_SAM_MLX_PYTHON set; ~7–8s PyTorch.
         args.push("--track");
         log.step("coreml video: real temporal tracking (~1.9s/frame; --no-track for the fast per-frame path)");
       } else {

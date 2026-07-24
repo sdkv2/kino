@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
-"""SAM3.1 REAL video tracking building blocks (CoreML tracker + CoreML/PyTorch backbone).
+"""SAM3.1 REAL video tracking building blocks (CoreML tracker + MLX/CoreML/PyTorch backbone).
 
 Self-contained port of the VERIFIED spike (scratchpad/sam3-coreml/tracking_pipeline.py
 + common.py) into committed scripts/ — the runtime must NOT depend on the gitignored
 scratchpad. scripts/sam_runner.py owns the I/O (ffmpeg decode, frame-0 text->mask via
 the CoreML image seg, mask.mp4 encode); this module owns the ML:
 
-    frame RGB  --CoreML vision backbone (sam3_vision_backbone.mlpackage)--> vis72/hires0/hires1
-                 (falls back to PyTorch TriHeadVisionOnly 467M if package absent)
+    frame RGB  --MLX (preferred) / CoreML / PyTorch--> vis72/hires0/hires1
     frame 0    --PyTorch track_step(mask-prompt init)--------------------> cond_mem/cond_img/cond_ptr
     frames 1+  --CoreML dense_sam3_trackstep.mlpackage (stateful)--------> per-object mask logits
 
 The frame-0 mask prompt is produced upstream (sam_runner's text->mask on frame 0) and
 fed here as mask_inputs, exactly as tracking_pipeline.py did with its synthetic disc mask.
 
-Speed: ~1.9s/frame with CoreML backbone + backbone_every=2 (default; ~2.9s at every=1).
+Speed: ~1.9s/frame with CoreML backbone + backbone_every=2 (default). MLX preferred when
+KINO_SAM_MLX_PYTHON (or in-process mlx) is available — feeds the same CoreML tracker.
 Release PyTorch post-init. PyTorch CPU fallback ~7–8s. Export:
 scripts/export_sam_backbone_coreml.py. KINO_SAM_BACKBONE_EVERY=1 for max accuracy.
+KINO_SAM_BACKBONE_ENGINE=auto|mlx|coreml|pytorch (default auto).
 
 Requires the same venv as the image path PLUS the `sam3` package importable and the
 multiplex checkpoint (sam3.1_multiplex.pt: backbone + tracker weights). CoreML packages
 resolved from ~/.kino/sam/models (KINO_SAM_TRACKER / KINO_SAM_BACKBONE overrides).
+MLX: separate python via KINO_SAM_MLX_PYTHON (mlx-vlm==0.4.3 + mlx-community/sam3.1-bf16).
 """
 import glob
 import os
@@ -44,6 +46,12 @@ SAM31_CKPT_NAME = os.environ.get("SAM3_CKPT_NAME", "sam3.1_multiplex.pt")
 
 def log(*a):
     print("[sam_track]", *a, file=sys.stderr, flush=True)
+
+
+def backbone_engine() -> str:
+    """auto|mlx|coreml|pytorch — which per-frame vision path to use."""
+    v = (os.environ.get("KINO_SAM_BACKBONE_ENGINE") or "auto").strip().lower()
+    return v if v in ("auto", "mlx", "coreml", "pytorch") else "auto"
 
 
 def _stub_triton():
@@ -140,11 +148,10 @@ def tracker_package(models_dir):
 
 
 def backbone_package(models_dir):
-    """CoreML vision-backbone mlpackage path, or None if absent (PyTorch fallback).
+    """CoreML vision-backbone mlpackage path, or None if absent (MLX/PyTorch fallback).
 
-    KINO_SAM_BACKBONE override, else models_dir/sam3_vision_backbone.mlpackage.
-    Not yet auto-downloaded from HF — export locally via scripts/export_sam_backbone_coreml.py
-    (follow-up: publish + ensureSamEnv fetch like the tracker).
+    KINO_SAM_BACKBONE override, else models_dir[/models]/sam3_vision_backbone.mlpackage.
+    Auto-downloaded by ensureSamEnv from sdkv2/sam3.1-coreml-vision-backbone.
     """
     env = os.environ.get("KINO_SAM_BACKBONE")
     if env:
@@ -156,6 +163,25 @@ def backbone_package(models_dir):
         if os.path.exists(cand):
             return cand
     return None
+
+
+def load_mlx_backbone():
+    """Start MLX backbone worker if engine allows and MLX python is available."""
+    eng = backbone_engine()
+    if eng in ("coreml", "pytorch"):
+        return None
+    try:
+        import sam_mlx_backbone
+    except ImportError:
+        log("sam_mlx_backbone import failed — skip MLX")
+        return None
+    worker = sam_mlx_backbone.try_load_worker()
+    if worker is None and eng == "mlx":
+        raise RuntimeError(
+            "KINO_SAM_BACKBONE_ENGINE=mlx but no usable MLX python — set KINO_SAM_MLX_PYTHON "
+            "to a venv with mlx + mlx-vlm==0.4.3"
+        )
+    return worker
 
 
 # ---------------------------------------------------------------- model build
@@ -259,13 +285,17 @@ def tracker_inputs(prop_feats):
 
 
 def load_backbone(models_dir):
-    """Load CoreML vision backbone if present. Returns MLModel or None (PyTorch fallback).
+    """Load CoreML vision backbone if present and engine allows. Returns MLModel or None.
 
     Default ComputeUnit.CPU_AND_GPU. Isolated ~2.7s/frame; co-resident with the PyTorch
     467M backbone was ~6.7s — callers must release PyTorch after frame-0 init. Opt in to
     ALL via KINO_SAM_BACKBONE_COMPUTE (ANE can hang on first load). Falls back to
     KINO_SAM_COMPUTE, then CPU_AND_GPU. Tracker keeps its own KINO_SAM_COMPUTE default.
+    Skipped when engine is mlx/pytorch, or when MLX already selected under auto.
     """
+    eng = backbone_engine()
+    if eng in ("mlx", "pytorch"):
+        return None
     import coremltools as ct
 
     path = backbone_package(models_dir)
@@ -280,14 +310,17 @@ def load_backbone(models_dir):
     return ct.models.MLModel(path, compute_units=unit)
 
 
-def encode_frame_features(model, img_t, coreml_backbone=None):
-    """Per-frame (vis72, hires0, hires1) for the tracker. CoreML backbone when loaded.
+def encode_frame_features(model, img_t, coreml_backbone=None, mlx_backbone=None):
+    """Per-frame (vis72, hires0, hires1) for the tracker.
 
+    Preference when callers pass both: mlx_backbone > coreml_backbone > PyTorch model.
     Returns (vis72, hires0, hires1, elapsed_s). Frame-0 interactive init still needs
     encode_frame(..., need_interactive=True) on PyTorch — this is the per-frame path only.
-    When coreml_backbone is set, `model` may be None (PyTorch already released).
+    When an accelerated backbone is set, `model` may be None (PyTorch already released).
     """
     t0 = time.time()
+    if mlx_backbone is not None:
+        return mlx_backbone.encode(img_t.numpy() if hasattr(img_t, "numpy") else img_t)
     if coreml_backbone is not None:
         feed = {"image": img_t.numpy().astype(np.float32)}
         got = coreml_backbone.predict(feed)
@@ -305,7 +338,7 @@ def encode_frame_features(model, img_t, coreml_backbone=None):
         hires1 = torch.from_numpy(pick("hires1", (1, 64, 2 * E, 2 * E)))
         return vis72, hires0, hires1, time.time() - t0
     if model is None:
-        raise RuntimeError("encode_frame_features: no CoreML backbone and model is None")
+        raise RuntimeError("encode_frame_features: no accelerated backbone and model is None")
     prop = encode_frame(model, img_t)["sam2_backbone_out"]
     vis72, hires0, hires1 = tracker_inputs(prop)
     return vis72, hires0, hires1, time.time() - t0
@@ -314,9 +347,9 @@ def encode_frame_features(model, img_t, coreml_backbone=None):
 def release_pytorch_after_init(model):
     """Drop the 467M PyTorch vision backbone after frame-0 init.
 
-    Holding it alongside the CoreML backbone contended for Metal/RAM and inflated
+    Holding it alongside the CoreML/MLX backbone contended for Metal/RAM and inflated
     per-frame CoreML time from ~2.7s (isolated) to ~6.7s (co-resident). Call only
-    when the CoreML backbone will handle frames 1+.
+    when an accelerated backbone will handle frames 1+.
     """
     import gc
 
@@ -335,8 +368,11 @@ def release_pytorch_after_init(model):
     log("released PyTorch vision backbone (+ unused heads) after frame-0 init")
 
 
-def warm_backbone(coreml_backbone, img_t=None):
+def warm_backbone(coreml_backbone=None, img_t=None, mlx_backbone=None):
     """One throwaway predict so first real frame isn't paying compile/load cost."""
+    if mlx_backbone is not None:
+        mlx_backbone.warm()
+        return
     if coreml_backbone is None:
         return
     if img_t is None:

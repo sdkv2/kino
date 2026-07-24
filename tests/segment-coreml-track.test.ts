@@ -10,9 +10,8 @@ import { readManifest } from "../src/segment/manifest.js";
 // CoreML REAL video tracking on Apple Silicon: frame-0 text→mask (CoreML image seg) seeds a PyTorch
 // mask-prompt init, then the stateful CoreML tracker propagates the mask across frames → manifest
 // tracked:true. Runs for real on a configured Mac; skips off-darwin (CI) and without KINO_SAM_PYTHON.
-// ~1.9s/frame with CoreML vision backbone + every=2 (PyTorch CPU fallback ~7–8s), so the fixture is a
-// TINY 8-frame 384px clip and the timeout is generous. Verifies not just that a mask exists but
-// that it MOVES with the object.
+// ~1.9s/frame with CoreML vision backbone + every=2; MLX preferred when KINO_SAM_MLX_PYTHON
+// set (~2.4s/frame mean here). PyTorch CPU fallback ~7–8s. Fixture is a TINY 8-frame 384px clip.
 function samPython(): string {
   return process.env.KINO_SAM_PYTHON ?? join(homedir(), ".kino", "sam", "venv", "bin", "python");
 }
