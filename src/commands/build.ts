@@ -281,7 +281,8 @@ export async function prepare(
     }
     spec.backgroundTextures.forEach((entry, i) => {
       const ref = typeof entry === "string" ? entry : entry.source;
-      const param = typeof entry === "string" ? undefined : entry.param;
+      const param = typeof entry === "object" && "param" in entry ? entry.param : undefined;
+      const isVideo = typeof entry === "object" && "kind" in entry && entry.kind === "video";
       const asAsset = project.assetPath(ref);
       const abs = existsSync(asAsset) ? asAsset : isAbsolute(ref) ? ref : join(project.workspaceRoot, ref);
       if (!existsSync(abs)) throw new Error(`backgroundTextures[${i}] not found: tried assets/${ref} and ${ref}`);
@@ -290,9 +291,11 @@ export async function prepare(
         bgTextures.push({ kind: "html", src: null, html: sanitizeMotionHtml(readFileSync(abs, "utf8")), param });
       } else {
         if (param) throw new Error(`backgroundTextures[${i}]: param only applies to .html sources`);
+        // Video masks and static images both stage a file under /public; only the kind differs
+        // (video is seeked + redrawn per frame, image uploads once).
         const staged = `bg-tex-${i}${ext}`;
         copyFileSync(abs, join(publicDir, staged));
-        bgTextures.push({ kind: "image", src: staged, html: null });
+        bgTextures.push({ kind: isVideo ? "video" : "image", src: staged, html: null });
       }
     });
   }

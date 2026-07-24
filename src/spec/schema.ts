@@ -196,7 +196,14 @@ export const SpecSchema = z
     // re-rasterizes the html EVERY FRAME at that background param's value (0..1 → the markup's
     // 1s CSS @keyframes) — true per-frame animation, no stepping. See docs/spec-reference.md.
     backgroundTextures: z
-      .array(z.union([z.string().min(1), z.object({ source: z.string().min(1), param: z.string().min(1) })]))
+      .array(
+        z.union([
+          z.string().min(1),
+          z.object({ source: z.string().min(1), param: z.string().min(1) }),
+          // A video source (e.g. a segmentation mask.mp4) sampled per composition frame into uTexN.
+          z.object({ source: z.string().min(1), kind: z.literal("video") }),
+        ]),
+      )
       .max(4)
       .optional(),
     captionStyle: CaptionStyle.optional(), // caption look preset (overrides brand.captionStyle.style)

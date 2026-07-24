@@ -86,9 +86,11 @@ export interface BgTrigger {
 // rasterizes (foreignObject) — brand fonts and --kino-* palette vars apply. With `param` set, the
 // markup is re-rasterized EVERY FRAME at that background param's value (0..1 → the markup's 1s
 // CSS @keyframes) — true per-frame animation. Without it, a single static raster.
+// kind="video": staged .mp4/.webm under /public (e.g. a segmentation mask), seeked to frame/fps and
+// drawn to a canvas EVERY FRAME so uTexN sees this frame's pixels.
 export interface BgTexture {
-  kind: "image" | "html";
-  src: string | null; // public-relative file, for kind="image"
+  kind: "image" | "html" | "video";
+  src: string | null; // public-relative file, for kind="image" | "video"
   html: string | null; // sanitized markup, for kind="html"
   param?: string; // html only: per-frame scrub driven by this background param (0..1)
 }
