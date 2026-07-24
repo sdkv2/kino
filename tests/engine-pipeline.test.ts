@@ -176,4 +176,34 @@ describe("extractDense chunking", () => {
       expect(entry.byFrame[n]).toBe(`x${String(n + 1).padStart(6, "0")}.jpg`);
     }
   }, 30000);
+
+  // Mask jobs (and ONLY mask jobs) extract to lossless PNG: kinoMaskDist reads a coverage gradient,
+  // and JPEG quantization perturbs the rendered distance field on the rim — 166 px of a 1080x1920
+  // frame moved by up to 0.208 in a measured A/B render. Footage stays on JPEG q2, which the test
+  // above pins. The two halves are one `job.key.startsWith("rsmask")` branch, so pin both sides:
+  // a stale readback filter that still looked for .jpg would find zero files and silently freeze
+  // every mask at "hold last frame" rather than fail.
+  // See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+  it("extracts mask jobs to png and leaves footage on jpg", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-maskext-"));
+    const video = join(dir, "src.mp4");
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error",
+      "-f", "lavfi", "-i", "testsrc=duration=1:size=320x240:rate=30", "-pix_fmt", "yuv420p", video]);
+
+    const total = 10;
+    const job = (key: string): MediaJob => ({
+      key, assetRel: "src.mp4", fromFrame: 0, seqDurFrames: total,
+      startSec: 0, stepSec: 1 / 30, effFrame: (n) => n, maxEffFrame: total - 1,
+    });
+    const framesRoot = join(dir, "vframes");
+    const mask = await extractDense(job("rsmask0_0"), video, framesRoot);
+    const footage = await extractDense(job("seg0"), video, framesRoot);
+
+    expect(readdirSync(join(framesRoot, "rsmask0_0")).every((f) => f.endsWith(".png"))).toBe(true);
+    expect(Object.keys(mask.byFrame).length).toBe(total);
+    expect(mask.byFrame[0]).toBe("x000001.png");
+
+    expect(readdirSync(join(framesRoot, "seg0")).every((f) => f.endsWith(".jpg"))).toBe(true);
+    expect(footage.byFrame[0]).toBe("x000001.jpg");
+  }, 30000);
 });

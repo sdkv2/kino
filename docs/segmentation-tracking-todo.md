@@ -41,9 +41,14 @@ until then it stays per-frame and honest.
 
 ## mask.mp4 packing notes (per-frame path)
 
-- 1 object → true grayscale (`R=G=B=mask`, luma-only) so h264 4:2:0 keeps edges crisp.
-- 2–3 objects → R/G/B channels. h264 4:2:0 chroma subsampling softens the G/B mask edges — acceptable
-  for a lossy fallback; upgrade to a 4:4:4 or alpha-capable container if precision matters.
+- 1 object → true grayscale (`R=G=B=mask`, luma-only).
+- 2–3 objects → R/G/B channels.
+- Encoded **lossless 4:4:4** (`-pix_fmt yuv444p -qp 0`), and mask frames re-extract to PNG rather
+  than JPEG. This is no longer a precision tradeoff: 4:2:0 put the G/B channels at half resolution
+  and broke `kinoMaskDist` on them outright (flat-region coverage gradient 0.85 against a 0.05
+  gate; now 0.0055). It is also *cheaper* — binary masks code losslessly at ~60% the size of
+  crf 16, and PNG stills are ~40% the size of JPEG q2.
+  See `docs/superpowers/specs/2026-07-24-multi-object-chroma.md`.
 - 4 objects → h264/mp4 has no alpha channel; only 3 are packed (logged). Use ≤3 objects for video,
   or run image seg per keyframe.
 

@@ -295,7 +295,14 @@ def run_video(args, n_want):
         enc = subprocess.run(
             [FFMPEG, "-y", "-loglevel", "error", "-framerate", rfr,
              "-i", os.path.join(mdir, "%06d.png"),
-             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "16",
+             # Lossless 4:4:4. Multi-object masks pack one object per R/G/B channel, and 4:2:0
+             # puts two of them at HALF resolution — one object's boundary rings into another's
+             # channel. Measured flat-region coverage gradient (kinoMaskDist's analytic gate is
+             # 0.05): 0.85 under yuv420p/crf16, 0.69 under yuv420p even coded losslessly, 0.62
+             # under LOSSY 4:4:4 — and 0.0055 here. All three had to go. Costs nothing: binary
+             # masks code losslessly at ~half the size of crf 16.
+             # See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+             "-c:v", "libx264", "-pix_fmt", "yuv444p", "-qp", "0",
              os.path.join(args.out, "mask.mp4")],
             capture_output=True, text=True,
         )
@@ -487,7 +494,14 @@ def run_track(args, n_want):
         enc = subprocess.run(
             [FFMPEG, "-y", "-loglevel", "error", "-framerate", rfr,
              "-i", os.path.join(mdir, "%06d.png"),
-             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "16",
+             # Lossless 4:4:4. Multi-object masks pack one object per R/G/B channel, and 4:2:0
+             # puts two of them at HALF resolution — one object's boundary rings into another's
+             # channel. Measured flat-region coverage gradient (kinoMaskDist's analytic gate is
+             # 0.05): 0.85 under yuv420p/crf16, 0.69 under yuv420p even coded losslessly, 0.62
+             # under LOSSY 4:4:4 — and 0.0055 here. All three had to go. Costs nothing: binary
+             # masks code losslessly at ~half the size of crf 16.
+             # See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+             "-c:v", "libx264", "-pix_fmt", "yuv444p", "-qp", "0",
              os.path.join(args.out, "mask.mp4")],
             capture_output=True, text=True,
         )
