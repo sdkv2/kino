@@ -40,7 +40,10 @@ async function writeMaskMp4(out: string): Promise<void> {
     // that decodes GREEN rather than grayscale — the R channel read 73/255 inside the ellipse and
     // 0 outside, so a consumer thresholding at 0.5 saw no subject anywhere.
     "-vf", `geq=lum='${ellipseExpr()}':cb='128':cr='128'`,
-    "-pix_fmt", "yuv420p", "-c:v", "libx264",
+    // Lossless 4:4:4, matching the real runners: 4:2:0 puts a multi-object mask's G/B channels at
+    // half resolution and breaks kinoMaskDist's analytic gate. Free — binary masks code losslessly
+    // smaller than crf 16. See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+    "-pix_fmt", "yuv444p", "-c:v", "libx264", "-qp", "0",
     out,
   ]);
 }

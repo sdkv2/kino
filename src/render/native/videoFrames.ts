@@ -212,6 +212,15 @@ async function extractIndices(
   // still leaves a gap-free file list (later chunks are past EOF and produce nothing).
   const CHUNK = 64;
   const hdr = await hdrChain(transfer);
+  // Masks are the ONLY asset that needs EXACT pixels. kinoMaskDist reads a coverage gradient to
+  // pick its analytic branch, and JPEG's DCT quantization alone — even from a bit-exact mask.mp4 —
+  // puts ~25k px/frame of a packed multi-object mask over the 0.05 gate. PNG is also SMALLER than
+  // JPEG for binary masks (0.33MB vs 1.12MB per 24 frames @1080x1920), so exactness costs no disk
+  // here. Footage keeps JPEG q2: visually lossless, and far cheaper on real photographic frames.
+  // See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+  const isMask = job.key.startsWith("rsmask");
+  const ext = isMask ? "png" : "jpg";
+  const quality = isMask ? [] : ["-q:v", "2"];
   for (let c = 0; c < uniq.length; c += CHUNK) {
     const part = uniq.slice(c, c + CHUNK);
     const terms = part.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
@@ -227,13 +236,13 @@ async function extractIndices(
       "-fps_mode", "passthrough",
       "-frames:v", String(part.length),
       "-start_number", String(c + 1),
-      "-q:v", "2",
-      join(dir, "x%06d.jpg"),
+      ...quality,
+      join(dir, `x%06d.${ext}`),
     ]);
   }
   // Outputs arrive in source order → x000001.jpg maps to uniq[0], etc. EOF can shorten the run;
   // local frames whose index wasn't reached clamp to the last extracted file (hold last frame).
-  const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(".jpg")).sort();
+  const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(`.${ext}`)).sort();
   const byFrame: Record<number, string> = {};
   let maxFrame = 0;
   if (!files.length) return { dir: job.key, byFrame, maxFrame: 0 };
