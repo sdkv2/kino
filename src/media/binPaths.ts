@@ -22,6 +22,12 @@ export function preferSystem(versionBanner: string): boolean {
   return !m || Number(m[1]) >= MIN_MAJOR;
 }
 
+/** Does this `-filters` listing carry `zscale`? Pure for the same reason `preferSystem` is. */
+export function hasZscale(filtersListing: string): boolean {
+  // Filter rows look like " ... zscale            V->V       Apply resizing, ..."
+  return /(^|\s)zscale(\s|$)/m.test(filtersListing);
+}
+
 function usableOnPath(cmd: string): boolean {
   try {
     // Doubles as the presence check — a missing binary throws here. Works on win32 too, where
@@ -33,5 +39,24 @@ function usableOnPath(cmd: string): boolean {
   }
 }
 
-export const FFMPEG_PATH = usableOnPath("ffmpeg") ? "ffmpeg" : (ffmpegStatic ?? "ffmpeg");
+/** Version is necessary but not sufficient: a system ffmpeg also has to carry the filters we
+ *  actually invoke. Homebrew's ffmpeg 8 is built without libzimg, so it has no `zscale` — and
+ *  `zscale` is how the frame extractor tonemaps HDR/HLG sources, which is every iPhone capture
+ *  and most modern stock footage. Missing it doesn't error the render: the extract dies, the
+ *  beat's texture stays empty, and video beats come out silently black. So a system binary has
+ *  to prove it can tonemap before it outranks the bundled build. */
+function usableFfmpeg(): boolean {
+  if (!usableOnPath("ffmpeg")) return false;
+  try {
+    const filters = execSync("ffmpeg -hide_banner -filters", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return hasZscale(filters);
+  } catch {
+    return false;
+  }
+}
+
+export const FFMPEG_PATH = usableFfmpeg() ? "ffmpeg" : (ffmpegStatic ?? "ffmpeg");
 export const FFPROBE_PATH = usableOnPath("ffprobe") ? "ffprobe" : (ffprobeStatic.path ?? "ffprobe");
