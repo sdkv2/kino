@@ -100,6 +100,19 @@ program
   });
 
 program
+  .command("segment <input>")
+  .description("Generate object masks (Mac/CoreML) for an image or video, consumed as shader texture channels")
+  .option("--prompt <text>", "text prompt naming the object(s) to segment (required)")
+  .option("--objects <n>", "number of objects to track (max 4, default 1)")
+  .option("--out <name>", "output subdir name under assets/masks/ (default: input's basename)")
+  .option("--no-track", "image-style per-frame segmentation instead of video object tracking")
+  .option("--backend <name>", "coreml | mock (default: coreml on macOS, else requires mock)")
+  .option("--format <fmt>", "json (default: human summary, or JSON when stdout isn't a TTY)")
+  .action(async (input, o) => {
+    await (await import("./commands/segment.js")).segment(input, o);
+  });
+
+program
   .command("scan <video>")
   .description("Analyse an EXTERNAL reference video: transcript + frames + contact sheet in one shot (research only)")
   .option("--count <n>", "extract N frames evenly (default: one per transcript segment)")
