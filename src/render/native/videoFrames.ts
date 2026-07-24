@@ -240,7 +240,7 @@ async function extractIndices(
       join(dir, `x%06d.${ext}`),
     ]);
   }
-  // Outputs arrive in source order → x000001.jpg maps to uniq[0], etc. EOF can shorten the run;
+  // Outputs arrive in source order → x000001.<ext> maps to uniq[0], etc. EOF can shorten the run;
   // local frames whose index wasn't reached clamp to the last extracted file (hold last frame).
   const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(`.${ext}`)).sort();
   const byFrame: Record<number, string> = {};
