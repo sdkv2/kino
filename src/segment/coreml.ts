@@ -121,10 +121,9 @@ export const coremlBackend: Backend = {
       if (req.track) {
         // REAL temporal tracking: frame-0 text→mask seeds the PyTorch mask-prompt init, then the
         // stateful CoreML tracker propagates each object across frames (manifest tracked:true).
-        // ~2.9s/frame measured (CoreML backbone ~2.4s + tracker ~0.55s) after releasing
-        // PyTorch post-init; ~7–8s PyTorch CPU fallback.
+        // ~1.9s/frame measured (CoreML backbone + every=2); ~2.9s at every=1; ~7–8s PyTorch fallback.
         args.push("--track");
-        log.step("coreml video: real temporal tracking (~2.9s/frame; --no-track for the fast per-frame path)");
+        log.step("coreml video: real temporal tracking (~1.9s/frame; --no-track for the fast per-frame path)");
       } else {
         // Per-frame image seg — masks independent per frame; fast motion can flicker. tracked:false.
         log.step("coreml video: per-frame segmentation (no tracking; fast, flicker possible on fast motion)");

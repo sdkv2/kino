@@ -21,7 +21,7 @@ VIDEO (--video --track): REAL temporal tracking (manifest tracked:true). Frame 0
 text->mask (the same image pipeline) seeds a PyTorch mask-prompt init; each frame's
 CoreML vision backbone (sam3_vision_backbone.mlpackage; PyTorch CPU fallback) feeds the
 stateful CoreML tracker (dense_sam3_trackstep) which propagates every object's mask.
-See scripts/sam_track.py. ~2.9s/frame with CoreML backbone; ~7–8s PyTorch fallback.
+See scripts/sam_track.py. ~1.9s/frame with CoreML backbone (every=2); ~7–8s PyTorch fallback.
 
 VIDEO (--video, no --track): ffmpeg-decodes to frames at the source fps, runs the SAME
 image pipeline on each frame INDEPENDENTLY (no temporal tracking), packs up to 3 objects
@@ -324,9 +324,8 @@ def run_track(args, n_want):
     stateful CoreML tracker, which propagates each object's mask. Writes mask.mp4 +
     manifest tracked:true.
 
-    ~3.5–4.5s/frame with CoreML backbone after releasing PyTorch post-init
-    (~2.7s backbone + ~0.6–1s tracker); ~7–8s/frame PyTorch CPU fallback.
-    Falls to per-frame only via --no-track.
+    ~1.9s/frame with CoreML backbone + backbone_every=2 (default); ~2.9s at every=1;
+    ~7–8s/frame PyTorch CPU fallback. Falls to per-frame only via --no-track.
     """
     import gc
     import time
@@ -412,13 +411,28 @@ def run_track(args, n_want):
         Image.fromarray(_pack([(seg0[i] > 127).astype(np.uint8) * 255 for i in range(n_obj)])).save(
             os.path.join(mdir, "000000.png"))
 
-        # frames 1.. : CoreML (or PyTorch) backbone -> stateful CoreML tracker propagate
+        # frames 1.. : CoreML (or PyTorch) backbone -> stateful CoreML tracker propagate.
+        # backbone_every>1 reuses last features (MLX-style); tracker state still advances.
+        every = sam_track.backbone_every()
+        if every > 1:
+            log(f"backbone cache: re-encode every {every} frame(s) (KINO_SAM_BACKBONE_EVERY)")
         bb_times, trk_times = [], []
+        cached_feats = None  # (vis72, hires0, hires1)
+        since_encode = every  # force encode on first loop frame
         for fnum in range(1, len(frames)):
             arr, _ = _load_frame_1008(frames[fnum])
-            with torch.no_grad():
-                vis72, hires0, hires1, t_bb = sam_track.encode_frame_features(
-                    model, sam_track.to_model_tensor(arr), coreml_backbone=coreml_bb)
+            if since_encode >= every or cached_feats is None:
+                with torch.no_grad():
+                    vis72, hires0, hires1, t_bb = sam_track.encode_frame_features(
+                        model, sam_track.to_model_tensor(arr), coreml_backbone=coreml_bb)
+                cached_feats = (vis72, hires0, hires1)
+                since_encode = 1
+                cache_hit = False
+            else:
+                vis72, hires0, hires1 = cached_feats
+                t_bb = 0.0
+                since_encode += 1
+                cache_hit = True
             t0 = time.time()
             high, scores = sam_track.tracker_step(
                 mlmodel, in_names, state, vis72, hires0, hires1, *cond, fnum)
@@ -427,15 +441,17 @@ def run_track(args, n_want):
             trk_times.append(t_trk)
             masks_1008 = [((high[oid, 0] > 0).astype(np.uint8) * 255) for oid in range(n_obj)]
             areas = [int((m > 0).sum()) for m in masks_1008]
+            hit = " cache" if cache_hit else ""
             log(f"frame {fnum}: obj areas={areas} score0={float(scores[0,0]):.2f} "
-                f"backbone={t_bb:.2f}s tracker={t_trk:.2f}s")
+                f"backbone={t_bb:.2f}s tracker={t_trk:.2f}s{hit}")
             Image.fromarray(_pack(masks_1008)).save(os.path.join(mdir, f"{fnum:06d}.png"))
 
         if bb_times:
             mean_bb = sum(bb_times) / len(bb_times)
             mean_trk = sum(trk_times) / len(trk_times)
+            n_enc = sum(1 for t in bb_times if t > 0)
             log(f"per-frame mean: backbone={mean_bb:.2f}s tracker={mean_trk:.2f}s "
-                f"total={mean_bb+mean_trk:.2f}s ({eng})")
+                f"total={mean_bb+mean_trk:.2f}s ({eng}; encoded {n_enc}/{len(bb_times)} frames)")
 
         enc = subprocess.run(
             [FFMPEG, "-y", "-loglevel", "error", "-framerate", rfr,

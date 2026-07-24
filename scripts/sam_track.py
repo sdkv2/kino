@@ -14,9 +14,9 @@ the CoreML image seg, mask.mp4 encode); this module owns the ML:
 The frame-0 mask prompt is produced upstream (sam_runner's text->mask on frame 0) and
 fed here as mask_inputs, exactly as tracking_pipeline.py did with its synthetic disc mask.
 
-Speed: ~3.5–4.5s/frame with CoreML backbone after releasing PyTorch post-init
-(~2.7s backbone + ~0.6–1s tracker). Opt-in KINO_SAM_BACKBONE_COMPUTE=ALL when stable.
-PyTorch CPU fallback ~7–8s. Export: scripts/export_sam_backbone_coreml.py.
+Speed: ~1.9s/frame with CoreML backbone + backbone_every=2 (default; ~2.9s at every=1).
+Release PyTorch post-init. PyTorch CPU fallback ~7–8s. Export:
+scripts/export_sam_backbone_coreml.py. KINO_SAM_BACKBONE_EVERY=1 for max accuracy.
 
 Requires the same venv as the image path PLUS the `sam3` package importable and the
 multiplex checkpoint (sam3.1_multiplex.pt: backbone + tracker weights). CoreML packages
@@ -98,6 +98,22 @@ def resolve_checkpoint():
 
 
 BACKBONE_PKG = "sam3_vision_backbone.mlpackage"
+
+
+def backbone_every() -> int:
+    """How often to re-run the vision backbone during tracking.
+
+    Default 2 (MLX-style): reuse last vis72/hires0/hires1 for one frame between
+    encodes. Measured on the moving-disc fixture: every=1 → ~2.9s/frame;
+    every=2 → ~1.9s/frame with identical centroid travel. every=5 still PASSes
+    the >100px travel gate but travel drops (175 vs 210). Set
+    KINO_SAM_BACKBONE_EVERY=1 for per-frame encode (max accuracy).
+    """
+    try:
+        n = int(os.environ.get("KINO_SAM_BACKBONE_EVERY", "2"))
+    except ValueError:
+        n = 2
+    return max(1, n)
 
 
 def tracker_package(models_dir):
