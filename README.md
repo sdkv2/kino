@@ -183,8 +183,5 @@ Full guidelines: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Code: [MIT](LICENSE) © sdkv2.
-
-The name **kino™**, the wordmark, and the logo are trademarks of sdkv2 and are *not* covered by
-the MIT licence — fork the code freely, but give your fork its own name. See
+[MIT](LICENSE) © sdkv2. The kino name and logo are trademarks — see
 [TRADEMARK.md](TRADEMARK.md).
