@@ -230,10 +230,19 @@ program
   )
   .action(async (o) => (await import("./commands/skills.js")).skills(o));
 
-program.parseAsync(process.argv).catch((err) => {
-  // One clean line instead of an uncaught stack dump on every expected failure (bad spec, missing
-  // brand, lint violation…). Full stack still available with KINO_DEBUG=1.
-  log.error(formatCliError(err));
-  if (process.env.KINO_DEBUG) console.error(err);
-  process.exit(1);
-});
+program
+  .parseAsync(process.argv)
+  .then(() => {
+    // Exit explicitly instead of waiting for the event loop to drain: puppeteer's CDP
+    // WebSocket transport isn't reliably unref'd across versions/platforms, so a render
+    // command can finish writing its output and then hang forever with no visible work
+    // left to do.
+    process.exit(0);
+  })
+  .catch((err) => {
+    // One clean line instead of an uncaught stack dump on every expected failure (bad spec, missing
+    // brand, lint violation…). Full stack still available with KINO_DEBUG=1.
+    log.error(formatCliError(err));
+    if (process.env.KINO_DEBUG) console.error(err);
+    process.exit(1);
+  });
