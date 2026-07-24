@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header-hq3.webp" alt="kino — spec driven video development" width="900">
+  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header-hq4.webp" alt="kino — spec driven video engine" width="900">
 </p>
 
-<p align="center"><em>spec driven video development · /ˈkiːnoʊ/</em></p>
+<p align="center"><em>the video engine · spec driven video development · /ˈkiːnoʊ/</em></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
@@ -14,10 +14,13 @@
 
 ---
 
-**kino** turns a JSON spec into a finished video. You (or an agent) write the spec; kino renders
-it: ElevenLabs voiceover, an optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless**
-background / motion graphic, composited by an in-house headless-Chrome engine to MP4
-(9:16, 3:4, 16:9, …). Same spec → same frames.
+**kino** is a video engine: a framework you author in and a renderer that turns what you wrote
+into a finished MP4. You (or an agent) write a JSON spec; kino renders it — ElevenLabs voiceover,
+an optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** background / motion graphic,
+composited frame-by-frame in headless Chrome (9:16, 3:4, 16:9, …). Same spec → same frames.
+
+The spec is the source; the MP4 is the build artifact. Edits are spec edits and a rebuild, not
+timeline drags — so revisions diff, review, and version like code.
 
 ## Showcase
 
@@ -98,7 +101,7 @@ kino skills --install --agents cursor,claude
 Agent fan-out dirs stay off git so they do not clutter the tree. Details: [`skills/README.md`](skills/README.md).
 
 ## Features
-- **Avatar engines** — `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3),
+- **Avatar providers** — `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3),
   `replicate` (open-source lip-sync). Avatars are trimmed to on-camera segments to cut spend;
   VO + avatar are content-hash cached.
 - **Faceless backgrounds** — `glow`, `image`, `mesh`, `aurora`, `particles`, `grid`, `custom` —
