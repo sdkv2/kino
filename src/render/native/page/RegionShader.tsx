@@ -173,7 +173,12 @@ async function initGL(
     // mainImage renamed), so a helper declared at file scope in both frags is a duplicate
     // definition here. That is the most common way to break a region shader, and the driver
     // cites a line in this assembled source — hence reporting it alongside the log.
-    const fragSrc = assembleRegionShaderSource(region.subjectCode, region.backgroundCode, []);
+    const fragSrc = assembleRegionShaderSource(
+      region.subjectCode,
+      region.backgroundCode,
+      [],
+      region.masks.map((m) => m.subjectCode ?? null),
+    );
     const mk = (type: number, s: string): WebGLShader | null => {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, s);
@@ -292,12 +297,15 @@ export const RegionShader: React.FC<{
     frameUrl: maskFrameUrls[i],
   }));
 
-  // Everything initGL bakes in: the two GLSL bodies (the assembled program) and the texture sources
+  // Everything initGL bakes in: every GLSL body (the assembled program) and the texture sources
   // (built once into slots). Per-frame /vframes URLs are deliberately NOT here — those re-upload
   // through updateFrameSlot and must not rebuild the program.
   const glKey = [
     region.subjectCode,
     region.backgroundCode,
+    // Per-mask bodies are baked into the program too — two specs differing ONLY in a masks[].subject
+    // would otherwise reuse the first one's compiled shader (see render-region-reuse.test.ts).
+    ...region.masks.map((m) => m.subjectCode ?? ""),
     `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
     ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
   ].join(" ");

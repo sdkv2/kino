@@ -42,10 +42,13 @@ export interface RegionShaderMask {
   maskSrc: string; // public-relative mask.png (image) or mask.mp4 (video)
   maskKind: "image" | "video";
   channel: "r" | "g" | "b" | "a" | "gray"; // manifest object's coverage channel
+  subjectCode?: string | null; // GLSL body for THIS mask's region; null/absent = the shared subjectCode
 }
 export interface RegionShaderProps {
-  masks: RegionShaderMask[]; // 1..4 entries; subject = union of all their coverage
-  subjectCode: string | null; // GLSL mainImage body for the union region, or null = passthrough asset pixels
+  // 1..4 entries. Each shades its own region, falling back to subjectCode where it has no
+  // subjectCode of its own; later entries paint OVER earlier ones where masks overlap.
+  masks: RegionShaderMask[];
+  subjectCode: string | null; // GLSL mainImage body for masks without their own, or null = passthrough asset pixels
   backgroundCode: string | null; // GLSL mainImage body elsewhere, or null = passthrough
 }
 

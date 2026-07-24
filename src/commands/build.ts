@@ -45,16 +45,24 @@ const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", g
 
 // Resolve an app beat's regionShader spec → RegionShaderProps: read each mask's manifest for kind +
 // the chosen object's channel, stage the mask file into /public (like frame.src / asset), and load
-// each region's .frag/.glsl body the same way a custom shader background is loaded. `masks` unions
-// multiple mask sources/objects into one subject region (e.g. two independently `kino segment`-ed
-// subjects cut onto one shared background) — `mask`+`object` is the single-entry shorthand.
+// each region's .frag/.glsl body the same way a custom shader background is loaded. `mask`+`object`
+// is the single-entry shorthand for `masks`. An entry's own `subject` shades just that mask
+// (per-object regions); entries without one fall back to the top-level `subject`, which is how
+// several independently `kino segment`-ed subjects share one treatment on one background.
 function resolveRegionShader(
-  rs: { mask?: string; masks?: { mask: string; object: number }[]; subject?: string; background?: string; object: number },
+  rs: {
+    mask?: string;
+    masks?: { mask: string; object: number; subject?: string }[];
+    subject?: string;
+    background?: string;
+    object: number;
+  },
   project: Project,
   stageAsset: (rel: string) => void,
 ): RegionShaderProps {
-  const entries = rs.masks ?? [{ mask: rs.mask!, object: rs.object }];
-  const masks = entries.map(({ mask, object }) => {
+  const loadBody = (ref: string | undefined) => (ref ? readFileSync(resolveBackgroundComponent(ref, project), "utf8") : null);
+  const entries = rs.masks ?? [{ mask: rs.mask!, object: rs.object, subject: undefined }];
+  const masks = entries.map(({ mask, object, subject }) => {
     const manifest = readManifest(project.assetPath(mask));
     // Image masks carry every object in the single union mask.png (all channel "gray"); per-object
     // image selection isn't wired, so object>0 would silently pick the same union — reject it loudly.
@@ -68,9 +76,8 @@ function resolveRegionShader(
     }
     const maskRel = `${mask}/${manifest.kind === "video" ? "mask.mp4" : "mask.png"}`;
     stageAsset(maskRel);
-    return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel };
+    return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel, subjectCode: loadBody(subject) };
   });
-  const loadBody = (ref: string | undefined) => (ref ? readFileSync(resolveBackgroundComponent(ref, project), "utf8") : null);
   return {
     masks,
     subjectCode: loadBody(rs.subject),
