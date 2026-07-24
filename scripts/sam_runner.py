@@ -19,9 +19,9 @@ instance. manifest kind:"image", tracked:false.
 
 VIDEO (--video --track): REAL temporal tracking (manifest tracked:true). Frame 0's
 text->mask (the same image pipeline) seeds a PyTorch mask-prompt init; each frame's
-PyTorch vision backbone feeds the stateful CoreML tracker (dense_sam3_trackstep) which
-propagates every object's mask across the clip. See scripts/sam_track.py. ~7.6s/frame
-(the PyTorch CPU backbone dominates).
+CoreML vision backbone (sam3_vision_backbone.mlpackage; PyTorch CPU fallback) feeds the
+stateful CoreML tracker (dense_sam3_trackstep) which propagates every object's mask.
+See scripts/sam_track.py. ~2.9s/frame with CoreML backbone; ~7–8s PyTorch fallback.
 
 VIDEO (--video, no --track): ffmpeg-decodes to frames at the source fps, runs the SAME
 image pipeline on each frame INDEPENDENTLY (no temporal tracking), packs up to 3 objects
@@ -308,9 +308,10 @@ def run_video(args, n_want):
 
 def _load_frame_1008(path):
     """Frame PNG -> (uint8[1008,1008,3] RGB, fp16[1,3,1008,1008] normalized). The uint8
-    feeds the PyTorch backbone (sam_track.to_model_tensor); the fp16 feeds the CoreML
-    image-seg pipeline (segment_one) for the frame-0 text->mask. Both use the same square
-    1008 squash as preprocess(), so masks round-trip to the tracker's coordinate space."""
+    feeds the per-frame backbone (CoreML or PyTorch via sam_track.to_model_tensor); the
+    fp16 feeds the CoreML image-seg pipeline (segment_one) for the frame-0 text->mask.
+    Both use the same square 1008 squash as preprocess(), so masks round-trip to the
+    tracker's coordinate space."""
     im = Image.open(path).convert("RGB").resize((RES, RES), Image.BILINEAR)
     arr = np.asarray(im, dtype=np.uint8)
     fp16 = np.transpose(((arr.astype(np.float32) / 255.0) - 0.5) / 0.5, (2, 0, 1))[None].astype(np.float16)
@@ -319,11 +320,16 @@ def _load_frame_1008(path):
 
 def run_track(args, n_want):
     """REAL temporal tracking. Frame-0 text->mask (CoreML image seg) seeds the PyTorch
-    mask-prompt init; per frame the PyTorch backbone feeds the stateful CoreML tracker,
-    which propagates each object's mask. Writes mask.mp4 + manifest tracked:true.
+    mask-prompt init; per frame the CoreML vision backbone (PyTorch fallback) feeds the
+    stateful CoreML tracker, which propagates each object's mask. Writes mask.mp4 +
+    manifest tracked:true.
 
-    ~7.6s/frame (PyTorch CPU backbone dominates). Falls to per-frame only via --no-track.
+    ~3.5–4.5s/frame with CoreML backbone after releasing PyTorch post-init
+    (~2.7s backbone + ~0.6–1s tracker); ~7–8s/frame PyTorch CPU fallback.
+    Falls to per-frame only via --no-track.
     """
+    import gc
+    import time
     import torch  # lazy: only the tracking path pulls in torch/sam3 + the multiplex ckpt
     import sam_track
 
@@ -335,6 +341,10 @@ def run_track(args, n_want):
     log("building PyTorch tracker + vision backbone (multiplex ckpt) — one-time ~12s")
     model = sam_track.build_model_with_backbone()
     ms = sam_track.make_multiplex_state(model)
+    # Resolve path now; LOAD the CoreML package AFTER frame-0 init + PyTorch release
+    # so the 467M fp32 weights aren't co-resident during Metal encode (was ~6.7s vs ~2.7s).
+    bb_path = sam_track.backbone_package(models_dir())
+    use_coreml_bb = bb_path is not None
 
     with tempfile.TemporaryDirectory() as work:
         fdir, mdir = os.path.join(work, "frames"), os.path.join(work, "masks")
@@ -360,17 +370,30 @@ def run_track(args, n_want):
         if n_obj > 3:
             log(f"objects={n_obj}: mask.mp4 (h264) has no alpha — packing 3 tracked objects into R/G/B")
         chans = ["gray"] if vch == 1 else ["r", "g", "b"][:vch]
-        log(f"tracking {n_obj} object(s) over {len(frames)} frames @ {fps:.3f}fps ({vw}x{vh}) — REAL temporal tracking")
+        eng = "CoreML backbone" if use_coreml_bb else "PyTorch CPU backbone"
+        log(f"tracking {n_obj} object(s) over {len(frames)} frames @ {fps:.3f}fps ({vw}x{vh}) — "
+            f"REAL temporal tracking ({eng})")
 
         mask_inputs = torch.zeros(sam_track.MULTIPLEX_COUNT, 1, RES, RES)
         for i in range(n_obj):
             mask_inputs[i, 0] = torch.from_numpy((seg0[i] > 127).astype(np.float32))
 
-        # --- frame-0 PyTorch init -> cond_* constants ---
+        # --- frame-0 PyTorch init -> cond_* constants (once per clip; interactive path) ---
         with torch.no_grad():
             feats0 = sam_track.encode_frame(model, sam_track.to_model_tensor(arr0), need_interactive=True)
         prop0 = feats0["sam2_backbone_out"]
         cond = sam_track.frame0_init(model, ms, feats0, prop0, mask_inputs, len(frames))
+        # Drop refs into the big feature trees before releasing weights.
+        del feats0, prop0, mask_inputs, ms
+
+        coreml_bb = None
+        if use_coreml_bb:
+            sam_track.release_pytorch_after_init(model)
+            del model
+            model = None
+            gc.collect()
+            coreml_bb = sam_track.load_backbone(models_dir())
+            sam_track.warm_backbone(coreml_bb, sam_track.to_model_tensor(arr0))
 
         mlmodel, in_names, state = sam_track.load_tracker(models_dir())
 
@@ -389,18 +412,30 @@ def run_track(args, n_want):
         Image.fromarray(_pack([(seg0[i] > 127).astype(np.uint8) * 255 for i in range(n_obj)])).save(
             os.path.join(mdir, "000000.png"))
 
-        # frames 1.. : PyTorch backbone -> stateful CoreML tracker propagate
+        # frames 1.. : CoreML (or PyTorch) backbone -> stateful CoreML tracker propagate
+        bb_times, trk_times = [], []
         for fnum in range(1, len(frames)):
             arr, _ = _load_frame_1008(frames[fnum])
             with torch.no_grad():
-                prop = sam_track.encode_frame(model, sam_track.to_model_tensor(arr))["sam2_backbone_out"]
-            vis72, hires0, hires1 = sam_track.tracker_inputs(prop)
+                vis72, hires0, hires1, t_bb = sam_track.encode_frame_features(
+                    model, sam_track.to_model_tensor(arr), coreml_backbone=coreml_bb)
+            t0 = time.time()
             high, scores = sam_track.tracker_step(
                 mlmodel, in_names, state, vis72, hires0, hires1, *cond, fnum)
+            t_trk = time.time() - t0
+            bb_times.append(t_bb)
+            trk_times.append(t_trk)
             masks_1008 = [((high[oid, 0] > 0).astype(np.uint8) * 255) for oid in range(n_obj)]
             areas = [int((m > 0).sum()) for m in masks_1008]
-            log(f"frame {fnum}: obj areas={areas} score0={float(scores[0,0]):.2f}")
+            log(f"frame {fnum}: obj areas={areas} score0={float(scores[0,0]):.2f} "
+                f"backbone={t_bb:.2f}s tracker={t_trk:.2f}s")
             Image.fromarray(_pack(masks_1008)).save(os.path.join(mdir, f"{fnum:06d}.png"))
+
+        if bb_times:
+            mean_bb = sum(bb_times) / len(bb_times)
+            mean_trk = sum(trk_times) / len(trk_times)
+            log(f"per-frame mean: backbone={mean_bb:.2f}s tracker={mean_trk:.2f}s "
+                f"total={mean_bb+mean_trk:.2f}s ({eng})")
 
         enc = subprocess.run(
             [FFMPEG, "-y", "-loglevel", "error", "-framerate", rfr,
@@ -447,7 +482,7 @@ def main():
     ap.add_argument("--objects", type=int, default=1)
     ap.add_argument("--video", action="store_true", help="treat --input as a video")
     ap.add_argument("--track", action="store_true",
-                    help="video: REAL temporal tracking (CoreML tracker + PyTorch backbone); "
+                    help="video: REAL temporal tracking (CoreML tracker + CoreML/PyTorch backbone); "
                          "without it, per-frame image seg (tracked:false)")
     args = ap.parse_args()
 

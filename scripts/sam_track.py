@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
-"""SAM3.1 REAL video tracking building blocks (CoreML tracker + PyTorch backbone).
+"""SAM3.1 REAL video tracking building blocks (CoreML tracker + CoreML/PyTorch backbone).
 
 Self-contained port of the VERIFIED spike (scratchpad/sam3-coreml/tracking_pipeline.py
 + common.py) into committed scripts/ — the runtime must NOT depend on the gitignored
 scratchpad. scripts/sam_runner.py owns the I/O (ffmpeg decode, frame-0 text->mask via
 the CoreML image seg, mask.mp4 encode); this module owns the ML:
 
-    frame RGB  --PyTorch vision backbone (467M, TriHeadVisionOnly)--> vis72/hires0/hires1
-    frame 0    --PyTorch track_step(mask-prompt init)--------------> cond_mem/cond_img/cond_ptr
-    frames 1+  --CoreML dense_sam3_trackstep.mlpackage (stateful)--> per-object mask logits
+    frame RGB  --CoreML vision backbone (sam3_vision_backbone.mlpackage)--> vis72/hires0/hires1
+                 (falls back to PyTorch TriHeadVisionOnly 467M if package absent)
+    frame 0    --PyTorch track_step(mask-prompt init)--------------------> cond_mem/cond_img/cond_ptr
+    frames 1+  --CoreML dense_sam3_trackstep.mlpackage (stateful)--------> per-object mask logits
 
 The frame-0 mask prompt is produced upstream (sam_runner's text->mask on frame 0) and
 fed here as mask_inputs, exactly as tracking_pipeline.py did with its synthetic disc mask.
 
-Speed: ~7.6s/frame — the PyTorch CPU backbone dominates (CoreML tracker itself ~0.6s).
-Exporting the image encoder to CoreML is the speed follow-up (see docs/segmentation.md).
+Speed: ~3.5–4.5s/frame with CoreML backbone after releasing PyTorch post-init
+(~2.7s backbone + ~0.6–1s tracker). Opt-in KINO_SAM_BACKBONE_COMPUTE=ALL when stable.
+PyTorch CPU fallback ~7–8s. Export: scripts/export_sam_backbone_coreml.py.
 
 Requires the same venv as the image path PLUS the `sam3` package importable and the
-multiplex checkpoint (sam3.1_multiplex.pt: backbone + tracker weights). CoreML tracker
-package resolved from ~/.kino/sam/models (KINO_SAM_TRACKER override).
+multiplex checkpoint (sam3.1_multiplex.pt: backbone + tracker weights). CoreML packages
+resolved from ~/.kino/sam/models (KINO_SAM_TRACKER / KINO_SAM_BACKBONE overrides).
 """
 import glob
 import os
 import sys
+import time
 
 import numpy as np
 import torch
@@ -94,6 +97,9 @@ def resolve_checkpoint():
     return hf_hub_download(repo_id=SAM31_HF_REPO, filename=SAM31_CKPT_NAME)
 
 
+BACKBONE_PKG = "sam3_vision_backbone.mlpackage"
+
+
 def tracker_package(models_dir):
     """CoreML tracker mlpackage path. KINO_SAM_TRACKER override, else under models_dir
     (ensureSamEnv downloads it to models_dir/models/dense_sam3_trackstep.mlpackage)."""
@@ -115,6 +121,25 @@ def tracker_package(models_dir):
         "run `kino segment` once to auto-download from HF sdkv2/sam3.1-coreml-tracker-spike, "
         "or set KINO_SAM_TRACKER"
     )
+
+
+def backbone_package(models_dir):
+    """CoreML vision-backbone mlpackage path, or None if absent (PyTorch fallback).
+
+    KINO_SAM_BACKBONE override, else models_dir/sam3_vision_backbone.mlpackage.
+    Not yet auto-downloaded from HF — export locally via scripts/export_sam_backbone_coreml.py
+    (follow-up: publish + ensureSamEnv fetch like the tracker).
+    """
+    env = os.environ.get("KINO_SAM_BACKBONE")
+    if env:
+        return env if os.path.exists(env) else None
+    for cand in (
+        os.path.join(models_dir, BACKBONE_PKG),
+        os.path.join(models_dir, "models", BACKBONE_PKG),
+    ):
+        if os.path.exists(cand):
+            return cand
+    return None
 
 
 # ---------------------------------------------------------------- model build
@@ -215,6 +240,94 @@ def tracker_inputs(prop_feats):
     hires1 = vf[1].permute(1, 2, 0).view(1, 64, 2 * E, 2 * E).contiguous()
     assert vis72.shape == (E * E, 1, 256), vis72.shape
     return vis72, hires0, hires1
+
+
+def load_backbone(models_dir):
+    """Load CoreML vision backbone if present. Returns MLModel or None (PyTorch fallback).
+
+    Default ComputeUnit.CPU_AND_GPU. Isolated ~2.7s/frame; co-resident with the PyTorch
+    467M backbone was ~6.7s — callers must release PyTorch after frame-0 init. Opt in to
+    ALL via KINO_SAM_BACKBONE_COMPUTE (ANE can hang on first load). Falls back to
+    KINO_SAM_COMPUTE, then CPU_AND_GPU. Tracker keeps its own KINO_SAM_COMPUTE default.
+    """
+    import coremltools as ct
+
+    path = backbone_package(models_dir)
+    if not path:
+        log(f"CoreML backbone absent under {models_dir} — per-frame features use PyTorch CPU")
+        return None
+    cu = (os.environ.get("KINO_SAM_BACKBONE_COMPUTE")
+          or os.environ.get("KINO_SAM_COMPUTE")
+          or "CPU_AND_GPU")
+    unit = getattr(ct.ComputeUnit, cu, ct.ComputeUnit.CPU_AND_GPU)
+    log(f"loading CoreML backbone {os.path.basename(path)} (compute_units={unit.name})")
+    return ct.models.MLModel(path, compute_units=unit)
+
+
+def encode_frame_features(model, img_t, coreml_backbone=None):
+    """Per-frame (vis72, hires0, hires1) for the tracker. CoreML backbone when loaded.
+
+    Returns (vis72, hires0, hires1, elapsed_s). Frame-0 interactive init still needs
+    encode_frame(..., need_interactive=True) on PyTorch — this is the per-frame path only.
+    When coreml_backbone is set, `model` may be None (PyTorch already released).
+    """
+    t0 = time.time()
+    if coreml_backbone is not None:
+        feed = {"image": img_t.numpy().astype(np.float32)}
+        got = coreml_backbone.predict(feed)
+        by_shape = {tuple(np.asarray(v).shape): np.asarray(v, dtype=np.float32)
+                    for v in got.values()}
+        named = {k: np.asarray(v, dtype=np.float32) for k, v in got.items()}
+
+        def pick(name, shape):
+            if name in named and tuple(named[name].shape) == shape:
+                return named[name]
+            return by_shape[shape]
+
+        vis72 = torch.from_numpy(pick("vis72", (E * E, 1, 256)))
+        hires0 = torch.from_numpy(pick("hires0", (1, 32, 4 * E, 4 * E)))
+        hires1 = torch.from_numpy(pick("hires1", (1, 64, 2 * E, 2 * E)))
+        return vis72, hires0, hires1, time.time() - t0
+    if model is None:
+        raise RuntimeError("encode_frame_features: no CoreML backbone and model is None")
+    prop = encode_frame(model, img_t)["sam2_backbone_out"]
+    vis72, hires0, hires1 = tracker_inputs(prop)
+    return vis72, hires0, hires1, time.time() - t0
+
+
+def release_pytorch_after_init(model):
+    """Drop the 467M PyTorch vision backbone after frame-0 init.
+
+    Holding it alongside the CoreML backbone contended for Metal/RAM and inflated
+    per-frame CoreML time from ~2.7s (isolated) to ~6.7s (co-resident). Call only
+    when the CoreML backbone will handle frames 1+.
+    """
+    import gc
+
+    if model is None:
+        return
+    model.backbone = None
+    # Drop heavy decoder weights we won't call again on the CoreML path.
+    for attr in ("sam_mask_decoder", "interactive_sam_mask_decoder",
+                 "memory_attention", "maskmem_backbone", "transformer"):
+        if hasattr(model, attr):
+            try:
+                setattr(model, attr, None)
+            except Exception:
+                pass
+    gc.collect()
+    log("released PyTorch vision backbone (+ unused heads) after frame-0 init")
+
+
+def warm_backbone(coreml_backbone, img_t=None):
+    """One throwaway predict so first real frame isn't paying compile/load cost."""
+    if coreml_backbone is None:
+        return
+    if img_t is None:
+        img_t = torch.zeros(1, 3, IMG, IMG)
+    t0 = time.time()
+    encode_frame_features(None, img_t, coreml_backbone=coreml_backbone)
+    log(f"CoreML backbone warm predict in {time.time()-t0:.2f}s")
 
 
 # ---------------------------------------------------------------- frame-0 init
