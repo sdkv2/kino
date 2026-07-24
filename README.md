@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header-hq2.webp" alt="kino — spec driven video development" width="900">
+  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header-hq3.webp" alt="kino — spec driven video development" width="900">
 </p>
 
 <p align="center"><em>spec driven video development · /ˈkiːnoʊ/</em></p>
