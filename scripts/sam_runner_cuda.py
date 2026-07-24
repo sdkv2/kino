@@ -224,12 +224,13 @@ def _tune_vram(model, device: str):
 
     tracker.init_state = _init_state
 
-    # Nobody upstream turns that flag on for the multiplex model, so its masklet-reconditioning
-    # path was never run against host-side state and assumes both sides are already colocated:
-    #   video_tracking_multiplex._merge:  d1[k1][d2_idx] = d2[k2].to(dtype=d1[k1].dtype)
-    # d1 is the stored state (now CPU), d2 a fresh GPU output — it matches dtype but not
-    # device, so the assignment raises "Expected all tensors to be on the same device". Same
-    # cast, with the device carried across too.
+    # Nobody upstream turns that flag on for the multiplex model, so the two helpers that fold
+    # a fresh result (d2, on GPU) into the stored state (d1, now on CPU) assume both sides are
+    # already colocated and raise "Expected all tensors to be on the same device":
+    #   _merge:   d1[k1][d2_idx] = d2[k2].to(dtype=d1[k1].dtype)   # casts dtype, not device
+    #   _append:  d1[k1] = torch.cat([d1[k1], d2[k2]], dim=dim)    # cats across devices
+    # These two are the module's whole state-mutation surface, so carrying the device across in
+    # both is the fix — not a patch on one symptom.
     import sam3.model.video_tracking_multiplex as vtm
 
     def _merge(d1, d2, k1, k2, d2_idx, strict=True):
@@ -238,7 +239,14 @@ def _tune_vram(model, device: str):
             return
         d1[k1][d2_idx] = d2[k2].to(dtype=d1[k1].dtype, device=d1[k1].device)
 
+    def _append(d1, d2, k1, k2, dim=0, strict=True):
+        if k1 not in d1:
+            assert not strict, f"{k1} not found"
+            return
+        d1[k1] = torch.cat([d1[k1], d2[k2].to(device=d1[k1].device)], dim=dim)
+
     vtm._merge = _merge
+    vtm._append = _append
     log("tracker state offloaded to host (VRAM fit)")
 
 

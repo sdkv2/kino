@@ -81,6 +81,42 @@ The checkpoint auto-downloads on first run (`sam3.1_multiplex.pt` — image + tr
 
 **License:** SAM3.1 weights are Meta's **SAM License** (share-alike, field-of-use, attribution) — not permissive. Downloaded, never bundled.
 
+#### Small-VRAM and pre-Ampere GPUs
+
+SAM3's defaults assume a big Ampere-or-newer datacentre card. The runner detects a smaller or
+older board and adapts automatically — no flags needed. What it changes, and why:
+
+| Condition | Adaptation | Why |
+| --- | --- | --- |
+| compute capability < 8.0 (Turing/Volta: 2080 Ti, T4, …) | autocast runs **fp16** instead of sam3's hardcoded bf16 | Pre-Ampere mem-efficient SDPA rejects bf16 (`Expected query, key and value to all be of dtype: {Half, Float}`) and flash needs sm_80, so every attention call falls back to the math kernel and materializes the full N² score matrix. One ViT global-attention call asked for **12.81 GiB**; in fp16 the same shape peaks at **0.08 GiB**. |
+| compute capability < 8.0 | flash-only `sdpa_kernel` requests are rewritten to prefer mem-efficient, math last | `decoder.py` wraps attention in an *exclusive* `sdpa_kernel(FLASH_ATTENTION)`, which raises `No available kernel. Aborting execution.` on Turing instead of falling back. |
+| < 16 GiB VRAM | `batched_grounding_batch_size` 16 → 1 | The detector grounds a whole chunk of frames in one pass purely for throughput; peak transient memory scales with it. Does not affect the masks. |
+| < 16 GiB VRAM | `offload_video_to_cpu`, plus the tracker's `offload_state_to_cpu` | Otherwise every decoded frame *and* every past frame's masks/memory-bank features sit in VRAM for the whole session — pure retention, ~16 MB/frame at 1080×1920. Device moves only: mask output is bit-identical (verified by md5). |
+
+Overrides, if the auto-detection guesses wrong: `KINO_SAM_DTYPE=fp16|bf16`,
+`KINO_SAM_GROUNDING_BATCH=<n>` (raise it if you have headroom, lower it if you still OOM).
+
+**Measured on an 11 GiB RTX 2080 Ti** (sm_75), prompt `dog`, `--objects 3`:
+
+| clip | peak VRAM | wall |
+| --- | --- | --- |
+| 32 frames @ 1080×1920 | 5.4 GiB | 37 s |
+| 155 frames @ 1080×1920 | 6.1 GiB | 108 s |
+| 884 frames @ 720×1280 | 8.4 GiB | 503 s |
+
+fp16 vs bf16 is not a quality tradeoff: on an identical frame the two agree at **IoU 0.999**
+(81 differing pixels out of 2.07 M).
+
+Peak still grows with clip length (~6 MB/frame at 1080p) because the tracker must retain past
+frames to attend over them — budget roughly **30 s of 1080p** on an 11 GiB board before it
+OOMs. Longer sources want to be cut into segments first.
+
+> Enabling the tracker's state offload also patches two upstream sam3 helpers
+> (`video_tracking_multiplex._merge` / `_append`). sam3 never turns that flag on for the
+> multiplex model, so the path is untested upstream and both helpers fold a fresh GPU result
+> into now-host-side state without carrying the device across. The runner reinstates the
+> device; if a future sam3 fixes this, the patch becomes a harmless no-op rewrite.
+
 ## Using masks
 
 Three consumption paths, cheapest to richest.
@@ -143,9 +179,11 @@ Both real backends do **real temporal tracking** by default (`tracked: true`):
   > **Cost:** **~2.9s/frame** measured with CoreML backbone, per-frame encode (default, `KINO_SAM_BACKBONE_EVERY=1`); `KINO_SAM_BACKBONE_EVERY=2` drops to ~1.9s/frame (encode 4/7 frames on the disc fixture, identical 210px centroid travel there) but visibly coarsens mask edges on fast-moving thin shapes in real video. MLX backbone (auto-preferred when a usable venv resolves) is ~3s/encode on this Mac, faster on published M3 Max (~0.8s ViT). Set `KINO_SAM_BACKBONE_ENGINE=coreml` to force CoreML. PyTorch released after frame-0 init. Export: `scripts/export_sam_backbone_coreml.py`. HF: `sdkv2/sam3.1-coreml (backbone/)`.
   >
   > **Verification status (2026-07-24):** verified end-to-end on this Mac — moving-disc clip → `mask.mp4`, `tracked:true`, centroid follows disc (every=1/2/3/5 all PASS the >100px travel gate; every=5 travel drops 210→175). CoreML-backbone vs PyTorch: fp16 cosine ≥ 0.99997. Tracker + backbone auto-download from HF.
-- **cuda** — the full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on frame 0 and propagated through the clip, so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent.
+- **cuda** — the full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on the first frame that actually detects, then propagated in **both** directions (everything before the seed frame is only reachable backwards), so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent.
 
-  > **Verification status (2026-07-24):** the CUDA image path is CPU-verified (real `backend:cuda` mask). The video-tracking pipeline is confirmed to *run* end-to-end on CPU (session start → `add_prompt` → `propagate_in_video` all execute), but a full tracked `mask.mp4` has **not** been produced-and-checked yet: CPU propagation is ~45 min/frame (unusable) and needs a real NVIDIA GPU + a realistic clip to verify. Run it on GPU to confirm `tracked:true` output before relying on it. The runner fails cleanly (`exit 2`) if the detector finds no objects — it never fabricates a mask.
+  > **Verification status (2026-07-24):** **GPU-verified** on an 11 GiB RTX 2080 Ti (sm_75, Turing). Real Pexels footage of three dogs on grass, prompt `dog`, `--objects 3` → `mask.mp4`, `tracked:true`, all three subjects masked with stable per-object R/G/B identity across the clip (including one heavily occluded third subject). 155 frames @1080×1920 peaks at 6.1 GiB; 884 frames @720×1280 at 8.4 GiB. See *Small-VRAM and pre-Ampere GPUs* for what the runner adapts and the measured numbers. The runner fails cleanly (`exit 2`) if the detector finds no objects — it never fabricates a mask.
+  >
+  > Not yet verified: tracker robustness over long clips. On a 15 s handheld clip of two small, fast, partly-occluded puppies, masks intermittently drop out mid-clip and one subject briefly picked up two object IDs. That is tracker behaviour on a hard clip, not a precision artifact — the fp16 path matches bf16 at IoU 0.999 on an identical frame — but it has not been characterized against a bf16 Ampere run.
 
 ## Platform
 
