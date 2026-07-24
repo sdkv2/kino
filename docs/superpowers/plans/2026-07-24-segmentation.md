@@ -347,3 +347,42 @@ describe("mock backend", () => {
 ## Execution
 
 Subagent-driven (user pre-authorized). Tasks 1–6 are cross-platform and land tonight with tests. Tasks 7–8 (CoreML engine) are Mac-gated; build as far as the model wiring allows, honest fallback + status otherwise. Task 9 documents final state.
+
+---
+
+## ADDENDUM (2026-07-24, user redirect): per-mask-region shaders
+
+User wants: within ONE image/video beat, the segmentation mask splits the frame — the **subject region** runs shader A, the **background region** runs shader B. Built on the mask engine (T1–T8) + the shader assembler (`src/render/shaderSource.ts`). Order: build after T8, before T9 (docs cover it). New global note: region shaders reuse the existing single-shader WebGL pipeline via combined-body assembly — no multi-pass FBO.
+
+### Task 10: Beat `regionShader` schema + prop
+
+**Files:** Modify `src/spec/schema.ts` (add to `app` and image/`avatar` faceless beats — decide via existing beat shape; app beat is primary), `src/render/props.ts` (add resolved prop). Test `tests/segment-regionshader-schema.test.ts`.
+
+**Interfaces — Produces:** beat field
+```
+regionShader?: {
+  mask: string;                 // mask asset dir (relative, e.g. "masks/clip") — resolved to mask.png/mask.mp4 via manifest
+  subject?: string;             // .frag/.glsl body file; region where mask>0.5. omit → passthrough asset pixels
+  background?: string;          // .frag/.glsl body file; region where mask<=0.5. omit → passthrough
+  object?: number;              // mask object id → channel (default 0)
+}
+```
+Resolved prop `RegionShaderProps { maskSrc: string; maskKind: "image"|"video"; subjectCode: string|null; backgroundCode: string|null; channel: "r"|"g"|"b"|"a"|"gray" }` (channel from the manifest object's channel). At least one of subject/background required (superRefine).
+
+- [ ] Step 1 Failing test: a beat with `regionShader:{mask:"masks/x",subject:"a.frag"}` parses; one with neither subject nor background fails.
+- [ ] Step 2 Run FAIL.
+- [ ] Step 3 Add zod object to the app beat (and note where it resolves to `RegionShaderProps` — read the mask manifest to get kind+channel; load the .frag bodies from project assets like `backgroundComponent`/shader resolution already does — find that resolver and mirror it). Keep shader-body loading identical to how custom shader `.frag` is currently loaded.
+- [ ] Step 4 Run PASS; `npm run build`.
+- [ ] Step 5 Commit `feat(segment): beat regionShader schema`.
+
+### Task 11: Render — dual-body mask-mix compositing
+
+**Files:** Modify `src/render/shaderSource.ts` (new `assembleRegionShaderSource(subjectBody, bgBody, extraNames)`), a render component that draws the region-shader as the beat's visual (new `src/render/native/page/RegionShader.tsx` or extend `ShaderBackground.tsx`), wire the beat's asset + mask as texture channels. Test `tests/segment-regionshader-src.test.ts` (pure GLSL-assembly string test — no WebGL).
+
+**Interfaces — Consumes:** `RegionShaderProps` (T10), `assembleShaderSource` convention (existing), the video/image texture path (T6). **Produces:** `assembleRegionShaderSource(subjectBody: string|null, bgBody: string|null, extraNames: string[]): string` — emits one GLSL ES 3.00 fragment shader defining `regionSubject(out vec4,in vec2)` from subjectBody (or passthrough sampling `uTex0`) and `regionBg(...)` from bgBody, samples the mask from `uMask` (a dedicated sampler bound to the mask channel), and `fragColor = mix(bgCol, subjCol, maskVal)` where `maskVal` reads the manifest channel (r/g/b/a/gray→r).
+
+- [ ] Step 1 Failing test: `assembleRegionShaderSource("fragColor=vec4(1.0);", null, [])` returns a string containing both `regionSubject` and `regionBg`, a `uMask` sampler, and a `mix(`; passthrough branch samples `uTex0`.
+- [ ] Step 2 Run FAIL.
+- [ ] Step 3 Implement `assembleRegionShaderSource` (reuse the prefix/namespacing approach in `assembleShaderSource` so two bodies never collide — wrap each body in its own function scope; passthrough = `fragColor = texture(uTex0, uv)`). Then wire the render: bind beat asset → `uTex0` (image or video via T6 path), mask → `uMask` (its own sampler + channel swizzle), render the assembled program as the beat's visual layer (chrome/captions composite on top — follow how ShaderBackground composites, but as content not background). Cost note comment: both bodies run per pixel then mix (`ponytail:` upgrade to discard/stencil if cost matters).
+- [ ] Step 4 Run PASS; `npm run build`; render smoke in T9.
+- [ ] Step 5 Commit `feat(segment): per-mask-region dual-shader compositing`.
