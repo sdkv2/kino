@@ -80,16 +80,20 @@ export function extraParamNames(
   return [...numeric].sort().slice(0, EXTRA_PARAM_SLOTS);
 }
 
+// `#define u_<name> uParamI` aliases. Prefixed so an alias can never collide with a bare local:
+// existing shaders write `float reveal = uParam1;` — `reveal` is untouched by `#define u_reveal`.
+function paramAliases(extraNames: string[]): string {
+  return extraNames
+    .map((n, i) => (IDENT.test(n) ? `#define u_${n} uParam${i}` : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** Wrap an agent-authored ShaderToy `mainImage` body into a compilable GLSL ES 3.00 fragment
  *  shader. `extraNames` (from extraParamNames) get readable `#define u_<name> uParamI` aliases so
  *  authors reference `u_bloom` instead of memorising which alphabetical slot `bloom` spilled into. */
 export function assembleShaderSource(body: string, extraNames: string[] = []): string {
-  // Prefixed so an alias can never collide with a bare local: existing shaders write
-  // `float reveal = uParam1;` — `reveal` is untouched by `#define u_reveal ...`.
-  const aliases = extraNames
-    .map((n, i) => (IDENT.test(n) ? `#define u_${n} uParam${i}` : ""))
-    .filter(Boolean)
-    .join("\n");
+  const aliases = paramAliases(extraNames);
   return (
     "#version 300 es\n" +
     "precision highp float;\n\n" +
@@ -102,6 +106,61 @@ export function assembleShaderSource(body: string, extraNames: string[] = []): s
     body +
     "\n// ---- kino entry ----\n" +
     "void main() { mainImage(kino_fragColor, gl_FragCoord.xy); }\n"
+  );
+}
+
+// Region-shader extra uniforms: the segmentation mask sampler + a dot-swizzle channel selector.
+// uChannel picks the manifest object's coverage channel at bind time (r/g/b/a/gray→r), so the
+// assembler stays channel-agnostic. uMaskSize is css-px parity with uTexSize* (unused today).
+const REGION_HEADER =
+  UNIFORM_HEADER +
+  "\nuniform sampler2D uMask;\nuniform vec2 uMaskSize;\nuniform vec4 uChannel;";
+
+// Null-side body: sample the beat asset (uTex0) unchanged. fragCoord/iResolution.xy is the 0..1 uv
+// (textures upload UNPACK_FLIP_Y'd, so v=0 is the bottom row — matches gl_FragCoord orientation).
+const REGION_PASSTHROUGH =
+  "void mainImage(out vec4 fragColor, in vec2 fragCoord){ fragColor = texture(uTex0, fragCoord / iResolution.xy); }";
+
+/** Assemble ONE GLSL ES 3.00 fragment shader that splits the frame by the segmentation mask:
+ *  `subjectBody` shades where the mask channel > 0.5, `backgroundBody` elsewhere; a null side is a
+ *  passthrough of the beat asset (uTex0). Each body's `mainImage` is #define-namespaced so the two
+ *  never collide, then `main()` runs both and mixes them by the mask value read through uChannel. */
+export function assembleRegionShaderSource(
+  subjectBody: string | null,
+  backgroundBody: string | null,
+  extraNames: string[] = [],
+): string {
+  const aliases = paramAliases(extraNames);
+  const subj = subjectBody ?? REGION_PASSTHROUGH;
+  const bg = backgroundBody ?? REGION_PASSTHROUGH;
+  return (
+    "#version 300 es\n" +
+    "precision highp float;\n\n" +
+    REGION_HEADER +
+    (aliases ? "\n" + aliases : "") +
+    "\n" +
+    GLSL_HELPERS +
+    "\nout vec4 kino_fragColor;\n\n" +
+    // Preprocessor-namespace each body's mainImage → two collision-free functions. Bodies are the
+    // normal shader convention, reused unchanged.
+    "// ---- subject region body ----\n" +
+    "#define mainImage regionSubject\n" +
+    subj +
+    "\n#undef mainImage\n" +
+    "// ---- background region body ----\n" +
+    "#define mainImage regionBg\n" +
+    bg +
+    "\n#undef mainImage\n" +
+    "// ---- kino region entry ----\n" +
+    // ponytail: both bodies run for EVERY pixel then mix — 2× fragment cost. Upgrade to a
+    // discard/stencil split (shade only the region each pixel belongs to) if the cost matters.
+    "void main() {\n" +
+    "  vec4 s, b;\n" +
+    "  regionSubject(s, gl_FragCoord.xy);\n" +
+    "  regionBg(b, gl_FragCoord.xy);\n" +
+    "  float m = dot(texture(uMask, gl_FragCoord.xy / iResolution.xy), uChannel);\n" +
+    "  kino_fragColor = mix(b, s, m);\n" +
+    "}\n"
   );
 }
 

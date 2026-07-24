@@ -11,6 +11,7 @@ import { AbsoluteFill, Easing, Sequence, interpolate, staticFile, useCurrentFram
 import { FrameVideo } from "./media";
 import { AppCutaway, Caption, Disclosure, FacelessBackdrop, FilmFinish, HeroCaption, Kicker, Logo, TextOverlay, TweenOverlay, WordCaption } from "./components";
 import { MotionGraphic } from "./MotionGraphic";
+import { RegionShader } from "./RegionShader";
 import { PlatformGuide, GridGuide } from "./PlatformGuide";
 import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../../captionLayout.js";
 import type { KinoProps } from "../../props.js";
@@ -72,6 +73,10 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         const seqDur = chained ? f(next.startSec) - f(s.startSec) + 12 : beatDur;
         return (
           <Sequence key={`a${i}`} from={f(s.startSec)} durationInFrames={seqDur}>
+            {s.regionShader ? (
+              // Mask-split dual shader replaces the footage draw; kicker/captions still layer on top.
+              <RegionShader asset={s.asset!} region={s.regionShader} t={theme} />
+            ) : (
             <AppCutaway
               asset={s.asset!}
               mediaKey={`seg${i}`}
@@ -87,6 +92,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               frame={s.frame}
               zoomKeyframes={s.zoomKeyframes}
             />
+            )}
             {s.kicker ? (
               // Kicker stays scoped to its own beat — it must not bleed over the next clip.
               <Sequence durationInFrames={beatDur}>
