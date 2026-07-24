@@ -17,8 +17,9 @@ contributions to the project.
 
 ## How to sign
 
-Add a row to [CONTRIBUTORS.md](CONTRIBUTORS.md) in your first pull request, and sign off your
-commits per [DCO.md](DCO.md). That row is your signature — no separate form, no bot.
+Add a row to [Signatures](#signatures) at the bottom of this file in your first pull request,
+and sign off your commits per [DCO.md](DCO.md). That row is your signature — no separate form,
+no bot.
 
 ## What you agree to
 
@@ -68,3 +69,19 @@ if you like; the tool is not a party to this agreement.
 If this agreement changes materially, the change applies to contributions made after it lands.
 Contributions already merged stay under the version in effect when they were merged; the git
 history of this file is the record.
+
+## Signatures
+
+Everyone below has agreed to the terms above. Copy the line, fill it in, keep the list
+alphabetical by GitHub handle:
+
+```
+| [@handle](https://github.com/handle) | Your Name | YYYY-MM-DD |
+```
+
+Contributing on behalf of an employer? Put the company in the Name column
+(`Your Name (Acme, Inc.)`) so the record is unambiguous.
+
+| GitHub | Name | Signed |
+|---|---|---|
+| [@sdkv2](https://github.com/sdkv2) | sdkv2 | 2026-07-24 |

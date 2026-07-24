@@ -37,8 +37,8 @@ Two one-time bits of paperwork, both done inside your PR:
    [Developer Certificate of Origin](DCO.md): your statement that you have the right to submit
    the patch. Missed it? `git commit --amend -s` (or `git rebase --signoff <base>`), then
    force-push.
-2. **Sign the [CLA](CLA.md)** — add a row to [CONTRIBUTORS.md](CONTRIBUTORS.md) in your first
-   PR. You keep the copyright to everything you write; the agreement grants kino the licence it
+2. **Sign the [CLA](CLA.md)** — add a row to its [Signatures](CLA.md#signatures) table in your
+   first PR. You keep the copyright to everything you write; the agreement grants kino the licence it
    needs to ship your work and, if the project's licensing ever changes, to carry it forward
    without hunting down every past contributor.
 
@@ -48,8 +48,8 @@ origin. AI-assisted contributions are fine — you're still the one certifying p
 ## Pull requests
 
 - Branch from `main`: `feat/…`, `fix/…`, `docs/…`, `chore/…`.
-- Sign off your commits (`-s`) and, on your first PR, add yourself to
-  [CONTRIBUTORS.md](CONTRIBUTORS.md).
+- Sign off your commits (`-s`) and, on your first PR, add yourself to the
+  [CLA signatures](CLA.md#signatures).
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org):
   `fix: remove audio artifact at the end of every VO beat`.
 - Add or update tests for behavior changes; `npm test` must pass.
