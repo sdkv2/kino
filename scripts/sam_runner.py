@@ -412,10 +412,17 @@ def run_track(args, n_want):
         mlmodel, in_names, state = sam_track.load_tracker(models_dir())
 
         def _pack(masks_1008):
-            """list of uint8{0,255} 1008-masks (per object) -> RGB frame at (vw,vh)."""
+            """list of uint8{0,255} 1008-masks (per object) -> RGB frame at (vw,vh).
+
+            BILINEAR (not NEAREST): the mask is binary at 1008px, and upscaling a hard edge
+            with nearest-neighbor staircases badly on thin diagonal shapes (legs, fingers) once
+            source video is much bigger than 1008. Bilinear antialiases the edge into a gray
+            gradient band instead — regionShader already splits on mask>0.5, so this only
+            softens the boundary, it doesn't change which side wins.
+            """
             rgb = np.zeros((vh, vw, 3), dtype=np.uint8)
             for oid in range(min(len(masks_1008), vch)):
-                m = np.asarray(Image.fromarray(masks_1008[oid]).resize((vw, vh), Image.NEAREST))
+                m = np.asarray(Image.fromarray(masks_1008[oid]).resize((vw, vh), Image.BILINEAR))
                 if vch == 1:
                     rgb[..., 0] = rgb[..., 1] = rgb[..., 2] = m
                 else:
