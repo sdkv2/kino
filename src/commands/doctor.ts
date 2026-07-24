@@ -1,4 +1,7 @@
 import { execa } from "execa";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
@@ -20,6 +23,10 @@ async function has(cmd: string, args: string[]): Promise<boolean> {
 export async function doctor(): Promise<void> {
   loadEnv(resolveWorkspace().workspaceRoot);
   const nodeMajor = Number(process.version.slice(1).split(".")[0]);
+  // kino segment (coreml backend) readiness — Mac-only author-time mask engine.
+  const samModels = process.env.KINO_SAM_MODEL ?? join(homedir(), ".kino", "sam", "models");
+  const samModelsOk = existsSync(join(samModels, "SAM3.1_ImageEncoder_FP16.mlpackage"));
+  const samPython = process.env.KINO_SAM_PYTHON ?? join(homedir(), ".kino", "sam", "venv", "bin", "python");
   const checks: Array<[string, boolean]> = [
     [`node ${process.version} (need 20+)`, nodeMajor >= 20],
     ["ffmpeg", await has(FFMPEG_PATH, ["-version"])],
@@ -30,6 +37,9 @@ export async function doctor(): Promise<void> {
     ],
     ["heygen CLI (provider: heygen)", await has("heygen", ["--version"])],
     ["whisper-cli (voFile STT without ElevenLabs — optional)", resolveWhisper() != null],
+    ["macOS/Apple Silicon (kino segment coreml backend)", process.platform === "darwin"],
+    ["SAM3.1 CoreML models (kino segment — downloads on first run)", samModelsOk],
+    ["SAM Python venv (KINO_SAM_PYTHON or ~/.kino/sam/venv)", existsSync(samPython)],
     ["ELEVENLABS_API_KEY", !!process.env.ELEVENLABS_API_KEY],
     ["HEYGEN_API_KEY (provider: heygen)", !!process.env.HEYGEN_API_KEY],
     ["HEDRA_API_KEY (provider: hedra)", !!process.env.HEDRA_API_KEY],

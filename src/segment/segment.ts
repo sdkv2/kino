@@ -15,15 +15,12 @@ export interface RunSegmentOpts {
   platform?: NodeJS.Platform;
 }
 
-// coreml.ts doesn't exist until Task 7 — lazy-import it so mock-only builds/tests/CI never touch
-// the python-runner path, and a missing module surfaces as a clean error instead of a crash.
+// Lazy-import coreml so mock-only builds/tests/CI never touch the python-runner path, and any
+// load failure surfaces as a clean error instead of a crash. Literal specifier — tsc type-checks it.
 async function loadCoremlBackend(): Promise<Backend> {
   try {
-    // Non-literal specifier: keeps tsc from resolving this module at compile time (it doesn't
-    // exist until Task 7), while Node still resolves it fine at runtime.
-    const coremlModulePath = "./coreml.js";
-    const mod = (await import(coremlModulePath)) as { coremlBackend: Backend };
-    return mod.coremlBackend;
+    const { coremlBackend } = await import("./coreml.js");
+    return coremlBackend;
   } catch (err) {
     throw new Error(`coreml backend unavailable: ${err instanceof Error ? err.message : String(err)}`);
   }
