@@ -240,13 +240,20 @@ perfectly flat. Measured through that exact chain, flat-region gradient runs a m
 
 - The margin above the noise is only ~1.13x and it depends on the `-q:v 2` extraction quality. At
   `-q:v 5` flat-region noise reaches 0.105 and the threshold stops separating the two.
-- It does not hold for **R/G/B-packed multi-object masks**. `yuv420p` subsamples chroma, so one
-  object's boundary rings into another object's channel; flat-region gradient there reaches **0.42**
-  and thousands of pixels per frame take the wrong regime. Single-object masks ride luma and are
-  unaffected, so `kinoMaskDist` is currently reliable on **grayscale masks only**. Prefer separate
-  single-object masks over a 3-object pack when a beat needs edge distance.
+- **R/G/B-packed multi-object masks work too, but only if the mask was generated after 2026-07-24.**
+  Masks used to be encoded `yuv420p crf 16`, which subsamples chroma and put two of the three
+  objects at half resolution — one object's boundary rang into another object's channel, flat-region
+  gradient reached **0.85**, and the noise overlapped the real-edge population outright. Masks are
+  now encoded **lossless 4:4:4** (`-pix_fmt yuv444p -qp 0`) and mask frames re-extract to **PNG**
+  rather than JPEG, which puts flat-region gradient at **0.0055** — clear of the 0.05 gate by 9x on
+  every channel. Both changes were needed: 4:2:0 still reads 0.69 even coded losslessly, and lossy
+  4:4:4 still reads 0.62.
 
-`tests/render-maskdist-video.test.ts` renders a genuinely compressed mask and pins this.
+  Masks generated before that change still render, but still carry the old noise. **Re-run
+  `kino segment` on them if a beat needs edge distance on object 1 or 2.**
+
+`tests/render-maskdist-video.test.ts` renders a genuinely compressed single-object mask and
+`tests/render-maskdist-multiobject.test.ts` a packed three-object one; both pin this.
 
 **Call it unconditionally and branch on the result** — never guard the call itself
 (`if (nearEdge) { d = kinoMaskDist(...); }`). The derivative regime needs uniform control flow, and

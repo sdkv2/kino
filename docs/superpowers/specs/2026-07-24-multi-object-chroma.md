@@ -129,6 +129,91 @@ The comment in `src/render/shaderSource.ts` and the prose in `docs/segmentation.
 record the new floor and the fact that the limitation is now conditional on when the mask was
 generated, rather than absolute.
 
-## Verification
+## Test and bite proof
 
-*(filled in during implementation — see "Test and bite proof" below)*
+`tests/render-maskdist-multiobject.test.ts` — a real render of a packed three-object mask (R a
+sweeping bar, **G the disc under test**, B a 24px comb), rimming object 1 on the G channel at
+radius 64. It measures the `|d| = radius/2` isoline's bounding box (geometry, which also pins the
+G-channel binding — a wrong channel would box the bar at 301x1501) and, as the regression bound,
+**`speckle`**: the count of deep-interior pixels that are not saturated, i.e. that wrongly took the
+analytic branch and answered `0.5/g` instead of the `-radius` they owe.
+
+Run at each stage of the fix, all other things equal:
+
+| pipeline | speckle | meanG | result |
+|---|---|---|---|
+| `yuv420p crf16` + jpg q2 (shipped) | **640** | 0.994142 | FAIL |
+| `yuv420p crf16` + **png** (extraction fixed only) | **1280** | 0.988505 | FAIL |
+| **`yuv444p qp0`** + **png** (both) | **0** | **1.0** | PASS |
+
+The middle row is the useful one: fixing extraction alone makes it **worse**, because PNG
+faithfully preserves the chroma-subsampling damage that JPEG's blur had been partly smoothing over.
+A single-stage fix is not a partial fix here.
+
+`tests/engine-pipeline.test.ts` gains a cheap unit-level companion pinning both sides of the
+`rsmask` branch — mask jobs produce `.png`, footage jobs produce `.jpg`. The pre-existing
+`extractDense chunking` test already asserted footage stays on `.jpg` and still passes unmodified,
+which is the no-regression proof for footage.
+
+### What the render test does NOT prove
+
+Honest limitation. With the encode fixed, reverting **only** the PNG extraction still renders
+`speckle=0` — the deep-interior probe does not bite on the extraction stage. The extraction change
+is retained on narrower but real evidence:
+
+- An A/B render of the identical scene, PNG vs JPEG extraction, differs on **166 pixels by more
+  than 1%**, up to **0.208**, and the difference's bounding box (`589x590+273+684`) is exactly the
+  disc's edge annulus — i.e. the damage lands precisely where a rim, glow or erode is drawn, which
+  is what this feature is for. The deep-interior probe simply does not sample there.
+- Pixel-level, from a bit-exact mp4, JPEG q:v 2 alone still puts 25,605 flat px (B channel, 24
+  frames) over the gate — configuration H above.
+- It removes the coupling the prior spec flagged as fragile: the gate's headroom was being held up
+  by `-q:v 2`, a constant in an unrelated file, with a note to re-measure if it ever changed.
+- It costs negative disk (below).
+
+If a future reader wants to drop the PNG half, the encode half alone does carry the render test.
+The rim diff above is the reason not to.
+
+## Measured cost
+
+300 frames @1080x1920 (a 10s segmented beat), three packed objects:
+
+| | shipped | fixed | change |
+|---|---|---|---|
+| `mask.mp4` | 0.58 MB | 0.36 MB | −37% |
+| extracted stills (temp disk) | 18.72 MB | 7.39 MB | **−61%** |
+| extraction wall-clock | 0.39 s | 1.08 s | +0.69 s |
+| mask encode wall-clock | 20.96 s | 22.70 s | +1.74 s |
+
+Extraction is +174% in relative terms and **+0.69 seconds** in absolute ones, against a segmentation
+step that already costs ~21s for the same clip. Temp disk goes *down* 61%, so the "PNG frames blow
+up disk" concern does not arise — binary masks are trivially PNG-compressible, and the shipped
+JPEG was spending its bits encoding ringing. Footage is untouched on both axes.
+
+## The gate stays at 0.05 — confirmed, not deferred
+
+The floor for newly-generated masks is now 0.0055, 80x under the gate, which would permit lowering
+it to buy analytic reach. Not done:
+
+- **Masks already on disk stay subsampled.** They keep rendering, but configuration B shows they
+  still peak at 0.84. Lowering the gate would newly break every mask a user has already generated,
+  which is the one thing the change must not do.
+- **It buys nothing observable.** The prior measurement rendered gates 0.02–0.4 byte-identically.
+
+Updated: the comment in `src/render/shaderSource.ts`, the regime prose in `docs/segmentation.md`
+(the limitation is now conditional on when the mask was generated, not absolute), and the stale
+"accepted limitation" note in `docs/segmentation-tracking-todo.md`.
+
+## Unresolved
+
+- **`-qp 0` needs H.264 High 4:4:4 Predictive from whatever `ffmpeg` the SAM runners find on
+  `PATH`** (the Python side uses system ffmpeg, not the bundled `ffmpeg-static`). Universal in
+  modern libx264 builds and verified here, but it is a new profile requirement on the CUDA box and
+  would fail loudly at encode rather than silently degrade. Not exercised on the GPU host in this
+  change.
+- **`-pix_fmt gbrp` is silently rewritten to `yuv444p`** by this ffmpeg build. A build where libx264
+  accepts gbrp natively would skip the RGB→YCbCr rotation and drop the residual 0.0055 to exactly 0.
+  Not worth pursuing at 80x headroom, but it explains why the two are identical in the table above.
+- **A 4th object still cannot ride one mp4.** h264 has no alpha at 4:4:4 either, so
+  `MAX_REGION_MASKS = 4` still means a 4th object needs its own `masks[]` entry and its own file.
+  Unchanged by this work, and deliberately not papered over.

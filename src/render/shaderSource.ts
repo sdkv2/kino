@@ -85,13 +85,19 @@ vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset
 // populations are ~20x apart, and every gate from 0.02 to 0.4 renders identically — 0.05 is
 // comfortably inside that plateau, not balanced on an edge.
 // Two caveats the numbers make explicit:
-//  - The margin over the 0.044 ceiling is only ~1.13x, and it is held up by -q:v 2 in
-//    videoFrames.ts. At -q:v 5 flat noise reaches 0.105 and this gate stops working. Re-measure
-//    before trading JPEG quality for disk.
-//  - It does NOT rescue R/G/B-packed multi-object masks. yuv420p subsamples chroma, so an
-//    object's boundary rings into ANOTHER object's channel: flat g there reaches 0.42, and 3–8k
-//    px/frame beat this gate. No gate value fixes that (the populations overlap); the mask would
-//    have to leave subsampled chroma. Single-object masks ride luma and are unaffected.
+//  - The 0.039–0.044 ceiling above was measured when masks were re-extracted to JPEG q:v 2. Mask
+//    jobs now extract to lossless PNG (videoFrames.ts gates on the rsmask key prefix), so coupling
+//    is gone for masks; footage still uses -q:v 2 but never feeds this helper.
+//  - R/G/B-packed multi-object masks USED to be unusable here: yuv420p subsampled chroma, so an
+//    object's boundary rang into ANOTHER object's channel and flat g reached 0.85 — overlapping
+//    the real-edge population outright, which no gate value can separate. Masks are now encoded
+//    -pix_fmt yuv444p -qp 0, and flat g on the packed channels is 0.0055 (zero px/frame even over
+//    0.01). Note it took BOTH: 4:2:0 alone still reads 0.69 when coded losslessly, and lossy 4:4:4
+//    alone still reads 0.62. See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+// The gate stays at 0.05, deliberately, now that the floor is 80x below it. Masks generated BEFORE
+// that change are still subsampled and still read up to 0.84, and they must keep rendering —
+// lowering the gate to buy analytic reach would newly break every mask already on disk, to fix no
+// observed defect (0.02 through 0.4 render identically).
 // What a leaky gate actually costs is NOT deep-region speckle — a flat pixel answers 0.5/g, which
 // still clamps to ±radius unless 0.5/g < radius. It is the annulus within one radius of the edge,
 // where ringing is strongest: there the wrong branch drags the field to ±radius and moves every
