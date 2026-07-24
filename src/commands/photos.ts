@@ -87,5 +87,5 @@ export async function photos(
   await download(url, dest);
   noteAttribution(project.projectRoot, `Pexels photo #${p.id} — ${p.photographer} — assets/${rel}`);
   log.ok(dest);
-  process.stdout.write(`\nUse it in a spec's app segment:\n  { "kind": "app", "asset": "${rel}", ... }\n`);
+  process.stdout.write(`\nUse it in a spec's video segment:\n  { "kind": "video", "source": "${rel}", ... }\n`);
 }
