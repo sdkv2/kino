@@ -15,8 +15,8 @@ export async function segment(
   },
 ): Promise<void> {
   if (!opts.prompt) throw new Error("kino segment requires --prompt <text>");
-  if (opts.backend && opts.backend !== "coreml" && opts.backend !== "mock") {
-    throw new Error(`--backend must be "coreml" or "mock" (got ${opts.backend})`);
+  if (opts.backend && opts.backend !== "coreml" && opts.backend !== "cuda" && opts.backend !== "mock") {
+    throw new Error(`--backend must be "coreml", "cuda", or "mock" (got ${opts.backend})`);
   }
 
   const project = resolveProject({ specPath: input });

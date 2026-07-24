@@ -7,8 +7,10 @@ describe("pickBackend", () => {
   });
   it("honors explicit request", () => {
     expect(pickBackend({ platform: "linux", requested: "mock" })).toBe("mock");
+    expect(pickBackend({ platform: "darwin", requested: "cuda" })).toBe("cuda");
   });
-  it("throws backend_unavailable off-darwin without request", () => {
-    expect(() => pickBackend({ platform: "linux" })).toThrow(/backend_unavailable/);
+  it("defaults to cuda off-darwin", () => {
+    expect(pickBackend({ platform: "linux" })).toBe("cuda");
+    expect(pickBackend({ platform: "win32" })).toBe("cuda");
   });
 });

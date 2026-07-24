@@ -27,6 +27,7 @@ export async function doctor(): Promise<void> {
   const samModels = process.env.KINO_SAM_MODEL ?? join(homedir(), ".kino", "sam", "models");
   const samModelsOk = existsSync(join(samModels, "SAM3.1_ImageEncoder_FP16.mlpackage"));
   const samPython = process.env.KINO_SAM_PYTHON ?? join(homedir(), ".kino", "sam", "venv", "bin", "python");
+  const samPythonOk = existsSync(samPython);
   const checks: Array<[string, boolean]> = [
     [`node ${process.version} (need 20+)`, nodeMajor >= 20],
     ["ffmpeg", await has(FFMPEG_PATH, ["-version"])],
@@ -39,7 +40,10 @@ export async function doctor(): Promise<void> {
     ["whisper-cli (voFile STT without ElevenLabs — optional)", resolveWhisper() != null],
     ["macOS/Apple Silicon (kino segment coreml backend)", process.platform === "darwin"],
     ["SAM3.1 CoreML models (kino segment — downloads on first run)", samModelsOk],
-    ["SAM Python venv (KINO_SAM_PYTHON or ~/.kino/sam/venv)", existsSync(samPython)],
+    ["SAM Python venv (KINO_SAM_PYTHON or ~/.kino/sam/venv)", samPythonOk],
+    // cuda backend (kino segment on Linux/Windows + NVIDIA): same venv, needs a CUDA torch + the
+    // sam3 package (pip install -e sam3). Real video tracking. Needs an NVIDIA GPU at run time.
+    ["SAM Python for cuda backend (needs NVIDIA GPU + torch-cuda + sam3 pkg — real video tracking)", samPythonOk],
     ["ELEVENLABS_API_KEY", !!process.env.ELEVENLABS_API_KEY],
     ["HEYGEN_API_KEY (provider: heygen)", !!process.env.HEYGEN_API_KEY],
     ["HEDRA_API_KEY (provider: hedra)", !!process.env.HEDRA_API_KEY],

@@ -26,6 +26,15 @@ async function loadCoremlBackend(): Promise<Backend> {
   }
 }
 
+async function loadCudaBackend(): Promise<Backend> {
+  try {
+    const { cudaBackend } = await import("./cuda.js");
+    return cudaBackend;
+  } catch (err) {
+    throw new Error(`cuda backend unavailable: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export async function runSegment(opts: RunSegmentOpts): Promise<SegmentResult> {
   const backendName = pickBackend({ requested: opts.backend, platform: opts.platform ?? process.platform });
   const outName = opts.out ?? basename(opts.input, extname(opts.input));
@@ -40,6 +49,9 @@ export async function runSegment(opts: RunSegmentOpts): Promise<SegmentResult> {
     outDir,
   };
 
-  const backend: Backend = backendName === "mock" ? mockBackend : await loadCoremlBackend();
+  const backend: Backend =
+    backendName === "mock" ? mockBackend
+    : backendName === "cuda" ? await loadCudaBackend()
+    : await loadCoremlBackend();
   return backend.run(req);
 }

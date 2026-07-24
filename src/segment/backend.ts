@@ -1,6 +1,6 @@
 import type { MaskManifest } from "./manifest.js";
 
-export type SegmentBackend = "coreml" | "mock";
+export type SegmentBackend = "coreml" | "cuda" | "mock";
 
 export interface SegmentRequest {
   input: string;
@@ -22,6 +22,7 @@ export interface Backend {
 
 export function pickBackend(opts: { requested?: SegmentBackend; platform: NodeJS.Platform }): SegmentBackend {
   if (opts.requested) return opts.requested;
-  if (opts.platform === "darwin") return "coreml";
-  throw new Error(`backend_unavailable: coreml segmentation needs macOS/Apple Silicon (got ${opts.platform}); use --backend mock or author masks on a Mac`);
+  // darwin → CoreML (Apple Silicon); everything else → CUDA (native PyTorch SAM3.1,
+  // Linux/Windows + NVIDIA). Both need a Python env; kino doctor shows readiness.
+  return opts.platform === "darwin" ? "coreml" : "cuda";
 }

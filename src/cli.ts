@@ -9,7 +9,7 @@ import { formatCliError } from "./cliError.js";
 import { KINO_VERSION } from "./version.js";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version(KINO_VERSION);
+program.name("kino").description("Spec driven video development").version(KINO_VERSION);
 
 program
   .command("build <spec>")
@@ -101,12 +101,12 @@ program
 
 program
   .command("segment <input>")
-  .description("Generate object masks (Mac/CoreML) for an image or video, consumed as shader texture channels")
+  .description("Generate object masks (Mac/CoreML or CUDA/PyTorch) for an image or video, consumed as shader texture channels")
   .option("--prompt <text>", "text prompt naming the object(s) to segment (required)")
   .option("--objects <n>", "number of objects to track (max 4, default 1)")
   .option("--out <name>", "output subdir name under assets/masks/ (default: input's basename)")
   .option("--no-track", "image-style per-frame segmentation instead of video object tracking")
-  .option("--backend <name>", "coreml | mock (default: coreml on macOS, else requires mock)")
+  .option("--backend <name>", "coreml | cuda | mock (default: coreml on macOS, cuda on Linux/Windows+NVIDIA)")
   .option("--format <fmt>", "json (default: human summary, or JSON when stdout isn't a TTY)")
   .action(async (input, o) => {
     await (await import("./commands/segment.js")).segment(input, o);

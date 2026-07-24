@@ -31,7 +31,7 @@ kino segment <input> --prompt "<text>" [options]
 | `--objects <n>` | cap objects (default 1, max 4 — packed into mask R/G/B/A). |
 | `--out <name>` | artifact dir name under `assets/masks/` (default: input basename). |
 | `--no-track` | video: force per-frame (no temporal tracking). |
-| `--backend <coreml\|mock>` | default: `coreml` on macOS, else error. `mock` runs anywhere. |
+| `--backend <coreml\|cuda\|mock>` | default: `coreml` on macOS, `cuda` elsewhere. `mock` runs anywhere. |
 | `--format json` | machine-readable manifest to stdout (auto when non-TTY). |
 
 Image input → `mask.png` (8-bit grayscale, white = object). Video input → `mask.mp4` (grayscale, or R/G/B/A when multi-object). Both come with `manifest.json`:
@@ -45,10 +45,11 @@ Image input → `mask.png` (8-bit grayscale, white = object). Video input → `m
 
 ### Backends
 
-- **coreml** (macOS/Apple Silicon) — real SAM3.1 segmentation. Downloads models once to `~/.kino/sam/models/`. Needs a Python env; see Setup.
+- **coreml** (macOS/Apple Silicon) — real SAM3.1 segmentation via CoreML. Video is **per-frame** (`tracked:false`). Downloads models once to `~/.kino/sam/models/`. Needs a Python env; see Setup.
+- **cuda** (Linux/Windows + NVIDIA) — the **full** SAM3.1 model in native PyTorch (`scripts/sam_runner_cuda.py`). This is the cross-platform path and the only one with **real video tracking**: the multiplex video predictor tracks each object across frames, so video masks are temporally coherent (`tracked:true`). Needs a Python env with a CUDA-enabled `torch` + the `sam3` package; see Setup.
 - **mock** — deterministic synthetic ellipse mask, no model, any platform. For pipeline/CI tests and for authoring specs on a non-Mac machine.
 
-`kino doctor` shows readiness rows (platform, models, python).
+`kino doctor` shows readiness rows (platform, models, python) for both real backends.
 
 ### Setup (coreml backend)
 
@@ -59,6 +60,17 @@ export KINO_SAM_PYTHON=/path/to/venv/bin/python
 ```
 
 Models auto-download from Hugging Face on first run (image: `AllanVester/SAM3.1-CoreML-FP16`; tracker: `sdkv2/sam3.1-coreml-tracker-spike`). Override the models dir with `KINO_SAM_MODEL`.
+
+### Setup (cuda backend)
+
+The PyTorch runner (`scripts/sam_runner_cuda.py`) needs a Python env with a **CUDA-enabled `torch`** and the **`sam3` package** installed. kino does **not** build this GPU env for you:
+
+```bash
+git clone https://github.com/facebookresearch/sam3 && pip install -e sam3   # + a CUDA torch
+export KINO_SAM_PYTHON=/path/to/venv/bin/python
+```
+
+The checkpoint auto-downloads on first run (`sam3.1_multiplex.pt` — image + tracker in one file; from `facebook/sam3.1`, or set `SAM3_HF_REPO` to an open mirror / `KINO_SAM_CHECKPOINT` to a local file). `KINO_SAM_DEVICE` selects the device (default `cuda`; set `cpu` to run the identical logic on CPU — correct but very slow, for verification only).
 
 **License:** SAM3.1 weights are Meta's **SAM License** (share-alike, field-of-use, attribution) — not permissive. Downloaded, never bundled.
 
@@ -117,10 +129,13 @@ Inside a region shader you can sample:
 
 ## Video: tracking status
 
-Video masks are currently **per-frame** (`tracked: false`) — each frame is segmented independently, so fast motion can flicker. True temporal object tracking (the SAM3.1 multiplex tracker) is verified as a CoreML package but not yet wired end-to-end; the remaining work (export the conditioning-frame memory encoder, apply the `conv_s0/s1` projections) is in `docs/segmentation-tracking-todo.md`.
+Tracking depends on the backend:
+
+- **coreml** — **per-frame** (`tracked: false`). Each frame is segmented independently, so fast motion can flicker. True temporal tracking is verified as a CoreML package but not yet wired end-to-end (the conditioning-frame memory-encode export is the gap; see `docs/segmentation-tracking-todo.md` and `.superpowers/sdd/coreml-io-reference.md`).
+- **cuda** — **real temporal tracking** (`tracked: true`). The full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on frame 0 and propagated through the clip, so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent. This is the recommended path for moving subjects.
 
 ## Platform
 
-- **Generating masks**: macOS/Apple Silicon (CoreML). `mock` backend elsewhere.
+- **Generating masks**: macOS/Apple Silicon → **coreml**; Linux/Windows + NVIDIA → **cuda** (native PyTorch, real video tracking); `mock` anywhere.
 - **Rendering** specs that use masks: any platform kino renders on.
-- Windows/CUDA backend: a clean seam exists (`src/segment/backend.ts` — union type + flat module + dispatch, mirroring `src/avatar/`); adding a backend is a new module + one dispatch case.
+- The backend seam (`src/segment/backend.ts` — union type + flat module + dispatch, mirroring `src/avatar/`) makes adding a backend a new module + one dispatch case (`src/segment/cuda.ts` is the second real one).
