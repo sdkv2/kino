@@ -231,6 +231,23 @@ edge orientation, and a feature thinner than the sample spacing (~0.36·`radius`
 entirely. So **pass the smallest radius that covers your effect**: a 3px rim wants radius 4, not 32.
 The value saturates at `±radius`.
 
+The switch between the regimes is a threshold on the coverage gradient, and it is set by the codec
+chain rather than by the geometry. Masks reach the shader through H.264 (crf 16) and then JPEG
+re-extraction (`-q:v 2`), and DCT ringing leaves a spurious gradient in regions that should be
+perfectly flat. Measured through that exact chain, flat-region gradient runs a median of 0 with a
+**maximum of 0.044**, while a genuine edge reads **0.40–1.41**; the threshold sits between them at
+0.05. Two consequences worth knowing:
+
+- The margin above the noise is only ~1.13x and it depends on the `-q:v 2` extraction quality. At
+  `-q:v 5` flat-region noise reaches 0.105 and the threshold stops separating the two.
+- It does not hold for **R/G/B-packed multi-object masks**. `yuv420p` subsamples chroma, so one
+  object's boundary rings into another object's channel; flat-region gradient there reaches **0.42**
+  and thousands of pixels per frame take the wrong regime. Single-object masks ride luma and are
+  unaffected, so `kinoMaskDist` is currently reliable on **grayscale masks only**. Prefer separate
+  single-object masks over a 3-object pack when a beat needs edge distance.
+
+`tests/render-maskdist-video.test.ts` renders a genuinely compressed mask and pins this.
+
 **Call it unconditionally and branch on the result** — never guard the call itself
 (`if (nearEdge) { d = kinoMaskDist(...); }`). The derivative regime needs uniform control flow, and
 screen-space derivatives are undefined inside a branch. That compiles clean, so the failure is

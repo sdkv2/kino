@@ -73,12 +73,31 @@ vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset
 // search is COARSE: its error grows with radius and varies with edge orientation, and a feature
 // thinner than the sample spacing (~0.36*radius) can be missed entirely.
 // Pass the SMALLEST radius that covers your effect — a 3px rim wants radius 4, not 32.
-// The 0.05 gate on g is set by the pipeline, not the maths: masks arrive through lossy H.264
-// (scripts/sam_runner_cuda.py) and then JPEG re-extraction, and DCT ringing around a hard
-// silhouette leaves a few /255 of wobble in nominally flat mask regions. A gate near that noise
-// floor takes the analytic branch on a spurious gradient and returns ±radius where its neighbour
-// falls through to the spiral — a rim that SPECKLES on a tracked video mask. 0.05 still leaves
-// ~10px of analytic reach (the branch resolves 0.5/g px).
+//
+// The 0.05 gate on g is set by the pipeline, not the maths, and is MEASURED, not reasoned: masks
+// arrive through lossy H.264 (scripts/sam_runner_cuda.py, crf 16) and then JPEG re-extraction
+// (videoFrames.ts, -q:v 2), and DCT ringing gives nominally flat mask regions a spurious gradient.
+// Measured on masks built through that exact chain (moving disc, busy silhouette, and the
+// BILINEAR 1008→native upscale sam_runner.py does), over ~2M genuinely-flat pixels per frame:
+//   flat g: median 0, p99 0, p99.9 0.004–0.011, MAX 0.039–0.044   (stable across crf 16..28)
+//   real edge g: median 0.97 hard-edged / 0.40 bilinear-upscaled, up to 1.41
+// So 0.01 sits INSIDE the noise (~1000 flat px/frame clear it) and 0.05 sits above it. The two
+// populations are ~20x apart, and every gate from 0.02 to 0.4 renders identically — 0.05 is
+// comfortably inside that plateau, not balanced on an edge.
+// Two caveats the numbers make explicit:
+//  - The margin over the 0.044 ceiling is only ~1.13x, and it is held up by -q:v 2 in
+//    videoFrames.ts. At -q:v 5 flat noise reaches 0.105 and this gate stops working. Re-measure
+//    before trading JPEG quality for disk.
+//  - It does NOT rescue R/G/B-packed multi-object masks. yuv420p subsamples chroma, so an
+//    object's boundary rings into ANOTHER object's channel: flat g there reaches 0.42, and 3–8k
+//    px/frame beat this gate. No gate value fixes that (the populations overlap); the mask would
+//    have to leave subsampled chroma. Single-object masks ride luma and are unaffected.
+// What a leaky gate actually costs is NOT deep-region speckle — a flat pixel answers 0.5/g, which
+// still clamps to ±radius unless 0.5/g < radius. It is the annulus within one radius of the edge,
+// where ringing is strongest: there the wrong branch drags the field to ±radius and moves every
+// isoline. tests/render-maskdist-video.test.ts measures it (erode lands ~22px off at 0.01).
+// 0.05 leaves ~10px of analytic reach (the branch resolves 0.5/g px), which covers the transition
+// band any real effect reads.
 // Reads only the texture, the coordinate and derivatives, so determinism holds.
 #define KINO_MASK_TAPS 24
 float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius){
