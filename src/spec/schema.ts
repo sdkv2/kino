@@ -129,11 +129,14 @@ const Segment = z.discriminatedUnion("kind", [
         }),
       })
       .optional(),
-    // Per-mask-region shaders: the segmentation mask(s) split this beat's frame — the subject region
-    // (union of the given mask/object channels, each >0.5) runs one .frag body, the background
-    // region (nothing selected) another. `mask`+`object` is the single-mask shorthand; `masks` (up
-    // to 4 entries) unions multiple mask sources/objects into one subject — e.g. two separately
-    // `kino segment`-ed subjects cut onto one shared background. Exactly one of mask/masks required.
+    // Per-mask-region shaders: the segmentation mask(s) split this beat's frame — each mask's region
+    // (its channel >0.5) runs a .frag body, the background region (no mask selected) another.
+    // `mask`+`object` is the single-mask shorthand; `masks` (up to 4 entries) is the general form.
+    // An entry's own `subject` shades JUST that mask (per-object regions — two tracked objects,
+    // two materials); entries without one fall back to the top-level `subject`, so several masks
+    // can still share one treatment (e.g. two separately `kino segment`-ed subjects cut onto one
+    // background). Where two masks overlap the LATER entry paints over the earlier one.
+    // Exactly one of mask/masks required, and at least one shader body somewhere.
     regionShader: z
       .object({
         mask: z.string().min(1).optional(), // mask asset dir, e.g. "masks/clip"
@@ -143,16 +146,19 @@ const Segment = z.discriminatedUnion("kind", [
             z.object({
               mask: z.string().min(1),
               object: z.number().int().min(0).max(3).default(0),
+              subject: z.string().min(1).optional(), // .frag/.glsl body for THIS mask's region only
             }),
           )
           .min(1)
           .max(4)
           .optional(),
-        subject: z.string().min(1).optional(), // .frag/.glsl body; region where any selected mask>0.5
+        subject: z.string().min(1).optional(), // .frag/.glsl body; masks without their own
         background: z.string().min(1).optional(), // .frag/.glsl body; region where none are
       })
       .refine((v) => v.mask || v.masks, { message: "regionShader needs mask or masks" })
-      .refine((v) => v.subject || v.background, { message: "regionShader needs at least one of subject/background" })
+      .refine((v) => v.subject || v.background || v.masks?.some((m) => m.subject), {
+        message: "regionShader needs at least one of subject/background (top-level or per-mask)",
+      })
       .optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),

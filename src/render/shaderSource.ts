@@ -169,26 +169,45 @@ const REGION_HEADER =
 const REGION_PASSTHROUGH =
   "void mainImage(out vec4 fragColor, in vec2 fragCoord){ fragColor = texture(uTex0, fragCoord / iResolution.xy); }";
 
-/** Assemble ONE GLSL ES 3.00 fragment shader that splits the frame by the segmentation mask:
- *  `subjectBody` shades where the mask channel > 0.5, `backgroundBody` elsewhere; a null side is a
- *  passthrough of the beat asset (uTex0). Each body's `mainImage` is #define-namespaced so the two
- *  never collide, then `main()` runs both and mixes them by the mask value read through uChannel. */
+/** Assemble ONE GLSL ES 3.00 fragment shader that splits the frame by the segmentation mask(s).
+ *  A null body on either side is a passthrough of the beat asset (uTex0); every body's `mainImage`
+ *  is #define-namespaced so they never collide in the one translation unit they share.
+ *
+ *  Default (no `maskBodies`): every mask unions into ONE subject region — `subjectBody` shades
+ *  where any bound mask channel > 0.5, `backgroundBody` elsewhere.
+ *
+ *  Per-object (any entry of `maskBodies` non-null): each mask gets its own body, falling back to
+ *  `subjectBody` where its entry is null, composited onto the background in ARRAY ORDER — later
+ *  entries paint over earlier ones where masks overlap. `maskBodies` is index-aligned with
+ *  RegionShaderProps.masks. See docs/superpowers/specs/2026-07-24-per-object-regions-design.md. */
 export function assembleRegionShaderSource(
   subjectBody: string | null,
   backgroundBody: string | null,
   extraNames: string[] = [],
+  maskBodies: (string | null)[] = [],
 ): string {
   const aliases = paramAliases(extraNames);
   const subj = subjectBody ?? REGION_PASSTHROUGH;
   const bg = backgroundBody ?? REGION_PASSTHROUGH;
-  return (
+  const head =
     "#version 300 es\n" +
     "precision highp float;\n\n" +
     REGION_HEADER +
     (aliases ? "\n" + aliases : "") +
     "\n" +
     GLSL_HELPERS +
-    "\nout vec4 kino_fragColor;\n\n" +
+    "\nout vec4 kino_fragColor;\n\n";
+  // A slot past MAX_REGION_MASKS has no uMaskN uniform to name — drop it rather than emit GLSL
+  // that cannot compile. (The schema caps masks[] at 4; this is belt-and-braces.)
+  const per = maskBodies.slice(0, MAX_REGION_MASKS);
+  return head + (per.some(Boolean) ? perObjectTail(per, subj, bg) : unionTail(subj, bg));
+}
+
+// Every mask unions into ONE subject region. This is the shape kino shipped before per-object
+// regions and is emitted byte-for-byte unchanged whenever no mask carries its own body — a spec
+// that doesn't use the feature must not pay for it, or change output at all.
+function unionTail(subj: string, bg: string): string {
+  return (
     // Preprocessor-namespace each body's mainImage → two collision-free functions. Bodies are the
     // normal shader convention, reused unchanged.
     "// ---- subject region body ----\n" +
@@ -216,6 +235,66 @@ export function assembleRegionShaderSource(
     // sam_runner.py erodes the mask before its 1008→native upscale, see _erode1008).
     "  m = smoothstep(0.4, 0.6, m);\n" +
     "  kino_fragColor = mix(b, s, m);\n" +
+    "}\n"
+  );
+}
+
+// One body per mask, composited onto the background in ARRAY ORDER — masks[1] paints over masks[0]
+// where they overlap (painter's order). Only the slots this beat actually binds are emitted: an
+// unbound uChannelN is the zero vector, so a line for it would be a guaranteed no-op mix at full
+// fragment cost.
+//
+// ponytail: N distinct bodies run for EVERY pixel, so 4 per-object masks is 5x the fragment work
+// of a plain background on the default SwiftShader renderer. The shared fallback is emitted and
+// called ONCE however many masks share it, and not at all when none do. Upgrade path is the same
+// discard/stencil split the union tail wants.
+function perObjectTail(per: (string | null)[], subj: string, bg: string): string {
+  const needShared = per.some((b) => !b);
+  // Which local holds each mask's shaded colour: its own body's output, or the shared one's.
+  const varOf = (b: string | null, i: number) => (b ? `s${i}` : "sShared");
+  return (
+    per
+      .map((b, i) =>
+        b
+          ? // uMaskSelf/uChannelSelf are scoped to THIS body, so a .frag can rim its own subject
+            // (kinoMaskDist(uMaskSelf, uChannelSelf, ...)) without hardcoding an array index.
+            // Deliberately absent from the shared and background bodies — those span several masks
+            // / the whole frame, so there is no single "self" and using it there is a loud compile
+            // error instead of a silently wrong edge.
+            `// ---- subject region body for mask ${i} ----\n` +
+            `#define uMaskSelf uMask${i}\n` +
+            `#define uChannelSelf uChannel${i}\n` +
+            `#define mainImage regionSubject${i}\n` +
+            b +
+            "\n#undef mainImage\n#undef uChannelSelf\n#undef uMaskSelf\n"
+          : "",
+      )
+      .join("") +
+    (needShared
+      ? "// ---- shared subject region body (masks without their own) ----\n" +
+        "#define mainImage regionSubjectShared\n" +
+        subj +
+        "\n#undef mainImage\n"
+      : "") +
+    "// ---- background region body ----\n" +
+    "#define mainImage regionBg\n" +
+    bg +
+    "\n#undef mainImage\n" +
+    "// ---- kino region entry ----\n" +
+    "void main() {\n" +
+    "  vec2 muv = gl_FragCoord.xy / iResolution.xy;\n" +
+    "  vec4 c;\n" +
+    "  regionBg(c, gl_FragCoord.xy);\n" +
+    per.map((b, i) => (b ? `  vec4 s${i};\n  regionSubject${i}(s${i}, gl_FragCoord.xy);\n` : "")).join("") +
+    (needShared ? "  vec4 sShared;\n  regionSubjectShared(sShared, gl_FragCoord.xy);\n" : "") +
+    // Same 0.4..0.6 smoothstep the union tail uses, applied per composite step for a ~1px AA seam.
+    per
+      .map(
+        (b, i) =>
+          `  c = mix(c, ${varOf(b, i)}, smoothstep(0.4, 0.6, dot(texture(uMask${i}, muv), uChannel${i})));\n`,
+      )
+      .join("") +
+    "  kino_fragColor = c;\n" +
     "}\n"
   );
 }

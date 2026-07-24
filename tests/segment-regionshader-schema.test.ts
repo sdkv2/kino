@@ -49,6 +49,49 @@ describe("SpecSchema app beat regionShader", () => {
     expect(seg.kind === "app" && seg.regionShader?.masks?.[1].mask).toBe("masks/dog2");
   });
 
+  it("parses a per-entry subject on a masks[] entry", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [
+        {
+          ...valid.segments[0],
+          regionShader: {
+            masks: [
+              { mask: "masks/dog", subject: "a.frag" },
+              { mask: "masks/ball", object: 1, subject: "b.frag" },
+              { mask: "masks/hand" },
+            ],
+            subject: "fallback.frag",
+            background: "bg.frag",
+          },
+        },
+      ],
+    });
+    const seg = s.segments[0];
+    expect(seg.kind === "app" && seg.regionShader?.masks?.[0].subject).toBe("a.frag");
+    expect(seg.kind === "app" && seg.regionShader?.masks?.[1].object).toBe(1);
+    expect(seg.kind === "app" && seg.regionShader?.masks?.[2].subject).toBe(undefined);
+  });
+
+  // Per-object regions can be the WHOLE spec: every mask shades itself, nothing falls back, and the
+  // background passes the beat asset through. The "needs a body" refine must count those.
+  it("accepts per-entry subjects as the only shader bodies", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [{ ...valid.segments[0], regionShader: { masks: [{ mask: "masks/dog", subject: "a.frag" }] } }],
+    });
+    expect(s.segments[0].kind === "app").toBe(true);
+  });
+
+  it("still rejects a regionShader with no shader body anywhere", () => {
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [{ ...valid.segments[0], regionShader: { masks: [{ mask: "masks/dog" }] } }],
+      }),
+    ).toThrow();
+  });
+
   it("rejects a regionShader with neither mask nor masks", () => {
     expect(() =>
       SpecSchema.parse({
