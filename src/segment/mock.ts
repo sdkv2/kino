@@ -35,7 +35,11 @@ async function writeMaskMp4(out: string): Promise<void> {
   await execa(FFMPEG_PATH, [
     "-y", "-loglevel", "error",
     "-f", "lavfi", "-i", `color=black:s=${WIDTH}x${HEIGHT}:r=30:d=2`,
-    "-vf", `geq=lum='${ellipseExpr()}'`,
+    // cb/cr pinned to neutral: geq only fills the planes you give it an expression for, so a
+    // lum-only filter leaves chroma at whatever the lavfi source carried. That shipped a mask.mp4
+    // that decodes GREEN rather than grayscale — the R channel read 73/255 inside the ellipse and
+    // 0 outside, so a consumer thresholding at 0.5 saw no subject anywhere.
+    "-vf", `geq=lum='${ellipseExpr()}':cb='128':cr='128'`,
     "-pix_fmt", "yuv420p", "-c:v", "libx264",
     out,
   ]);
