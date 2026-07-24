@@ -12,8 +12,9 @@ tracker), this runs the FULL facebookresearch/sam3 model in PyTorch:
   IMAGE  build_sam3_image_model -> Sam3Processor.set_image / set_text_prompt
          -> state["masks"]/["scores"]  (kind:"image", tracked:false)
   VIDEO  build_sam3_multiplex_video_predictor -> handle_request(start_session)
-         -> handle_request(add_prompt frame 0) -> handle_stream_request(
-         propagate_in_video) -> per-frame per-object masks keyed by a STABLE
+         -> handle_request(add_prompt on the first frame that detects, see
+         seed_prompt) -> handle_stream_request(propagate_in_video, both
+         directions) -> per-frame per-object masks keyed by a STABLE
          obj_id  ==> REAL temporal tracking  (kind:"video", tracked:TRUE)
 
 --device cuda (default, KINO_SAM_DEVICE) runs on an NVIDIA GPU. --device cpu
@@ -95,18 +96,47 @@ def _amp_dtype(device: str):
     return torch.bfloat16
 
 
-def force_amp_dtype(target):
-    """Rewrite every CUDA bf16 autocast sam3 opens to `target`.
+def apply_pre_ampere_workarounds(target, device):
+    """Undo sam3's two hardcoded "this GPU is an Ampere with flash-attn" assumptions.
 
-    Must run BEFORE `import sam3`: sam3 applies `@torch.autocast(device_type="cuda",
-    dtype=torch.bfloat16)` as a decorator on its tracking/inference methods, and a decorator
-    constructs its autocast object at import time — patching afterwards is too late. The
-    remaining bf16 contexts sam3 opens at runtime (self.bf16_context in the multiplex
-    predictors) go through the same class, so one patch covers both."""
+    Must run BEFORE `import sam3` — both patches target names sam3 binds at import time
+    (`@torch.autocast(...)` decorators construct their context object when the class body is
+    evaluated, and `from torch.nn.attention import sdpa_kernel` copies the function into
+    sam3's module namespace). Patching after the import is too late for either.
+
+      1. dtype   — every bf16 autocast becomes `target` (see _amp_dtype).
+      2. backend — decoder.py wraps its attention in `sdpa_kernel(SDPBackend.FLASH_ATTENTION)`,
+                   an *exclusive* request. Flash needs sm_80, so on Turing that raises
+                   "RuntimeError: No available kernel. Aborting execution." rather than
+                   falling back. Rewrite flash requests to prefer the mem-efficient kernel,
+                   with math last so a request can never come up empty."""
     import torch
 
-    if target is torch.bfloat16:
+    # Both patches are pre-Ampere fixups; Ampere+ has real flash-attn and native bf16.
+    if device != "cuda" or torch.cuda.get_device_capability()[0] >= 8:
         return
+
+    import torch.nn.attention as tna
+
+    import functools
+
+    _orig_kernel = tna.sdpa_kernel
+
+    # torch's sdpa_kernel is a @contextlib.contextmanager; keep the wrapper's metadata
+    # (notably __wrapped__, which torch's contextlib plumbing reads) or the import blows up.
+    @functools.wraps(_orig_kernel)
+    def sdpa_kernel(backends, *a, **k):
+        bs = list(backends) if isinstance(backends, (list, tuple)) else [backends]
+        if tna.SDPBackend.FLASH_ATTENTION in bs:
+            bs = [b for b in bs if b is not tna.SDPBackend.FLASH_ATTENTION]
+            # mem-efficient first (never materializes the score matrix), math as backstop.
+            for b in (tna.SDPBackend.EFFICIENT_ATTENTION, tna.SDPBackend.MATH):
+                if b not in bs:
+                    bs.append(b)
+        return _orig_kernel(bs, *a, **k)
+
+    tna.sdpa_kernel = sdpa_kernel
+
     orig = torch.amp.autocast_mode.autocast.__init__
 
     # Param must literally be named `dtype` — sam3 passes it as a keyword.
@@ -303,6 +333,62 @@ def probe_video(path):
     return s["r_frame_rate"], fps, int(s["width"]), int(s["height"])
 
 
+def frame_count(path, fps):
+    """Frame count from the container, else duration x fps. Rough is fine — it only sets
+    the spread of seed probes, never anything written to the mask."""
+    out = subprocess.run(
+        [FFPROBE, "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=nb_frames:format=duration", "-of", "json", path],
+        capture_output=True, text=True,
+    )
+    try:
+        j = json.loads(out.stdout)
+        n = int(j["streams"][0].get("nb_frames") or 0)
+        if n > 0:
+            return n
+        return max(1, int(float(j["format"]["duration"]) * fps))
+    except Exception:
+        return 1
+
+
+# How many frames to try seeding on before giving up. Each is one detector pass (~0.4s).
+SEED_PROBES = 12
+
+
+def seed_prompt(predictor, sid, prompt, nframes):
+    """add_prompt on the first probed frame whose detector actually finds the object.
+
+    SAM3's text detector runs on ONE frame — the seed — and the tracker propagates that
+    identity across the clip. Frame 0 is not special, and seeding there blindly is a real
+    failure mode: if the subject is absent, occluded, or merely under the confidence
+    threshold at t=0, nothing is seeded, and the clip comes back empty except where the
+    multiplex detector happens to re-fire on its own later. Measured on a 3s ocean clip
+    ("the wave", a wave that has not broken yet at t=0): seeding at frame 0 detected 0
+    objects and produced masks on 38/60 frames with nothing before frame 22; seeding at
+    the first frame that detects (23) produces 60/60.
+
+    Probes are spread across the clip rather than walking frame by frame — each one is a
+    detector pass, and a probe that finds nothing adds nothing to the session, so
+    re-seeding on the same session is safe and needs no reset. Returns the seed frame
+    index, or None if nothing was detected anywhere probed."""
+    step = max(1, (nframes - 1) // SEED_PROBES) if nframes > 1 else 1
+    probes = list(range(0, nframes, step))
+    # range() lands short of the end whenever step does not divide the clip evenly (60 frames
+    # at step 4 stops at 56), which would miss a subject that only appears in the last frames.
+    if probes[-1] != nframes - 1:
+        probes.append(nframes - 1)
+    for f in probes:
+        r = predictor.handle_request(
+            dict(type="add_prompt", session_id=sid, frame_index=int(f), text=prompt)
+        )
+        ids = np.asarray(r.get("outputs", {}).get("out_obj_ids", [])).tolist()
+        if ids:
+            if f:
+                log(f"seeded on frame {f} — the prompt matched nothing on earlier probes")
+            return int(f)
+    return None
+
+
 def to_uint8_mask(m):
     """bool/float mask (numpy or torch, incl. bf16) -> uint8 {0,255} 2D."""
     if hasattr(m, "detach"):  # torch tensor (bf16 has no numpy dtype -> float first)
@@ -422,15 +508,27 @@ def run_video(args, n_want):
     # a cuda-autocast at init (a no-op off-GPU); this nested one matches the device.
     outputs_per_frame = {}
     with torch.autocast(device_type=args.device, dtype=args.amp_dtype):
-        predictor.handle_request(
-            dict(type="add_prompt", session_id=sid, frame_index=0, text=args.prompt)
-        )
-        # Propagate frame 0's prompt through the whole clip; obj_id is STABLE across
-        # frames (that IS the temporal track).
+        seed = seed_prompt(predictor, sid, args.prompt, frame_count(args.input, fps))
+        if seed is None:
+            fail(f"no instances above confidence {CONF} for prompt {args.prompt!r} on any probed frame")
+        # Propagate the seed frame's prompt through the whole clip; obj_id is STABLE across
+        # frames (that IS the temporal track). "both", not "forward": when the seed is not
+        # frame 0, everything before it is only reachable by propagating backward.
         for r in predictor.handle_stream_request(
-            dict(type="propagate_in_video", session_id=sid, propagation_direction="forward")
+            dict(type="propagate_in_video", session_id=sid, propagation_direction="both")
         ):
-            outputs_per_frame[int(r["frame_index"])] = r["outputs"]
+            out = r["outputs"]
+            # Pull each frame's masks off the GPU as they stream. Retaining the raw outputs
+            # (out_binary_masks are CUDA tensors) for the whole clip grows VRAM linearly with
+            # frame count — ~25 MB/frame at 1080x1920 with 3 objects, which is what took a 5s
+            # clip from 6.0 GiB to 9.2 GiB on an 11 GiB board. Converting here keeps the GPU
+            # working set flat in clip length; only the encoder-side buffer grows.
+            # ponytail: that buffer is now CPU uint8, ~6 MB/frame at 1080p — fine for the
+            # short clips kino cuts, but a minute-plus source wants incremental PNG writes.
+            outputs_per_frame[int(r["frame_index"])] = {
+                "out_obj_ids": np.asarray(out["out_obj_ids"]).tolist(),
+                "masks": [to_uint8_mask(m) for m in out["out_binary_masks"]],
+            }
     if not outputs_per_frame:
         fail("propagate_in_video yielded no frames")
 
@@ -438,7 +536,7 @@ def run_video(args, n_want):
     # Choose which tracked objects get channels: deterministic, first-seen order.
     chan_ids = []
     for fi in frame_idxs:
-        for oid in np.asarray(outputs_per_frame[fi]["out_obj_ids"]).tolist():
+        for oid in outputs_per_frame[fi]["out_obj_ids"]:
             if oid not in chan_ids:
                 chan_ids.append(int(oid))
             if len(chan_ids) >= vch:
@@ -455,13 +553,13 @@ def run_video(args, n_want):
         os.makedirs(mdir)
         for i, fi in enumerate(frame_idxs):
             out = outputs_per_frame[fi]
-            ids = np.asarray(out["out_obj_ids"]).tolist()
-            bm = out["out_binary_masks"]  # [N,H,W]
+            ids = out["out_obj_ids"]
+            bm = out["masks"]  # list of uint8 [H,W], already off the GPU
             rgb = np.zeros((vh, vw, 3), dtype=np.uint8)
             for idx, oid in enumerate(ids):
                 if oid not in id_to_chan:
                     continue
-                m = to_uint8_mask(bm[idx])
+                m = bm[idx]
                 if m.shape != (vh, vw):
                     m = np.asarray(Image.fromarray(m).resize((vw, vh), Image.NEAREST))
                 ch = id_to_chan[oid]
@@ -508,7 +606,7 @@ def main():
 
     # Must precede the sam3 imports inside run_image/run_video (decorator-time autocast).
     args.amp_dtype = _amp_dtype(args.device)
-    force_amp_dtype(args.amp_dtype)
+    apply_pre_ampere_workarounds(args.amp_dtype, args.device)
     log(f"device={args.device} amp={str(args.amp_dtype).split('.')[-1]}")
 
     if args.video:
