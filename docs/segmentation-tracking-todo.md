@@ -46,3 +46,18 @@ until then it stays per-frame and honest.
   for a lossy fallback; upgrade to a 4:4:4 or alpha-capable container if precision matters.
 - 4 objects → h264/mp4 has no alpha channel; only 3 are packed (logged). Use ≤3 objects for video,
   or run image seg per keyframe.
+
+## Video-mask render animation (separate from tracking)
+
+Video masks (`mask.mp4`) and video beat assets currently render FROZEN at frame 0
+in the deterministic capture: the region-shader / bgTextures video path uses a
+`<video>` element seek, which does not advance under headless capture (same reason
+kino pre-extracts footage frames node-side). Verified 2026-07-24: a moving-ellipse
+mask.mp4 rendered identical splits at t=0 and t=1.5, while plain footage of the same
+clip animated correctly.
+
+Fix: route video mask + video asset textures through the existing footage frame
+pipeline — `src/render/native/videoFrames.ts` extraction → `/vframes/<dir>/<N>` →
+the current-frame `<img>` (as `FrameVideo` does) drawn into the GL texture each
+composition frame — instead of a `<video>` seek. Infra already exists; it is a
+wiring task in `RegionShader.tsx` (headline) and the bgTextures video channel.
