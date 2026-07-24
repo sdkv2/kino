@@ -63,28 +63,45 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
     });
   }
   props.segments.forEach((s, i) => {
-    if (s.kind !== "app" || !s.asset) return;
-    if (!/\.(mp4|mov)$/i.test(s.asset)) return; // images render directly
-    const seqDur = appSeqDurFrames(props.segments, i, fps);
-    if (seqDur <= 0) return;
-    const speed = s.speed ?? 1;
-    const { trimBefore } = appTrimFrames(fps, s.clipFrom, s.clipTo);
-    const eff = (n: number) =>
-      appFreezeFrame({ localFrame: n, fps, pauseAt: s.pauseAt, clipFrom: s.clipFrom, clipTo: s.clipTo, speed }) ?? n;
-    let maxEff = 0;
-    for (let n = 0; n < seqDur; n++) maxEff = Math.max(maxEff, eff(n));
-    jobs.push({
-      key: `seg${i}`,
-      assetRel: s.asset,
-      fromFrame: f(s.startSec, fps),
-      seqDurFrames: seqDur,
-      startSec: trimBefore / fps,
-      stepSec: speed / fps,
-      effFrame: eff,
-      maxEffFrame: maxEff,
-    });
+    if (s.kind !== "app") return;
+    // Footage beat (or the region-shader asset texture): mp4/mov gets frame-extracted; images render directly.
+    if (s.asset && /\.(mp4|mov)$/i.test(s.asset)) {
+      const j = appMediaJob(props.segments, i, fps, `seg${i}`, s.asset);
+      if (j) jobs.push(j);
+    }
+    // Region-shader video mask (uMask): same source-time progression as the beat asset so a
+    // clipped/frozen beat samples the matching mask frame. Routed through /vframes because <video>
+    // seeking never advances under deterministic headless capture.
+    const rs = s.regionShader;
+    if (rs && rs.maskKind === "video") {
+      const j = appMediaJob(props.segments, i, fps, `rsmask${i}`, rs.maskSrc);
+      if (j) jobs.push(j);
+    }
   });
   return jobs;
+}
+
+/** MediaJob for app segment i's clip (asset or mask): shares the beat's trim/speed/freeze clock. */
+function appMediaJob(segments: KinoProps["segments"], i: number, fps: number, key: string, assetRel: string): MediaJob | null {
+  const s = segments[i];
+  const seqDur = appSeqDurFrames(segments, i, fps);
+  if (seqDur <= 0) return null;
+  const speed = s.speed ?? 1;
+  const { trimBefore } = appTrimFrames(fps, s.clipFrom, s.clipTo);
+  const eff = (n: number) =>
+    appFreezeFrame({ localFrame: n, fps, pauseAt: s.pauseAt, clipFrom: s.clipFrom, clipTo: s.clipTo, speed }) ?? n;
+  let maxEff = 0;
+  for (let n = 0; n < seqDur; n++) maxEff = Math.max(maxEff, eff(n));
+  return {
+    key,
+    assetRel,
+    fromFrame: f(s.startSec, fps),
+    seqDurFrames: seqDur,
+    startSec: trimBefore / fps,
+    stepSec: speed / fps,
+    effFrame: eff,
+    maxEffFrame: maxEff,
+  };
 }
 
 interface VideoInfo {
