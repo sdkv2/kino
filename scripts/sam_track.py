@@ -13,10 +13,11 @@ the CoreML image seg, mask.mp4 encode); this module owns the ML:
 The frame-0 mask prompt is produced upstream (sam_runner's text->mask on frame 0) and
 fed here as mask_inputs, exactly as tracking_pipeline.py did with its synthetic disc mask.
 
-Speed: ~1.9s/frame with CoreML backbone + backbone_every=2 (default). MLX preferred when
-KINO_SAM_MLX_PYTHON (or in-process mlx) is available — feeds the same CoreML tracker.
-Release PyTorch post-init. PyTorch CPU fallback ~7–8s. Export:
-scripts/export_sam_backbone_coreml.py. KINO_SAM_BACKBONE_EVERY=1 for max accuracy.
+Speed: ~2.9s/frame with CoreML backbone, per-frame encode (default, backbone_every=1).
+MLX preferred when KINO_SAM_MLX_PYTHON (or in-process mlx) is available — feeds the
+same CoreML tracker. Release PyTorch post-init. PyTorch CPU fallback ~7–8s. Export:
+scripts/export_sam_backbone_coreml.py. KINO_SAM_BACKBONE_EVERY=2+ trades accuracy for
+speed (~1.9s/frame at 2, coarser mask edges on fast motion).
 KINO_SAM_BACKBONE_ENGINE=auto|mlx|coreml|pytorch (default auto).
 
 Requires the same venv as the image path PLUS the `sam3` package importable and the
@@ -111,16 +112,17 @@ BACKBONE_PKG = "sam3_vision_backbone.mlpackage"
 def backbone_every() -> int:
     """How often to re-run the vision backbone during tracking.
 
-    Default 2 (MLX-style): reuse last vis72/hires0/hires1 for one frame between
-    encodes. Measured on the moving-disc fixture: every=1 → ~2.9s/frame;
-    every=2 → ~1.9s/frame with identical centroid travel. every=5 still PASSes
-    the >100px travel gate but travel drops (175 vs 210). Set
-    KINO_SAM_BACKBONE_EVERY=1 for per-frame encode (max accuracy).
+    Default 1 (per-frame encode, max accuracy). Caching every=2 measured
+    ~1.9s/frame vs every=1's ~2.9s on the moving-disc fixture with identical
+    centroid travel there, but on real video (dog-park clip) every=2 visibly
+    coarsened mask edges on fast-moving thin shapes (legs) — the stale
+    cached frame lags the tracker by one step. Set KINO_SAM_BACKBONE_EVERY=2+
+    to trade accuracy back for speed.
     """
     try:
-        n = int(os.environ.get("KINO_SAM_BACKBONE_EVERY", "2"))
+        n = int(os.environ.get("KINO_SAM_BACKBONE_EVERY", "1"))
     except ValueError:
-        n = 2
+        n = 1
     return max(1, n)
 
 

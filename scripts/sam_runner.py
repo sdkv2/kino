@@ -21,7 +21,7 @@ VIDEO (--video --track): REAL temporal tracking (manifest tracked:true). Frame 0
 text->mask (the same image pipeline) seeds a PyTorch mask-prompt init; each frame's
 CoreML vision backbone (sam3_vision_backbone.mlpackage; PyTorch CPU fallback) feeds the
 stateful CoreML tracker (dense_sam3_trackstep) which propagates every object's mask.
-See scripts/sam_track.py. ~1.9s/frame with CoreML backbone (every=2); ~7–8s PyTorch fallback.
+See scripts/sam_track.py. ~2.9s/frame with CoreML backbone (per-frame, default); ~7–8s PyTorch fallback.
 
 VIDEO (--video, no --track): ffmpeg-decodes to frames at the source fps, runs the SAME
 image pipeline on each frame INDEPENDENTLY (no temporal tracking), packs up to 3 objects
@@ -324,7 +324,8 @@ def run_track(args, n_want):
     stateful CoreML tracker, which propagates each object's mask. Writes mask.mp4 +
     manifest tracked:true.
 
-    ~1.9s/frame with CoreML backbone + backbone_every=2 (default); ~2.9s at every=1;
+    ~2.9s/frame with CoreML backbone, per-frame encode (default, backbone_every=1);
+    ~1.9s/frame if KINO_SAM_BACKBONE_EVERY=2 (coarser mask edges on fast motion);
     ~7–8s/frame PyTorch CPU fallback. Falls to per-frame only via --no-track.
     """
     import gc
