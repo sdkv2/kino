@@ -24,6 +24,12 @@ const HF_REPO = "AllanVester/SAM3.1-CoreML-FP16";
 // mlpackage dir stems in the HF repo; each gated by existsSync so re-downloads are skipped.
 const PACKAGES = ["SAM3.1_ImageEncoder_FP16", "SAM3.1_TextEncoder_FP16", "SAM3.1_Detector_FP16"];
 
+// Stateful CoreML tracker for REAL video tracking (public spike repo). Lands under
+// modelsDir/models/ (the repo nests it there); sam_track.py resolves it from either spot.
+const TRACKER_REPO = "sdkv2/sam3.1-coreml-tracker-spike";
+const TRACKER_PKG = "dense_sam3_trackstep.mlpackage";
+const trackerPath = (dir: string): string => join(dir, "models", TRACKER_PKG);
+
 const samDir = (): string => join(homedir(), ".kino", "sam");
 const modelsDir = (): string => process.env.KINO_SAM_MODEL ?? join(samDir(), "models");
 
@@ -75,6 +81,24 @@ export async function ensureSamEnv(): Promise<string> {
         "https://github.com/facebookresearch/sam3/blob/main/LICENSE — share-alike, field-of-use, attribution).\n",
     );
   }
+
+  // Tracker package (~86MB) for real video tracking — fetched alongside the image models.
+  if (!existsSync(trackerPath(dir))) {
+    if (!(await pyCanImport(py, "huggingface_hub"))) {
+      throw new Error(
+        `sam_tracker_missing: ${TRACKER_PKG} absent from ${dir} and ${py} lacks huggingface_hub — ` +
+          `pip install huggingface_hub, or huggingface-cli download --local-dir ${dir} ${TRACKER_REPO}`,
+      );
+    }
+    log.step(`downloading SAM3.1 CoreML tracker (~86MB, one-time) → ${dir}`);
+    await execa(py, [
+      "-c",
+      "import sys;from huggingface_hub import snapshot_download;" +
+        `snapshot_download(sys.argv[1], local_dir=sys.argv[2], allow_patterns=['models/${TRACKER_PKG}/*'])`,
+      TRACKER_REPO,
+      dir,
+    ]);
+  }
   return py;
 }
 
@@ -93,11 +117,17 @@ export const coremlBackend: Backend = {
     const py = await ensureSamEnv();
     const args = [RUNNER, "--input", req.input, "--prompt", req.prompt, "--out", req.outDir, "--objects", String(req.objects)];
     if (VIDEO_EXT.test(req.input)) {
-      // No CoreML export exists for the tracker's conditioning-frame memory encode (see
-      // .superpowers/sdd/coreml-io-reference.md + docs/segmentation-tracking-todo.md), so video is
-      // per-frame image seg — masks are independent per frame; fast motion can flicker. Never tracked:true.
       args.push("--video");
-      log.step("coreml video: per-frame segmentation (no temporal tracking; flicker possible on fast motion)");
+      if (req.track) {
+        // REAL temporal tracking: frame-0 text→mask seeds the PyTorch mask-prompt init, then the
+        // stateful CoreML tracker propagates each object across frames (manifest tracked:true).
+        // ~7.6s/frame — the PyTorch CPU backbone dominates. --no-track picks the fast per-frame path.
+        args.push("--track");
+        log.step("coreml video: real temporal tracking (~7.6s/frame; --no-track for the fast per-frame path)");
+      } else {
+        // Per-frame image seg — masks independent per frame; fast motion can flicker. tracked:false.
+        log.step("coreml video: per-frame segmentation (no tracking; fast, flicker possible on fast motion)");
+      }
     }
     await execa(py, args, { stdio: ["ignore", "inherit", "inherit"] });
     const manifest = readManifest(req.outDir);

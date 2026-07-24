@@ -39,14 +39,14 @@ Image input → `mask.png` (8-bit grayscale, white = object). Video input → `m
 ```json
 { "kind": "video", "source": "clip.mp4", "prompt": "the person",
   "width": 1080, "height": 1920, "fps": 30, "frames": 90,
-  "objects": [{ "id": 0, "label": "the person", "channel": "r" }],
-  "backend": "coreml", "tracked": false }
+  "objects": [{ "id": 0, "label": "the person", "channel": "gray" }],
+  "backend": "coreml", "tracked": true }
 ```
 
 ### Backends
 
-- **coreml** (macOS/Apple Silicon) — real SAM3.1 segmentation via CoreML. Video is **per-frame** (`tracked:false`). Downloads models once to `~/.kino/sam/models/`. Needs a Python env; see Setup.
-- **cuda** (Linux/Windows + NVIDIA) — the **full** SAM3.1 model in native PyTorch (`scripts/sam_runner_cuda.py`). This is the cross-platform path and the only one with **real video tracking**: the multiplex video predictor tracks each object across frames, so video masks are temporally coherent (`tracked:true`). Needs a Python env with a CUDA-enabled `torch` + the `sam3` package; see Setup.
+- **coreml** (macOS/Apple Silicon) — real SAM3.1 segmentation via CoreML. Video defaults to **real temporal tracking** (`tracked:true`) — frame 0's text→mask seeds the stateful CoreML tracker, which propagates each object across the clip. `--no-track` selects the fast per-frame path (`tracked:false`). Tracking is ~7.6s/frame (the PyTorch CPU vision backbone dominates; the CoreML tracker itself is ~0.6s). Downloads models once to `~/.kino/sam/models/`. Needs a Python env; see Setup.
+- **cuda** (Linux/Windows + NVIDIA) — the **full** SAM3.1 model in native PyTorch (`scripts/sam_runner_cuda.py`). The multiplex video predictor tracks each object across frames, so video masks are temporally coherent (`tracked:true`). Needs a Python env with a CUDA-enabled `torch` + the `sam3` package; see Setup.
 - **mock** — deterministic synthetic ellipse mask, no model, any platform. For pipeline/CI tests and for authoring specs on a non-Mac machine.
 
 `kino doctor` shows readiness rows (platform, models, python) for both real backends.
@@ -129,10 +129,14 @@ Inside a region shader you can sample:
 
 ## Video: tracking status
 
-Tracking depends on the backend:
+Both real backends do **real temporal tracking** by default (`tracked: true`):
 
-- **coreml** — **per-frame** (`tracked: false`). Each frame is segmented independently, so fast motion can flicker. True temporal tracking is verified as a CoreML package but not yet wired end-to-end (the conditioning-frame memory-encode export is the gap; see `docs/segmentation-tracking-todo.md` and `.superpowers/sdd/coreml-io-reference.md`).
-- **cuda** — **real temporal tracking** (`tracked: true`). The full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on frame 0 and propagated through the clip, so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent. This is the recommended path for moving subjects.
+- **coreml** — the frame-0 text→mask (CoreML image seg) seeds a PyTorch mask-prompt init; each frame's PyTorch vision backbone feeds the **stateful CoreML tracker** (`dense_sam3_trackstep.mlpackage`), which propagates every object's mask across the clip. `--no-track` forces the fast per-frame path (`tracked:false`), where each frame is segmented independently and fast motion can flicker.
+
+  > **Cost:** ~7.6s/frame. The bottleneck is the **PyTorch CPU vision backbone** (467M params, ~7s/frame); the CoreML tracker itself is ~0.6s/frame. Exporting the image encoder (trunk + propagation neck + `conv_s0/s1`) to CoreML is the speed follow-up — it's stateless and single-input, a much easier conversion than the tracker was. Until then, use `--no-track` when temporal coherence isn't needed.
+  >
+  > **Verification status (2026-07-24):** verified end-to-end on this Mac — a moving-disc clip produces a `mask.mp4` whose mask centroid follows the disc's known trajectory (frame-0→last: 60px→305px, +245px, matching the disc) with `tracked:true`. The tracker package (`sdkv2/sam3.1-coreml-tracker-spike`, ~86MB) auto-downloads to `~/.kino/sam/models/` alongside the image models. Building blocks: `scripts/sam_track.py`; orchestration: `scripts/sam_runner.py --track`.
+- **cuda** — the full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on frame 0 and propagated through the clip, so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent.
 
   > **Verification status (2026-07-24):** the CUDA image path is CPU-verified (real `backend:cuda` mask). The video-tracking pipeline is confirmed to *run* end-to-end on CPU (session start → `add_prompt` → `propagate_in_video` all execute), but a full tracked `mask.mp4` has **not** been produced-and-checked yet: CPU propagation is ~45 min/frame (unusable) and needs a real NVIDIA GPU + a realistic clip to verify. Run it on GPU to confirm `tracked:true` output before relying on it. The runner fails cleanly (`exit 2`) if the detector finds no objects — it never fabricates a mask.
 
