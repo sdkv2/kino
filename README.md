@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-logo-web.png" alt="kino — /ˈkiːnoʊ/ n. German: cinema, from Greek kīnēma: motion" width="560">
+  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header.webp" alt="kino — cinematic 3D, from one spec file" width="900">
 </p>
 
-<p align="center"><em>Agent-driven short-form video production</em></p>
+<p align="center"><em>Agent-driven short-form video production · /ˈkiːnoʊ/</em></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
