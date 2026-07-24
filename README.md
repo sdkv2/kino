@@ -177,8 +177,14 @@ npm run dev -- <args>   # run the CLI from source via tsx
 ```
 Work on a feature branch (`feat/…`, `fix/…`, `chore/…`), bump `version` in `package.json` for
 releases, and open a PR to `main`. Version history lives in [`CHANGELOG.md`](CHANGELOG.md).
+Sign off your commits (`git commit -s`, see [DCO.md](DCO.md)) and add yourself to
+[CONTRIBUTORS.md](CONTRIBUTORS.md) on your first PR to sign the [CLA](CLA.md).
 Full guidelines: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © sdkv2
+Code: [MIT](LICENSE) © sdkv2.
+
+The name **kino™**, the wordmark, and the logo are trademarks of sdkv2 and are *not* covered by
+the MIT licence — fork the code freely, but give your fork its own name. See
+[TRADEMARK.md](TRADEMARK.md).

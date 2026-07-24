@@ -29,9 +29,27 @@ npm run test:watch      # watch mode
 The CLI runs from compiled `dist/` — rebuild (`npm run build`) before testing a change
 through the `kino` binary rather than `npm run dev`.
 
+## Sign-off and the CLA
+
+Two one-time bits of paperwork, both done inside your PR:
+
+1. **Sign off every commit** — `git commit -s`. This is the
+   [Developer Certificate of Origin](DCO.md): your statement that you have the right to submit
+   the patch. Missed it? `git commit --amend -s` (or `git rebase --signoff <base>`), then
+   force-push.
+2. **Sign the [CLA](CLA.md)** — add a row to [CONTRIBUTORS.md](CONTRIBUTORS.md) in your first
+   PR. You keep the copyright to everything you write; the agreement grants kino the licence it
+   needs to ship your work and, if the project's licensing ever changes, to carry it forward
+   without hunting down every past contributor.
+
+If a contribution includes third-party code or assets, flag it in the PR with its licence and
+origin. AI-assisted contributions are fine — you're still the one certifying provenance.
+
 ## Pull requests
 
 - Branch from `main`: `feat/…`, `fix/…`, `docs/…`, `chore/…`.
+- Sign off your commits (`-s`) and, on your first PR, add yourself to
+  [CONTRIBUTORS.md](CONTRIBUTORS.md).
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org):
   `fix: remove audio artifact at the end of every VO beat`.
 - Add or update tests for behavior changes; `npm test` must pass.
