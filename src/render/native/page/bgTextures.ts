@@ -37,6 +37,24 @@ interface AnimTex {
 const animTexes: AnimTex[] = [];
 const ANIM_CACHE_MAX = 48;
 
+// Video-channel state: a hidden <video> per channel, seeked to frame/fps and re-drawn into its own
+// canvas every frame. Same canvas object across frames (redrawn in place); the revision bump is what
+// tells ShaderBackground to re-upload.
+interface VideoTex {
+  index: number; // channel slot in `loaded`
+  video: HTMLVideoElement;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+}
+const videoTexes: VideoTex[] = [];
+
+// Pure, DOM-free seam (unit-tested; the <video> seek + canvas draw wrap it in prepareBgTextures):
+// composition frame → deterministic source seek time (frame/fps) and the next revision, bumped every
+// frame so a re-seeked mask always re-uploads to uTexN. fps<=0 guards divide-by-zero.
+export function videoTexStep(frame: number, fps: number, revision: number): { time: number; revision: number } {
+  return { time: fps > 0 ? frame / fps : 0, revision: revision + 1 };
+}
+
 export function getBgTextures(): (LoadedTex | null)[] {
   return loaded;
 }
@@ -51,6 +69,39 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error(`background texture failed to load: ${url}`));
   });
   return img;
+}
+
+// Hidden <video> for a mask channel. `loadeddata` guarantees the first frame is decodable
+// (videoWidth/Height known, drawImage safe). Same-origin (/public) → the canvas stays untainted, so
+// texImage2D can read it back.
+async function loadVideo(url: string): Promise<HTMLVideoElement> {
+  const vid = document.createElement("video");
+  vid.muted = true;
+  vid.preload = "auto";
+  vid.src = url;
+  await new Promise<void>((resolve, reject) => {
+    vid.onloadeddata = () => resolve();
+    vid.onerror = () => reject(new Error(`background video texture failed to load: ${url}`));
+  });
+  return vid;
+}
+
+// Seek to `t` and resolve once the frame has settled. Clamp inside [0, duration) — a seek past the
+// end never fires `seeked`, so late composition frames hold the last mask frame.
+// ponytail: <video> seeking is not guaranteed frame-exact (kino extracts footage frames node-side
+// for that reason). Acceptable for a smooth mask; upgrade path = route mask.mp4 through videoFrames.ts.
+function seekVideo(vid: HTMLVideoElement, t: number): Promise<void> {
+  const dur = Number.isFinite(vid.duration) ? vid.duration : t;
+  const target = Math.max(0, Math.min(t, dur - 1e-3));
+  if (Math.abs(vid.currentTime - target) < 1e-4) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      vid.removeEventListener("seeked", done);
+      resolve();
+    };
+    vid.addEventListener("seeked", done);
+    vid.currentTime = target;
+  });
 }
 
 async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
@@ -156,6 +207,7 @@ async function rasterAt(tpl: HtmlTemplate, t: number, cache: Map<string, HTMLCan
 /** Load all texture channels. Called from kinoLoad before the first seek. */
 export async function loadBgTextures(props: KinoProps): Promise<void> {
   animTexes.length = 0; // page reuse across render calls re-registers channels
+  videoTexes.length = 0;
   const defs = props.background.textures ?? [];
   // Fixed-length by def index — failures stay null so channel i never slides into uTex{i-1}.
   const out: (LoadedTex | null)[] = defs.map(() => null);
@@ -165,6 +217,23 @@ export async function loadBgTextures(props: KinoProps): Promise<void> {
       try {
         const img = await loadImage("/public/" + def.src);
         out[i] = { source: img, width: img.naturalWidth, height: img.naturalHeight, revision: 0 };
+      } catch (err) {
+        console.error(String(err));
+      }
+    } else if (def.kind === "video" && def.src) {
+      try {
+        const vid = await loadVideo("/public/" + def.src);
+        const w = vid.videoWidth || 2;
+        const h = vid.videoHeight || 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(vid, 0, 0, w, h); // frame 0; per-frame seeks happen in prepareBgTextures
+          out[i] = { source: canvas, width: w, height: h, revision: 0 };
+          videoTexes.push({ index: i, video: vid, canvas, ctx });
+        }
       } catch (err) {
         console.error(String(err));
       }
@@ -194,6 +263,18 @@ export async function loadBgTextures(props: KinoProps): Promise<void> {
  * Deterministic: the raster is a pure function of the scrub value (cached by value).
  */
 export async function prepareBgTextures(props: KinoProps, frame: number, fps: number): Promise<void> {
+  if (animTexes.length === 0 && videoTexes.length === 0) return;
+  // Video mask channels: seek to this frame's source time and re-draw into the channel canvas, then
+  // bump revision so ShaderBackground.syncLiveTextures re-uploads it to uTexN.
+  for (const vt of videoTexes) {
+    const tex = loaded[vt.index];
+    if (!tex) continue;
+    const step = videoTexStep(frame, fps, tex.revision);
+    await seekVideo(vt.video, step.time);
+    vt.ctx.drawImage(vt.video, 0, 0, vt.canvas.width, vt.canvas.height);
+    tex.source = vt.canvas;
+    tex.revision = step.revision;
+  }
   if (animTexes.length === 0) return;
   const bg = props.background;
   const tt = fps > 0 ? frame / fps : 0;
