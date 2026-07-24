@@ -64,25 +64,34 @@ vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset
 // masked region, positive outside, saturating at ±radius. Region shaders otherwise see only a
 // binary in/out, which is what blocks rim light, outline, outward glow, edge fringe and
 // erode/dilate. Takes the sampler + channel so it serves any uMask0..3 from either region body.
-// Approximate by design: a golden-angle spiral with linear radial spacing, so resolution is
-// radius/24 px and a feature thinner than that step can be missed — at radius 24 the step is
-// 1px, at radius 240 it is 10px and thin detail will alias. Reads only the texture and the
-// coordinate, so determinism holds.
+//
+// Two regimes. Inside the mask's own transition band the bilinear-filtered coverage is a ramp,
+// so its screen-space gradient gives SUB-PIXEL distance for free — fwidth reads the fragment
+// quad, not the texture, so it costs no taps (the trick aastep already uses). Outside that band
+// the coverage saturates and the gradient collapses, so fall back to a 24-tap search. That
+// search is COARSE: 24 samples scattered over a disc of radius R sit ~0.36*R apart, so it can
+// over-report by roughly a third of the radius, and the error varies with edge orientation.
+// Pass the SMALLEST radius that covers your effect — a 3px rim wants radius 4, not 32.
+// Reads only the texture, the coordinate and derivatives, so determinism holds.
 #define KINO_MASK_TAPS 24
 float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius){
   vec2 res = iResolution.xy;
   vec2 uv = fragCoord / res;
   vec2 texel = 1.0 / res;
-  float here = step(0.5, dot(texture(mask, uv), channel));
+  float m = dot(texture(mask, uv), channel);
+  float g = fwidth(m);
+  if (g > 0.01) return clamp((0.5 - m) / g, -radius, radius);
+  float here = step(0.5, m);
   float best = radius;
   for (int i = 0; i < KINO_MASK_TAPS; i++){
     float r = (float(i) + 1.0) / float(KINO_MASK_TAPS) * radius;
     float a = float(i) * 2.39996323;
     float s = step(0.5, dot(texture(mask, uv + vec2(cos(a), sin(a)) * r * texel), channel));
-    if (s != here) { best = min(best, r); }
+    if (s != here) { best = r; break; }
   }
   return here > 0.5 ? -best : best;
 }
+#undef KINO_MASK_TAPS
 `;
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;

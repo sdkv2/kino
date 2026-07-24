@@ -16,6 +16,10 @@ describe("assembleShaderSource", () => {
     expect(src).toContain("void main()");
     expect(src).toContain("mainImage(kino_fragColor, gl_FragCoord.xy)");
   });
+  it("injects kinoMaskDist into plain shader source, where there are no mask uniforms", () => {
+    expect(assembleShaderSource("void mainImage(out vec4 c, in vec2 f){ c = vec4(1.0); }", []))
+      .toContain("float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius)");
+  });
 });
 
 describe("hexToVec3", () => {
