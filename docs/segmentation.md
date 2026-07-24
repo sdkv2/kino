@@ -166,6 +166,32 @@ Inside a region shader you can sample:
 
 **Worked example:** `examples/segmentation/` — a blue disc image, a mock mask, a solid-red subject shader and solid-green background shader. Its `README.md` has the exact commands (make a fixture asset, `kino segment --backend mock`, `kino still`). You get a red ellipse (subject) on green (background) — the mask boundary is the seam.
 
+#### Distance to the mask edge
+
+A region body sees a binary in/out by default. `kinoMaskDist` gives it the **signed distance to the
+silhouette in pixels** — negative inside the masked region, positive outside — which is what rim
+light, outline, outward glow, chromatic fringe and erode/dilate all need:
+
+```glsl
+float d = kinoMaskDist(uMask0, uChannel0, fragCoord, 8.0);
+float rim   = 1.0 - smoothstep(0.0, 3.0, -d);   // 3px band just inside the edge
+float glow  = 1.0 - smoothstep(0.0, 8.0,  d);   // falloff outward from the edge
+float eaten = step(-4.0, d);                    // erode the subject by 4px
+```
+
+Pass the same `uMaskN`/`uChannelN` pair the split itself uses (`uMask0`/`uChannel0` for a single
+mask). It works from the subject body, the background body, or both.
+
+It runs in two regimes. Inside the mask's own transition band it reads **sub-pixel** distance from
+screen-space derivatives, costing no extra texture taps. Beyond that band the coverage saturates
+and it falls back to a 24-tap search accurate only to roughly a third of `radius` — 24 samples over
+a disc of radius R sit ~0.36R apart, which is an information limit rather than a tuning choice, and
+the error varies with edge orientation. So **pass the smallest radius that covers your effect**: a
+3px rim wants radius 4, not 32. The value saturates at `±radius`.
+
+Cost is 24 taps per pixel per calling body, on top of the two bodies that already run for every
+pixel — calling it once per mask across a 4-mask union would be 96.
+
 ### How region shaders assemble (for the curious)
 
 `assembleRegionShaderSource` (`src/render/shaderSource.ts`) namespaces the two bodies with the GLSL preprocessor (`#define mainImage regionSubject` … `#undef` … `#define mainImage regionBg`), binds the beat asset to `uTex0` and the mask to `uMask`, and emits `fragColor = mix(bgColor, subjectColor, dot(texture(uMask, uv), uChannel))`. Both bodies run every pixel, then mix — fine for short-form; a `ponytail:` note marks the discard/stencil upgrade if cost ever matters.

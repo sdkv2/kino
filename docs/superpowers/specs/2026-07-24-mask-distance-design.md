@@ -69,25 +69,40 @@ float eaten = step(-4.0, d);                     // erode the subject by 4px
 
 ## Implementation
 
-Sample the centre to establish which side the pixel is on, then walk a golden-angle spiral
-outward with **linear** radial spacing, keeping the first sample whose side differs.
+Two regimes, because the mask's own soft edge already carries the distance where it matters
+most and a tap budget cannot compete with it.
+
+**Near the edge — analytic.** Sample the mask coverage, take its screen-space gradient, and
+read the distance straight off the linear ramp. Inside the transition band this is *sub-pixel*
+and costs no taps beyond the one already made:
 
 ```
-here  = step(0.5, dot(texture(mask, uv), channel))
+m = dot(texture(mask, uv), channel)
+g = length(vec2(dFdx(m), dFdy(m)))
+if g > 0.01: return clamp((0.5 - m) / g, -radius, radius)
+```
+
+**Beyond it — spiral search.** Where coverage has saturated to flat 0 or 1 the gradient
+vanishes and there is nothing local to read. Fall back to sampling which side the pixel is on,
+then walking a golden-angle spiral outward with **linear** radial spacing, stopping at the
+first sample whose side differs:
+
+```
+here  = step(0.5, m)
 best  = radius                           # no transition found → saturates at ±radius
 for i in 0..TAPS-1:
     r = (i + 1) / TAPS * radius          # linear: uniform radial steps
     a = i * 2.39996323                   # golden angle, decorrelates direction from radius
     s = step(0.5, dot(texture(mask, uv + vec2(cos a, sin a) * r * texel), channel))
-    if s != here: best = min(best, r)
+    if s != here: best = r; break
 return here > 0.5 ? -best : best
 ```
 
 `TAPS = 24`, a compile-time constant so the loop bound is static.
 
 Linear spacing rather than area-uniform (`sqrt`) spacing is deliberate: these effects need
-resolution *near* the edge, and it makes the precision exactly `radius / 24` pixels — a
-number that can go in the documentation.
+resolution *near* the edge. It does **not** make the precision `radius / 24` — see Known
+limits.
 
 `uv` is `fragCoord / iResolution.xy` and `texel` is `1.0 / iResolution.xy`, matching how the
 region entry point samples masks today.
@@ -99,11 +114,16 @@ unseeded noise. Same frame index → same pixels, on SwiftShader and under `KINO
 
 Stated here and in the docs rather than discovered later:
 
-- **Approximate.** Angular gaps grow with radius, so a feature thinner than the spacing can be
-  missed. At `radius = 24` the step is 1px; at `radius = 240` it is 10px and thin spray will
-  alias.
+- **Approximate outside the transition band.** The analytic regime is sub-pixel, but the spiral
+  fallback is accurate only to roughly **0.36 · `radius`**, not `radius / 24`. Twenty-four
+  samples spread over a disc of radius R get about `R * sqrt(pi / 24)` ≈ `0.36 R` of spacing
+  between neighbours no matter how they are arranged — an information limit of the tap budget,
+  not something the spacing rule can tune away. Linear radial spacing only shifts where that
+  error lands (tighter near the centre, looser at the rim), and the error varies with edge
+  orientation. Features thinner than the local spacing can be missed entirely.
 - **Bounded.** Distance saturates at ±`radius`. Wide soft glow (beyond ~32px) is not served
-  well by this phase.
+  well by this phase — and because the error scales *with* `radius`, a large radius buys reach
+  at the cost of accuracy. Pass the smallest radius that covers the effect.
 - **Cost scales with callers,** not with the frame: both region bodies run for every pixel
   (an existing property, flagged by a `ponytail:` note in `assembleRegionShaderSource`), so a
   call in each body is 48 taps per pixel.

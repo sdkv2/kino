@@ -99,6 +99,7 @@ Always injected; unused compile away:
 | `kinoCoverUV(texSize, fragCoord)` | Aspect-correct **cover-fit** local uv |
 | `kinoBackdrop(tex, texSize, fragCoord)` | Full-frame cover sample + mirror |
 | `kinoBackdropOffset(tex, texSize, fragCoord, offset)` | Same, displaced by bent ray xy |
+| `kinoMaskDist(mask, channel, fragCoord, radius)` | Signed px distance to a region mask's edge (−inside/+outside) — rim, outline, glow, erode. Sub-pixel near the edge, ~0.36·radius beyond it; pass the smallest radius that covers the effect |
 
 **Old-light craft bar** (helpers encode this — use them instead of re-deriving):
 
