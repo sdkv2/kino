@@ -3,12 +3,12 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.21.1",
+  "version": "1.21.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sdkv2/kino.git"
   },
-  "description": "Agent-driven short-form video production CLI",
+  "description": "Spec driven video development CLI — JSON spec → deterministic MP4",
   "license": "MIT",
   "author": "sdkv2",
   "homepage": "https://github.com/sdkv2/kino#readme",
@@ -18,11 +18,12 @@
   "keywords": [
     "video",
     "cli",
+    "spec",
     "agent",
     "elevenlabs",
-    "short-form",
-    "tiktok",
-    "reels"
+    "motion-graphics",
+    "deterministic",
+    "ffmpeg"
   ],
   "type": "module",
   "bin": {
@@ -64,6 +65,6 @@
     "react-dom": "^18.3.1",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "vitest": "^4.1.10"
   }
 }

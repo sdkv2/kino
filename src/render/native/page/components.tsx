@@ -1,7 +1,5 @@
-// Native-engine port of the composition components. Layout, styling and animation math are kept
-// line-for-line with the legacy composition so the two engines render identically; only the frame
-// plumbing differs: primitives come from ./runtime, video frames from ./media (pre-extracted), and
-// fonts are loaded once at page boot (index.tsx) instead of per-component.
+// Composition components for the native render page. Primitives from ./runtime, video frames from
+// ./media (ffmpeg pre-extract), fonts loaded once at page boot (index.tsx).
 import React from "react";
 import { AbsoluteFill, Easing, Freeze, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
 import { FrameVideo } from "./media";

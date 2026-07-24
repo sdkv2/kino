@@ -1,6 +1,6 @@
 # Getting started
 
-**kino** turns an agent-authored JSON **spec** into a finished vertical video: ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** animated background → deterministic frame composite → 9:16 / 3:4 MP4. You (or a driving agent) supply the creative as JSON; kino handles deterministic production.
+**kino** turns a JSON **spec** into a finished video: ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** background / motion graphic → deterministic frame composite → MP4 (9:16, 3:4, 16:9, …). You (or a driving agent) author the creative as JSON; kino handles deterministic production.
 
 This guide takes you from a clean checkout to your first rendered video. For the full command list see the [CLI reference](cli-reference.md); for the JSON format see the [Spec reference](spec-reference.md).
 
@@ -100,6 +100,7 @@ Renders land at `projects/<name>/out/<title>/<title>[-<tag>]-<format>.mp4` (e.g.
 - **[CLI reference](cli-reference.md)** — every `kino` command and flag.
 - **[Spec reference](spec-reference.md)** — the full JSON spec, `brand.md`, and `project.json`.
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
-- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers.
+- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers, shaders.
+- **[Segmentation](segmentation.md)** — `kino segment` masks + `regionShader`.
 - Agent skills (canonical): [`skills/`](../skills/). `kino skills --install` (also `kino init`) creates local (gitignored) symlinks under `.agents` / `.cursor` / `.claude` / `.codex`.
-- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`. Also: `npx skills add sdkv2/kino`.
+- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`, `shader-backgrounds`. Also: `npx skills add sdkv2/kino`.

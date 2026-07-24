@@ -1,28 +1,23 @@
 <p align="center">
-  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-logo-web.png" alt="kino — /ˈkiːnoʊ/ n. German: cinema, from Greek kīnēma: motion" width="560">
+  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header.webp" alt="kino — spec driven video development" width="900">
 </p>
 
-<p align="center"><em>Agent-driven short-form video production</em></p>
+<p align="center"><em>spec driven video development · /ˈkiːnoʊ/</em></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://github.com/sdkv2/kino/actions/workflows/ci.yml"><img src="https://github.com/sdkv2/kino/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/@sdkv2/kino"><img src="https://img.shields.io/npm/v/%40sdkv2%2Fkino.svg?logo=npm&color=cb3837" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/@sdkv2/kino"><img src="https://img.shields.io/npm/dw/%40sdkv2%2Fkino.svg?color=cb3837" alt="npm downloads"></a>
-</p>
-<p align="center">
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg" alt="Node ≥20">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
-  <img src="https://img.shields.io/badge/output-9%3A16%20MP4-black.svg" alt="9:16 MP4 output">
+  <img src="https://img.shields.io/badge/spec%20%E2%86%92%20MP4-black.svg" alt="spec → MP4">
   <a href="https://try.elevenlabs.io/7t4pgbmyxq67" title="Referral — supports the project"><img src="https://img.shields.io/badge/voiceover-ElevenLabs-000?logo=elevenlabs&logoColor=fff" alt="Voiceover by ElevenLabs"></a>
 </p>
 
 ---
 
-**kino** turns an agent-authored JSON spec into a finished vertical video. The agent writes the
-spec, kino renders it: ElevenLabs voiceover, an optional AI avatar (HeyGen / Hedra / Replicate)
-or a **faceless** background, composited to a 9:16 / 3:4 MP4 by an in-house headless-Chrome
-render engine.
+**kino** turns a JSON spec into a finished video. You (or an agent) write the spec; kino renders
+it: ElevenLabs voiceover, an optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless**
+background / motion graphic, composited by an in-house headless-Chrome engine to MP4
+(9:16, 3:4, 16:9, …). Same spec → same frames.
 
 ## Showcase
 
@@ -39,7 +34,7 @@ render engine.
 </tr>
 </table>
 
-<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> — faceless, 9:16, ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
+<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> from a JSON spec — faceless, ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
 
 ## Pipeline at a glance
 ```

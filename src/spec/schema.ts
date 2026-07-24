@@ -115,7 +115,7 @@ const Segment = z.discriminatedUnion("kind", [
     // Source-footage slice + retiming (importing-footage skill). Seconds into the asset.
     clipFrom: z.number().min(0).optional(),
     clipTo: z.number().min(0).optional(),
-    speed: z.number().positive().default(1), // OffthreadVideo playbackRate; tune after beats exist
+    speed: z.number().positive().default(1), // asset playback rate; tune after beats exist
     pauseAt: z.number().min(0).optional(), // seconds from segment start → freeze for rest of beat
     // Optional chrome: footage draws in inset (% of composition); src is a full-bleed PNG/WebP on top.
     frame: z
