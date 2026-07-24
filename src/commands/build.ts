@@ -43,35 +43,38 @@ import { log } from "../log.js";
 // config/brand.ts).
 const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
 
-// Resolve an app beat's regionShader spec → RegionShaderProps: read the mask manifest for kind +
+// Resolve an app beat's regionShader spec → RegionShaderProps: read each mask's manifest for kind +
 // the chosen object's channel, stage the mask file into /public (like frame.src / asset), and load
-// each region's .frag/.glsl body the same way a custom shader background is loaded.
-// ponytail: full compositing wiring (uMask bind + mix) lands in T11; this resolves the prop only.
+// each region's .frag/.glsl body the same way a custom shader background is loaded. `masks` unions
+// multiple mask sources/objects into one subject region (e.g. two independently `kino segment`-ed
+// subjects cut onto one shared background) — `mask`+`object` is the single-entry shorthand.
 function resolveRegionShader(
-  rs: { mask: string; subject?: string; background?: string; object: number },
+  rs: { mask?: string; masks?: { mask: string; object: number }[]; subject?: string; background?: string; object: number },
   project: Project,
   stageAsset: (rel: string) => void,
 ): RegionShaderProps {
-  const manifest = readManifest(project.assetPath(rs.mask));
-  // Image masks carry every object in the single union mask.png (all channel "gray"); per-object
-  // image selection isn't wired, so object>0 would silently pick the same union — reject it loudly.
-  // Multi-object addressing lives on video masks (distinct R/G/B channels).
-  if (manifest.kind === "image" && rs.object > 0) {
-    throw new Error(`regionShader.object must be 0 for image mask "${rs.mask}" — per-object selection is only supported on video masks.`);
-  }
-  const obj = manifest.objects[rs.object];
-  if (!obj) {
-    throw new Error(`regionShader.object ${rs.object} out of range for mask "${rs.mask}" (${manifest.objects.length} objects)`);
-  }
-  const maskRel = `${rs.mask}/${manifest.kind === "video" ? "mask.mp4" : "mask.png"}`;
-  stageAsset(maskRel);
+  const entries = rs.masks ?? [{ mask: rs.mask!, object: rs.object }];
+  const masks = entries.map(({ mask, object }) => {
+    const manifest = readManifest(project.assetPath(mask));
+    // Image masks carry every object in the single union mask.png (all channel "gray"); per-object
+    // image selection isn't wired, so object>0 would silently pick the same union — reject it loudly.
+    // Multi-object addressing lives on video masks (distinct R/G/B channels).
+    if (manifest.kind === "image" && object > 0) {
+      throw new Error(`regionShader object must be 0 for image mask "${mask}" — per-object selection is only supported on video masks.`);
+    }
+    const obj = manifest.objects[object];
+    if (!obj) {
+      throw new Error(`regionShader object ${object} out of range for mask "${mask}" (${manifest.objects.length} objects)`);
+    }
+    const maskRel = `${mask}/${manifest.kind === "video" ? "mask.mp4" : "mask.png"}`;
+    stageAsset(maskRel);
+    return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel };
+  });
   const loadBody = (ref: string | undefined) => (ref ? readFileSync(resolveBackgroundComponent(ref, project), "utf8") : null);
   return {
-    maskSrc: maskRel,
-    maskKind: manifest.kind,
+    masks,
     subjectCode: loadBody(rs.subject),
     backgroundCode: loadBody(rs.background),
-    channel: obj.channel,
   };
 }
 

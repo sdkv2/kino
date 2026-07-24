@@ -5,12 +5,13 @@ const SUBJ = "void mainImage(out vec4 c, in vec2 f){ c = vec4(1.0); }";
 const BG = "void mainImage(out vec4 c, in vec2 f){ c = vec4(uColorA, 1.0); }";
 
 describe("assembleRegionShaderSource", () => {
-  it("namespaces both bodies, binds uMask, and mixes bg→subject", () => {
+  it("namespaces both bodies, binds every uMaskN, and mixes bg→subject", () => {
     const src = assembleRegionShaderSource(SUBJ, null, []);
     expect(src.startsWith("#version 300 es")).toBe(true);
     expect(src).toContain("regionSubject");
     expect(src).toContain("regionBg");
-    expect(src).toContain("uniform sampler2D uMask;");
+    expect(src).toContain("uniform sampler2D uMask0;");
+    expect(src).toContain("uniform sampler2D uMask3;"); // MAX_REGION_MASKS = 4
     expect(src).toContain("mix(");
     // exactly one entry point
     expect((src.match(/void main\(\)/g) ?? []).length).toBe(1);

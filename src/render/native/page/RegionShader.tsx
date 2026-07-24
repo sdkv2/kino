@@ -1,8 +1,10 @@
 // Per-mask-region dual-shader beat visual (Task 11). Compiles ONE program from the beat's
 // subject/background GLSL bodies (assembleRegionShaderSource), binds uTex0 = beat asset and
-// uMask = the segmentation mask, and mixes the two regions by the mask channel. Renders full-frame
-// as the app beat's content; chrome/captions composite on top exactly as a normal app beat
-// (KinoVideo layers them above this in its own passes).
+// uMask0..N = the segmentation mask(s), and mixes the two regions by the union of their channels
+// (RegionShaderProps.masks — usually 1 entry, up to MAX_REGION_MASKS for compositing several
+// independently-segmented subjects onto one shared background). Renders full-frame as the app
+// beat's content; chrome/captions composite on top exactly as a normal app beat (KinoVideo layers
+// them above this in its own passes).
 //
 // VIDEO sources (mask.mp4, and a video beat asset) do NOT use a <video> element: <video> seeking
 // never advances under kino's deterministic headless capture, so the split froze at frame 0. They
@@ -16,8 +18,8 @@
 // settleImages plays for DOM <img>. So frame 0 is never the bare night fill.
 import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
-import type { RegionShaderProps, Theme } from "../../props.js";
-import { assembleRegionShaderSource } from "../../shaderSource.js";
+import type { RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
+import { assembleRegionShaderSource, MAX_REGION_MASKS } from "../../shaderSource.js";
 import { useFrameImageUrl } from "./media";
 
 const VERT = `#version 300 es
@@ -26,14 +28,16 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-// Manifest channel → uChannel dot-swizzle. gray masks carry coverage in r.
-const CHANNEL_VEC: Record<RegionShaderProps["channel"], [number, number, number, number]> = {
+// Manifest channel → uChannel dot-swizzle. gray masks carry coverage in r. An unbound slot (beyond
+// region.masks.length) gets the zero vector so it never contributes to the union.
+const CHANNEL_VEC: Record<RegionShaderMask["channel"], [number, number, number, number]> = {
   r: [1, 0, 0, 0],
   g: [0, 1, 0, 0],
   b: [0, 0, 1, 0],
   a: [0, 0, 0, 1],
   gray: [1, 0, 0, 0],
 };
+const ZERO_VEC: [number, number, number, number] = [0, 0, 0, 0];
 
 // Render page must await these before capturing a frame: initial texture loads + per-frame image
 // uploads. Mirrors settleImages for RegionShader's off-DOM Image() + WebGL output. Each entry
@@ -76,7 +80,7 @@ interface GLState {
   prog: WebGLProgram;
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
-  mask: Slot;
+  masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
 }
 
 function uploadTex(gl: WebGL2RenderingContext, unit: number, handle: WebGLTexture, src: TexImageSource): void {
@@ -119,6 +123,20 @@ async function makeSlot(
   return slot;
 }
 
+// Inert 1×1 texture for a mask slot beyond region.masks.length — its uChannel is always the zero
+// vector (see ZERO_VEC), so its content never contributes to the union; this just keeps every
+// declared uMaskN sampler complete without fetching anything.
+function makePlaceholderSlot(gl: WebGL2RenderingContext, unit: number, samplerLoc: WebGLUniformLocation | null): Slot {
+  const handle = gl.createTexture()!;
+  gl.activeTexture(gl.TEXTURE0 + unit);
+  gl.bindTexture(gl.TEXTURE_2D, handle);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+  if (samplerLoc) gl.uniform1i(samplerLoc, unit);
+  return { handle, unit };
+}
+
 // Upload this frame's extracted <img> into a frame-video slot when the /vframes URL changed. No-op
 // for static image slots and for repeat/absent URLs.
 async function updateFrameSlot(gl: WebGL2RenderingContext, slot: Slot, url: string | null): Promise<void> {
@@ -127,9 +145,15 @@ async function updateFrameSlot(gl: WebGL2RenderingContext, slot: Slot, url: stri
   slot.frameVideo.lastUrl = url;
 }
 
-// Compile the program + build both texture slots. Never rejects — failure resolves null (the beat
-// keeps the night fill, same policy as a broken <Img>). Cached once per component via initRef.
-async function initGL(canvas: HTMLCanvasElement, assetSrc: Src, maskSrc: Src, region: RegionShaderProps): Promise<GLState | null> {
+// Compile the program + build the asset slot and every mask slot (real sources first, inert
+// placeholders for the rest). Never rejects — failure resolves null (the beat keeps the night
+// fill, same policy as a broken <Img>). Cached once per component via initRef.
+async function initGL(
+  canvas: HTMLCanvasElement,
+  assetSrc: Src,
+  maskSrcs: Src[],
+  region: RegionShaderProps,
+): Promise<GLState | null> {
   try {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false });
     if (!gl) return null;
@@ -155,13 +179,19 @@ async function initGL(canvas: HTMLCanvasElement, assetSrc: Src, maskSrc: Src, re
       return null;
     }
     const loc: Record<string, WebGLUniformLocation | null> = {};
-    for (const n of ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0", "uMask", "uChannel"]) {
-      loc[n] = gl.getUniformLocation(prog, n);
-    }
+    const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0"];
+    for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
+    for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     const assetSlot = await makeSlot(gl, 0, assetSrc, loc.uTex0);
-    const maskSlot = await makeSlot(gl, 1, maskSrc, loc.uMask);
-    return { gl, prog, loc, asset: assetSlot, mask: maskSlot };
+    const masks: Slot[] = [];
+    for (let i = 0; i < MAX_REGION_MASKS; i++) {
+      const unit = i + 1; // unit 0 is the asset
+      masks.push(
+        i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMask${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMask${i}`]),
+      );
+    }
+    return { gl, prog, loc, asset: assetSlot, masks };
   } catch (err) {
     console.error(String(err));
     return null;
@@ -174,19 +204,19 @@ async function drawFrame(
   canvas: HTMLCanvasElement,
   initRef: React.MutableRefObject<Promise<GLState | null> | null>,
   assetSrc: Src,
-  maskSrc: Src,
+  maskSrcs: Src[],
   region: RegionShaderProps,
   frame: number,
   width: number,
   height: number,
 ): Promise<void> {
   try {
-    initRef.current ??= initGL(canvas, assetSrc, maskSrc, region);
+    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region);
     const st = await initRef.current;
     if (!st) return;
     const { gl, prog, loc } = st;
     await updateFrameSlot(gl, st.asset, assetSrc.frameUrl);
-    await updateFrameSlot(gl, st.mask, maskSrc.frameUrl);
+    await Promise.all(maskSrcs.map((src, i) => updateFrameSlot(gl, st.masks[i], src.frameUrl)));
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
@@ -199,8 +229,11 @@ async function drawFrame(
     gl.uniform1f(loc.iTime, frame / 30);
     gl.uniform1i(loc.iFrame, frame);
     gl.uniform1f(loc.iTimeDelta, 1 / 30);
-    const ch = CHANNEL_VEC[region.channel] ?? CHANNEL_VEC.gray;
-    gl.uniform4f(loc.uChannel, ch[0], ch[1], ch[2], ch[3]);
+    for (let i = 0; i < MAX_REGION_MASKS; i++) {
+      const m = region.masks[i];
+      const ch = m ? CHANNEL_VEC[m.channel] ?? CHANNEL_VEC.gray : ZERO_VEC;
+      gl.uniform4f(loc[`uChannel${i}`], ch[0], ch[1], ch[2], ch[3]);
+    }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish();
   } catch (err) {
@@ -213,8 +246,8 @@ export const RegionShader: React.FC<{
   region: RegionShaderProps;
   t: Theme;
   assetMediaKey?: string; // /vframes key when the beat asset is a video (else the asset is a static image)
-  maskMediaKey?: string; // /vframes key when the mask is video (maskKind === "video")
-}> = ({ asset, region, t, assetMediaKey, maskMediaKey }) => {
+  maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
+}> = ({ asset, region, t, assetMediaKey, maskMediaKeys }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -222,13 +255,22 @@ export const RegionShader: React.FC<{
 
   // Current-frame /vframes URLs for the video sources (null for static-image sources or un-extracted
   // sparse-still frames). Same lookup FrameVideo uses, so the GL texture tracks the identical frame.
+  // Fixed MAX_REGION_MASKS hook calls (rules of hooks) regardless of how many masks this beat has.
   const assetSrc: Src = { frameVideo: !!assetMediaKey, staticUrl: staticFile(asset), frameUrl: useFrameImageUrl(assetMediaKey) };
-  const maskSrc: Src = { frameVideo: !!maskMediaKey, staticUrl: staticFile(region.maskSrc), frameUrl: useFrameImageUrl(maskMediaKey) };
+  /* eslint-disable react-hooks/rules-of-hooks */
+  const maskFrameUrls: (string | null)[] = [];
+  for (let i = 0; i < MAX_REGION_MASKS; i++) maskFrameUrls.push(useFrameImageUrl(maskMediaKeys?.[i]));
+  /* eslint-enable react-hooks/rules-of-hooks */
+  const maskSrcs: Src[] = region.masks.map((m, i) => ({
+    frameVideo: m.maskKind === "video",
+    staticUrl: staticFile(m.maskSrc),
+    frameUrl: maskFrameUrls[i],
+  }));
 
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    track(drawFrame(canvas, initRef, assetSrc, maskSrc, region, frame, width, height));
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height));
   });
 
   return (

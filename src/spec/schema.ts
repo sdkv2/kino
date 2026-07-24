@@ -129,16 +129,29 @@ const Segment = z.discriminatedUnion("kind", [
         }),
       })
       .optional(),
-    // Per-mask-region shaders: the segmentation mask splits this beat's frame — the subject region
-    // (mask>0.5) runs one .frag body, the background region (mask<=0.5) another. `mask` is a mask
-    // asset dir (manifest.json + mask.png/mask.mp4); `object` picks the manifest object → channel.
+    // Per-mask-region shaders: the segmentation mask(s) split this beat's frame — the subject region
+    // (union of the given mask/object channels, each >0.5) runs one .frag body, the background
+    // region (nothing selected) another. `mask`+`object` is the single-mask shorthand; `masks` (up
+    // to 4 entries) unions multiple mask sources/objects into one subject — e.g. two separately
+    // `kino segment`-ed subjects cut onto one shared background. Exactly one of mask/masks required.
     regionShader: z
       .object({
-        mask: z.string().min(1), // mask asset dir, e.g. "masks/clip"
-        subject: z.string().min(1).optional(), // .frag/.glsl body; region where mask>0.5
-        background: z.string().min(1).optional(), // .frag/.glsl body; region where mask<=0.5
-        object: z.number().int().min(0).max(3).default(0),
+        mask: z.string().min(1).optional(), // mask asset dir, e.g. "masks/clip"
+        object: z.number().int().min(0).max(3).default(0), // manifest object → channel, for `mask`
+        masks: z
+          .array(
+            z.object({
+              mask: z.string().min(1),
+              object: z.number().int().min(0).max(3).default(0),
+            }),
+          )
+          .min(1)
+          .max(4)
+          .optional(),
+        subject: z.string().min(1).optional(), // .frag/.glsl body; region where any selected mask>0.5
+        background: z.string().min(1).optional(), // .frag/.glsl body; region where none are
       })
+      .refine((v) => v.mask || v.masks, { message: "regionShader needs mask or masks" })
       .refine((v) => v.subject || v.background, { message: "regionShader needs at least one of subject/background" })
       .optional(),
     captionMode: CaptionMode.optional(),

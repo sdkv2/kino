@@ -109,12 +109,21 @@ export function assembleShaderSource(body: string, extraNames: string[] = []): s
   );
 }
 
-// Region-shader extra uniforms: the segmentation mask sampler + a dot-swizzle channel selector.
-// uChannel picks the manifest object's coverage channel at bind time (r/g/b/a/gray→r), so the
-// assembler stays channel-agnostic. uMaskSize is css-px parity with uTexSize* (unused today).
+// Up to this many mask sources union into one subject region (see RegionShaderProps.masks).
+export const MAX_REGION_MASKS = 4;
+
+// Region-shader extra uniforms: up to MAX_REGION_MASKS segmentation mask samplers, each with a
+// dot-swizzle channel selector. uChannelN picks maskN's manifest object's coverage channel at bind
+// time (r/g/b/a/gray→r); an unbound slot's uChannelN is left at (0,0,0,0) so it never contributes to
+// the union regardless of what's in its (placeholder) texture — same "unbound reads as nothing"
+// convention as uTex0..3.
 const REGION_HEADER =
   UNIFORM_HEADER +
-  "\nuniform sampler2D uMask;\nuniform vec2 uMaskSize;\nuniform vec4 uChannel;";
+  "\n" +
+  Array.from(
+    { length: MAX_REGION_MASKS },
+    (_, i) => `uniform sampler2D uMask${i};\nuniform vec4 uChannel${i};`,
+  ).join("\n");
 
 // Null-side body: sample the beat asset (uTex0) unchanged. fragCoord/iResolution.xy is the 0..1 uv
 // (textures upload UNPACK_FLIP_Y'd, so v=0 is the bottom row — matches gl_FragCoord orientation).
@@ -158,7 +167,12 @@ export function assembleRegionShaderSource(
     "  vec4 s, b;\n" +
     "  regionSubject(s, gl_FragCoord.xy);\n" +
     "  regionBg(b, gl_FragCoord.xy);\n" +
-    "  float m = dot(texture(uMask, gl_FragCoord.xy / iResolution.xy), uChannel);\n" +
+    "  vec2 muv = gl_FragCoord.xy / iResolution.xy;\n" +
+    "  float m = 0.0;\n" +
+    Array.from(
+      { length: MAX_REGION_MASKS },
+      (_, i) => `  m = max(m, dot(texture(uMask${i}, muv), uChannel${i}));\n`,
+    ).join("") +
     "  kino_fragColor = mix(b, s, m);\n" +
     "}\n"
   );

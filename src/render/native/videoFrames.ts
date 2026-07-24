@@ -69,13 +69,17 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
       const j = appMediaJob(props.segments, i, fps, `seg${i}`, s.asset);
       if (j) jobs.push(j);
     }
-    // Region-shader video mask (uMask): same source-time progression as the beat asset so a
+    // Region-shader video mask(s) (uMask0..N): same source-time progression as the beat asset so a
     // clipped/frozen beat samples the matching mask frame. Routed through /vframes because <video>
-    // seeking never advances under deterministic headless capture.
+    // seeking never advances under deterministic headless capture. One job per masks[] entry that's
+    // a video (image masks need no extraction).
     const rs = s.regionShader;
-    if (rs && rs.maskKind === "video") {
-      const j = appMediaJob(props.segments, i, fps, `rsmask${i}`, rs.maskSrc);
-      if (j) jobs.push(j);
+    if (rs) {
+      rs.masks.forEach((m, j) => {
+        if (m.maskKind !== "video") return;
+        const job = appMediaJob(props.segments, i, fps, `rsmask${i}_${j}`, m.maskSrc);
+        if (job) jobs.push(job);
+      });
     }
   });
   return jobs;

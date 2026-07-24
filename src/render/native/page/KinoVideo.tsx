@@ -76,13 +76,14 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
             {s.regionShader ? (
               // Mask-split dual shader replaces the footage draw; kicker/captions still layer on top.
               // Video asset/mask animate via the same /vframes pipeline as footage (seg${i} entry is
-              // already extracted for app beats; rsmask${i} is registered in planMediaJobs).
+              // already extracted for app beats; rsmask${i}_${j} is registered in planMediaJobs, one
+              // per region.masks entry that's a video mask).
               <RegionShader
                 asset={s.asset!}
                 region={s.regionShader}
                 t={theme}
                 assetMediaKey={/\.(mp4|mov)$/i.test(s.asset!) ? `seg${i}` : undefined}
-                maskMediaKey={s.regionShader.maskKind === "video" ? `rsmask${i}` : undefined}
+                maskMediaKeys={s.regionShader.masks.map((m, j) => (m.maskKind === "video" ? `rsmask${i}_${j}` : undefined))}
               />
             ) : (
             <AppCutaway
