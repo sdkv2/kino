@@ -28,4 +28,9 @@ describe("assembleRegionShaderSource", () => {
     expect(src).toContain(BG);
     expect((src.match(/void main\(\)/g) ?? []).length).toBe(1);
   });
+
+  it("injects kinoMaskDist so region bodies can read distance to the mask edge", () => {
+    const src = assembleRegionShaderSource(SUBJ, null, []);
+    expect(src).toContain("float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius)");
+  });
 });

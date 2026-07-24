@@ -60,6 +60,29 @@ vec4 kinoBackdrop(sampler2D tex, vec2 texSize, vec2 fragCoord){
 vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset){
   return texture(tex, kinoMirrorUV(kinoCoverUV(texSize, fragCoord) + offset));
 }
+// Signed distance in PIXELS from this pixel to the nearest mask boundary: negative inside the
+// masked region, positive outside, saturating at ±radius. Region shaders otherwise see only a
+// binary in/out, which is what blocks rim light, outline, outward glow, edge fringe and
+// erode/dilate. Takes the sampler + channel so it serves any uMask0..3 from either region body.
+// Approximate by design: a golden-angle spiral with linear radial spacing, so resolution is
+// radius/24 px and a feature thinner than that step can be missed — at radius 24 the step is
+// 1px, at radius 240 it is 10px and thin detail will alias. Reads only the texture and the
+// coordinate, so determinism holds.
+#define KINO_MASK_TAPS 24
+float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius){
+  vec2 res = iResolution.xy;
+  vec2 uv = fragCoord / res;
+  vec2 texel = 1.0 / res;
+  float here = step(0.5, dot(texture(mask, uv), channel));
+  float best = radius;
+  for (int i = 0; i < KINO_MASK_TAPS; i++){
+    float r = (float(i) + 1.0) / float(KINO_MASK_TAPS) * radius;
+    float a = float(i) * 2.39996323;
+    float s = step(0.5, dot(texture(mask, uv + vec2(cos(a), sin(a)) * r * texel), channel));
+    if (s != here) { best = min(best, r); }
+  }
+  return here > 0.5 ? -best : best;
+}
 `;
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
