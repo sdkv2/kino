@@ -72,3 +72,12 @@ REMAINING: the generic `backgroundTextures` `{kind:"video"}` channel
 (`bgTextures.ts`) still uses the frozen `<video>`-seek (page-global scope, not
 trivially routable through per-beat /vframes). Apply the same /vframes routing
 there. Lower priority — region shaders are the primary video-mask surface.
+
+## CUDA backend — GPU verification pending (2026-07-24)
+
+CUDA backend shipped (native PyTorch SAM3.1, real tracking by design). Image path
+CPU-verified. Video-tracking pipeline runs end-to-end on CPU but ~45 min/frame —
+a full tracked mask.mp4 was NOT produced-and-verified. TODO: run
+`scripts/sam_runner_cuda.py --video --device cuda` on a real NVIDIA GPU with a
+realistic clip; confirm tracked:true output + mask actually tracks the object
+across frames. HF Jobs path is ready (l4x1/a10g, ~$0.25) once account has credits.

@@ -134,6 +134,8 @@ Tracking depends on the backend:
 - **coreml** — **per-frame** (`tracked: false`). Each frame is segmented independently, so fast motion can flicker. True temporal tracking is verified as a CoreML package but not yet wired end-to-end (the conditioning-frame memory-encode export is the gap; see `docs/segmentation-tracking-todo.md` and `.superpowers/sdd/coreml-io-reference.md`).
 - **cuda** — **real temporal tracking** (`tracked: true`). The full SAM3.1 multiplex video predictor runs in PyTorch: a text prompt is added on frame 0 and propagated through the clip, so each object keeps a stable identity across frames (its R/G/B channel) and masks are temporally coherent. This is the recommended path for moving subjects.
 
+  > **Verification status (2026-07-24):** the CUDA image path is CPU-verified (real `backend:cuda` mask). The video-tracking pipeline is confirmed to *run* end-to-end on CPU (session start → `add_prompt` → `propagate_in_video` all execute), but a full tracked `mask.mp4` has **not** been produced-and-checked yet: CPU propagation is ~45 min/frame (unusable) and needs a real NVIDIA GPU + a realistic clip to verify. Run it on GPU to confirm `tracked:true` output before relying on it. The runner fails cleanly (`exit 2`) if the detector finds no objects — it never fabricates a mask.
+
 ## Platform
 
 - **Generating masks**: macOS/Apple Silicon → **coreml**; Linux/Windows + NVIDIA → **cuda** (native PyTorch, real video tracking); `mock` anywhere.
