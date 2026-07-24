@@ -1,0 +1,20 @@
+{
+  "brand": "generic",
+  "title": "region-smoke",
+  "format": ["9:16"],
+  "provider": "none",
+  "segments": [
+    {
+      "kind": "app",
+      "asset": "segdemo/subject.png",
+      "text": "region split smoke test",
+      "dur": 2,
+      "regionShader": {
+        "mask": "masks/segdemo-mask",
+        "subject": "backgrounds/region-red.frag",
+        "background": "backgrounds/region-green.frag",
+        "object": 0
+      }
+    }
+  ]
+}
