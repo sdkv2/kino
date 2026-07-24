@@ -68,7 +68,7 @@ Three consumption paths, cheapest to richest.
 
 ### 1. Mask as a shader texture channel
 
-Any mask file is a `backgroundTextures` channel (`uTex0..uTex3`). Image mask = static; a video mask channel currently renders at its first frame (see the video-mask limitation under Region shaders):
+Any mask file is a `backgroundTextures` channel (`uTex0..uTex3`). Image mask = static. **Note:** a *video* source in this generic `backgroundTextures` channel currently renders **frozen at frame 0** (it still uses the `<video>`-seek path). For animated video masks use **region shaders** (below), which route video through the `/vframes` frame pipeline. Routing this generic channel the same way is queued in `docs/segmentation-tracking-todo.md`.
 
 ```json
 "background": "custom",
@@ -101,7 +101,7 @@ On an `app` beat, `regionShader` splits the beat's own asset by the mask: the **
 
 Each `.frag` is an ordinary ShaderToy-style `mainImage` body (the same format as a shader background) — normal shaders work as region shaders unchanged. Omit `subject` or `background` to pass that region's original asset pixels through. `object` picks which mask object (its R/G/B/A channel) does the split.
 
-> **Video-mask animation — known limitation (2026-07-24).** In the deterministic render capture, a `mask.mp4` (and a video beat asset) currently render **frozen at their first frame** — the `<video>`-seek seam does not advance under headless capture, the same reason kino extracts footage frames node-side (`src/render/native/videoFrames.ts`). So a *moving* subject is NOT tracked frame-to-frame yet. **Image masks and image assets work fully.** For video today, either use a single representative mask frame, or wait for the fix below. Upgrade path (queued in `docs/segmentation-tracking-todo.md`): route the video mask/asset through the same node-side per-frame extraction footage uses, instead of a `<video>` element.
+A **video** mask (`mask.mp4`) and a **video** beat asset both animate: each source is pre-extracted to per-frame images (`src/render/native/videoFrames.ts` → `/vframes`, the same pipeline footage uses) and the region shader uploads the current composition frame's image to GL each frame — so a moving subject stays masked. Image masks and image assets are static. (Verified: a moving-ellipse mask renders the split at a different position at t=0 vs t=1.5.)
 
 **Multi-object addressing is video-only.** Image masks pack every object into one grayscale `mask.png`, so `object` must be `0` for an image mask (build errors otherwise). Distinct objects need a video mask, where they occupy separate R/G/B channels.
 

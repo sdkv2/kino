@@ -61,3 +61,14 @@ pipeline — `src/render/native/videoFrames.ts` extraction → `/vframes/<dir>/<
 the current-frame `<img>` (as `FrameVideo` does) drawn into the GL texture each
 composition frame — instead of a `<video>` seek. Infra already exists; it is a
 wiring task in `RegionShader.tsx` (headline) and the bgTextures video channel.
+
+### UPDATE 2026-07-24: region-shader video FIXED
+
+Region-shader video masks + video assets now animate — routed through the
+`/vframes` node-side frame pipeline (commit b49315e). Verified: moving-ellipse
+mask renders the split at different x-positions at t=0 vs t=1.5.
+
+REMAINING: the generic `backgroundTextures` `{kind:"video"}` channel
+(`bgTextures.ts`) still uses the frozen `<video>`-seek (page-global scope, not
+trivially routable through per-beat /vframes). Apply the same /vframes routing
+there. Lower priority — region shaders are the primary video-mask surface.
