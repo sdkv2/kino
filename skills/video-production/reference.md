@@ -33,7 +33,7 @@ step.**
   a labeled contact sheet, in one call. "View this clip."
 - `kino frames <video> --count N | --every S | --at 1,3,5 [--montage]` — pull stills.
 
-**Source recordings (production):** to cut a long capture into `app` beats, seat it in chrome, or
+**Source recordings (production):** to cut a long capture into `video` beats, seat it in chrome, or
 retiming with `speed`/`pauseAt`, follow the `importing-footage` skill. Use `kino frames` on the
 source file (not `scan`/`transcribe`). App fields: `clipFrom`, `clipTo`, `speed`, `pauseAt`, `frame`.
 
@@ -51,7 +51,7 @@ that assigns a brand and optional default overrides:
 - kino infers the project by walking up from the spec's path to the nearest `project.json`
   (`kino build projects/launch/specs/hook.json`), or use `--project <name>`.
 - Precedence: CLI flag > spec > project.json > brand. A spec may omit `brand` (the project supplies it).
-- Brands are shared at the workspace, so brand assets (`logo`, `facelessBackdrop`) are workspace-relative;
+- Brands are shared at the workspace, so brand assets (`logo`, `backdrop`) are workspace-relative;
   app assets (`assets/...`) are project-relative.
 - Specs must live under `projects/<name>/specs/` (with a `project.json`). No flat layout.
 
@@ -64,7 +64,7 @@ for true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `ou
 
 ## Brand config (`brands/<name>/brand.md` YAML frontmatter)
 `name, colors{night,mint,green,white,gold}, font, labelFont?, captionStyle{fontSize,strokeWidth,background?,style?,animation?},
-disclosure, facelessDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
+disclosure, presenterDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
 defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}` (+ the logo/background/provider fields below).
 
 Frontmatter is validated **strict** — an unknown key throws at parse, not silently ignored. The
@@ -78,13 +78,13 @@ say/never-say examples, brand bans. Agents read it via `kino brand <name>` and a
 writing copy. The renderer ignores the body.
 
 Faceless branding (optional):
-- `logo` — transparent brand mark (PNG); shown on faceless talking beats.
+- `logo` — transparent brand mark (PNG); shown on presenter-less talking beats.
 - `logoSize` — `small` (100px) / `medium` (150) / `big` (220) / a number. `logoPosition` — `top` /
   `bottom` / `left` / `right` / `center` / custom `{x,y}` (% of frame). Spec overrides brand; see `kino elements`.
   Tween it over time with spec `logoKeyframes: [{ at, params: { x, y, scale, opacity }, ease? }]`.
-- `background` — faceless background engine (see below). Default: `glow`. Set `background: "image"`
+- `background` — background engine (see below). Default: `glow`. Set `background: "image"`
   when using a backdrop. Override per-video with spec `background` or `--background <kind>`.
-- `facelessBackdrop` — image used when `background: "image"` (required for that kind).
+- `backdrop` — image used when `background: "image"` (required for that kind).
 - `backgroundComponent` — custom draw-fn file, used when `background: "custom"`.
 - `backgroundColors` — palette for animated backgrounds (default: mint/green/gold).
 - `backgroundIntensity` — 0..1 motion strength (default 0.5); spec `backgroundIntensity` overrides.
@@ -94,7 +94,7 @@ Frame-driven (deterministic) layers behind the hero text; a center scrim is auto
 The backdrop is always the base layer (even in avatar mode), so app cut-in transitions reveal the brand
 background rather than black — the avatar covers it on camera.
 - `glow` — animated CSS brand glows (zero-config default).
-- `image` — static `facelessBackdrop` with a slow Ken-Burns.
+- `image` — static `backdrop` with a slow Ken-Burns.
 - `solid` — static night + glow (**loop-safe**; no global-frame drift).
 - `mesh` / `aurora` / `particles` / `grid` — built-in Canvas2D presets (draft-friendly; mesh is an easy generic tell).
 - `custom` — your own Canvas2D `draw` fn. Set `backgroundComponent` on the **spec** (overrides brand) or
@@ -129,7 +129,7 @@ Provider-specific:
 - `replicateImageField` / `replicateAudioField` — input keys for the chosen model (defaults `image` / `audio`).
 - `replicateInput` — extra model inputs (default `{}`). Community models need their own keys, e.g. SadTalker:
   `replicateModel: "cjwbw/sadtalker"`, `replicateImageField: "source_image"`, `replicateAudioField: "driven_audio"`.
-- Note: `bytedance/omni-human` is premium + slow (~100s+ per short clip); faceless stays the cheap default.
+- Note: `bytedance/omni-human` is premium + slow (~100s+ per short clip); no presenter stays the cheap default.
 
 ## Env keys (`.env`, never committed)
 - `ELEVENLABS_API_KEY` — always (voiceover).
@@ -188,7 +188,7 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - **Caption backplate** (legibility over light app screenshots): set brand
   `captionStyle.background { color?, opacity?, appOnly? }` to draw a translucent rounded panel behind the
   lower-third caption. Defaults: `color` = brand `night`, `opacity` = 0.82, `appOnly` = true (only behind
-  captions on `app` cut-ins; faceless hero text is never plated). Opt-in — omit it and captions render
+  captions on `video` cut-ins; hero text is never plated). Opt-in — omit it and captions render
   exactly as before. Pairs with `captionKeyframes` for positioning.
 - **Caption look** (`captionStyle`, top-level or per-segment, layered `segment ?? spec ?? brand.captionStyle.style`,
   default `stroke`): `stroke` (legacy — white ink, black stroke, mint active-word highlight) · `highlight`
@@ -198,7 +198,7 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 - **Caption entrance** (`captionAnimation`, same layering, `brand.captionStyle.animation`): `pop` (spring
   scale-in) · `rise` (translateY cascade) · `typewriter` (staggered instant reveal) · `wave` (pop then a
   per-word sine bob) · `blur-in` (blur→0 + fade) · `none` (static). Unset = the surface's native entrance
-  (`pop`; `rise` for faceless hero text) — word-reveal *timing* in `words` mode always stays VO-driven,
+  (`pop`; `rise` for hero text) — word-reveal *timing* in `words` mode always stays VO-driven,
   the preset only shapes each word's entrance motion.
 - **Caption reveal** (`captionReveal`, `words` mode only; layered `segment ?? spec ?? brand.captionStyle.reveal`,
   default `word`): `word` reveals each word at its VO time (per-word pop); `all` lays the whole caption out

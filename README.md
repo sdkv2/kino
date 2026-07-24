@@ -16,7 +16,7 @@
 
 **kino** is a video engine: a framework you author in and a renderer that turns what you wrote
 into a finished MP4. You (or an agent) write a JSON spec; kino renders it — ElevenLabs voiceover,
-an optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** background / motion graphic,
+a background or motion graphic, and an optional AI presenter (HeyGen / Hedra / Replicate),
 composited frame-by-frame in headless Chrome (9:16, 3:4, 16:9, …). Same spec → same frames.
 
 The spec is the source; the MP4 is the build artifact. Edits are spec edits and a rebuild, not
@@ -37,12 +37,12 @@ timeline drags — so revisions diff, review, and version like code.
 </tr>
 </table>
 
-<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> from a JSON spec — faceless, ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
+<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> from a JSON spec, with ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
 
 ## Pipeline at a glance
 ```
-spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ avatar plan + trim
-          ─▶ avatar (HeyGen/Hedra/Replicate) or faceless background / motion graphics
+spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ presenter plan + trim
+          ─▶ background / motion graphics, plus an optional presenter (HeyGen/Hedra/Replicate)
           ─▶ native render (headless Chrome) ─▶ ffmpeg ─▶ out/<title>/…mp4
 ```
 No LLM inside the CLI: every step is deterministic, so the same spec renders the same video.
@@ -54,12 +54,12 @@ npx @sdkv2/kino init acme                                     # scaffold .env, b
 npx @sdkv2/kino build projects/acme/specs/sample.json --mock  # free structural preview, no API spend
 npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → projects/acme/out/sample/
 ```
-`init` writes a ready-to-build faceless sample (provider `none`, $0) — the first build works with
+`init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with
 no editing. Swap in your own spec once the preview looks right.
 
 Needs Node 20+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Real voiceover needs
 an [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project);
-avatar builds also need their provider's key. `kino doctor` checks all of it.
+presenter builds also need their provider's key. `kino doctor` checks all of it.
 
 Repo install, Windows, or the guided API-key walkthrough:
 [getting started](docs/getting-started.md).
@@ -77,9 +77,9 @@ kino skills --install        # inside a kino workspace — symlinks into .agents
 Details: [`skills/README.md`](skills/README.md).
 
 ## Features
-- **Avatar providers** — `none` (faceless, $0), `heygen`, `hedra`, `replicate`. Trimmed to
-  on-camera beats to cut spend; VO + avatar are content-hash cached.
-- **Faceless backgrounds** — `glow`, `image`, `mesh`, `aurora`, `particles`, `grid`, `custom`,
+- **Presenters as a video source** — a beat asks for one with `"source": "avatar:"` (or pins
+  `heygen:`/`hedra:`/`replicate:`). Trimmed to on-camera beats to cut spend, and content-hash cached.
+- **Backgrounds** — `glow`, `image`, `mesh`, `aurora`, `particles`, `grid`, `custom`,
   auto-coloured from the brand. Plus WebGL shaders and `kino segment` masking.
 - **Captions** — an editorial block, or word-by-word revealed against real VO timestamps.
 - **Motion graphics** — HTML/CSS/JS/Lottie beats driven per-frame, sanitized and determinism-linted.
@@ -125,7 +125,7 @@ Longer guides are in [`docs/`](docs/):
 - [CLI reference](docs/cli-reference.md) — every command + flag.
 - [Spec reference](docs/spec-reference.md) — the JSON spec, `brand.md`, `project.json`.
 - [Motion graphics](docs/motion-graphics.md) — author custom animated beats/overlays in HTML/CSS.
-- [Backgrounds & overlays](docs/backgrounds-and-overlays.md) — faceless backgrounds, logo, captions, kickers.
+- [Backgrounds & overlays](docs/backgrounds-and-overlays.md) — backgrounds, logo, captions, kickers.
 - [Segmentation](docs/segmentation.md) — `kino segment` masks and `regionShader`.
 
 ## Development

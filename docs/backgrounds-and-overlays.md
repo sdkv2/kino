@@ -1,8 +1,8 @@
 # Backgrounds & overlays
 
-For faceless beats (no avatar), kino renders a deterministic, brand-coloured **background**. On any beat it can also lay out **overlay elements** — the logo mark, captions, and kickers — all tweenable on one shared keyframe layer. This page documents both. For where these fields live in the spec, see the [Spec reference](spec-reference.md); for fully custom animated beats, see [Motion graphics](motion-graphics.md).
+Behind every beat, kino renders a deterministic, brand-coloured **background**. On any beat it can also lay out **overlay elements** — the logo mark, captions, and kickers — all tweenable on one shared keyframe layer. This page documents both. For where these fields live in the spec, see the [Spec reference](spec-reference.md); for fully custom animated beats, see [Motion graphics](motion-graphics.md).
 
-- [Faceless backgrounds](#faceless-backgrounds)
+- [Backgrounds](#backgrounds)
 - [Animating a background](#animating-a-background)
 - [Custom backgrounds](#custom-backgrounds)
 - [Overlay elements](#overlay-elements)
@@ -14,7 +14,7 @@ Select the engine with `background` (spec) / `--background` (CLI) / `brand.backg
 | Preset | Animated | Description |
 |---|---|---|
 | `glow` | — | Soft CSS radial glow (calm, cheap). |
-| `image` | — | A static backdrop image (`brand.facelessBackdrop`). |
+| `image` | — | A static backdrop image (`brand.backdrop`). |
 | `mesh` | ✅ | Flowing gradient mesh (**draft default — easy generic tell**). |
 | `aurora` | ✅ | Drifting aurora ribbons. |
 | `particles` | ✅ | Floating brand-coloured particles. |
@@ -88,15 +88,15 @@ Craft playbook: `skills/shader-backgrounds`. Library ids in `assets-lib/backgrou
 Run `kino backgrounds` for the picker + library ids.
 
 For richer full-screen UI (typed terminals, pipelines), prefer [motion graphics](motion-graphics.md)
-and paint a full-bleed `.bg` inside the graphic — that occludes the faceless layer entirely.
+and paint a full-bleed `.bg` inside the graphic — that occludes the background layer entirely.
 Pair `kino-glass` with a **structured** shader field (not a flat night), not frosted CSS blur.
 
 | When | Use |
 |---|---|
-| Brand identity on faceless / caption cards | `custom` + `backgroundComponent` (`.js` or `.frag`) |
+| Brand identity on scene / caption cards | `custom` + `backgroundComponent` (`.js` or `.frag`) |
 | Raymarch / plasma / photo refraction | `.frag` + `skills/shader-backgrounds` |
 | Seamless loop / settle | `solid` (or custom that ignores frame drift at edges) + motion `.bg` |
-| Real photo backdrop (static) | `image` + `facelessBackdrop` |
+| Real photo backdrop (static) | `image` + `backdrop` |
 | Quick draft | `glow` / `mesh` / `aurora` — replace before ship if the frame is the brand |
 
 ## Overlay elements
@@ -105,7 +105,7 @@ Run `kino elements` for the live contract. All overlays tween on the shared keyf
 
 ### Logo
 
-Shown on faceless talking beats. Set `logoSize`/`logoPosition` (spec or brand), and tween with `logoKeyframes` (`params: { x, y, scale, opacity }`).
+Shown on presenter-less talking beats. Set `logoSize`/`logoPosition` (spec or brand), and tween with `logoKeyframes` (`params: { x, y, scale, opacity }`).
 
 | Size | px |
 |---|---|
@@ -142,6 +142,6 @@ Tween per segment with `captionKeyframes` (`params: { x, y, scale, opacity }`, x
 
 ### Kickers
 
-The small label on `app` beats (`kicker: { text, color }`, color ∈ `mint|green|gold`) tweens via `kickerKeyframes` (`params: { x, y, scale, opacity }`).
+The small label on `video` beats (`kicker: { text, color }`, color ∈ `mint|green|gold`) tweens via `kickerKeyframes` (`params: { x, y, scale, opacity }`).
 
 See also: [Spec reference](spec-reference.md) · [CLI reference](cli-reference.md) · [Motion graphics](motion-graphics.md).

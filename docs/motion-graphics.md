@@ -85,7 +85,7 @@ Agent playbooks: recipes (caption-free montage, spoof chat window, camera-follow
     '<b style="opacity:' + (caretOn ? 1 : 0) + '">█</b></span>';
   ```
 
-  Works in a full-screen `kind:"motion"` beat **and** as a `motionOverlay` on an `app`/`avatar` beat (the
+  Works in a full-screen `kind:"motion"` beat **and** as a `motionOverlay` on a `video`/`scene` beat (the
   overlay gets its host beat's words).
 
 ### Camera zoom / pan inside a motion graphic
@@ -430,14 +430,14 @@ When a graphic needs organic illustrated motion, complex vector morphs, or desig
 { "kind": "motion", "source": "motion/confetti.json", "text": "We just shipped it." }
 ```
 
-Tier-3 Lottie works in **all three motion slots**: a full-screen `kind:"motion"` beat, a `motionOverlay` on an `avatar` beat, and a `motionOverlay` on an `app` beat.
+Tier-3 Lottie works in **all three motion slots**: a full-screen `kind:"motion"` beat, a `motionOverlay` on a `scene` beat, and a `motionOverlay` on a `video` beat.
 
 ### Playback
 
 By default the animation plays **once, stretched** so its full duration spans the beat — matching the system's "everything is progress across the beat" model. Add `"loop": true` (a sibling of `source`) to loop the animation at native speed instead:
 
 ```json
-{ "kind": "app", "asset": "screens/dashboard.png", "text": "...", "caption": "...",
+{ "kind": "video", "source": "screens/dashboard.png", "text": "...", "caption": "...",
   "motionOverlay": { "source": "motion/sparkle.json", "loop": true } }
 ```
 

@@ -378,7 +378,7 @@ const SEGMENT_KIND_HINTS: Record<string, string> = {
   keyframes: "keyframes are motion-only (or motionOverlay)",
   params: "params are motion-only (or motionOverlay)",
   loop: "loop is motion/Lottie-only",
-  cta: "cta is avatar/motion-only",
+  cta: "cta is scene/motion-only",
   motionOverlay: "motionOverlay is avatar/app-only (motion segments use source)",
 };
 

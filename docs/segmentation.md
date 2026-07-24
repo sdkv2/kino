@@ -138,12 +138,12 @@ The shader samples `uTex1` (the mask) to composite — e.g. `mix(bg, subject, te
 
 ### 2. Region shaders — the main event
 
-On an `app` beat, `regionShader` splits the beat's own asset by the mask: the **subject** region (mask > 0.5) runs one shader, the **background** region (mask ≤ 0.5) runs another. Output is the beat's visual; captions/logo composite on top as usual.
+On a `video` beat, `regionShader` splits the beat's own source by the mask: the **subject** region (mask > 0.5) runs one shader, the **background** region (mask ≤ 0.5) runs another. Output is the beat's visual; captions/logo composite on top as usual.
 
 ```json
 {
-  "kind": "app",
-  "asset": "segdemo/subject.png",
+  "kind": "video",
+  "source": "segdemo/subject.png",
   "text": "...",
   "regionShader": {
     "mask": "masks/segdemo-mask",

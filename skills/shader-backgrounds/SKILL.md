@@ -10,7 +10,7 @@ description: >
 # Shader backgrounds in kino
 
 Kino's "3D" look on this branch is **deterministic WebGL2 fragment shaders**
-(ShaderToy `mainImage`) as custom faceless backgrounds, optionally paired with
+(ShaderToy `mainImage`) as custom backgrounds, optionally paired with
 **`kino-glass`** liquid refraction in motion HTML. Not Blender. Not `.scene.js`.
 
 **Craft bar:** `projects/old-light/` (raymarched crystal + galaxy `uTex0` refraction)
@@ -199,7 +199,7 @@ pulses land on triggers, stills match encode (determinism).
 ## Related
 
 - `docs/spec-reference.md` — Shader backgrounds uniforms / textures
-- `docs/backgrounds-and-overlays.md` — faceless presets + custom
+- `docs/backgrounds-and-overlays.md` — background presets + custom
 - `docs/build-and-preview.md` — `KINO_SHADER_*` / `KINO_GPU`
 - `skills/motion-design` — composition + `kino-glass` knobs
 - `src/render/shaderSource.ts` — assemble / helpers / aliases (source of truth)

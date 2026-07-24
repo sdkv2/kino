@@ -29,7 +29,7 @@ kino build <spec> [options]
 | `--mock` | — | Skip all paid APIs (silent VO + placeholder avatar). Free structural render. |
 | `--format <list>` | e.g. `9:16,3:4,16:9` | Comma-separated output formats. |
 | `--provider <name>` | `none\|heygen\|hedra\|replicate` | Override the avatar engine for this render. |
-| `--background <kind>` | `glow\|image\|mesh\|aurora\|particles\|grid\|custom` | Override the faceless background. |
+| `--background <kind>` | `glow\|image\|mesh\|aurora\|particles\|grid\|custom` | Override the background. |
 | `--font <name>` | font name | Override `brand.font` for this render (see [`fonts`](#fonts)). |
 | `--project <name>` | project | Use `projects/<name>` (else inferred from the spec path). |
 | `--tag <label>` | label | Suffix the output filename so variants are kept (auto-set from `--background`/`--font`). |
@@ -324,7 +324,7 @@ kino segment photo.jpg --prompt "the car" --backend mock   # CI / non-Mac
 
 ### `pexels`
 Search Pexels stock **videos** (portrait by default) and download one into a project's `assets/pexels/`.
-Downloaded clips are referenced from `app` segments like any asset (`"asset": "pexels/<id>.mp4"`).
+Downloaded clips are referenced from `video` segments like any asset (`"source": "pexels/<id>.mp4"`).
 Requires `PEXELS_API_KEY` in `.env` (free — [pexels.com/api](https://www.pexels.com/api/)).
 
 ```
@@ -342,7 +342,7 @@ kino pexels "city commute at night" --get 2 --project x  # download match 2 → 
 
 ### `photos`
 Search Pexels stock **photos** (portrait by default) and download one into `assets/pexels/`.
-Same key as `kino pexels`. Reference from `app` segments (`"asset": "pexels/<id>.jpg"`).
+Same key as `kino pexels`. Reference from `video` segments (`"source": "pexels/<id>.jpg"`).
 
 ```
 kino photos "coffee desk morning light"                      # list: #, id, size, author, thumb

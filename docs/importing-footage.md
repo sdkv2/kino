@@ -1,6 +1,6 @@
 # Importing footage
 
-An `app` beat plays real footage — a screen capture, device scroll, desktop demo, or any imported clip — under the voiceover, optionally seated inside a chrome frame. This page is the field reference for turning one source recording into app beats. For the end-to-end agent workflow (inspect stills → beat map → author → retime), see the [`importing-footage`](../skills/importing-footage/SKILL.md) skill. Spec fields: [Spec reference](spec-reference.md#segments).
+A `video` beat plays real footage — a screen capture, device scroll, desktop demo, or any imported clip — under the voiceover, optionally seated inside a chrome frame. This page is the field reference for turning one source recording into video beats. For the end-to-end agent workflow (inspect stills → beat map → author → retime), see the [`importing-footage`](../skills/importing-footage/SKILL.md) skill. Spec fields: [Spec reference](spec-reference.md#segments).
 
 The core idea: **stage the recording once, cut beats from it with time windows** — never re-split the mp4 into clips. Each `app` segment points at the same `asset` and shows a different `clipFrom`/`clipTo` slice.
 
@@ -27,7 +27,7 @@ The core idea: **stage the recording once, cut beats from it with time windows**
 ## Clipping one recording into beats
 
 ```json
-{ "kind": "app", "asset": "recordings/demo.mp4", "text": "Search finds it instantly.",
+{ "kind": "video", "source": "recordings/demo.mp4", "text": "Search finds it instantly.",
   "clipFrom": 4.0, "clipTo": 7.5 }
 ```
 
@@ -70,7 +70,7 @@ Get beats and framing right **first**, then tune timing so the moment lands unde
 - **`pauseAt`** — seconds from segment start to **freeze** the footage for the rest of the beat (hold on the result while the VO finishes the line).
 
 ```json
-{ "kind": "app", "asset": "recordings/demo.mp4", "text": "…and it's saved.",
+{ "kind": "video", "source": "recordings/demo.mp4", "text": "…and it's saved.",
   "clipFrom": 12, "clipTo": 15, "speed": 0.75, "pauseAt": 2.0 }
 ```
 

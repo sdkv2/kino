@@ -19,7 +19,7 @@ spec → validate → voiceover → avatar plan/trim → stage assets → backgr
 
 - **validate** — parse the spec, resolve provider/voice/look, check every SFX/music/asset ref. A bad ref fails here, **before** any paid API call.
 - **voiceover** — one ElevenLabs read per segment `text`, stitched with gaps into the VO track (skipped/silent under `--mock`).
-- **avatar plan/trim** — pick the on-camera (`avatar`) beats, trim the VO to just those windows, lip-sync them at the provider. No `avatar` beats or `provider: none` → faceless, this stage is skipped. See [Avatars](avatars.md).
+- **presenter plan/trim** — pick the on-camera beats (a `scene` whose `source` is a presenter), trim the VO to just those windows, lip-sync them at the provider. No presenter sources or `provider: none` → this stage is skipped. See [Avatars](avatars.md).
 - **stage assets** — copy the spec's assets (footage, frames, images), resolve SFX/music, download the brand font.
 - **render** — kino's frame engine (headless Chromium) composites captions, background/overlays, footage, and audio into frames and encodes the MP4, once per `format`.
 

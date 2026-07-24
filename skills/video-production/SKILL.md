@@ -1,6 +1,6 @@
 ---
 name: video-production
-description: Use when producing short-form vertical marketing videos for an app (TikTok/Reels/Shorts) with the `kino` CLI — AI avatar presenter + app screen footage + voiceover + captions. Covers authoring the video spec, the build workflow, and the cost/compliance guardrails.
+description: Use when producing short-form vertical marketing videos for an app (TikTok/Reels/Shorts) with the `kino` CLI — background/motion beats, app screen footage, voiceover, captions, and an optional AI presenter. Covers authoring the video spec, the build workflow, and the cost/compliance guardrails.
 ---
 
 # Producing videos with kino
@@ -67,26 +67,31 @@ path) or pass `--project <name>`. `kino projects --new <name> [--brand <brand>]`
 optional — omitted = kino house defaults). Specs must
 live under a project — there is no flat layout.
 
-## Avatar provider (cost lever — pick deliberately)
-Set per spec with `"provider"`, or per brand with `defaultProvider`, or override with `--provider`:
-- **`none` (faceless)** — no avatar; app footage + VO + captions only. **$0 avatar cost**, and the
+## Presenter provider (cost lever — pick deliberately)
+A presenter is a **video source on a beat**, not a beat type: give a scene `"source": "avatar:"` for the
+configured provider, or pin one with `"heygen:look-id"` / `"hedra:portraits/x.png"` / `"replicate:"`.
+Which provider `avatar:` means is set per spec with `"provider"`, per brand with `defaultProvider`, or
+via `--provider`:
+- **`none`** — no presenter; footage + VO + captions over the background. **$0 presenter cost**, and the
   strongest format for app installs because it shows the product. Default for most videos.
 - **`heygen`** — Avatar-IV hosted look. Highest quality, most expensive (~20 credits/min). Needs a look id.
 - **`hedra`** — Character-3. Cheap API + free monthly tier. Needs `brand.avatarImage` (a portrait).
 - **`replicate`** — open-source lip-sync (default SadTalker). Pennies/clip. Needs `brand.avatarImage`.
 
-Two automatic savings when an avatar IS used: the avatar is **trimmed to the on-camera segments only**
-(app cut-ins aren't billed), and VO + avatar are **content-hash cached** so caption/motion edits don't re-bill.
+Two automatic savings when a presenter IS used: it is **trimmed to the on-camera beats only**
+(video cut-ins aren't billed), and VO + presenter are **content-hash cached** so caption/motion edits don't
+re-bill. One presenter clip is generated per build, so every presenter beat must agree on provider and look.
 
 ## Spec schema
 ```jsonc
 { "brand": "<brand>", "title": "kebab-case", "format": ["9:16"], "voice": "<alias>",
   "provider": "none",            // none | heygen | hedra | replicate (else brand.defaultProvider)
-  "background": "custom",        // faceless: prefer custom+backgroundComponent over mesh for brand identity
+  "background": "custom",        // prefer custom+backgroundComponent over mesh for brand identity
   "backgroundComponent": "brand-wash", // bare id → assets-lib/backgrounds/ (or path / brand field)
   "segments": [
-    { "kind": "avatar", "text": "spoken (+ lip-synced if an avatar provider is set)", "caption": "on-screen text (optional — omit on any kind for a caption-free beat)", "cta": true },
-    { "kind": "app", "asset": "screens/x.png", "text": "spoken (avatar hidden)", "caption": "...",
+    { "text": "spoken over the background", "caption": "on-screen text (optional — omit on any kind for a caption-free beat)", "cta": true },
+    { "source": "avatar:", "text": "spoken + lip-synced by the configured presenter provider" },
+    { "kind": "video", "source": "screens/x.png", "text": "spoken (presenter hidden)", "caption": "...",
       "captionMode": "words", "emphasis": ["claim"],  // optional: spoken text, word-synced + highlighted
       "kicker": { "text": "86% match", "color": "mint" } } ] }
 ```
@@ -104,31 +109,31 @@ promos burned a pass on this.
 **Trailer shape — adapt, don't stamp.** A ~20–30s / 7–9-beat trailer runs OPENER → a MIDDLE that shows the product → PAYOFF + CTA.
 
 **Opener = scroll-stop first.** TikTok/Reels thumbs and the first ~1s decide whether anyone hears the VO. Prefer a
-**cold open on your strongest footage** (`app`: product screen, real-world b-roll, or the most kinetic clip you have)
-with a short hook caption over it. Mesh/glow/aurora caption cards (`avatar`) and motion title cards stay **valid** —
+**cold open on your strongest footage** (`video`: product screen, real-world b-roll, or the most kinetic clip you have)
+with a short hook caption over it. Mesh/glow/aurora caption cards (`scene`) and motion title cards stay **valid** —
 use them when the brand is deliberately quiet/editorial, when you truly have no usable footage yet, or when a typographic
-cold open *is* the brand move — but do **not** default to a soft blurred mesh + centered line just because faceless
+cold open *is* the brand move — but do **not** default to a soft blurred mesh + centered line just because presenter-less
 trailers used to start that way. If the first still could be any SaaS ad after you squint, the opener is too weak.
 
 Opener menu (pick one; bias toward #1 for consumer/app ads):
 
-1. **Cold open (`app`)** — default lean. Strongest clip + one hook line (lower-third + backplate). Optional kicker.
+1. **Cold open (`video`)** — default lean. Strongest clip + one hook line (lower-third + backplate). Optional kicker.
    `shot: "push-in"` + `transition: "cut"` reads as a thumb-stop. Caption stays short (`which hold?`, not the full VO).
 2. **Motion title (`motion`)** — brand-forward graphic cold open when the product truth *is* a number/diagram.
-3. **Caption card (`avatar`)** — faceless hero on `background` mesh/glow/aurora. Fine for quiet/luxury brands or
+3. **Caption card (`scene`)** — hero text on `background` mesh/glow/aurora. Fine for quiet/luxury brands or
    copy-led hooks; still compose it (big line, hot palette intensity, not a muddy mid-grey blur). Never open on the
    brand name (ad-voice rule).
 
 One proven layout for a footage-driven trailer (cold-open first):
 
 ```
-0  app      cold open — strongest footage + hook caption   ← scroll-stop; not a mesh card by default
-1  app      footage — establish the world / product surface
-2  app      footage — show the product truth          ← consecutive app beats auto-crossfade = montage
-3  app      footage — the payoff moment
-4  motion   a data/feature beat (counter, timer…)     ← media ≈ half the runtime
-5  avatar   payoff — the emotional turn (caption card OK here)
-6  avatar   CTA (cta: true) — brand name + action as a **centered end card** (hero), not a lower-third subtitle
+0  video    cold open — strongest footage + hook caption   ← scroll-stop; not a mesh card by default
+1  video    footage — establish the world / product surface
+2  video    footage — show the product truth        ← consecutive video beats auto-crossfade = montage
+3  video    footage — the payoff moment
+4  motion   a data/feature beat (counter, timer…)   ← media ≈ half the runtime
+5  scene    payoff — the emotional turn (caption card OK here)
+6  scene    CTA (cta: true) — brand name + action as a **centered end card** (hero), not a lower-third subtitle
 ```
 
 **Footage-cut rules:** match each clip's length to its beat's VO; vary the `shot` per cut-in to the action (push-in / pan / pull-out); keep related shots back-to-back for the auto-crossfade; set the brand's `captionStyle.background` backplate so captions stay legible over uncontrolled footage. **Plan the opener clip before writing beat 0 copy** — pick the thumb-stopping frame, then write the one-line caption that rides it.
@@ -145,9 +150,9 @@ layout and crowd the top chrome — don't.
 
 | Layer | Default | Don't |
 |---|---|---|
-| Hook / cold open (`app`) | Strongest footage first; short lower-third caption + backplate; optional kicker | Soft mesh card as the default opener; brand-name first line |
-| Hook (`avatar`, faceless) | Centered hero caption — big, calm, no `captionKeyframes` (use when caption-card opener is intentional) | Pin to top edge; `y: -16` "for variety"; muddy low-contrast mesh behind a weak line |
-| App / footage captions | Lower-third (engine default) + brand backplate | Per-beat `y`/`scale` jitters |
+| Hook / cold open (`video`) | Strongest footage first; short lower-third caption + backplate; optional kicker | Soft mesh card as the default opener; brand-name first line |
+| Hook (`scene`, no presenter) | Centered hero caption — big, calm, no `captionKeyframes` (use when caption-card opener is intentional) | Pin to top edge; `y: -16` "for variety"; muddy low-contrast mesh behind a weak line |
+| Video / footage captions | Lower-third (engine default) + brand backplate | Per-beat `y`/`scale` jitters |
 | CTA (`cta: true`) | **Centered end card** (hero) — short brand + action; `captionReveal: "all"` or `captionMode: "phrase"` | Park the CTA in the lower-third caption gutter; word-by-word drip on a long App Store line; empty mesh with no brand mark |
 | Kickers | Top pill — fine when the still has empty top chrome | Treat kicker as the end card; **kicker on a feed/chip still that already labels the moment** |
 | `texts[]` labels | Small, `position: "top"` (or clear of caption band) | Second headline fighting the CTA end card |
@@ -165,14 +170,14 @@ the tint.
 **Caption stability is the default.** Omit `captionKeyframes` on a first pass. Add one only when a
 single beat must dodge a bright subject (check that still) — never a different `y` on every beat.
 
-**CTA = end card, not a subtitle.** `cta: true` on a faceless avatar beat uses the **centered hero**
-surface (same as other faceless talking beats). **`cta: true` is avatar-only — the CLI rejects it on a
-`motion` or `app` beat (`cta is avatar-only`).** A motion end-card graphic (baked wordmark + button, or
+**CTA = end card, not a subtitle.** `cta: true` on a presenter-less scene beat uses the **centered hero**
+surface (same as other presenter-less talking beats). **`cta: true` is scene/motion-only — the CLI rejects
+it on a `video` beat (`cta is scene/motion-only`).** A motion end-card graphic (baked wordmark + button, or
 a `texts` CTA) already *is* the end card; keep it plain `kind:"motion"` and carry the CTA copy in the
-graphic/`texts`, not via `cta: true`. **Two valid faceless CTA shapes:** (a) `kind:"avatar"` +
-`provider:"none"` **with** `cta:true` (the centered-hero caption surface — add a `motionOverlay` for a
-wordmark if you want the graphic), or (b) a pure `kind:"motion"` end-card **without** `cta:true`. "Faceless"
-comes from `provider:"none"`, not the segment kind — an `avatar` beat is still faceless. Write a short caption (`Cadence · free to try`, not a
+graphic/`texts`, not via `cta: true`. **Two valid CTA shapes:** (a) a plain scene (no `source`) **with**
+`cta:true` (the centered-hero caption surface — add a `motionOverlay` for a wordmark if you want the
+graphic), or (b) a pure `kind:"motion"` end-card **without** `cta:true`. A scene has no face unless its
+`source` asks for one. Write a short caption (`Cadence · free to try`, not a
 full spoken sentence). Prefer `captionMode: "phrase"` or `captionReveal: "all"` so the line lands as
 one poster, not a word drip. Logo is optional: if the caption already carries the brand name, **omit
 `brand.logo`** — a centered mark + centered wordmark fights. Otherwise put the mark mid/top so the
@@ -207,7 +212,7 @@ Preview with `kino still --segment <n>` (layout) **and** `kino still --around <t
 before the real build. If the graphic kisses the caption or sits under the top UI, nudge `top` —
 don't reintroduce per-caption `y` offsets to compensate.
 
-- `avatar` segments are the on-camera/hook/payoff beats; `app` segments show the screenshot/recording while the VO continues. (Faceless still uses these kinds — `avatar` beats become branded caption cards.)
+- `scene` segments are the hook/payoff beats (on camera only if `source` names a presenter); `video` segments show the screenshot/recording while the VO continues. With no presenter, scene beats are branded caption cards.
 - **Emphasis is a spice, not a sauce** — `emphasis` adds a glow to the marked word while it's spoken.
   Cap it at one word (max two) per beat, on the single word carrying the claim; several emphasised
   words per beat reads as noise and devalues all of them. Beats can (and often should) have none.
@@ -219,7 +224,7 @@ don't reintroduce per-caption `y` offsets to compensate.
   or `texts` overlays instead.
 - **Media density**: caption cards are connective tissue, not the show — viewers stay for footage,
   screenshots, and motion. Target roughly **half the runtime on media** (`app` cut-ins, `motion`
-  beats, motionOverlays): in a ~20s spec that's 2-3 `app` beats + at least one `motion`/Lottie
+  beats, motionOverlays): in a ~20s spec that's 2-3 `video` beats + at least one `motion`/Lottie
   moment. Never run more than two plain caption-card beats back-to-back; break the pattern with a
   cut-in or overlay. **Compose each caption card for what its beat says, not to a template** — the
   monotony that reads as a slideshow comes from framing every beat as the same centered line. Fit the
@@ -229,7 +234,7 @@ don't reintroduce per-caption `y` offsets to compensate.
   that genuinely want the same frame may share it. The failure is every beat defaulting to dead-center
   because none was composed for what it says (don't jitter position just to make cards differ — that
   reads as noise, not design). B-roll sources: project assets, `kino pexels` / `kino photos`.
-  **Consecutive `app` beats crossfade shot-to-shot automatically** (the first holds under the next's
+  **Consecutive `video` beats crossfade shot-to-shot automatically** (the first holds under the next's
   fade-in — no background flash between them), so sequencing related footage back-to-back is
   encouraged: it reads as edited film, not a slideshow. **Consecutive `motion` beats dissolve the
   same way** (~0.5s hold-through-gap + fade-in; first motion stays opaque for loop seams — see
@@ -242,7 +247,7 @@ don't reintroduce per-caption `y` offsets to compensate.
   Auto-vary is asset-aware: video b-roll defaults to the soft pair (`dissolve`/`fade`) and UI stills
   to the punchy rotation — match that instinct when overriding (footage wants a natural fade, not a
   spring fly-in). **Plan shot variety before writing the spec, not after seeing the storyboard**: for
-  3+ consecutive `app` beats, jot the camera move **and** transition per beat first (CONCEPT.md) —
+  3+ consecutive `video` beats, jot the camera move **and** transition per beat first (CONCEPT.md) —
   auto-vary picks per-cut, not across the whole run, so an unlucky repeat (three push-ins) slips
   through unless you skim your own list. Tall stills (~2200px+) earn `scroll`; 9:16 plates do not.
 - **Faceless backgrounds** (`kino backgrounds`): **do not *default* to `mesh`** — but a brand whose
@@ -254,8 +259,8 @@ don't reintroduce per-caption `y` offsets to compensate.
   with no colour work is the generic tell. Prefer:
   - `"background": "custom"` + `"backgroundComponent": "brand-wash"` (or your draw fn) for authored identity
   - `"solid"` when `seamlessLoop` / settle (no global-frame drift)
-  - `"image"` + `facelessBackdrop` for photo stages
-  - a full-bleed `.bg` inside motion graphics (occludes the faceless layer entirely)
+  - `"image"` + `backdrop` for photo stages
+  - a full-bleed `.bg` inside motion graphics (occludes the background layer entirely)
   Spec `backgroundComponent` overrides brand. Tween with `backgroundKeyframes` / `backgroundTriggers`;
   sync to VO via `kino inspect`. See `docs/backgrounds-and-overlays.md`.
 - **Overlay elements tween** (`kino elements`): the logo has `logoSize` (small/medium/big/px) +
@@ -506,7 +511,7 @@ asset — same key as video, separate command:
 `kino photos "coffee desk morning light"` lists portrait stills (size, author, alt + local thumb),
 then `kino photos "coffee desk morning light" --get 2 --project <name>` → `assets/pexels/<id>.jpg`.
 **Screen the local thumb before `--get`** (`thumb: $TMPDIR/kino-pexels-photo-thumbs/<id>.jpg` — Read
-it). Reference like any still: `"asset": "pexels/<id>.jpg"`. Prefer real product screenshots when
+it). Reference like any still: `"source": "pexels/<id>.jpg"`. Prefer real product screenshots when
 they exist. Needs `PEXELS_API_KEY`.
 
 ## Generated stills (image gen)
@@ -524,7 +529,7 @@ then `kino pexels "city commute at night" --get 2 --project <name>` downloads in
 — Read that file and reject on composition/mood there. Don't curl the remote URL by hand.
 Downloading full clips just to preview burns bandwidth for candidates you were never going to use.
 Only `--get` the ones you'd plausibly cut in.
-Reference it from an `app` segment like any asset (`"asset": "pexels/<id>.mp4"` — .mp4 assets play
+Reference it from a `video` segment like any asset (`"source": "pexels/<id>.mp4"` — .mp4 assets play
 with the same shots/transitions as stills). Prefer real product footage when it exists; match the
 clip's duration to the beat's VO length (durations are listed). Needs `PEXELS_API_KEY` (free — pexels.com/api).
 **Caption legibility over footage is not optional:** stock/photographic clips have uncontrolled
