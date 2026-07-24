@@ -70,9 +70,15 @@ vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset
 // length(dFdx, dFdy) reads the fragment quad, not the texture, so it costs no taps (the same
 // derivative trick aastep already uses). Outside that band
 // the coverage saturates and the gradient collapses, so fall back to a 24-tap search. That
-// search is COARSE: 24 samples scattered over a disc of radius R sit ~0.36*R apart, so it can
-// over-report by roughly a third of the radius, and the error varies with edge orientation.
+// search is COARSE: its error grows with radius and varies with edge orientation, and a feature
+// thinner than the sample spacing (~0.36*radius) can be missed entirely.
 // Pass the SMALLEST radius that covers your effect — a 3px rim wants radius 4, not 32.
+// The 0.05 gate on g is set by the pipeline, not the maths: masks arrive through lossy H.264
+// (scripts/sam_runner_cuda.py) and then JPEG re-extraction, and DCT ringing around a hard
+// silhouette leaves a few /255 of wobble in nominally flat mask regions. A gate near that noise
+// floor takes the analytic branch on a spurious gradient and returns ±radius where its neighbour
+// falls through to the spiral — a rim that SPECKLES on a tracked video mask. 0.05 still leaves
+// ~10px of analytic reach (the branch resolves 0.5/g px).
 // Reads only the texture, the coordinate and derivatives, so determinism holds.
 #define KINO_MASK_TAPS 24
 float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius){
@@ -81,7 +87,7 @@ float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius){
   vec2 texel = 1.0 / res;
   float m = dot(texture(mask, uv), channel);
   float g = length(vec2(dFdx(m), dFdy(m)));
-  if (g > 0.01) return clamp((0.5 - m) / g, -radius, radius);
+  if (g > 0.05) return clamp((0.5 - m) / g, -radius, radius);
   float here = step(0.5, m);
   float best = radius;
   for (int i = 0; i < KINO_MASK_TAPS; i++){

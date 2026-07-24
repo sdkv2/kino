@@ -1,10 +1,12 @@
 # Mask Distance (`kinoMaskDist`) Implementation Plan
 
+> **Amended post-implementation** to match what actually shipped: the helper is a two-regime hybrid (derivative branch + spiral fallback), not the single-regime spiral this plan originally specified, and the `radius/24` accuracy claim was wrong. Follow-on phases should be written against the code below, which is the shipped version.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give region shaders a signed distance-to-mask-edge value in pixels, so rim light, outline, outward glow, chromatic fringe and erode/dilate become expressible.
 
-**Architecture:** One pure GLSL helper injected into the shared `GLSL_HELPERS` block in `src/render/shaderSource.ts`. It estimates distance by sampling the mask texture that is already bound (`uMask0..3` + `uChannel0..3`) along a golden-angle spiral. No pipeline, manifest, CLI or `kino segment` changes — it works on every mask already on disk.
+**Architecture:** One pure GLSL helper injected into the shared `GLSL_HELPERS` block in `src/render/shaderSource.ts`. It estimates distance from the mask texture that is already bound (`uMask0..3` + `uChannel0..3`): screen-space derivatives inside the mask's transition band, and a golden-angle spiral search beyond it. No pipeline, manifest, CLI or `kino segment` changes — it works on every mask already on disk.
 
 **Tech Stack:** TypeScript, GLSL ES 3.00, vitest, puppeteer (via `renderStills`), ImageMagick (via the `tests/magick.ts` argv helper).
 
@@ -58,26 +60,48 @@ In `src/render/shaderSource.ts`, inside the `GLSL_HELPERS` template literal, app
 // masked region, positive outside, saturating at ±radius. Region shaders otherwise see only a
 // binary in/out, which is what blocks rim light, outline, outward glow, edge fringe and
 // erode/dilate. Takes the sampler + channel so it serves any uMask0..3 from either region body.
-// Approximate by design: a golden-angle spiral with linear radial spacing, so resolution is
-// radius/24 px and a feature thinner than that step can be missed — at radius 24 the step is
-// 1px, at radius 240 it is 10px and thin detail will alias. Reads only the texture and the
-// coordinate, so determinism holds.
+//
+// Two regimes. Inside the mask's own transition band the bilinear-filtered coverage is a ramp,
+// so its screen-space gradient gives SUB-PIXEL distance for free — the true gradient magnitude
+// length(dFdx, dFdy) reads the fragment quad, not the texture, so it costs no taps (the same
+// derivative trick aastep already uses). Outside that band
+// the coverage saturates and the gradient collapses, so fall back to a 24-tap search. That
+// search is COARSE: its error grows with radius and varies with edge orientation, and a feature
+// thinner than the sample spacing (~0.36*radius) can be missed entirely.
+// Pass the SMALLEST radius that covers your effect — a 3px rim wants radius 4, not 32.
+// The 0.05 gate on g is set by the pipeline, not the maths: masks arrive through lossy H.264
+// (scripts/sam_runner_cuda.py) and then JPEG re-extraction, and DCT ringing around a hard
+// silhouette leaves a few /255 of wobble in nominally flat mask regions. A gate near that noise
+// floor takes the analytic branch on a spurious gradient and returns ±radius where its neighbour
+// falls through to the spiral — a rim that SPECKLES on a tracked video mask. 0.05 still leaves
+// ~10px of analytic reach (the branch resolves 0.5/g px).
+// Reads only the texture, the coordinate and derivatives, so determinism holds.
 #define KINO_MASK_TAPS 24
 float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius){
   vec2 res = iResolution.xy;
   vec2 uv = fragCoord / res;
   vec2 texel = 1.0 / res;
-  float here = step(0.5, dot(texture(mask, uv), channel));
+  float m = dot(texture(mask, uv), channel);
+  float g = length(vec2(dFdx(m), dFdy(m)));
+  if (g > 0.05) return clamp((0.5 - m) / g, -radius, radius);
+  float here = step(0.5, m);
   float best = radius;
   for (int i = 0; i < KINO_MASK_TAPS; i++){
     float r = (float(i) + 1.0) / float(KINO_MASK_TAPS) * radius;
     float a = float(i) * 2.39996323;
-    float s = step(0.5, dot(texture(mask, uv + vec2(cos(a), sin(a)) * r * texel), channel));
-    if (s != here) { best = min(best, r); }
+    float s = step(0.5, dot(textureLod(mask, uv + vec2(cos(a), sin(a)) * r * texel, 0.0), channel));
+    if (s != here) { best = r; break; }
   }
   return here > 0.5 ? -best : best;
 }
+#undef KINO_MASK_TAPS
 ```
+
+The spiral's taps use `textureLod(..., 0.0)`, not `texture` — the loop's derivatives are garbage,
+so an implicit-LOD sample would pick a mip at random. The loop `break`s on the first sign change
+instead of `min`-ing every hit: radii increase monotonically, so the first hit is the nearest.
+`#undef KINO_MASK_TAPS` keeps the macro out of the author's body — the region assembler
+concatenates both bodies into one translation unit.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -99,10 +123,12 @@ Region shaders reduced every mask to a binary in/out, so a body could know
 whether a pixel was on the subject but never how far from the silhouette.
 That blocks rim light, outline, outward glow, edge fringe and erode/dilate.
 
-Estimates distance from the mask already bound: a 24-tap golden-angle spiral
-with linear radial spacing, resolution radius/24 px. Approximate and bounded
-by design; the signature is chosen so a precomputed distance field can replace
-the body later without touching any shader that calls it."
+Estimates distance from the mask already bound, in two regimes: screen-space
+derivatives give sub-pixel distance inside the mask's transition band, and
+beyond it a 24-tap golden-angle spiral takes over — coarse, with error that
+grows with radius and varies with edge orientation. Approximate and bounded by
+design; the signature is chosen so a precomputed distance field can replace the
+body later without touching any shader that calls it."
 ```
 
 ---
@@ -275,11 +301,13 @@ float eaten = step(-4.0, d);                     // erode the subject by 4px
 Pass the same `uMaskN`/`uChannelN` pair the split itself uses (`uMask0`/`uChannel0` for a single
 mask). It works from the subject body, the background body, or both.
 
-It is an **estimate**: a 24-tap spiral with linear radial spacing, so resolution is `radius/24` px
-and features thinner than that step can be missed — 1px steps at `radius` 24, 10px at 240. The
-value saturates at `±radius`, so a wide soft glow beyond ~32px is not what this is for. Cost is 24
-texture taps per pixel per body that calls it, on top of the two bodies that already run for every
-pixel.
+It runs in two regimes. Inside the mask's own transition band it reads **sub-pixel** distance from
+screen-space derivatives, costing no extra texture taps. Beyond that band it falls back to a 24-tap
+spiral, which is coarse: its error grows with `radius` and varies with edge orientation, and a
+feature thinner than the sample spacing (~0.36·`radius`) can be missed entirely. So **pass the
+smallest radius that covers your effect**: a 3px rim wants radius 4, not 32. The value saturates at
+`±radius`, so a wide soft glow beyond ~32px is not what this is for. Cost is 24 texture taps per
+pixel per body that calls it, on top of the two bodies that already run for every pixel.
 ```
 
 - [ ] **Step 3: Verify the docs render and nothing else broke**
@@ -294,7 +322,8 @@ git add .claude/skills/shader-backgrounds/SKILL.md docs/segmentation.md
 git commit -m "docs(shader): document kinoMaskDist and its ceiling
 
 Records the signature, the three worked uses that motivated it, and the limits
-up front: radius/24 px resolution, saturation at ±radius, 24 taps per pixel per
+up front: sub-pixel near the edge but coarse beyond it (error growing with
+radius), saturation at ±radius, 24 taps per pixel per
 calling body. Better stated here than discovered by whoever writes the next
 region shader."
 ```

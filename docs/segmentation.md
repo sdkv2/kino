@@ -184,10 +184,18 @@ mask). It works from the subject body, the background body, or both.
 
 It runs in two regimes. Inside the mask's own transition band it reads **sub-pixel** distance from
 screen-space derivatives, costing no extra texture taps. Beyond that band the coverage saturates
-and it falls back to a 24-tap search accurate only to roughly a third of `radius` — 24 samples over
-a disc of radius R sit ~0.36R apart, which is an information limit rather than a tuning choice, and
-the error varies with edge orientation. So **pass the smallest radius that covers your effect**: a
-3px rim wants radius 4, not 32. The value saturates at `±radius`.
+and it falls back to a 24-tap spiral, which is coarse: its error grows with `radius` and varies with
+edge orientation, and a feature thinner than the sample spacing (~0.36·`radius`) can be missed
+entirely. So **pass the smallest radius that covers your effect**: a 3px rim wants radius 4, not 32.
+The value saturates at `±radius`.
+
+**Call it unconditionally and branch on the result** — never guard the call itself
+(`if (nearEdge) { d = kinoMaskDist(...); }`). The derivative regime needs uniform control flow, and
+screen-space derivatives are undefined inside a branch. That compiles clean, so the failure is
+silent.
+
+Unioning several masks in one region? Call it per mask and take `min()` of the results — the union's
+edge is the nearest of any mask's edge.
 
 Cost is 24 taps per pixel per calling body, on top of the two bodies that already run for every
 pixel — calling it once per mask across a 4-mask union would be 96.

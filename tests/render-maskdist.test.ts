@@ -120,9 +120,10 @@ describe("kinoMaskDist", () => {
 
   // GLSL_HELPERS is injected into assembleShaderSource too, where there are no uMaskN uniforms at
   // all — kinoMaskDist's sampler2D/vec4 args are its own parameters, so it must still compile there.
-  // No other test renders a real GLSL background (every one sets shaderCode: null), and a shader
-  // that fails to compile leaves the flat night fill, so asserting the actual colour is what makes
-  // this a check rather than a "the render didn't throw" tautology.
+  // No other test renders a real GLSL background (every one sets shaderCode: null). A compile
+  // failure now fails the render outright (src/render/native/page/fatal.ts), so the colour
+  // assertion is not what catches that — it is what proves the shader's own output actually
+  // reached the frame instead of being skipped or painted over by the night fill.
   it("compiles away unused in a plain shader background (no mask uniforms)", async () => {
     const props: KinoProps = {
       theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, disclosure: "",
@@ -136,7 +137,7 @@ describe("kinoMaskDist", () => {
     });
     const [r, g, b] = rgb(out[0]);
     console.log(`plain shader background mean rgb: ${r} ${g} ${b}`);
-    expect(r).toBeGreaterThan(0.9); // a failed compile leaves the night fill (r ~0.04), not red
+    expect(r).toBeGreaterThan(0.9); // red = the shader's own output; the night fill would be r ~0.04
     expect(g).toBeLessThan(0.1);
     expect(b).toBeLessThan(0.1);
   }, 180000);
