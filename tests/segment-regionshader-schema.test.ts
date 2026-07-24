@@ -4,18 +4,18 @@ import { SpecSchema } from "../src/spec/schema.js";
 const valid = {
   brand: "acme",
   title: "seg-region",
-  segments: [{ kind: "app", asset: "clip.mp4", text: "hi", caption: "hi" }],
+  segments: [{ kind: "video", source: "clip.mp4", text: "hi", caption: "hi" }],
 };
 
-describe("SpecSchema app beat regionShader", () => {
+describe("SpecSchema video beat regionShader", () => {
   it("parses a regionShader with a mask + subject body", () => {
     const s = SpecSchema.parse({
       ...valid,
       segments: [{ ...valid.segments[0], regionShader: { mask: "masks/x", subject: "a.frag" } }],
     });
     const seg = s.segments[0];
-    expect(seg.kind === "app" && seg.regionShader?.mask).toBe("masks/x");
-    expect(seg.kind === "app" && seg.regionShader?.object).toBe(0); // default
+    expect(seg.kind === "video" && seg.regionShader?.mask).toBe("masks/x");
+    expect(seg.kind === "video" && seg.regionShader?.object).toBe(0); // default
   });
 
   it("rejects a regionShader with neither subject nor background", () => {
@@ -45,8 +45,8 @@ describe("SpecSchema app beat regionShader", () => {
       ],
     });
     const seg = s.segments[0];
-    expect(seg.kind === "app" && seg.regionShader?.masks?.length).toBe(2);
-    expect(seg.kind === "app" && seg.regionShader?.masks?.[1].mask).toBe("masks/dog2");
+    expect(seg.kind === "video" && seg.regionShader?.masks?.length).toBe(2);
+    expect(seg.kind === "video" && seg.regionShader?.masks?.[1].mask).toBe("masks/dog2");
   });
 
   it("parses a per-entry subject on a masks[] entry", () => {
@@ -68,9 +68,9 @@ describe("SpecSchema app beat regionShader", () => {
       ],
     });
     const seg = s.segments[0];
-    expect(seg.kind === "app" && seg.regionShader?.masks?.[0].subject).toBe("a.frag");
-    expect(seg.kind === "app" && seg.regionShader?.masks?.[1].object).toBe(1);
-    expect(seg.kind === "app" && seg.regionShader?.masks?.[2].subject).toBe(undefined);
+    expect(seg.kind === "video" && seg.regionShader?.masks?.[0].subject).toBe("a.frag");
+    expect(seg.kind === "video" && seg.regionShader?.masks?.[1].object).toBe(1);
+    expect(seg.kind === "video" && seg.regionShader?.masks?.[2].subject).toBe(undefined);
   });
 
   // Per-object regions can be the WHOLE spec: every mask shades itself, nothing falls back, and the
@@ -80,7 +80,7 @@ describe("SpecSchema app beat regionShader", () => {
       ...valid,
       segments: [{ ...valid.segments[0], regionShader: { masks: [{ mask: "masks/dog", subject: "a.frag" }] } }],
     });
-    expect(s.segments[0].kind === "app").toBe(true);
+    expect(s.segments[0].kind === "video").toBe(true);
   });
 
   it("still rejects a regionShader with no shader body anywhere", () => {

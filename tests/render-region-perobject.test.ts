@@ -39,7 +39,7 @@ const BLUE = "void mainImage(out vec4 c, in vec2 f){ c = vec4(0.0, 0.0, 1.0, 1.0
 const props: KinoProps = {
   theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
   segments: [{
-    kind: "app", asset: "asset.png", caption: "", startSec: 0, endSec: 2,
+    kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {
       masks: [
         { maskSrc: "mask0.png", maskKind: "image" as const, channel: "gray" as const, subjectCode: RED },

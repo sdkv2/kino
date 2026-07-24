@@ -7,14 +7,14 @@ export interface SegmentSummary {
   endSec: number;
   durSec: number;
   captionMode: string;
-  asset?: string;
+  source?: string;
   hasKicker: boolean;
 }
 
 export interface InspectPlan {
   fps: number;
   durationSec: number;
-  faceless: boolean;
+  presenter: boolean; // a provider-generated presenter is composited over this build
   background: string;
   segments: SegmentSummary[];
 }
@@ -30,13 +30,13 @@ export function inspectPlan(props: KinoProps): InspectPlan {
     endSec: s.endSec,
     durSec: round2(s.endSec - s.startSec),
     captionMode: s.captionMode ?? "phrase",
-    ...(s.asset ? { asset: s.asset } : {}),
+    ...(s.source ? { source: s.source } : {}),
     hasKicker: !!s.kicker,
   }));
   return {
     fps: props.fps,
     durationSec: round2(Math.max(0, ...props.segments.map((s) => s.endSec))),
-    faceless: props.avatar === null,
+    presenter: props.avatar !== null,
     background: props.background.kind,
     segments,
   };

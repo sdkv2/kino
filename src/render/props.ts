@@ -53,22 +53,22 @@ export interface RegionShaderProps {
 }
 
 export interface KinoSegment {
-  kind: "avatar" | "app" | "motion";
-  asset?: string;
+  kind: "scene" | "video" | "motion";
+  source?: string; // video beats: the asset path this beat composites
   caption: string; // "" = no caption for this beat (spec caption is optional; build coalesces)
   startSec: number;
   endSec: number;
-  /** Faceless avatar beats (including cta:true end cards) use centered hero captions. */
+  /** Presenter-less scene beats (including cta:true end cards) use centered hero captions. */
   cta?: boolean;
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
-  transition?: string; // resolved in/out transition for app cut-ins
+  transition?: string; // resolved in/out transition for video cut-ins
   clipFrom?: number; // seconds into source asset
   clipTo?: number;
   speed?: number; // playbackRate; default 1
   pauseAt?: number; // seconds from segment start → freeze for rest of beat
   frame?: AppFrame;
-  regionShader?: RegionShaderProps; // mask-split dual shader for this app beat (subject vs background regions)
+  regionShader?: RegionShaderProps; // mask-split dual shader for this video beat (subject vs background regions)
   captionMode?: "phrase" | "words"; // "words" = spoken text revealed word-by-word, synced to VO
   words?: WordTiming[]; // absolute word timings (present for captionMode "words")
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
@@ -77,7 +77,7 @@ export interface KinoSegment {
   captionReveal?: CaptionReveal; // words-mode reveal: "word" (per-word pop, default) | "all" (whole line, highlight tracks VO)
   texts?: ResolvedText[]; // standalone stylised text overlays, absolute-timed
   captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)
-  kickerKeyframes?: BgKeyframe[]; // tween the kicker (app segments)
+  kickerKeyframes?: BgKeyframe[]; // tween the kicker (video segments)
   zoomKeyframes?: BgKeyframe[]; // camera push/pan on the footage+chrome group (beat-relative: at = sec from beat start)
   motion?: MotionGraphicProps; // resolved graphic for kind === "motion"
   motionOverlay?: MotionGraphicProps; // resolved overlay graphic layered on this beat
@@ -173,7 +173,7 @@ export interface MotionEnv {
   duration: number; // beat length in seconds
 }
 
-// Brand mark overlay (faceless talking beats): resolved layout + an agent keyframe track.
+// Brand mark overlay (presenter-less talking beats): resolved layout + an agent keyframe track.
 export interface LogoProps {
   src: string; // staticFile-relative
   sizePx: number;
@@ -203,11 +203,11 @@ export interface MusicProps {
 export interface KinoProps {
   theme: Theme;
   fps: number;
-  avatar: string | null; // staticFile-relative path to the (trimmed) avatar clip, or null for faceless
-  avatarWindows: AvatarWindow[]; // placements of the avatar clip; empty when faceless
+  avatar: string | null; // staticFile-relative path to the (trimmed) presenter clip, or null when there is none
+  avatarWindows: AvatarWindow[]; // placements of the presenter clip; empty when there is no presenter
   voTrack: string | null; // staticFile-relative path to the full VO audio track
-  logo: LogoProps | null; // brand mark shown on faceless talking beats
-  background: BackgroundProps; // faceless background engine selection
+  logo: LogoProps | null; // brand mark shown on presenter-less talking beats
+  background: BackgroundProps; // background engine selection
   disclosure: string;
   sfx?: SfxProps[]; // free-placed sound effects
   music?: MusicProps | null; // music bed, ducked while VO speaks

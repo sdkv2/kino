@@ -32,7 +32,7 @@ describe("motion graphics render", () => {
       theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
       disclosure: "test",
       segments: [
-        { kind: "avatar", caption: "hook", startSec: 0, endSec: 2,
+        { kind: "scene", caption: "hook", startSec: 0, endSec: 2,
           motionOverlay: { html, params: { pct: 50 }, keyframes: [], triggers: [] } },
       ],
     };

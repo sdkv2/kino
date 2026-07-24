@@ -31,7 +31,7 @@ const flat = (rgb: string): string => `void mainImage(out vec4 c, in vec2 f){ c 
 const propsFor = (rgb: string): KinoProps => ({
   theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
   segments: [{
-    kind: "app", asset: "asset.png", caption: "", startSec: 0, endSec: 2,
+    kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {
       masks: [{ maskSrc: "mask.png", maskKind: "image" as const, channel: "gray" as const }],
       subjectCode: flat(rgb), backgroundCode: flat(rgb),

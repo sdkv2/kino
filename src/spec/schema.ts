@@ -1,5 +1,5 @@
 // THE SPEC CONTRACT. Zod schema for the agent-authored spec.json that drives a build: title,
-// format, segments (avatar/app/motion), captions, background, overlays, keyframes. This is the
+// format, segments (scene/video/motion), captions, background, overlays, keyframes. This is the
 // single source of truth for what an agent may author; keep it and docs/spec-reference.md in sync.
 // Exports the Spec type used throughout the pipeline. Note: keyframe/trigger `at` is in seconds
 // (resolved against frame/fps in the render layer).
@@ -83,9 +83,49 @@ const Music = z
 // forces either); mock builds pace the spec text across the file's true duration.
 const VoFile = z.string().min(1);
 
-const Segment = z.discriminatedUnion("kind", [
+// Video sources that are GENERATED rather than read off disk: "avatar:" uses the configured
+// provider (spec.provider → brand.defaultProvider → project.json), the named schemes pin one.
+// Anything else is an asset path under the project's assets/.
+export const PRESENTER_SCHEMES = ["avatar", "heygen", "hedra", "replicate"] as const;
+const PRESENTER_RE = new RegExp(`^(${PRESENTER_SCHEMES.join("|")}):`);
+export const isPresenterSource = (source: string | undefined): boolean =>
+  !!source && PRESENTER_RE.test(source);
+
+// Legacy kinds, normalized before the union sees them. "avatar" was the default beat back when
+// kino only made presenter-led ads; it is a plain scene now, with the presenter as one video
+// source among many. Old specs keep working — an "avatar" beat still resolves the configured
+// provider, and resolves to nothing when that provider is "none", exactly as it did before.
+const LEGACY_KINDS: Record<string, string> = { avatar: "scene", app: "video" };
+const normalizeSegment = (raw: unknown): unknown => {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
+  const seg = { ...(raw as Record<string, unknown>) };
+  if (seg.kind === undefined) seg.kind = "scene";
+  if (typeof seg.kind !== "string") return seg;
+  if (seg.kind === "avatar") {
+    seg.kind = "scene";
+    // Only mark it as presenter-seeking if the author did not already say otherwise.
+    if (seg.source === undefined) seg.source = "avatar:";
+  } else if (seg.kind === "app") {
+    seg.kind = "video";
+    if (seg.source === undefined && seg.asset !== undefined) seg.source = seg.asset;
+    delete seg.asset;
+  } else if (LEGACY_KINDS[seg.kind]) {
+    seg.kind = LEGACY_KINDS[seg.kind];
+  }
+  // A presenter is generated over the background rather than composited off disk, so a video
+  // beat pointing at one IS a scene with a presenter. Collapsing it here keeps the authoring
+  // surface unified (one `kind: "video"`) without every render path re-deciding what a source is.
+  if (seg.kind === "video" && isPresenterSource(seg.source as string | undefined)) seg.kind = "scene";
+  return seg;
+};
+
+const SegmentUnion = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal("avatar"),
+    // A beat over the background: voiceover, captions, overlays. The default — omit `kind`.
+    kind: z.literal("scene"),
+    // Optional presenter video ("avatar:" for the configured provider, or "heygen:"/"hedra:"/
+    // "replicate:" to pin one). Resolves to nothing when the provider is "none".
+    source: z.string().min(1).optional(),
     text: z.string().min(1),
     voFile: VoFile.optional(),
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
@@ -103,8 +143,11 @@ const Segment = z.discriminatedUnion("kind", [
   })
   .strict(),
   z.object({
-    kind: z.literal("app"),
-    asset: z.string().min(1),
+    // Footage, stills, or a generated presenter — whatever the `source` resolves to.
+    kind: z.literal("video"),
+    // Asset path under the project's assets/ (.mp4/.mov/.jpg/.png), or a presenter scheme
+    // ("avatar:", "heygen:", "hedra:", "replicate:").
+    source: z.string().min(1),
     text: z.string().min(1),
     voFile: VoFile.optional(),
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
@@ -195,6 +238,10 @@ const Segment = z.discriminatedUnion("kind", [
   .strict(),
 ]);
 
+// `kind` is optional (omit it for a scene) and the pre-1.22 kinds still parse, so normalize
+// before the discriminated union — which needs the discriminator present and current.
+const Segment = z.preprocess(normalizeSegment, SegmentUnion);
+
 export const SpecSchema = z
   .object({
     brand: z.string().optional(), // falls back to the project's project.json brand
@@ -216,7 +263,7 @@ export const SpecSchema = z
     film: z.number().min(0).max(1).optional(),
     avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
     provider: Provider.optional(), // overrides brand.defaultProvider
-    background: Background.optional(), // overrides brand.background (faceless beats)
+    background: Background.optional(), // overrides brand.background
     backgroundIntensity: z.number().min(0).max(1).optional(), // 0..1 motion strength override
     backgroundKeyframes: z.array(BgKeyframe).optional(), // agent-driven param tweens over time
     backgroundTriggers: z.array(BgTrigger).optional(), // agent-driven one-shot actions (e.g. pulse)
@@ -256,9 +303,21 @@ export const SpecSchema = z
   })
   .strict() // reject unknown top-level keys — a misplaced/misspelled key errors instead of silently no-op'ing
   .superRefine((spec, ctx) => {
-    // Kept off the app object so discriminatedUnion stays a plain ZodObject (ZodEffects breaks it).
+    // A scene's `source` only ever names a presenter — footage belongs to a video beat, which
+    // carries the clip/speed/frame knobs a scene has no use for.
     spec.segments.forEach((seg, i) => {
-      if (seg.kind !== "app") return;
+      if (seg.kind !== "scene" || !seg.source) return;
+      if (!isPresenterSource(seg.source)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `scene source must be a presenter ("${PRESENTER_SCHEMES.join(':", "')}:") — use kind "video" for footage and stills`,
+          path: ["segments", i, "source"],
+        });
+      }
+    });
+    // Kept off the video object so discriminatedUnion stays a plain ZodObject (ZodEffects breaks it).
+    spec.segments.forEach((seg, i) => {
+      if (seg.kind !== "video") return;
       if (seg.clipTo != null && seg.clipFrom != null && !(seg.clipTo > seg.clipFrom)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "clipTo must be > clipFrom", path: ["segments", i, "clipTo"] });
       }
@@ -304,15 +363,15 @@ const TOP_LEVEL_KEYS: Record<string, string> = {
 
 /** Keys valid on some segment kinds but rejected on others (strict). */
 const SEGMENT_KIND_HINTS: Record<string, string> = {
-  transition: "transition is app-only (motion hard-cuts; motion→motion auto-dissolves)",
-  asset: "asset is app-only",
-  clipFrom: "clipFrom/clipTo are app-only (importing-footage)",
-  clipTo: "clipFrom/clipTo are app-only (importing-footage)",
-  speed: "speed is app-only",
-  pauseAt: "pauseAt is app-only",
-  frame: "frame chrome is app-only",
-  kicker: "kicker is app-only",
-  zoomKeyframes: "zoomKeyframes is app-only",
+  transition: "transition is video-only (motion hard-cuts; motion→motion auto-dissolves)",
+  asset: "asset was renamed to source (video beats)",
+  clipFrom: "clipFrom/clipTo are video-only (importing-footage)",
+  clipTo: "clipFrom/clipTo are video-only (importing-footage)",
+  speed: "speed is video-only",
+  pauseAt: "pauseAt is video-only",
+  frame: "frame chrome is video-only",
+  kicker: "kicker is video-only",
+  zoomKeyframes: "zoomKeyframes is video-only",
   kickerKeyframes: "kickerKeyframes is app-only",
   source: "source is motion-only (or motionOverlay on avatar/app)",
   triggers: "triggers are motion-only (or motionOverlay / top-level backgroundTriggers)",

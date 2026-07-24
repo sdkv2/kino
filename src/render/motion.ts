@@ -57,7 +57,7 @@ export const MOTION_XFADE_FRAMES = 15;
 /**
  * Sequence span for a full-screen motion beat. Holds the outgoing graphic through any VO gap
  * and into an overlap with the next motion beat so the handoff is a dissolve, not a hard cut
- * onto the faceless backdrop. `beatDur` still drives --progress (clamped at 1 while held).
+ * onto the backdrop. `beatDur` still drives --progress (clamped at 1 while held).
  */
 export function motionHandoff(opts: {
   startSec: number;

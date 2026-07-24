@@ -73,7 +73,7 @@ export function stripTagWords(words: WordTiming[]): WordTiming[] {
  * (real ElevenLabs when !mock, silence+fake timings when mock) and cache the result. Then probe
  * durations, compute timeline timings with GAP, offset clip-relative word times onto the timeline,
  * and stitch one continuous track (also cached).
- * Exception: real faceless builds on models without previous_text/next_text support (v3) TTS the
+ * Exception: real presenter-less builds on models without previous_text/next_text support (v3) TTS the
  * whole script in ONE call instead — see buildVOSingle.
  * Contract: apiKey is required unless mock=true (real TTS calls pass it via the `apiKey!`
  * non-null assertion). Side effects: writes
@@ -206,7 +206,7 @@ export function splitWordsBySegment(texts: string[], allWords: WordTiming[]): Wo
   return out;
 }
 
-// Real faceless builds on models that reject previous_text/next_text (v3): per-segment calls
+// Real presenter-less builds on models that reject previous_text/next_text (v3): per-segment calls
 // can't be prosody-conditioned, so TTS the whole script in ONE call — the read flows naturally
 // across beats — then derive per-segment timings/words from the single alignment.
 // Segment startSec = its first word's start (0 for the opener); endSec = its last word's end

@@ -13,12 +13,12 @@ const brand = {
 
 describe("complianceScan", () => {
   it("flags a banned phrase in any text or caption", () => {
-    const spec = { segments: [{ kind: "avatar", text: "You'll get the job fast", caption: "x", cta: false }] } as unknown as Spec;
+    const spec = { segments: [{ kind: "scene", text: "You'll get the job fast", caption: "x", cta: false }] } as unknown as Spec;
     const hits = complianceScan(spec, brand);
     expect(hits).toEqual([{ phrase: "get the job", where: "segment[0].text" }]);
   });
   it("passes clean copy", () => {
-    const spec = { segments: [{ kind: "avatar", text: "Tailored to the role.", caption: "honest", cta: false }] } as unknown as Spec;
+    const spec = { segments: [{ kind: "scene", text: "Tailored to the role.", caption: "honest", cta: false }] } as unknown as Spec;
     expect(complianceScan(spec, brand)).toEqual([]);
   });
 });
@@ -34,16 +34,16 @@ describe("assertCaptionModes", () => {
   };
   it("warns when a words-mode beat carries a caption that will never paint", () => {
     const spec = {
-      segments: [{ kind: "app", asset: "a.png", text: "The full spoken line paints instead.", caption: "short hook" }],
+      segments: [{ kind: "video", source: "a.png", text: "The full spoken line paints instead.", caption: "short hook" }],
     } as unknown as Spec;
     expect(warns(spec, wordsBrand)).toMatch(/caption is ignored under words mode/);
   });
   it("stays quiet for phrase beats, caption-free beats, and caption === text", () => {
     const spec = {
       segments: [
-        { kind: "app", asset: "a.png", text: "Spoken.", caption: "Different hook", captionMode: "phrase" },
-        { kind: "avatar", text: "No caption here.", cta: false },
-        { kind: "avatar", text: "Same words.", caption: "Same words.", cta: false },
+        { kind: "video", source: "a.png", text: "Spoken.", caption: "Different hook", captionMode: "phrase" },
+        { kind: "scene", text: "No caption here.", cta: false },
+        { kind: "scene", text: "Same words.", caption: "Same words.", cta: false },
       ],
     } as unknown as Spec;
     expect(warns(spec, wordsBrand)).toBe("");
@@ -51,7 +51,7 @@ describe("assertCaptionModes", () => {
   it("resolves brand < spec < segment (spec-level words triggers the warn too)", () => {
     const spec = {
       captionMode: "words",
-      segments: [{ kind: "app", asset: "a.png", text: "Spoken line.", caption: "hook" }],
+      segments: [{ kind: "video", source: "a.png", text: "Spoken line.", caption: "hook" }],
     } as unknown as Spec;
     expect(warns(spec, brand)).toMatch(/caption is ignored/);
   });

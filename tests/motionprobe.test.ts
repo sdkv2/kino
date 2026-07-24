@@ -3,7 +3,7 @@ import { probeFramePicks, isUnderAnimated, PROBE_POINTS } from "../src/render/mo
 
 describe("probeFramePicks", () => {
   const segs = [
-    { kind: "app", startSec: 0, endSec: 2 },
+    { kind: "video", startSec: 0, endSec: 2 },
     { kind: "motion", startSec: 2, endSec: 5, motion: {} },
     { kind: "motion", startSec: 5, endSec: 6, motion: {} },
   ] as never[];
@@ -15,7 +15,7 @@ describe("probeFramePicks", () => {
     ]);
   });
   it("skips beats without a full-screen motion graphic", () => {
-    expect(probeFramePicks([{ kind: "app", startSec: 0, endSec: 2 }] as never, 30)).toEqual([]);
+    expect(probeFramePicks([{ kind: "video", startSec: 0, endSec: 2 }] as never, 30)).toEqual([]);
   });
 });
 

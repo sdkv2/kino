@@ -9,7 +9,7 @@ describe("SpecSchema loop field", () => {
     const spec = SpecSchema.parse({
       title: "t",
       segments: [
-        { kind: "app", asset: "screens/x.png", text: "look", caption: "c",
+        { kind: "video", source: "screens/x.png", text: "look", caption: "c",
           motionOverlay: { source: "motion/sparkle.json", loop: true } },
       ],
     });

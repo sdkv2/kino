@@ -20,7 +20,7 @@ program
   .option("--mock", "alias of --draft (deprecated)")
   .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4,16:9")
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
-  .option("--background <kind>", "override faceless background: glow|image|mesh|aurora|particles|grid|custom")
+  .option("--background <kind>", "override the background: glow|image|mesh|aurora|particles|grid|custom")
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")

@@ -4,7 +4,7 @@ import { SpecSchema } from "../src/spec/schema.js";
 const valid = {
   brand: "acme",
   title: "seg-tex",
-  segments: [{ kind: "avatar", text: "hi", caption: "hi" }],
+  segments: [{ kind: "scene", text: "hi", caption: "hi" }],
 };
 
 describe("SpecSchema backgroundTextures video kind", () => {

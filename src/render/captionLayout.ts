@@ -5,9 +5,9 @@ import type { KinoSegment } from "./props.js";
 // graphics as the --kino-caption-bottom CSS var so authors can keep their own text clear of it.
 export const CAPTION_BOTTOM = 470;
 
-/** Faceless talking beats (including CTA end cards) centre the caption as the hero. */
+/** Presenter-less talking beats (including CTA end cards) centre the caption as the hero. */
 export function isHeroCaption(s: Pick<KinoSegment, "kind" | "cta">, hasAvatar: boolean): boolean {
-  return !hasAvatar && s.kind === "avatar";
+  return !hasAvatar && s.kind === "scene";
 }
 
 /** Whether this beat draws any caption at all: word-synced words, or non-blank caption text.
@@ -18,7 +18,7 @@ export function hasCaptionContent(s: KinoSegment): boolean {
 }
 
 // The caption band bottom (px) a motion beat should reserve, or 0 when nothing sits in the bottom band
-// for this beat: an empty caption, or a faceless avatar beat whose caption is the centered hero text.
+// for this beat: an empty caption, or a presenter-less scene beat whose caption is the centered hero text.
 export function captionBandBottom(s: KinoSegment, hasAvatar: boolean): number {
   if (isHeroCaption(s, hasAvatar)) return 0;
   return hasCaptionContent(s) ? CAPTION_BOTTOM : 0;

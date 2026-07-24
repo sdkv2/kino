@@ -42,12 +42,14 @@ export const BrandFrontmatterSchema = z
         reveal: z.enum(CAPTION_REVEALS).optional(),
       })
       .optional(),
-    disclosure: z.string().optional(),
-    facelessDisclosure: z.string().optional(),
+    disclosure: z.string().optional(), // AI disclosure shown on ordinary beats
+    presenterDisclosure: z.string().optional(), // shown instead whenever a presenter is composited
+    facelessDisclosure: z.string().optional(), // pre-1.22 name for `disclosure` (see normalizeDisclosures)
     logo: z.string().optional(),
     logoSize: LogoSize.optional(),
     logoPosition: LogoPosition.optional(),
-    facelessBackdrop: z.string().optional(),
+    backdrop: z.string().optional(), // still image behind `background: "image"`
+    facelessBackdrop: z.string().optional(), // pre-1.22 name for `backdrop`
     background: Background.optional(),
     backgroundComponent: z.string().optional(),
     backgroundColors: z.array(z.string()).optional(),
@@ -87,11 +89,11 @@ export interface Brand {
     animation?: CaptionAnimation;
   };
   disclosure: string;
-  facelessDisclosure?: string;
+  presenterDisclosure?: string;
   logo?: string;
   logoSize?: z.infer<typeof LogoSize>;
   logoPosition?: z.infer<typeof LogoPosition>;
-  facelessBackdrop?: string;
+  backdrop?: string;
   background?: z.infer<typeof Background>;
   backgroundComponent?: string;
   backgroundColors?: string[];
@@ -143,7 +145,26 @@ export function parseBrandMd(text: string): { frontmatter: Record<string, unknow
   return { frontmatter: fm, body: m[2] };
 }
 
-function mergeBrand(base: Brand, fm: BrandFrontmatter): Brand {
+/**
+ * Pre-1.22 brands named these fields around the presenter being the default:
+ * `disclosure` was the WITH-presenter text and `facelessDisclosure` the one for every other beat.
+ * Presenters are the exception now, so `disclosure` is the ordinary text and `presenterDisclosure`
+ * overrides it on camera. Behaviour is preserved exactly, including the old fallback where a brand
+ * that set only `disclosure` showed it in both cases — an AI disclosure must never silently drop.
+ */
+function normalizeDisclosures(fm: BrandFrontmatter): BrandFrontmatter {
+  const out = { ...fm };
+  if (out.facelessBackdrop && !out.backdrop) out.backdrop = out.facelessBackdrop;
+  delete out.facelessBackdrop;
+  if (!out.facelessDisclosure) return out;
+  if (!out.presenterDisclosure) out.presenterDisclosure = out.disclosure; // old `disclosure` = on camera
+  out.disclosure = out.facelessDisclosure;
+  delete out.facelessDisclosure;
+  return out;
+}
+
+function mergeBrand(base: Brand, fmRaw: BrandFrontmatter): Brand {
+  const fm = normalizeDisclosures(fmRaw);
   return {
     ...base,
     ...fm,

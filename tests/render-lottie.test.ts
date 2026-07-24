@@ -59,7 +59,7 @@ describe("Tier-3 Lottie render", () => {
   it("renders a Lottie motionOverlay on an avatar beat", async () => {
     const props: KinoProps = {
       theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
-      segments: [{ kind: "avatar", caption: "hook", startSec: 0, endSec: 2,
+      segments: [{ kind: "scene", caption: "hook", startSec: 0, endSec: 2,
         motionOverlay: { html: "", lottie: fade, loop: false, params: {}, keyframes: [], triggers: [] } }],
     };
     const outs = await renderStills({ props, publicDir: mkdtempSync(join(tmpdir(), "lottie-ov-")), format: "9:16", frames: [{ frame: 20, name: "ov" }], outDir: mkdtempSync(join(tmpdir(), "kino-lottie-ov-")) });

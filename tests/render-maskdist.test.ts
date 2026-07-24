@@ -60,7 +60,7 @@ const body =
 const maskProps: KinoProps = {
   theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
   segments: [{
-    kind: "app", asset: "asset.png", caption: "", startSec: 0, endSec: 2,
+    kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {
       masks: [{ maskSrc: "mask.png", maskKind: "image" as const, channel: "gray" as const }],
       subjectCode: body, backgroundCode: body,
@@ -129,7 +129,7 @@ describe("kinoMaskDist", () => {
       theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, disclosure: "",
       background: { kind: "custom", image: null, customCode: null, params, keyframes: [], triggers: [],
         shaderCode: "void mainImage(out vec4 c, in vec2 f){ c = vec4(1.0, 0.0, 0.0, 1.0); }" },
-      segments: [{ kind: "avatar", caption: "", startSec: 0, endSec: 2 }],
+      segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }],
     };
     const out = await renderStills({
       props, publicDir: mkdtempSync(join(tmpdir(), "kino-maskdist-solid-")), format: "9:16",

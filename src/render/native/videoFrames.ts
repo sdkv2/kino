@@ -40,7 +40,7 @@ export function appSeqDurFrames(segments: KinoProps["segments"], i: number, fps:
   const s = segments[i];
   const next = segments[i + 1];
   const beatDur = f(s.endSec, fps) - f(s.startSec, fps);
-  return next?.kind === "app" ? f(next.startSec, fps) - f(s.startSec, fps) + 12 : beatDur;
+  return next?.kind === "video" ? f(next.startSec, fps) - f(s.startSec, fps) + 12 : beatDur;
 }
 
 export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
@@ -63,10 +63,10 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
     });
   }
   props.segments.forEach((s, i) => {
-    if (s.kind !== "app") return;
+    if (s.kind !== "video") return;
     // Footage beat (or the region-shader asset texture): mp4/mov gets frame-extracted; images render directly.
-    if (s.asset && /\.(mp4|mov)$/i.test(s.asset)) {
-      const j = appMediaJob(props.segments, i, fps, `seg${i}`, s.asset);
+    if (s.source && /\.(mp4|mov)$/i.test(s.source)) {
+      const j = appMediaJob(props.segments, i, fps, `seg${i}`, s.source);
       if (j) jobs.push(j);
     }
     // Region-shader video mask(s) (uMask0..N): same source-time progression as the beat asset so a

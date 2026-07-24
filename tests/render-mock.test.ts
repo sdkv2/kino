@@ -26,7 +26,7 @@ describe("renderVideo", () => {
       disclosure: "test",
       segments: [
         {
-          kind: "avatar",
+          kind: "scene",
           caption: "hello",
           startSec: 0,
           endSec: 2,
@@ -54,7 +54,7 @@ describe("renderVideo", () => {
       logo: null,
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
-      segments: [{ kind: "avatar", caption: "on camera", startSec: 0, endSec: 2 }],
+      segments: [{ kind: "scene", caption: "on camera", startSec: 0, endSec: 2 }],
     };
     const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "av" });
     expect(outs).toHaveLength(1);
@@ -75,8 +75,8 @@ describe("renderVideo", () => {
       background: { kind: "mesh", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [
-        { kind: "avatar", caption: "hook", startSec: 0, endSec: 1 },
-        { kind: "app", asset: "app.mp4", caption: "cut-in", startSec: 1, endSec: 2, shot: "static", transition: "fly-left" },
+        { kind: "scene", caption: "hook", startSec: 0, endSec: 1 },
+        { kind: "video", source: "app.mp4", caption: "cut-in", startSec: 1, endSec: 2, shot: "static", transition: "fly-left" },
       ],
     };
     const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "app" });
@@ -107,8 +107,8 @@ describe("renderVideo", () => {
       disclosure: "test",
       segments: [
         {
-          kind: "app",
-          asset: "app.mp4",
+          kind: "video",
+          source: "app.mp4",
           caption: "sliced",
           startSec: 0,
           endSec: 2,
@@ -138,7 +138,7 @@ describe("renderVideo", () => {
       logo: null,
       background: { kind: "mesh", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
-      segments: [{ kind: "avatar", caption: "hello", startSec: 0, endSec: 2 }],
+      segments: [{ kind: "scene", caption: "hello", startSec: 0, endSec: 2 }],
     };
     const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "bg" });
     expect(outs).toHaveLength(1);
@@ -158,7 +158,7 @@ describe("renderVideo", () => {
       disclosure: "test",
       segments: [
         {
-          kind: "avatar",
+          kind: "scene",
           caption: "hi",
           startSec: 0,
           endSec: 2,
@@ -184,7 +184,7 @@ describe("renderVideo", () => {
       logo: null,
       background: { kind: "solid", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "",
-      segments: [{ kind: "avatar", caption: "", startSec: 0, endSec: 2 }], // no caption: isolate the background layer
+      segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }], // no caption: isolate the background layer
     };
     const outs = await renderStills({ props, publicDir: outDir, format: "9:16", frames: [{ frame: 5, name: "s1" }, { frame: 55, name: "s2" }], outDir });
     // top-left corner, well clear of any centred content: pixel is driven only by the background draw.
@@ -203,7 +203,7 @@ describe("renderVideo", () => {
       logo: null,
       background: { kind: "mesh", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
-      segments: [{ kind: "avatar", caption: "hi", startSec: 0, endSec: 2 }],
+      segments: [{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }],
     };
     const outs = await renderStills({ props, publicDir: outDir, format: "9:16", frames: [{ frame: 5, name: "a" }, { frame: 20, name: "b" }], outDir });
     expect(outs).toHaveLength(2);
@@ -223,7 +223,7 @@ describe("renderVideo", () => {
       disclosure: "test",
       segments: [
         {
-          kind: "avatar",
+          kind: "scene",
           caption: "hi",
           startSec: 0,
           endSec: 2,
@@ -260,7 +260,7 @@ describe("renderVideo with sfx + music", () => {
       sfx: [{ src: "sfx-0.mp3", at: 1.0, volume: 0.8 }],
       music: { src: "music.mp3", volume: 0.2, duck: 0.05, fadeOutSec: 1, duckSpans: [{ from: 0, to: 2 }] },
       segments: [
-        { kind: "avatar", caption: "hello", startSec: 0, endSec: 3 },
+        { kind: "scene", caption: "hello", startSec: 0, endSec: 3 },
       ],
     };
     const outs = await renderVideo({ props, publicDir, formats: ["9:16"], outDir, title: "sfx-check" });

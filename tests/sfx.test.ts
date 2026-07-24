@@ -49,7 +49,7 @@ describe("resolveAudioSource", () => {
 
 const baseSpec = {
   title: "sfx-check",
-  segments: [{ kind: "avatar", text: "hi", caption: "hi" }],
+  segments: [{ kind: "scene", text: "hi", caption: "hi" }],
 };
 
 describe("spec sfx/music schema", () => {

@@ -1,5 +1,5 @@
 // Which engine turns the voiceover into a talking-head clip.
-//   none     — faceless: no avatar at all (free; app footage + VO + captions)
+//   none     — no presenter at all (free; footage + VO + captions over the background)
 //   heygen   — HeyGen Avatar-IV hosted look (premium, highest quality)
 //   hedra    — Hedra Character-3 (cheap API, free monthly tier; needs a portrait image)
 //   replicate — open-source lip-sync model on Replicate (pennies/clip; needs a portrait image)

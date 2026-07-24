@@ -209,7 +209,7 @@ describe("assertMotionGraphics", () => {
   });
   it("throws for a missing overlay source", () => {
     const project = { assetPath: (rel: string) => join("/nope", rel) };
-    const spec = { segments: [{ kind: "app", asset: "a.png", text: "x", caption: "c", motionOverlay: { source: "motion/missing.html" } }] } as unknown as Spec;
+    const spec = { segments: [{ kind: "video", source: "a.png", text: "x", caption: "c", motionOverlay: { source: "motion/missing.html" } }] } as unknown as Spec;
     expect(() => assertMotionGraphics(spec, project)).toThrow(/Missing motion graphic/);
   });
   it("throws naming the segment + violation for a banned construct", () => {
@@ -261,7 +261,7 @@ describe("SpecSchema motion graphics", () => {
   it("parses a motionOverlay on an app segment", () => {
     const spec = SpecSchema.parse({
       title: "t", segments: [
-        { kind: "app", asset: "screens/x.png", text: "look", caption: "c",
+        { kind: "video", source: "screens/x.png", text: "look", caption: "c",
           motionOverlay: { source: "motion/callout.html", params: { x: 50 } } },
       ],
     });

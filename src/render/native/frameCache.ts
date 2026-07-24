@@ -69,7 +69,7 @@ export function frameSignatures(opts: {
   const ranges = props.segments.map((s) => ({
     from: f(s.startSec) - PAD,
     to: f(s.endSec) + PAD,
-    sig: sha1(JSON.stringify(s) + ("asset" in s && s.asset ? `|${statSig(join(publicDir, s.asset))}` : "")),
+    sig: sha1(JSON.stringify(s) + ("source" in s && s.source ? `|${statSig(join(publicDir, s.source))}` : "")),
   }));
   const sigs: string[] = new Array(total);
   for (let n = 0; n < total; n++) {

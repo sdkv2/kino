@@ -269,7 +269,7 @@ export const TweenOverlay: React.FC<{ keyframes: BgKeyframe[]; children: React.R
   );
 };
 
-// Brand mark for faceless talking beats — configurable size/position, agent-tweenable.
+// Brand mark for presenter-less talking beats — configurable size/position, agent-tweenable.
 export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number; keyframes: BgKeyframe[]; fromSec: number }> = ({
   src,
   sizePx,

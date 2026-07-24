@@ -1,9 +1,9 @@
 // Native-engine port of the top-level composition. Layers render back-to-front exactly as the
 // legacy composition documents:
-//   1. night backdrop fill   2. faceless brand backdrop   3. avatar video windows
+//   1. night backdrop fill   2. brand backdrop   3. presenter video windows
 //   4. app cut-ins (each with its own kicker overlay)     5. full-screen motion-graphic beats
 //   6. motion-graphic overlays   7. standalone text overlays (spec `texts[]`)
-//   8. logo (faceless beats only)   9. captions (word/hero/lower-third)   10. AI disclosure
+//   8. logo (presenter-less beats only)   9. captions (word/hero/lower-third)   10. AI disclosure
 // Audio (VO, SFX, ducked music) is mixed node-side by the engine (../audioMix.ts) — nothing to
 // mount here. Fonts load once at page boot (index.tsx). `f` converts seconds→frames (sec * fps).
 import React from "react";
@@ -46,7 +46,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
   const f = (s: number) => Math.round(s * fps);
   return (
     <AbsoluteFill style={{ backgroundColor: theme.night }}>
-      {/* Living brand backdrop, always the base layer: faceless beats aren't empty, and app cut-in
+      {/* Living brand backdrop, always the base layer: presenter-less beats aren't empty, and video cut-in
           transitions reveal the brand background instead of raw black (the avatar covers it on camera). */}
       <FacelessBackdrop t={theme} background={background} />
 
@@ -63,12 +63,12 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         : null}
 
       {segments.map((s, i) => {
-        if (s.kind !== "app") return null;
+        if (s.kind !== "video") return null;
         // Media-to-media handoff: when the NEXT beat is also an app cut-in, hold this clip (no exit
         // animation) through the VO gap and 12 frames into the successor, which mounts above it and
         // fades in — a crossfade between shots instead of a flash of bare background between them.
         const next = segments[i + 1];
-        const chained = next?.kind === "app";
+        const chained = next?.kind === "video";
         const beatDur = f(s.endSec) - f(s.startSec);
         const seqDur = chained ? f(next.startSec) - f(s.startSec) + 12 : beatDur;
         return (
@@ -79,15 +79,15 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
               // already extracted for app beats; rsmask${i}_${j} is registered in planMediaJobs, one
               // per region.masks entry that's a video mask).
               <RegionShader
-                asset={s.asset!}
+                asset={s.source!}
                 region={s.regionShader}
                 t={theme}
-                assetMediaKey={/\.(mp4|mov)$/i.test(s.asset!) ? `seg${i}` : undefined}
+                assetMediaKey={/\.(mp4|mov)$/i.test(s.source!) ? `seg${i}` : undefined}
                 maskMediaKeys={s.regionShader.masks.map((m, j) => (m.maskKind === "video" ? `rsmask${i}_${j}` : undefined))}
               />
             ) : (
             <AppCutaway
-              asset={s.asset!}
+              asset={s.source!}
               mediaKey={`seg${i}`}
               dur={seqDur}
               t={theme}
@@ -163,7 +163,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         )),
       )}
 
-      {/* Brand mark on faceless talking runs — one per contiguous run so it holds steady as the text changes. */}
+      {/* Brand mark on presenter-less talking runs — one per contiguous run so it holds steady as the text changes. */}
       {!avatar && logo
         ? avatarWindows.map((w, i) => (
             <Sequence key={`lg${i}`} from={f(w.fromSec)} durationInFrames={f(w.toSec) - f(w.fromSec)}>
@@ -176,15 +176,15 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
         // Captions are optional: a beat with no words and no caption text mounts nothing (an empty
         // Caption span would still paint its backplate pill).
         if (!hasCaptionContent(s)) return null;
-        // words mode = synced spoken text; else faceless talking beats use hero text, app beats lower-third.
+        // words mode = synced spoken text; else presenter-less talking beats use hero text, video beats lower-third.
         // Faceless CTA end cards are hero-centered too (isHeroCaption) — not a lower-third subtitle.
         const wordMode = s.captionMode === "words" && s.words && s.words.length > 0;
         const hero = isHeroCaption(s, !!avatar);
         // Backplate behind the lower-third caption (legibility over light app screenshots). appOnly
-        // (default) scopes it to app cut-ins; the hero text on faceless beats never gets a plate.
+        // (default) scopes it to video cut-ins; the hero text on presenter-less beats never gets a plate.
         const cbg = theme.captionBg;
         const backplate =
-          cbg && (!cbg.appOnly || s.kind === "app") ? { bg: cbg.bg } : null;
+          cbg && (!cbg.appOnly || s.kind === "video") ? { bg: cbg.bg } : null;
         return (
           <Sequence key={`c${i}`} from={f(s.startSec)} durationInFrames={f(s.endSec) - f(s.startSec)}>
             <TweenOverlay keyframes={s.captionKeyframes ?? []}>

@@ -71,8 +71,8 @@ describe("app cut-in frame accuracy (clip window + speed + pauseAt)", () => {
       disclosure: "",
       segments: [
         {
-          kind: "app",
-          asset: "app.mp4",
+          kind: "video",
+          source: "app.mp4",
           caption: "",
           startSec: 0,
           endSec: 2,

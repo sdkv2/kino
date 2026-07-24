@@ -4,7 +4,7 @@ import { SpecSchema } from "../src/spec/schema.js";
 const valid = {
   brand: "acme",
   title: "fps-spec",
-  segments: [{ kind: "avatar", text: "hi", caption: "hi" }],
+  segments: [{ kind: "scene", text: "hi", caption: "hi" }],
 };
 
 describe("SpecSchema fps", () => {

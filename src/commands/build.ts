@@ -1,4 +1,4 @@
-// Pipeline backbone: spec → VO → avatar plan/trim → faceless background → fonts → frame render.
+// Pipeline backbone: spec → VO → presenter plan/trim → background → fonts → frame render.
 // prepare() is the shared resolver that does everything up to (but not including) the final encode;
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
@@ -18,6 +18,7 @@ import { contentHash } from "../media/hash.js";
 import { buildVO, GAP } from "../vo/vo.js";
 import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
+import { presenterBeats, resolvePresenterPin } from "../avatar/source.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
@@ -149,7 +150,7 @@ export async function prepare(
     mock?: boolean; // deprecated alias of `draft`
     draft?: boolean;
     tts?: boolean; // default true on a full render; false = silent (full quality). commander --no-tts.
-    avatar?: boolean; // default true on a full render; false = faceless. commander --no-avatar.
+    avatar?: boolean; // default true on a full render; false = no presenter. commander --no-avatar.
     format?: string;
     provider?: string;
     background?: string;
@@ -175,15 +176,19 @@ export async function prepare(
   };
   validateSpec(spec, brand, project);
   // Three independent build axes (draft/mock is just the all-off, no-spend preset):
-  //   draft  → fast free preview: silent VO + placeholder avatar + veryfast/low-SS encode
+  //   draft  → fast free preview: silent VO + placeholder presenter + veryfast/low-SS encode
   //   tts    → real voiceover (off = silent, but FULL quality). commander --no-tts.
-  //   avatar → real presenter  (off = faceless, full quality; forced off whenever tts is off,
-  //            since a lip-synced avatar has nothing to sync to). commander --no-avatar.
+  //   avatar → real presenter  (off = no presenter, full quality; forced off whenever tts is off,
+  //            since a lip-synced presenter has nothing to sync to). commander --no-avatar.
   const draft = !!(opts.draft || opts.mock);
   const tts = !draft && opts.tts !== false;
   const wantAvatar = tts && opts.avatar !== false;
-  // --no-avatar (or silent) routes through the existing faceless path by forcing provider "none".
-  const provider = wantAvatar ? ((opts.provider as Provider | undefined) ?? resolveProvider(spec, brand)) : "none";
+  // A beat may pin its provider/look via `source: "heygen:look-id"`; otherwise "avatar:" takes
+  // whatever the spec/brand/project configures. --no-avatar (or silent) drops to "none".
+  const pin = resolvePresenterPin(spec);
+  const provider = wantAvatar
+    ? ((opts.provider as Provider | undefined) ?? pin?.provider ?? resolveProvider(spec, brand))
+    : "none";
   const voiceId = resolveVoice(spec, brand);
   // A spec whose every beat imports real VO (voFile) needs no TTS voice at all.
   const needsTts = spec.segments.some((s) => !s.voFile);
@@ -210,22 +215,25 @@ export async function prepare(
     resolveAsset: (rel) => project.assetPath(rel),
   });
 
-  log.step("avatar");
-  const plan = planAvatarWindows(spec.segments.map((s) => s.kind), vo.timings, GAP);
-  const avatarWindows = plan.windows; // contiguous on-camera runs: avatar placement + steady faceless logo
+  log.step("presenter");
+  const plan = planAvatarWindows(presenterBeats(spec), vo.timings, GAP);
+  const avatarWindows = plan.windows; // contiguous on-camera runs: presenter placement + steady logo
   let avatarRel: string | null = null;
   let avatarPath: string | null = null;
   if (provider === "none" || plan.avatarIndices.length === 0) {
-    log.info("  · faceless (no avatar generated)");
+    log.info("  · no presenter");
   } else {
     const avTrack = await stitchAvatarTrack(vo.clips, plan.avatarIndices, cache);
-    const source = provider === "heygen" ? resolveVoiceLook(spec, brand).lookId : resolveSourceImage(spec, brand, project, provider);
+    // A beat's pinned look (after the colon in `source`) overrides the spec/brand one.
+    const source =
+      pin?.look ??
+      (provider === "heygen" ? resolveVoiceLook(spec, brand).lookId : resolveSourceImage(spec, brand, project, provider));
     avatarPath = await buildAvatar({ provider, audioPath: avTrack, source, brand, cache, mock: false });
     avatarRel = "avatar.mp4";
     log.info(`  · ${plan.avatarIndices.length}/${spec.segments.length} segments on camera (trimmed)`);
   }
 
-  // Stage everything the render page reads via staticFile(): app assets, the avatar clip, and the VO track.
+  // Stage everything the render page reads via staticFile(): video assets, the presenter clip, and the VO track.
   const publicDir = join(project.outDir(spec.title), "_public");
   mkdirSync(publicDir, { recursive: true });
   const staged = new Set<string>();
@@ -237,8 +245,8 @@ export async function prepare(
     copyFileSync(project.assetPath(rel), dest);
   };
   for (const seg of spec.segments) {
-    if (seg.kind === "app") {
-      stageAsset(seg.asset);
+    if (seg.kind === "video") {
+      stageAsset(seg.source);
       if (seg.frame) stageAsset(seg.frame.src);
     }
   }
@@ -298,10 +306,10 @@ export async function prepare(
   let bgCustomCode: string | null = null;
   let bgShaderCode: string | null = null;
   if (bgKind === "image") {
-    const imgAbs = resolveBrandFile(brand.facelessBackdrop, project);
-    if (!imgAbs) throw new Error('background "image" needs brand.facelessBackdrop');
-    copyFileSync(imgAbs, join(publicDir, "faceless-bg.png"));
-    bgImageRel = "faceless-bg.png";
+    const imgAbs = resolveBrandFile(brand.backdrop, project);
+    if (!imgAbs) throw new Error('background "image" needs brand.backdrop');
+    copyFileSync(imgAbs, join(publicDir, "backdrop.png"));
+    bgImageRel = "backdrop.png";
   } else if (bgKind === "custom") {
     const compRef = spec.backgroundComponent ?? brand.backgroundComponent;
     if (!compRef) {
@@ -425,7 +433,7 @@ export async function prepare(
     });
     const base = {
       kind: seg.kind,
-      asset: seg.kind === "app" ? seg.asset : undefined,
+      source: seg.kind === "video" ? seg.source : undefined,
       caption: seg.caption ?? "",
       startSec,
       endSec,
@@ -438,9 +446,9 @@ export async function prepare(
       captionReveal: look.reveal,
       texts: resolveTexts(seg.texts, startSec, endSec, brand.captionStyle.fontSize, look),
     };
-    if (seg.kind === "app") {
+    if (seg.kind === "video") {
       const shot = pickShot(appIdx, seg.shot as Shot | undefined);
-      const isVideo = /\.(mp4|mov)$/i.test(seg.asset ?? "");
+      const isVideo = /\.(mp4|mov)$/i.test(seg.source ?? "");
       const transition = pickTransition(appIdx, seg.transition as Transition | undefined, isVideo);
       appIdx++;
       return {
@@ -463,7 +471,7 @@ export async function prepare(
           : undefined,
       };
     }
-    if (seg.kind === "avatar") {
+    if (seg.kind === "scene") {
       return {
         ...base,
         cta: seg.cta || undefined,
@@ -509,7 +517,7 @@ export async function prepare(
     voTrack: "vo.mp3",
     logo,
     background,
-    disclosure: avatarRel ? brand.disclosure : (brand.facelessDisclosure ?? brand.disclosure),
+    disclosure: avatarRel ? (brand.presenterDisclosure ?? brand.disclosure) : brand.disclosure,
     sfx,
     music,
     segments: renderSegments,
@@ -534,7 +542,7 @@ export async function build(
   },
 ): Promise<string[]> {
   const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
-  // Only a draft is low-quality; a full render — even a silent (--no-tts) or faceless (--no-avatar)
+  // Only a draft is low-quality; a full render — even a silent (--no-tts) or presenter-less (--no-avatar)
   // one — keeps final quality and a clean, untagged filename.
   const draft = !!(opts.draft || opts.mock);
   // Under-animation probe: sample each full-screen motion beat at a few progress points and warn

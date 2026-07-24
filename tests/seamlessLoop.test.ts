@@ -17,7 +17,7 @@ function motionSpec(overrides: Partial<Spec> = {}): Spec {
 
 describe("assertSeamlessLoop", () => {
   it("no-ops when unset", () => {
-    expect(() => assertSeamlessLoop({ title: "x", segments: [{ kind: "avatar", text: "hi" }] } as Spec)).not.toThrow();
+    expect(() => assertSeamlessLoop({ title: "x", segments: [{ kind: "scene", text: "hi" }] } as Spec)).not.toThrow();
   });
 
   it("requires last segment to be motion", () => {
@@ -26,7 +26,7 @@ describe("assertSeamlessLoop", () => {
         motionSpec({
           segments: [
             { kind: "motion", source: "prompt-type", text: "Make me an advert." },
-            { kind: "avatar", text: "Tell your agent." },
+            { kind: "scene", text: "Tell your agent." },
           ],
         }),
       ),

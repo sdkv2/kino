@@ -8,7 +8,7 @@ export async function backgrounds(): Promise<void> {
   process.stdout.write("  Choose:\n");
   process.stdout.write("    · custom + backgroundComponent  — authored brand stage (preferred when identity matters)\n");
   process.stdout.write("    · solid                         — loop-safe static wash (seamlessLoop / settle)\n");
-  process.stdout.write("    · image                         — brand.facelessBackdrop still + slow Ken Burns\n");
+  process.stdout.write("    · image                         — brand.backdrop still + slow Ken Burns\n");
   process.stdout.write("    · glow                          — calm CSS (cheap default)\n");
   process.stdout.write("    · mesh / aurora / particles / grid — stock presets (fine for drafts; easy AI tell)\n");
   process.stdout.write("    · motion beat .bg               — own the ground inside the graphic (occludes all of the above)\n");

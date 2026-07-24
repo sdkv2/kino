@@ -20,7 +20,7 @@ describe("still --measure geometry probe", () => {
     const props: KinoProps = {
       theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
       disclosure: "test",
-      segments: [{ kind: "avatar", caption: "hook", startSec: 0, endSec: 2, motionOverlay: { html, params: {}, keyframes: [], triggers: [] } }],
+      segments: [{ kind: "scene", caption: "hook", startSec: 0, endSec: 2, motionOverlay: { html, params: {}, keyframes: [], triggers: [] } }],
     };
     const measurements: FrameMeasure[] = [];
     await renderStills({ props, publicDir: outDir, format: "9:16", frames: [{ frame: 20, name: "m" }], outDir, measureSink: measurements });
@@ -47,7 +47,7 @@ describe("still --measure geometry probe", () => {
     const props: KinoProps = {
       theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
       disclosure: "test",
-      segments: [{ kind: "avatar", caption: "hook", startSec: 0, endSec: 2, motionOverlay: { html, params: {}, keyframes: [], triggers: [] } }],
+      segments: [{ kind: "scene", caption: "hook", startSec: 0, endSec: 2, motionOverlay: { html, params: {}, keyframes: [], triggers: [] } }],
     };
     const outs = await renderStills({ props, publicDir: outDir, format: "9:16", frames: [{ frame: 20, name: "m" }], outDir });
     expect(outs).toHaveLength(1); // still returns the plain string[] of file paths

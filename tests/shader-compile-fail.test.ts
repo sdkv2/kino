@@ -28,7 +28,7 @@ function propsWithShader(shaderCode: string): KinoProps {
       keyframes: [], triggers: [],
     },
     disclosure: "test",
-    segments: [{ kind: "avatar", caption: "hi", startSec: 0, endSec: 1 }],
+    segments: [{ kind: "scene", caption: "hi", startSec: 0, endSec: 1 }],
   };
 }
 
