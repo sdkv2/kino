@@ -44,6 +44,120 @@ SAM3_HF_REPO = os.environ.get("SAM3_HF_REPO", "AEmotionStudio/sam3.1")
 SAM3_CKPT_NAME = os.environ.get("SAM3_CKPT_NAME", "sam3.1_multiplex.pt")
 
 
+def _use_fa3(device: str) -> bool:
+    """FlashAttention-3 needs the `flash_attn_interface` package AND Hopper-class silicon
+    (fp8 tensor cores, compute capability 9.0+ — H100/H200). Every consumer/prosumer card
+    (Turing/Ampere/Ada: 2080 Ti, 3060/3080/3090, 4070/4090, ...) is below that, and sam3's
+    fa3 module has no capability check of its own — it imports flash_attn_interface
+    unconditionally and crashes with ModuleNotFoundError on anything less than Hopper (that
+    package isn't even installable there). Auto-detect instead of hardcoding True; override
+    with KINO_SAM_FA3=1/0 if you know better than the capability check.
+
+    Capability alone is not enough: Blackwell (sm_120) reports major=12 but does not ship
+    flash_attn_interface either, so we check the package actually imports rather than
+    inferring it from "new enough GPU"."""
+    override = os.environ.get("KINO_SAM_FA3")
+    if override is not None:
+        return override == "1"
+    if device != "cuda":
+        return False
+    import importlib.util
+
+    import torch
+
+    major, _ = torch.cuda.get_device_capability()
+    return major >= 9 and importlib.util.find_spec("flash_attn_interface") is not None
+
+
+def _amp_dtype(device: str):
+    """bf16 everywhere except pre-Ampere CUDA, where it must be fp16.
+
+    SAM3 hardcodes bf16 autocast throughout ("use bfloat16 inference for Flash Attention
+    kernel") — an Ampere assumption. On Turing/Volta (sm_75 and below) PyTorch's
+    memory-efficient SDPA kernel rejects bf16 outright ("Expected query, key and value to
+    all be of dtype: {Half, Float}"), and flash needs sm_80, so EVERY attention call falls
+    back to the math kernel, which materializes the full [B,heads,N,N] score matrix. On a
+    2080 Ti that is fatal: one global-attention call in the ViT trunk at B=8 frames asks for
+    12.81 GiB (6.4 GiB of bf16 scores, doubled by the fp32 softmax upcast) against 11 GiB of
+    board. fp16 re-enables the mem-efficient kernel, which never materializes the matrix —
+    measured on this box at the exact OOMing shape [8,16,5184,64]: bf16 OOM at 12.81 GiB vs
+    fp16 0.08 GiB peak, and it stays linear in frame count instead of quadratic in tokens.
+
+    Ampere+ keeps bf16 (wider exponent range, and its kernels support it natively).
+    Override with KINO_SAM_DTYPE=fp16|bf16."""
+    import torch
+
+    override = os.environ.get("KINO_SAM_DTYPE")
+    if override:
+        return {"fp16": torch.float16, "bf16": torch.bfloat16}[override]
+    if device == "cuda" and torch.cuda.get_device_capability()[0] < 8:
+        return torch.float16
+    return torch.bfloat16
+
+
+def force_amp_dtype(target):
+    """Rewrite every CUDA bf16 autocast sam3 opens to `target`.
+
+    Must run BEFORE `import sam3`: sam3 applies `@torch.autocast(device_type="cuda",
+    dtype=torch.bfloat16)` as a decorator on its tracking/inference methods, and a decorator
+    constructs its autocast object at import time — patching afterwards is too late. The
+    remaining bf16 contexts sam3 opens at runtime (self.bf16_context in the multiplex
+    predictors) go through the same class, so one patch covers both."""
+    import torch
+
+    if target is torch.bfloat16:
+        return
+    orig = torch.amp.autocast_mode.autocast.__init__
+
+    # Param must literally be named `dtype` — sam3 passes it as a keyword.
+    def patched(self, device_type, dtype=None, *a, **k):
+        if device_type == "cuda" and dtype is torch.bfloat16:
+            dtype = target
+        return orig(self, device_type, dtype, *a, **k)
+
+    torch.amp.autocast_mode.autocast.__init__ = patched
+    # sam3 also hard-casts a few tensors (maskmem_features, backbone_fpn) to bf16 outside any
+    # autocast; those flow straight into SDPA and would drag it back to the math kernel.
+    orig_to = torch.Tensor.to
+
+    def to(self, *a, **k):
+        a = tuple(target if x is torch.bfloat16 else x for x in a)
+        if k.get("dtype") is torch.bfloat16:
+            k["dtype"] = target
+        return orig_to(self, *a, **k)
+
+    torch.Tensor.to = to
+
+
+def _tune_vram(model, device: str):
+    """Shrink the detector's frame-batch to fit small boards.
+
+    The video path re-runs the grounding detector over a *chunk* of frames at a time
+    (`batched_grounding_batch_size`, sam3 default 16) purely for throughput — every frame in
+    the chunk is encoded and mask-decoded simultaneously, so peak transient memory scales
+    straight with it. The weights alone are 3.25 GiB resident, which on an 11 GiB board
+    leaves ~6.5 GiB for transients: a 16-frame chunk blows that in the maskformer pixel
+    embedding. Chunk size does not affect the masks, only how many frames share one pass.
+
+    Scaled off total VRAM rather than hardcoded, since the same runner serves 11 GiB 2080 Tis
+    and 80 GiB H100s. Override with KINO_SAM_GROUNDING_BATCH."""
+    import torch
+
+    override = os.environ.get("KINO_SAM_GROUNDING_BATCH")
+    if override:
+        n = int(override)
+    elif device != "cuda":
+        return
+    else:
+        gib = torch.cuda.get_device_properties(0).total_memory / 2**30
+        # ponytail: coarse 3-step ladder off measured headroom, not a per-GPU table.
+        # Raise KINO_SAM_GROUNDING_BATCH if you have room; lower it if you still OOM.
+        n = 1 if gib < 16 else (4 if gib < 32 else 16)
+    if n != getattr(model, "batched_grounding_batch_size", n):
+        log(f"grounding batch {model.batched_grounding_batch_size} -> {n} (VRAM fit)")
+    model.batched_grounding_batch_size = n
+
+
 def log(*a):
     print("[sam_runner_cuda]", *a, file=sys.stderr, flush=True)
 
@@ -236,9 +350,10 @@ def run_image(args, n_want):
 
     img = Image.open(args.input).convert("RGB")
     ow, oh = img.size
-    # SAM3 is a bf16-AMP model (its fused vit MLP casts activations to bf16);
-    # inference must run under autocast so the fp32 layers match. GPU=cuda, verify=cpu.
-    with torch.autocast(device_type=args.device, dtype=torch.bfloat16):
+    # SAM3 is a low-precision-AMP model (its fused vit MLP casts activations); inference must
+    # run under autocast so the fp32 layers match. GPU=cuda, verify=cpu. See _amp_dtype for
+    # why pre-Ampere CUDA uses fp16 rather than sam3's hardcoded bf16.
+    with torch.autocast(device_type=args.device, dtype=args.amp_dtype):
         state = processor.set_image(img)
         state = processor.set_text_prompt(state=state, prompt=args.prompt)
 
@@ -281,9 +396,11 @@ def run_video(args, n_want):
     log(f"building multiplex video predictor on {args.device} (real tracking)")
     predictor = build_sam3_multiplex_video_predictor(
         checkpoint_path=ckpt,
-        use_fa3=(args.device == "cuda"),  # FlashAttention-3 is CUDA-only
+        use_fa3=_use_fa3(args.device),
         async_loading_frames=False,
     )
+
+    _tune_vram(predictor.model, args.device)
 
     # sam3 API skew: Sam3BasePredictor.start_session always passes offload_state_to_cpu, but the
     # multiplex model.init_state signature doesn't accept it. Filter to the params it declares.
@@ -301,10 +418,10 @@ def run_video(args, n_want):
 
     resp = predictor.handle_request(dict(type="start_session", resource_path=args.input))
     sid = resp["session_id"]
-    # bf16-AMP model — inference runs under autocast (GPU=cuda, verify=cpu). The predictor
-    # entered a cuda-autocast at init (a no-op off-GPU); this nested one matches the device.
+    # AMP model — inference runs under autocast (GPU=cuda, verify=cpu). The predictor entered
+    # a cuda-autocast at init (a no-op off-GPU); this nested one matches the device.
     outputs_per_frame = {}
-    with torch.autocast(device_type=args.device, dtype=torch.bfloat16):
+    with torch.autocast(device_type=args.device, dtype=args.amp_dtype):
         predictor.handle_request(
             dict(type="add_prompt", session_id=sid, frame_index=0, text=args.prompt)
         )
@@ -388,6 +505,11 @@ def main():
     if args.device == "cpu":
         apply_cpu_workarounds()
     # CUDA path: leave torch/triton untouched — the GPU kernels need the real thing.
+
+    # Must precede the sam3 imports inside run_image/run_video (decorator-time autocast).
+    args.amp_dtype = _amp_dtype(args.device)
+    force_amp_dtype(args.amp_dtype)
+    log(f"device={args.device} amp={str(args.amp_dtype).split('.')[-1]}")
 
     if args.video:
         run_video(args, n_want)
