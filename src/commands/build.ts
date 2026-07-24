@@ -496,7 +496,7 @@ export async function prepare(
       captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
       film: resolveFilm(spec, brand),
     },
-    fps: 30,
+    fps: spec.fps ?? 30,
     avatar: avatarRel,
     avatarWindows,
     voTrack: "vo.mp3",

@@ -195,6 +195,11 @@ export const SpecSchema = z
     title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
     kinoVersion: z.string().optional(), // kino version this spec was authored/built against — mismatch warns, doesn't fail
     format: z.array(z.enum(["9:16", "3:4", "16:9"])).default(["9:16"]),
+    // Composition frame rate. 30 suits talking-head and motion work and keeps render cost down,
+    // but it resamples higher-rate source: 60fps footage (and a 60fps segmentation mask tracking
+    // it) lands on every other frame. Raise it to carry that cadence through — cost scales with
+    // it, since every frame is a real browser paint.
+    fps: z.number().int().min(1).max(120).optional(),
     voice: z.string().optional(),
     // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
     // eleven_multilingual_v2 for metronome-critical / timing-stable reads.

@@ -22,6 +22,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `segments` | [Segment](#segments)[] | ✅ | The beats, in order (≥ 1). |
 | `brand` | string | — | Brand name; falls back to the project's `project.json` brand. |
 | `format` | `("9:16"\|"3:4"\|"16:9")[]` | — | Output formats. Default `["9:16"]`. Motion layouts adapt via `--kino-aspect`. |
+| `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
 | `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. |
 | `voiceModel` | string | — | ElevenLabs TTS model. Default is v3 (inline audio tags `[excited]`, `[whispers]`, `[short pause]`, … work in segment `text`; tags are stripped from word-synced captions). Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads. |
 | `film` | number | — | Cinematic-finish intensity (vignette + grain over photographic/app beats), `0..1`. Default `1` (graded film look). Set `0` for clean flat edges — e.g. a light "paper" video where the edge vignette reads as a dark border. Motion-graphic beats are never graded. |
