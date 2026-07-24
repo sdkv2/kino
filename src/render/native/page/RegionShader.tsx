@@ -146,9 +146,20 @@ async function updateFrameSlot(gl: WebGL2RenderingContext, slot: Slot, url: stri
   slot.frameVideo.lastUrl = url;
 }
 
+// Free a superseded program and its textures. The canvas keeps ONE WebGL2 context (getContext
+// returns the same object on every call), so a re-keyed component would otherwise leak a program
+// and MAX_REGION_MASKS+1 textures per spec. Deletion is by object name and the new init has
+// already bound its own handles, so this can't disturb the replacement.
+function disposeGL(st: GLState | null): void {
+  if (!st) return;
+  st.gl.deleteProgram(st.prog);
+  st.gl.deleteTexture(st.asset.handle);
+  for (const m of st.masks) st.gl.deleteTexture(m.handle);
+}
+
 // Compile the program + build the asset slot and every mask slot (real sources first, inert
 // placeholders for the rest). Never rejects — failure resolves null (the beat keeps the night
-// fill, same policy as a broken <Img>). Cached once per component via initRef.
+// fill, same policy as a broken <Img>). Cached in initRef, keyed by glKey (see the component).
 async function initGL(
   canvas: HTMLCanvasElement,
   assetSrc: Src,
@@ -188,6 +199,9 @@ async function initGL(
       reportFatal("RegionShader program failed to link", gl.getProgramInfoLog(prog), fragSrc);
       return null;
     }
+    // Flagged for deletion, actually freed with the program — otherwise disposeGL leaves them behind.
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
     const loc: Record<string, WebGLUniformLocation | null> = {};
     const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0"];
     for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
@@ -262,6 +276,7 @@ export const RegionShader: React.FC<{
   const { width, height } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
   const initRef = useRef<Promise<GLState | null> | null>(null);
+  const keyRef = useRef<string | null>(null);
 
   // Current-frame /vframes URLs for the video sources (null for static-image sources or un-extracted
   // sparse-still frames). Same lookup FrameVideo uses, so the GL texture tracks the identical frame.
@@ -277,9 +292,29 @@ export const RegionShader: React.FC<{
     frameUrl: maskFrameUrls[i],
   }));
 
+  // Everything initGL bakes in: the two GLSL bodies (the assembled program) and the texture sources
+  // (built once into slots). Per-frame /vframes URLs are deliberately NOT here — those re-upload
+  // through updateFrameSlot and must not rebuild the program.
+  const glKey = [
+    region.subjectCode,
+    region.backgroundCode,
+    `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
+    ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
+  ].join(" ");
+
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
+    // Worker pages are cached and re-loaded for the NEXT spec, and React keeps this component
+    // instance at the same tree position — so initRef outlives the program it describes. Without
+    // this a second render in one process would draw the FIRST spec's shader (identical bytes out
+    // of two different region bodies). Same guard ShaderBackground uses for its progRef.
+    if (keyRef.current !== glKey) {
+      keyRef.current = glKey;
+      const stale = initRef.current;
+      initRef.current = null;
+      if (stale) void stale.then(disposeGL, () => {});
+    }
     track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height));
   });
 

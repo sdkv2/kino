@@ -33,9 +33,10 @@ const probe = (name: string, radius: number) =>
   `  float ${name} = kinoMaskDist(uMask0, uChannel0, f, ${radius.toFixed(1)});`;
 
 // Both probes ride ONE frame on separate colour channels — r = the boundary band, g = the deep
-// interior. Not merely cheaper than a render each: the render page is cached per process and
-// RegionShader compiles its program once per component instance, so a second renderStills call with
-// the same segment shape reuses the FIRST call's GLSL and silently measures it twice.
+// interior. Cheaper than a render each, and one frame is enough. (This used to be load-bearing:
+// RegionShader kept its compiled program across renders, so a second renderStills call with the
+// same segment shape silently re-measured the first call's GLSL. Fixed by the glKey guard in
+// RegionShader.tsx; tests/render-region-reuse.test.ts is the regression.)
 const body =
   "void mainImage(out vec4 c, in vec2 f){\n" +
   probe("dRing", 8.0) +
