@@ -61,10 +61,10 @@ float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius)
 Worked uses:
 
 ```glsl
-float d = kinoMaskDist(uMask0, uChannel0, fragCoord, 24.0);
-float rim   = 1.0 - smoothstep(0.0, 3.0,  -d);   // 3px band inside the edge
-float glow  = 1.0 - smoothstep(0.0, 24.0,  d);   // falloff outward
-float eaten = step(-4.0, d);                     // erode the subject by 4px
+float d = kinoMaskDist(uMask0, uChannel0, fragCoord, 8.0);
+float rim   = 1.0 - smoothstep(0.0, 3.0, -d);   // 3px band inside the edge
+float glow  = 1.0 - smoothstep(0.0, 8.0,  d);   // falloff outward
+float eaten = step(-4.0, d);                    // erode the subject by 4px
 ```
 
 ## Implementation
