@@ -17,6 +17,7 @@
 // pending-set that kinoSeek drains (awaitRegionShaders) after flushSync — the same gate role
 // settleImages plays for DOM <img>. So frame 0 is never the bare night fill.
 import React, { useLayoutEffect, useRef } from "react";
+import { reportFatal } from "./fatal";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
 import { assembleRegionShaderSource, MAX_REGION_MASKS } from "../../shaderSource.js";
@@ -157,25 +158,34 @@ async function initGL(
   try {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false });
     if (!gl) return null;
+    // The subject and background bodies are concatenated into ONE translation unit (each
+    // mainImage renamed), so a helper declared at file scope in both frags is a duplicate
+    // definition here. That is the most common way to break a region shader, and the driver
+    // cites a line in this assembled source — hence reporting it alongside the log.
+    const fragSrc = assembleRegionShaderSource(region.subjectCode, region.backgroundCode, []);
     const mk = (type: number, s: string): WebGLShader | null => {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, s);
       gl.compileShader(sh);
       if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        console.error("RegionShader compile failed:\n" + gl.getShaderInfoLog(sh));
+        reportFatal(
+          `RegionShader ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader failed to compile`,
+          gl.getShaderInfoLog(sh),
+          s,
+        );
         return null;
       }
       return sh;
     };
     const vs = mk(gl.VERTEX_SHADER, VERT);
-    const fs = mk(gl.FRAGMENT_SHADER, assembleRegionShaderSource(region.subjectCode, region.backgroundCode, []));
+    const fs = mk(gl.FRAGMENT_SHADER, fragSrc);
     if (!vs || !fs) return null;
     const prog = gl.createProgram()!;
     gl.attachShader(prog, vs);
     gl.attachShader(prog, fs);
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error("RegionShader link failed:\n" + gl.getProgramInfoLog(prog));
+      reportFatal("RegionShader program failed to link", gl.getProgramInfoLog(prog), fragSrc);
       return null;
     }
     const loc: Record<string, WebGLUniformLocation | null> = {};

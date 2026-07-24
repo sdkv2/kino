@@ -170,6 +170,10 @@ Inside a region shader you can sample:
 
 `assembleRegionShaderSource` (`src/render/shaderSource.ts`) namespaces the two bodies with the GLSL preprocessor (`#define mainImage regionSubject` … `#undef` … `#define mainImage regionBg`), binds the beat asset to `uTex0` and the mask to `uMask`, and emits `fragColor = mix(bgColor, subjectColor, dot(texture(uMask, uv), uChannel))`. Both bodies run every pixel, then mix — fine for short-form; a `ponytail:` note marks the discard/stencil upgrade if cost ever matters.
 
+> **The two bodies share one GLSL scope.** Only `mainImage` is renamed — everything else you declare at file scope lands in a single translation unit alongside the other frag. Declaring the same helper in both (`float lum(vec3)` is the classic) is a duplicate definition: `ERROR: 'lum' : function already has a body`. Either give the helpers distinct names or inline them. The same goes for file-scope `const`s and `struct`s.
+>
+> A program that won't compile now **fails the render** with the driver's log and the assembled source, line-numbered so the reported line is findable (the driver counts lines in the assembled program, which does not exist on disk). It used to render as a flat wash with no diagnostic — see `src/render/native/page/fatal.ts`.
+
 ## Video: tracking status
 
 Both real backends do **real temporal tracking** by default (`tracked: true`):

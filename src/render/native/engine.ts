@@ -143,7 +143,14 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
   return {
     page: p,
     seek: async (frame: number) => {
-      await p.evaluate(`window.kinoSeek(${frame})`);
+      // Read window.__kinoFatal in the SAME evaluate as the seek — one CDP round-trip per frame,
+      // not two. A shader that won't compile leaves the beat rendering without it, so without
+      // this the render completes and ships a silently flat frame (see page/fatal.ts). kinoSeek
+      // already awaits region-shader init, so any fault is recorded by the time it resolves.
+      const fatal = (await p.evaluate(
+        `window.kinoSeek(${frame}).then(() => window.__kinoFatal ?? null)`,
+      )) as string | null;
+      if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
     },
     shot: async () => Buffer.from(await p.screenshot({ type: "jpeg", quality: 95 })),
   };

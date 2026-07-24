@@ -3,6 +3,7 @@
 // completed frame. The program compiles once (ref-cached); each frame only resolves tweened params
 // and sets uniforms. Motion is frame-derived (iTime = frame/fps) → deterministic.
 import React, { useLayoutEffect, useRef } from "react";
+import { reportFatal } from "./fatal";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { Theme, BgParamValue, BgKeyframe, BgTrigger } from "../../props.js";
 import { paramsAt, pulseAt } from "../../bgparams.js";
@@ -250,19 +251,40 @@ export const ShaderBackground: React.FC<{
   const { fps, width, height } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
   const progRef = useRef<Program | null>(null);
-  const errRef = useRef<string | null>(null);
+  const errRef = useRef<{ log: string; src: string } | null>(null);
+  const keyRef = useRef<string | null>(null);
 
   // Intentional: re-runs every frame (frame-derived deps). NOT a missing-deps bug — do not add [].
   useLayoutEffect(() => {
     const canvas = ref.current;
-    if (!canvas || errRef.current) return;
+    if (!canvas) return;
     // Stable across frames — must match the aliases baked into the compiled program.
     const extras = extraParamNames(params, keyframes);
+    // Worker pages are cached and re-rendered for the *next* spec, and React keeps this component
+    // instance at the same tree position — so both refs can outlive the program they describe.
+    // Without this, a reused page would draw the previous spec's shader (progRef) or re-report a
+    // failure the new spec doesn't have (errRef). Key them to the program actually being asked for.
+    const key = `${extras.join(",")} ${shaderSrc}`;
+    if (keyRef.current !== key) {
+      keyRef.current = key;
+      progRef.current = null;
+      errRef.current = null;
+    }
+    if (errRef.current) {
+      // Don't retry — it fails identically and floods the log. Do keep *reporting*: pages are
+      // cached across renders and kinoLoad clears window.__kinoFatal, so a component instance
+      // that survives into the next render would otherwise swallow its own failure and go back
+      // to emitting flat frames silently.
+      reportFatal("ShaderBackground failed to build", errRef.current.log, errRef.current.src);
+      return;
+    }
     if (!progRef.current) {
-      const built = compile(canvas, assembleShaderSource(shaderSrc, extras));
+      const assembled = assembleShaderSource(shaderSrc, extras);
+      const built = compile(canvas, assembled);
       if (typeof built === "string") {
-        errRef.current = built;
-        if (frame === 0) console.error("ShaderBackground compile failed:\n" + built);
+        errRef.current = { log: built, src: assembled };
+        // Authoring bug, not a flaky asset — every frame would render without the background.
+        reportFatal("ShaderBackground failed to build", built, assembled);
         return;
       }
       progRef.current = built;

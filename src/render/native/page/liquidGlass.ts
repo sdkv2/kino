@@ -29,6 +29,7 @@
 //   --glass-fit        shape scale 0.3..1 (default adaptive: 1 untilted, 0.70 when tilted)
 // Supersample (SS) comes from render-config / window.__kinoShaderSS (mock defaults to 1).
 
+import { reportFatal } from "./fatal";
 import { shaderSS } from "../shaderQuality.js";
 
 /** Pure fit selector for the liquid-glass SDF (`uFit`). Exported for unit tests.
@@ -258,7 +259,7 @@ function makeState(): GlassState | null {
     gl.shaderSource(sh, src);
     gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      console.error("kino-glass shader compile failed:", gl.getShaderInfoLog(sh));
+      reportFatal("kino-glass shader failed to compile", gl.getShaderInfoLog(sh), src);
       return null;
     }
     return sh;
@@ -271,7 +272,7 @@ function makeState(): GlassState | null {
   gl.attachShader(prog, fs);
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    console.error("kino-glass program link failed:", gl.getProgramInfoLog(prog));
+    reportFatal("kino-glass program failed to link", gl.getProgramInfoLog(prog), FRAG);
     return null;
   }
   const names = [

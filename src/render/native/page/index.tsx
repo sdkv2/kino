@@ -115,6 +115,9 @@ async function kinoSeek(frame: number): Promise<void> {
 }
 
 async function kinoLoad(): Promise<void> {
+  // Pages are cached per worker slot and re-loaded for the next render, so a fault recorded by
+  // the previous spec would otherwise fail this one (reportFatal is first-write-wins).
+  window.__kinoFatal = undefined;
   const cfg: RenderConfig = await (await fetch("/render-config.json", { cache: "no-store" })).json();
   document.documentElement.style.background = "#000";
   document.body.style.margin = "0";
