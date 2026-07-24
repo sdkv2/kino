@@ -160,6 +160,48 @@ A **video** mask (`mask.mp4`) and a **video** beat asset both animate: each sour
 
 **Multi-object addressing is video-only.** Image masks pack every object into one grayscale `mask.png`, so `object` must be `0` for an image mask (build errors otherwise). Distinct objects need a video mask, where they occupy separate R/G/B channels.
 
+#### Several masks: one treatment, or one each
+
+`masks` (up to 4 entries) takes several mask sources/objects in one beat. What they *do* depends on where you put the `subject`:
+
+```jsonc
+"regionShader": {
+  "masks": [
+    { "mask": "masks/dog",  "object": 0, "subject": "backgrounds/mercury.frag" },  // this dog: mercury
+    { "mask": "masks/ball", "object": 0, "subject": "backgrounds/glass.frag" },    // the ball: glass
+    { "mask": "masks/hand", "object": 0 }                                          // no subject → uses the one below
+  ],
+  "subject": "backgrounds/tint.frag",       // fallback for entries without their own
+  "background": "backgrounds/plasma.frag"   // everywhere no mask selects
+}
+```
+
+- **Top-level `subject` only** (no per-entry ones) — every mask **unions** into one subject region. Two separately `kino segment`-ed subjects cut onto one shared background.
+- **Per-entry `subject`** — that mask gets its **own** shader. Different materials on different tracked objects in one beat.
+
+The two mix freely; an entry without its own `subject` falls back to the top-level one, and an entry with neither passes the beat asset through.
+
+**Overlap: later entries paint over earlier ones.** Two masks can cover the same pixel — masks from two independent `kino segment` runs overlap constantly. The rule is painter's order, the way the array reads: `masks[1]` wins over `masks[0]`, `masks[2]` over both. Reorder the array to change who is in front.
+
+**Each per-entry body knows its own mask.** Inside a per-entry `subject` body, `uMaskSelf` and `uChannelSelf` alias that entry's own `uMaskN`/`uChannelN`, so a rim/outline `.frag` works at any array position:
+
+```glsl
+float d = kinoMaskDist(uMaskSelf, uChannelSelf, fragCoord, 8.0);   // MY subject's edge
+```
+
+They are defined **only** inside a per-entry body. The top-level `subject` spans every entry that falls back to it and `background` spans the whole frame, so neither has a single "self" — using `uMaskSelf` there is a compile error naming an undeclared identifier (reported with line-numbered source, see below).
+
+**The same `.frag` on two entries is a duplicate definition** if it declares anything at file scope — all bodies land in one translation unit, exactly as with `subject` vs `background` below. If two masks want the same treatment, that is what the top-level `subject` fallback is for: it compiles and runs **once** however many entries share it.
+
+**Cost.** Every region body runs for every pixel, so N distinct subject bodies plus the background is N+1 bodies per pixel, on the default SwiftShader (software) renderer. Nothing changes for specs that don't use per-entry subjects — with no per-entry `subject` anywhere, kino emits the union program byte-for-byte unchanged. Measured on an Apple M4, 1080×1920, 12 stills, SwiftShader:
+
+| bodies/px | shader ≈120 ALU ops/px | shader ≈750 ALU ops/px |
+| --- | --- | --- |
+| 2 (1 mask, union) | 0.37 s/frame | 0.71 s/frame |
+| 5 (4 masks, one body each) | 0.48 s/frame (**1.28×**) | 1.30 s/frame (**1.85×**) |
+
+The marginal cost of one extra body is ~0.04 s/frame for the light shader and ~0.20 s/frame for the heavy one; the rest is fixed per-frame overhead (page work, capture, encode, finishing pass) that four bodies do not multiply. So "5× the fragment work" is real in the shader and lands well under 2× end-to-end — but the heavier your bodies, the closer to the fragment ratio you get.
+
 Inside a region shader you can sample:
 - `uTex0` — the beat's own asset (the thing being segmented).
 - the shader's own params/uniforms (`u_*` aliases, `iTime`, etc.) as any shader.
@@ -194,17 +236,26 @@ The value saturates at `±radius`.
 screen-space derivatives are undefined inside a branch. That compiles clean, so the failure is
 silent.
 
-Unioning several masks in one region? Call it per mask and take `min()` of the results — the union's
-edge is the nearest of any mask's edge.
+Which mask to pass depends on which body you are in:
 
-Cost is 24 taps per pixel per calling body, on top of the two bodies that already run for every
-pixel — calling it once per mask across a 4-mask union would be 96.
+- **A per-entry `subject`** (per-object regions, above) — pass `uMaskSelf`/`uChannelSelf`. The edge
+  that matters is its own mask's, and there is nothing to combine.
+- **The shared `subject` or the `background`**, with several masks unioned into one region — call it
+  per mask and take `min()` of the results. The union's edge is the nearest of any mask's edge.
+
+Cost is 24 taps per pixel per calling body, on top of the bodies that already run for every
+pixel — calling it once per mask from a body that spans a 4-mask union would be 96.
 
 ### How region shaders assemble (for the curious)
 
-`assembleRegionShaderSource` (`src/render/shaderSource.ts`) namespaces the two bodies with the GLSL preprocessor (`#define mainImage regionSubject` … `#undef` … `#define mainImage regionBg`), binds the beat asset to `uTex0` and the mask to `uMask`, and emits `fragColor = mix(bgColor, subjectColor, dot(texture(uMask, uv), uChannel))`. Both bodies run every pixel, then mix — fine for short-form; a `ponytail:` note marks the discard/stencil upgrade if cost ever matters.
+`assembleRegionShaderSource` (`src/render/shaderSource.ts`) namespaces every body with the GLSL preprocessor (`#define mainImage regionSubject` … `#undef` … `#define mainImage regionBg`), binds the beat asset to `uTex0` and each mask to `uMask0..3` with a `uChannel0..3` dot-swizzle picking that object's coverage channel. It emits one of two entry points:
 
-> **The two bodies share one GLSL scope.** Only `mainImage` is renamed — everything else you declare at file scope lands in a single translation unit alongside the other frag. Declaring the same helper in both (`float lum(vec3)` is the classic) is a duplicate definition: `ERROR: 'lum' : function already has a body`. Either give the helpers distinct names or inline them. The same goes for file-scope `const`s and `struct`s.
+- **Union** (no per-entry `subject` anywhere) — `m = max(...)` over every `uMaskN`, then `fragColor = mix(bgColor, subjectColor, smoothstep(0.4, 0.6, m))`. Two bodies.
+- **Per-object** (any entry carries its own `subject`) — start from the background colour and `mix()` each mask's body over it in array order, so later entries paint over earlier ones. One body per distinct subject, plus the background; the shared fallback is emitted only if some entry needs it, and only once.
+
+The union form is emitted byte-for-byte as it was before per-object regions existed, so a spec that doesn't use the feature renders identically and pays nothing for it. Every body runs on every pixel and then composites — fine for short-form; a `ponytail:` note marks the discard/stencil upgrade if cost ever matters.
+
+> **All bodies share one GLSL scope.** Only `mainImage` is renamed — everything else you declare at file scope lands in a single translation unit alongside the other frags. Declaring the same helper in two of them (`float lum(vec3)` is the classic) is a duplicate definition: `ERROR: 'lum' : function already has a body`. Either give the helpers distinct names or inline them. The same goes for file-scope `const`s and `struct`s — and for naming the same `.frag` as two entries' `subject`.
 >
 > A program that won't compile now **fails the render** with the driver's log and the assembled source, line-numbered so the reported line is findable (the driver counts lines in the assembled program, which does not exist on disk). It used to render as a flat wash with no diagnostic — see `src/render/native/page/fatal.ts`.
 
