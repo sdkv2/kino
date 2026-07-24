@@ -41,6 +41,11 @@ Or install by hand:
 cd ~/kino && npm install && npm run build && npm link   # provides the `kino` command
 ```
 
+No install at all also works — `npx @sdkv2/kino <command>` runs the published package, and
+Puppeteer's Chromium ships with it. ffmpeg/ffprobe use your system install when they're on
+PATH and fall back to a bundled binary otherwise. `npx` re-resolves dependencies on each first
+run, so `npm i -g @sdkv2/kino` is worth it once you use kino regularly.
+
 ## Verify your environment
 
 ```bash
