@@ -77,7 +77,7 @@ function writeMaskAsset(dir: string): void {
 const props: KinoProps = {
   theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
   segments: [{
-    kind: "app", asset: "asset.png", caption: "", startSec: 0, endSec: 2,
+    kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {
       masks: [{ maskSrc: "mask.mp4", maskKind: "video" as const, channel: "gray" as const }],
       subjectCode: body, backgroundCode: body,
