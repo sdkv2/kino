@@ -173,6 +173,9 @@ export function assembleRegionShaderSource(
       { length: MAX_REGION_MASKS },
       (_, i) => `  m = max(m, dot(texture(uMask${i}, muv), uChannel${i}));\n`,
     ).join("") +
+    // Tight smoothstep for a clean ~1px AA edge (the bulk of the fringe fix is upstream —
+    // sam_runner.py erodes the mask before its 1008→native upscale, see _erode1008).
+    "  m = smoothstep(0.4, 0.6, m);\n" +
     "  kino_fragColor = mix(b, s, m);\n" +
     "}\n"
   );

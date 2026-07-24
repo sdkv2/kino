@@ -43,7 +43,7 @@ import sys
 import tempfile
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 import coremltools as ct
 
 RES = 1008        # ImageEncoder input side
@@ -415,15 +415,23 @@ def run_track(args, n_want):
         def _pack(masks_1008):
             """list of uint8{0,255} 1008-masks (per object) -> RGB frame at (vw,vh).
 
-            BILINEAR (not NEAREST): the mask is binary at 1008px, and upscaling a hard edge
-            with nearest-neighbor staircases badly on thin diagonal shapes (legs, fingers) once
-            source video is much bigger than 1008. Bilinear antialiases the edge into a gray
-            gradient band instead — regionShader already splits on mask>0.5, so this only
-            softens the boundary, it doesn't change which side wins.
+            Erode 2px at the 1008 grid before resizing: the detector/tracker mask routinely
+            overshoots the true silhouette by a couple of its own texels (thin fast-moving
+            shapes especially), and a plain upscale stretches that overshoot into a visible
+            fringe of background color once the video is much bigger than 1008 (2px at 1008
+            -> ~5px at 2560). Erosion shrinks the boundary inward before it gets stretched,
+            which is far cheaper than eroding post-upscale (1 grid px = several native px).
+
+            BILINEAR (not NEAREST) for the resize itself: the mask is binary at 1008px, and
+            upscaling a hard edge with nearest-neighbor staircases badly on thin diagonal
+            shapes (legs, fingers). Bilinear antialiases the edge into a gray gradient band
+            instead — regionShader already splits on mask>0.5, so this only softens the
+            boundary, it doesn't change which side wins.
             """
             rgb = np.zeros((vh, vw, 3), dtype=np.uint8)
             for oid in range(min(len(masks_1008), vch)):
-                m = np.asarray(Image.fromarray(masks_1008[oid]).resize((vw, vh), Image.BILINEAR))
+                eroded = Image.fromarray(masks_1008[oid]).filter(ImageFilter.MinFilter(5))
+                m = np.asarray(eroded.resize((vw, vh), Image.BILINEAR))
                 if vch == 1:
                     rgb[..., 0] = rgb[..., 1] = rgb[..., 2] = m
                 else:
