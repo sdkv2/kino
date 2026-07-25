@@ -73,7 +73,7 @@ export function stripTagWords(words: WordTiming[]): WordTiming[] {
  * (real ElevenLabs when !mock, silence+fake timings when mock) and cache the result. Then probe
  * durations, compute timeline timings with GAP, offset clip-relative word times onto the timeline,
  * and stitch one continuous track (also cached).
- * Exception: real faceless builds on models without previous_text/next_text support (v3) TTS the
+ * Exception: real presenter-less builds on models without previous_text/next_text support (v3) TTS the
  * whole script in ONE call instead — see buildVOSingle.
  * Contract: apiKey is required unless mock=true (real TTS calls pass it via the `apiKey!`
  * non-null assertion). Side effects: writes
@@ -129,12 +129,15 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
     // segment re-bills its neighbors too (their clips were conditioned on the old text).
     const prev = useCtx ? spec.segments[i - 1]?.text : undefined;
     const next = useCtx ? spec.segments[i + 1]?.text : undefined;
+    // `dur` only bites when silent (mock): it forces the beat length instead of the 0.38s/word
+    // estimate. It's in the key so editing dur re-bakes the silent clip; harmless on real TTS.
     const key = contentHash({
       text: seg.text,
       ...(useCtx ? { prev, next } : {}),
       voiceId,
       settings: DEFAULT_SETTINGS,
       mock,
+      dur: mock ? seg.dur ?? null : null,
       v: "ts",
       model: resolvedModel,
     });
@@ -144,7 +147,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
       const tmp = join(dir, `seg${i}.mp3`);
       const words = stripTagWords(
         mock
-          ? await ttsMockWithTimestamps(seg.text, tmp)
+          ? await ttsMockWithTimestamps(seg.text, tmp, seg.dur)
           : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp, DEFAULT_SETTINGS, resolvedModel, { previousText: prev, nextText: next }),
       );
       clip = cache.put(key, "mp3", tmp);
@@ -203,7 +206,7 @@ export function splitWordsBySegment(texts: string[], allWords: WordTiming[]): Wo
   return out;
 }
 
-// Real faceless builds on models that reject previous_text/next_text (v3): per-segment calls
+// Real presenter-less builds on models that reject previous_text/next_text (v3): per-segment calls
 // can't be prosody-conditioned, so TTS the whole script in ONE call — the read flows naturally
 // across beats — then derive per-segment timings/words from the single alignment.
 // Segment startSec = its first word's start (0 for the opener); endSec = its last word's end

@@ -34,9 +34,16 @@ describe("resolveWorkspace", () => {
     expect(w.cache).toBe(join(ws, ".kino-cache"));
     expect(w.brandDir("acme")).toBe(join(ws, "brands", "acme"));
   });
-  it("throws when no brands/ exists (unless create: true)", () => {
-    const empty = mkdtempSync(join(tmpdir(), "kino-no-brands-"));
-    expect(() => resolveWorkspace(empty)).toThrow(/No brands\//);
+  it("resolves a projects-only workspace (no brands/)", () => {
+    const ws = mkdtempSync(join(tmpdir(), "kino-ws-projects-only-"));
+    mkdirSync(join(ws, "projects"), { recursive: true });
+    const w = resolveWorkspace(ws);
+    expect(w.workspaceRoot).toBe(ws);
+    expect(w.brandDir("acme")).toBe(join(ws, "brands", "acme"));
+  });
+  it("throws when neither projects/ nor brands/ exists (unless create: true)", () => {
+    const empty = mkdtempSync(join(tmpdir(), "kino-no-ws-"));
+    expect(() => resolveWorkspace(empty)).toThrow(/No kino workspace found/);
     expect(resolveWorkspace(empty, { create: true }).workspaceRoot).toBe(empty);
   });
 });
@@ -86,6 +93,19 @@ describe("resolveProject", () => {
     });
     expect(p.workspaceRoot).toBe(demos);
     expect(p.brandDir("hold")).toBe(join(demos, "brands", "hold"));
+    expect(p.projectRoot).toBe(join(demos, "projects", "hold"));
+  });
+  it("prefers nested demos projects/ over a parent brands/ when demos has no brands/", () => {
+    const root = mkdtempSync(join(tmpdir(), "kino-nested-proj-"));
+    mkdirSync(join(root, "brands", "parentbrand"), { recursive: true });
+    const demos = join(root, "demos");
+    mkdirSync(join(demos, "projects", "hold", "specs"), { recursive: true });
+    writeFileSync(join(demos, "projects", "hold", "project.json"), JSON.stringify({}));
+    const p = resolveProject({
+      specPath: join(demos, "projects", "hold", "specs", "trailer.json"),
+      cwd: root,
+    });
+    expect(p.workspaceRoot).toBe(demos);
     expect(p.projectRoot).toBe(join(demos, "projects", "hold"));
   });
 });

@@ -1,11 +1,11 @@
 # Spec reference
 
-A **spec** is the JSON file an agent authors to describe one video. kino validates it, generates voiceover, optionally renders an avatar, and composites everything with its deterministic frame engine. This page documents every field of the spec, plus the `brand.md` and `project.json` configs it resolves against.
+A **spec** is the JSON file that describes one video. kino validates it, generates voiceover, optionally renders a presenter, and composites everything with its deterministic frame engine. This page documents every field of the spec, plus the `brand.md` and `project.json` configs it resolves against.
 
 The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) — invalid specs fail the build with a precise error.
 
 - [Top-level fields](#top-level-fields)
-- [Segments](#segments) — [avatar](#avatar-segment) · [app](#app-segment) · [motion](#motion-segment)
+- [Segments](#segments) — [scene](#scene-segment) · [video](#video-segment) · [motion](#motion-segment)
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
 - [Keyframes & triggers](#keyframes--triggers)
@@ -21,14 +21,16 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `title` | string (kebab-case) | ✅ | Output basename; must match `^[a-z0-9-]+$`. |
 | `segments` | [Segment](#segments)[] | ✅ | The beats, in order (≥ 1). |
 | `brand` | string | — | Brand name; falls back to the project's `project.json` brand. |
-| `format` | `("9:16"\|"3:4")[]` | — | Output formats. Default `["9:16"]`. |
+| `format` | `("9:16"\|"3:4"\|"16:9")[]` | — | Output formats. Default `["9:16"]`. Motion layouts adapt via `--kino-aspect`. |
+| `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
 | `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. |
 | `voiceModel` | string | — | ElevenLabs TTS model. Default is v3 (inline audio tags `[excited]`, `[whispers]`, `[short pause]`, … work in segment `text`; tags are stripped from word-synced captions). Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads. |
 | `film` | number | — | Cinematic-finish intensity (vignette + grain over photographic/app beats), `0..1`. Default `1` (graded film look). Set `0` for clean flat edges — e.g. a light "paper" video where the edge vignette reads as a dark border. Motion-graphic beats are never graded. |
 | `avatarLook` | string | — | HeyGen: look alias/id · Hedra/Replicate: portrait image path/url. |
-| `provider` | `none\|heygen\|hedra\|replicate` | — | Avatar engine; overrides `brand.defaultProvider`. See [Avatars & presenters](avatars.md). |
+| `provider` | `none\|heygen\|hedra\|replicate` | — | Presenter engine for `avatar:` sources; overrides `brand.defaultProvider`. See [Avatars & presenters](avatars.md). |
 | `background` | `glow\|image\|mesh\|aurora\|particles\|grid\|solid\|custom` | — | Faceless background; overrides `brand.background`. Prefer `custom` + `backgroundComponent` over stock `mesh` for brand identity. |
 | `backgroundComponent` | string | — | Draw-fn for `custom`: bare id (`brand-wash`) or path. Spec overrides `brand.backgroundComponent`. |
+| `backgroundTextures` | (string \| `{source, param}`)[] | — | Up to 4 texture channels for a shader background (`uTex0`..`uTex3`): image paths upload as-is; `.html` files are sanitized + rasterized DOM (fonts/palette apply). `{source, param: "name"}` re-rasterizes the html every frame at that background param's value (0..1 → the markup's 1s CSS `@keyframes`) — true per-frame animation. Shader backgrounds only. |
 | `backgroundIntensity` | number | — | 0..1 motion-strength override. |
 | `backgroundKeyframes` | [BgKeyframe](#keyframes--triggers)[] | — | Tween background params over time. |
 | `backgroundTriggers` | [BgTrigger](#keyframes--triggers)[] | — | One-shot background actions (e.g. `pulse`). |
@@ -36,7 +38,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `logoPosition` | `top\|bottom\|left\|right\|center` \| `{x,y}` | — | Logo placement (% of frame); overrides brand. |
 | `logoKeyframes` | [BgKeyframe](#keyframes--triggers)[] | — | Tween logo `x/y/scale/opacity`. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset; overrides `brand.captionStyle.style`. Default `stroke`. See [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Unset = the surface's native entrance (`pop`; `rise` for faceless hero text). See [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Unset = the surface's native entrance (`pop`; `rise` for presenter-less hero text). See [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal: `word` (default, one word at a time) or `all` (whole line laid out, active-word highlight tracks VO). See [Captions](#captions). |
 | `captionMode` | `phrase\|words` | — | Caption mode; overrides `brand.captionMode`. See [Captions](#captions). |
 | `sfx` | [SfxEvent](#sound-effects--music)[] | — | Free-placed sound effects. See [Sound effects & music](#sound-effects--music). |
@@ -45,21 +47,22 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 
 ## Segments
 
-Every segment is one beat. `kind` selects the beat type (a discriminated union). Two fields recur and are easy to confuse:
+Every segment is one beat. `kind` selects the beat type; **omit it for a `scene`**, the ordinary beat. Two fields recur and are easy to confuse:
 
-- **`text`** — the **spoken** voiceover for the beat (drives VO + timing). Required on `avatar`, `app`, and `motion`.
+- **`text`** — the **spoken** voiceover for the beat (drives VO + timing). Required on every kind.
 - **`caption`** — the **on-screen** text. Optional on every kind: omit it and the beat renders no caption line at all (the VO still speaks `text`). In `captionMode: "words"` the synced spoken words render regardless of `caption` — under a words-mode brand, set `"captionMode": "phrase"` on the beat (and omit `caption`) for a fully caption-free beat.
 
-### `avatar` segment
-A talking beat — an AI avatar, or faceless VO over a [background](#backgrounds).
+### `scene` segment
+The default beat: voiceover and captions over a [background](#backgrounds), optionally with an AI presenter composited on top. Omit `kind` and you get one.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `kind` | `"avatar"` | ✅ | |
+| `kind` | `"scene"` | — | Default when `kind` is omitted. |
+| `source` | presenter scheme | — | Put a presenter on this beat: `"avatar:"` uses the configured provider, `"heygen:look-id"` / `"hedra:portraits/founder.png"` / `"replicate:"` pin one (anything after the colon is the look). Omit for no presenter. A file path here is an error — that is a [`video`](#video-segment) beat. |
 | `text` | string | ✅ | Spoken VO. |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
-| `cta` | boolean | — | Mark as a call-to-action / end-card beat. Faceless: centered hero (not lower-third). Default `false`. |
+| `cta` | boolean | — | Mark as a call-to-action / end-card beat. With no presenter: centered hero (not lower-third). Default `false`. |
 | `shot` | [Shot](#enums) | — | Camera move. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Words to emphasise in `words` mode. |
@@ -70,13 +73,13 @@ A talking beat — an AI avatar, or faceless VO over a [background](#backgrounds
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 
-### `app` segment
-A screenshot/app cut-in with an optional caption (and optional kicker label).
+### `video` segment
+Footage, a screenshot, or any other video source cut in full-frame, with an optional caption (and optional kicker label).
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `kind` | `"app"` | ✅ | |
-| `asset` | string | ✅ | Path to the screenshot/asset. |
+| `kind` | `"video"` | ✅ | |
+| `source` | string | ✅ | Project asset path (`.mp4`/`.mov`/`.jpg`/`.png`). A presenter scheme (`"heygen:…"`) is also accepted here and resolves to a [`scene`](#scene-segment) with that presenter. |
 | `text` | string | ✅ | Spoken VO. |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
@@ -98,6 +101,9 @@ A screenshot/app cut-in with an optional caption (and optional kicker label).
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
+| `regionShader` | `{ mask?, masks?, subject?, background?, object?, params?, keyframes? }` | — | Split this beat's frame by a segmentation mask: subject region (`mask>0.5`) runs one `.frag`, background region another. `mask` = mask asset dir (`manifest.json` + `mask.png`/`mask.mp4` from [`kino segment`](segmentation.md)). `object` picks which packed object channel (0..3). Need at least one of `subject`/`background`; omit a side to pass that region's original pixels through. `masks` (up to 4) takes several mask sources in one beat, each optionally with its own `subject`; later entries paint over earlier ones. Unknown keys are rejected. See [Segmentation](segmentation.md). |
+| `regionShader.params` | `{ name: number\|string }` | — | Author params shared by **every** body in the beat (`subject`, `background`, and each `masks[].subject`) — they compile into one program with one uniform bank. Numeric names alias to `u_<name>` in GLSL, packed alphabetically into `uParam0..3`; `colorA`/`colorB`/`colorC` (hex) and `intensity` drive their own uniforms and cost no slot. Max **4** numeric names across `params` + `keyframes`; more is a build error, not a silent drop. |
+| `regionShader.keyframes` | `{ at, params, ease? }[]` | — | Tweens those params over the beat. **`at` is beat-relative seconds** (0 = this beat's start), like `zoomKeyframes`/`captionKeyframes` — *not* absolute like `backgroundKeyframes`. Region shaders have no `triggers` surface, so `uPulse` always reads 0. |
 
 Long source recordings: see [Importing footage](importing-footage.md) for clipping, chrome frames, and retiming.
 
@@ -151,7 +157,7 @@ An optional **backplate** (translucent panel behind lower-third captions for leg
 | `gradient` | mint→green gradient fill (stroke dropped — clashes with the fill); drop-shadow for legibility | same |
 | `minimal` | weight 700, no stroke, soft shadow; active/brand word mint | same |
 
-**Caption entrance** (`captionAnimation`) — layered `segment ?? spec ?? brand.captionStyle.animation`; unset = the surface's native entrance (`pop` for lower-third + words captions, `rise` for faceless hero text):
+**Caption entrance** (`captionAnimation`) — layered `segment ?? spec ?? brand.captionStyle.animation`; unset = the surface's native entrance (`pop` for lower-third + words captions, `rise` for presenter-less hero text):
 
 | animation | behaviour |
 |---|---|
@@ -193,11 +199,81 @@ BgTrigger  = { at: number, action: string }   // e.g. { at: 1.2, action: "pulse"
 
 ## Backgrounds
 
-`background` selects the faceless engine; `backgroundKeyframes`/`backgroundTriggers` animate it; `backgroundIntensity` sets motion strength. Per-preset params and actions are documented in [Backgrounds & overlays](backgrounds-and-overlays.md).
+`background` selects the engine; `backgroundKeyframes`/`backgroundTriggers` animate it; `backgroundIntensity` sets motion strength. Per-preset params and actions are documented in [Backgrounds & overlays](backgrounds-and-overlays.md).
+
+### Shader backgrounds (`.frag` / `.glsl`)
+
+When `background` is `"custom"` and `backgroundComponent` points at a `.frag` or `.glsl` file, kino renders a WebGL2 fullscreen-quad shader instead of a Canvas2D draw fn. Author only the ShaderToy entry point:
+
+```glsl
+void mainImage(out vec4 fragColor, in vec2 fragCoord) { /* … */ }
+```
+
+| Uniform | Type | Source |
+|---------|------|--------|
+| `iResolution` | `vec3` | `[width, height, 1]` |
+| `iTime` | `float` | `frame / fps` (frame-derived — no wall clock) |
+| `iFrame` | `int` | current frame index |
+| `iTimeDelta` | `float` | `1 / fps` |
+| `uPulse` | `float` | trigger envelope from `backgroundTriggers` |
+| `uColorA` / `uColorB` / `uColorC` | `vec3` | brand `backgroundColors` (hex → RGB) |
+| `uIntensity` | `float` | `backgroundIntensity` (0..1) |
+| `uParam0`..`uParam3` | `float` | extra numeric params (sorted by key) |
+| `uTex0`..`uTex3` | `sampler2D` | `backgroundTextures` channels (see below) |
+| `uTexSize0`..`uTexSize3` | `vec2` | texture size in css px; `(0,0)` when the channel is unbound |
+
+Motion is deterministic: `iTime` comes only from the frame index, same contract as Canvas2D backgrounds. Bare library id or project path both work:
+
+```json
+{ "background": "custom", "backgroundComponent": "aurora-flow" }
+```
+
+```json
+{ "background": "custom", "backgroundComponent": "backgrounds/my-plasma.frag" }
+```
+
+**Texture channels** — `backgroundTextures` feeds up to four samplers to the shader. An image path
+uploads as-is. A `.html` path is sanitized (same DOMPurify pass as motion sources) and rasterized
+ONCE at load via `foreignObject` (2×): brand fonts are inlined and the `--kino-*` palette vars are
+set, so a texture can be an actual styled UI element. `v=0` is the bottom row (matches `fragCoord`
+orientation). Size the root element in **px** (it is texture pixels, not viewport layout) and keep
+the page background transparent. Rasterization happens before the first frame — sampling is
+deterministic.
+
+**Sampling a full-bleed backdrop** — for a texture that should fill the frame (a photo, a
+starfield), sample it **cover-fit at the pixel's own coordinate** (`fragCoord/iResolution`,
+corrected for the `uTexSize`/frame aspect ratio) — do **not** project a ray direction into a
+centre patch of the texture (`0.5 + dir.xy*k`): that magnifies ~25% of the image across the whole
+frame and looks blurry *no matter the source resolution*. For a refractive/reflective object, make
+the lookup a **displacement** of that same local uv by the bent ray (`sampleTex(baseUV +
+bentDir.xy*throw)`), not a re-projection — it stays full-res and reads as glass. Channels wrap
+`CLAMP_TO_EDGE`, so offset samples that leave `[0,1]` smear the edge texel into scanline streaks;
+mirror-fold them: `uv = 1.0 - abs(1.0 - fract(uv*0.5)*2.0)`. Oversized images are auto-downscaled
+to the GPU's max texture size at upload, so a full-res original is safe to point a channel at.
+
+**Animated DOM textures** — author ordinary CSS `@keyframes` at the `1s` scrub convention, then
+pass `{ "source": "motion/card.html", "param": "fill" }`: each frame the engine re-rasterizes the
+markup at the current value of the `fill` background param (0..1 → animation time), cached by
+value, before the frame is captured. The shader just samples `texture(uTex0, uv)` — the pixels
+already match the frame, true per-frame motion, no stepping. Drive `fill` with
+`backgroundKeyframes` like any param.
+
+Library examples: `orb-badge` wraps `uTex0` around a raymarched metaball as a
+rotating cylindrical decal; `ui-hero` floats the DOM card in a 3D scene — perspective sway, glossy
+floor reflection, and a shard-dissolve materialize driven by a `reveal` param
+(`backgroundKeyframes` → `uParam0`):
+
+```json
+{
+  "background": "custom",
+  "backgroundComponent": "orb-badge",
+  "backgroundTextures": ["motion/badge.html"]
+}
+```
 
 ## Logo & overlay tweening
 
-`logoSize`/`logoPosition` place the brand mark on faceless talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions and kickers tween the same way via `captionKeyframes`/`kickerKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
+`logoSize`/`logoPosition` place the brand mark on presenter-less talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions and kickers tween the same way via `captionKeyframes`/`kickerKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
 
 ## Sound effects & music
 
@@ -273,12 +349,12 @@ The frontmatter fields:
 | `font` | string | — | Registry font name (downloaded) or raw CSS family. Default `Helvetica, ...`. |
 | `labelFont` | string | — | Registry font for storyboard/montage labels (default: caption font). |
 | `captionStyle` | `{ fontSize?, strokeWidth?, background?, style?, animation? }` | — | `fontSize` 74, `strokeWidth` 9; `background` = the caption backplate `{ color?, opacity? (0..1, def .82), appOnly? (def true) }`; `style`/`animation` = brand-level defaults for [caption look/entrance](#captions) (segment/spec override). |
-| `disclosure` | string | — | AI disclosure shown when an avatar is present. |
-| `facelessDisclosure` | string | — | Disclosure for faceless renders (falls back to `disclosure`). |
-| `logo` | string | — | Brand mark (transparent PNG) for faceless talking beats. |
+| `disclosure` | string | — | AI disclosure shown on ordinary beats. |
+| `presenterDisclosure` | string | — | Disclosure shown instead whenever a presenter is composited (falls back to `disclosure`). |
+| `logo` | string | — | Brand mark (transparent PNG) for presenter-less talking beats. |
 | `logoSize` / `logoPosition` | size / position | — | Default logo layout. |
-| `facelessBackdrop` | string | — | Background image for faceless beats (when `background="image"`). |
-| `background` | preset | — | Default faceless background engine. |
+| `backdrop` | string | — | Background image (when `background="image"`). |
+| `background` | preset | — | Default background engine. |
 | `backgroundComponent` | string | — | Path or bare id for custom Canvas2D draw fn (when `background="custom"`). |
 | `backgroundColors` | string[] | — | Palette for animated backgrounds (else mint/green/gold). |
 | `backgroundIntensity` | number | — | 0..1 motion strength (default 0.5). |
@@ -296,14 +372,14 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `brand` | string | ✅ | Brand to use for specs in this project. |
-| `provider` | provider | — | Default avatar engine. |
-| `background` | preset | — | Default faceless background. |
+| `provider` | provider | — | Default presenter engine. |
+| `background` | preset | — | Default background. |
 | `font` | string | — | Default font override. |
 | `captionMode` | `phrase\|words` | — | Default caption style. |
 
 ## Examples
 
-**Minimal** (faceless, one motion hook + one VO beat):
+**Minimal** (one motion hook + one VO beat):
 
 ```json
 {
@@ -311,12 +387,12 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
   "background": "aurora",
   "segments": [
     { "kind": "motion", "source": "motion/hook.html", "text": "Most cover letters get rejected in six seconds." },
-    { "kind": "avatar", "text": "Here's how to fix yours.", "caption": "Fix yours" }
+    { "text": "Here's how to fix yours.", "caption": "Fix yours" }
   ]
 }
 ```
 
-**Richer** (faceless, animated + pulsed background, word captions, an app cut-in, and a motion overlay):
+**Richer** (animated + pulsed background, word captions, a video cut-in, and a motion overlay):
 
 ```json
 {
@@ -332,15 +408,14 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
   "logoPosition": "top",
   "segments": [
     {
-      "kind": "avatar",
       "text": "Recruiters spend six seconds on your resume.",
       "caption": "6 seconds.",
       "captionMode": "words",
       "emphasis": ["six", "seconds"]
     },
     {
-      "kind": "app",
-      "asset": "assets/dashboard.png",
+      "kind": "video",
+      "source": "assets/dashboard.png",
       "text": "Acme scores it instantly.",
       "caption": "Instant score",
       "kicker": { "text": "LIVE", "color": "gold" },

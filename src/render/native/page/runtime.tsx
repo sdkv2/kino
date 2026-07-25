@@ -1,9 +1,6 @@
-// Frame-driven primitives for the native render page. Clean-room implementations designed from
-// kino's own consumer code + publicly documented observable behavior (frame-indexed sequencing,
-// damped-spring easing, piecewise-linear interpolation). No Remotion source was referenced.
-//
-// Everything is a pure function of the current frame, provided via React context and advanced
-// by window.kinoSeek (see index.tsx) — no wall clock anywhere.
+// Frame-driven primitives for the native render page: frame-indexed sequencing, damped-spring
+// easing, piecewise-linear interpolation. Everything is a pure function of the current frame
+// (React context), advanced by window.kinoSeek (see index.tsx) — no wall clock anywhere.
 import React from "react";
 
 export interface VideoConfig {

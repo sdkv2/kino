@@ -40,7 +40,7 @@ export function appSeqDurFrames(segments: KinoProps["segments"], i: number, fps:
   const s = segments[i];
   const next = segments[i + 1];
   const beatDur = f(s.endSec, fps) - f(s.startSec, fps);
-  return next?.kind === "app" ? f(next.startSec, fps) - f(s.startSec, fps) + 12 : beatDur;
+  return next?.kind === "video" ? f(next.startSec, fps) - f(s.startSec, fps) + 12 : beatDur;
 }
 
 export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
@@ -63,28 +63,49 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
     });
   }
   props.segments.forEach((s, i) => {
-    if (s.kind !== "app" || !s.asset) return;
-    if (!/\.(mp4|mov)$/i.test(s.asset)) return; // images render directly
-    const seqDur = appSeqDurFrames(props.segments, i, fps);
-    if (seqDur <= 0) return;
-    const speed = s.speed ?? 1;
-    const { trimBefore } = appTrimFrames(fps, s.clipFrom, s.clipTo);
-    const eff = (n: number) =>
-      appFreezeFrame({ localFrame: n, fps, pauseAt: s.pauseAt, clipFrom: s.clipFrom, clipTo: s.clipTo, speed }) ?? n;
-    let maxEff = 0;
-    for (let n = 0; n < seqDur; n++) maxEff = Math.max(maxEff, eff(n));
-    jobs.push({
-      key: `seg${i}`,
-      assetRel: s.asset,
-      fromFrame: f(s.startSec, fps),
-      seqDurFrames: seqDur,
-      startSec: trimBefore / fps,
-      stepSec: speed / fps,
-      effFrame: eff,
-      maxEffFrame: maxEff,
-    });
+    if (s.kind !== "video") return;
+    // Footage beat (or the region-shader asset texture): mp4/mov gets frame-extracted; images render directly.
+    if (s.source && /\.(mp4|mov)$/i.test(s.source)) {
+      const j = appMediaJob(props.segments, i, fps, `seg${i}`, s.source);
+      if (j) jobs.push(j);
+    }
+    // Region-shader video mask(s) (uMask0..N): same source-time progression as the beat asset so a
+    // clipped/frozen beat samples the matching mask frame. Routed through /vframes because <video>
+    // seeking never advances under deterministic headless capture. One job per masks[] entry that's
+    // a video (image masks need no extraction).
+    const rs = s.regionShader;
+    if (rs) {
+      rs.masks.forEach((m, j) => {
+        if (m.maskKind !== "video") return;
+        const job = appMediaJob(props.segments, i, fps, `rsmask${i}_${j}`, m.maskSrc);
+        if (job) jobs.push(job);
+      });
+    }
   });
   return jobs;
+}
+
+/** MediaJob for app segment i's clip (asset or mask): shares the beat's trim/speed/freeze clock. */
+function appMediaJob(segments: KinoProps["segments"], i: number, fps: number, key: string, assetRel: string): MediaJob | null {
+  const s = segments[i];
+  const seqDur = appSeqDurFrames(segments, i, fps);
+  if (seqDur <= 0) return null;
+  const speed = s.speed ?? 1;
+  const { trimBefore } = appTrimFrames(fps, s.clipFrom, s.clipTo);
+  const eff = (n: number) =>
+    appFreezeFrame({ localFrame: n, fps, pauseAt: s.pauseAt, clipFrom: s.clipFrom, clipTo: s.clipTo, speed }) ?? n;
+  let maxEff = 0;
+  for (let n = 0; n < seqDur; n++) maxEff = Math.max(maxEff, eff(n));
+  return {
+    key,
+    assetRel,
+    fromFrame: f(s.startSec, fps),
+    seqDurFrames: seqDur,
+    startSec: trimBefore / fps,
+    stepSec: speed / fps,
+    effFrame: eff,
+    maxEffFrame: maxEff,
+  };
 }
 
 interface VideoInfo {
@@ -191,6 +212,15 @@ async function extractIndices(
   // still leaves a gap-free file list (later chunks are past EOF and produce nothing).
   const CHUNK = 64;
   const hdr = await hdrChain(transfer);
+  // Masks are the ONLY asset that needs EXACT pixels. kinoMaskDist reads a coverage gradient to
+  // pick its analytic branch, and JPEG's DCT quantization alone — even from a bit-exact mask.mp4 —
+  // puts ~25k px/frame of a packed multi-object mask over the 0.05 gate. PNG is also SMALLER than
+  // JPEG for binary masks (0.33MB vs 1.12MB per 24 frames @1080x1920), so exactness costs no disk
+  // here. Footage keeps JPEG q2: visually lossless, and far cheaper on real photographic frames.
+  // See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+  const isMask = job.key.startsWith("rsmask");
+  const ext = isMask ? "png" : "jpg";
+  const quality = isMask ? [] : ["-q:v", "2"];
   for (let c = 0; c < uniq.length; c += CHUNK) {
     const part = uniq.slice(c, c + CHUNK);
     const terms = part.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
@@ -206,13 +236,13 @@ async function extractIndices(
       "-fps_mode", "passthrough",
       "-frames:v", String(part.length),
       "-start_number", String(c + 1),
-      "-q:v", "2",
-      join(dir, "x%06d.jpg"),
+      ...quality,
+      join(dir, `x%06d.${ext}`),
     ]);
   }
-  // Outputs arrive in source order → x000001.jpg maps to uniq[0], etc. EOF can shorten the run;
+  // Outputs arrive in source order → x000001.<ext> maps to uniq[0], etc. EOF can shorten the run;
   // local frames whose index wasn't reached clamp to the last extracted file (hold last frame).
-  const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(".jpg")).sort();
+  const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(`.${ext}`)).sort();
   const byFrame: Record<number, string> = {};
   let maxFrame = 0;
   if (!files.length) return { dir: job.key, byFrame, maxFrame: 0 };

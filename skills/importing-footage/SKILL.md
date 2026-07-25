@@ -2,7 +2,7 @@
 name: importing-footage
 description: >
   Use when turning a long source recording (screen capture, device scroll, desktop
-  demo, imported clip) into kino app beats — inspecting stills, mapping clip windows,
+  demo, imported clip) into kino video beats — inspecting stills, mapping clip windows,
   seating footage in a custom chrome frame, or retiming with speed/pause after beats exist.
 ---
 
@@ -83,8 +83,8 @@ Same `asset`, different windows:
 
 ```jsonc
 {
-  "kind": "app",
-  "asset": "recordings/onboarding-scroll.mp4",
+  "kind": "video",
+  "source": "recordings/onboarding-scroll.mp4",
   "clipFrom": 4.2,
   "clipTo": 8.0,
   "speed": 1,

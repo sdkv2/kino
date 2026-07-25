@@ -7,18 +7,18 @@ const props = {
   avatar: null,
   background: { kind: "mesh", image: null, customCode: null, colors: [], intensity: 0.5 },
   segments: [
-    { kind: "avatar", caption: "hi", startSec: 0, endSec: 2 },
-    { kind: "app", asset: "x.png", caption: "a", startSec: 2.3, endSec: 5, kicker: { text: "86%", color: "#1", fg: "#0" }, captionMode: "words" },
+    { kind: "scene", caption: "hi", startSec: 0, endSec: 2 },
+    { kind: "video", source: "x.png", caption: "a", startSec: 2.3, endSec: 5, kicker: { text: "86%", color: "#1", fg: "#0" }, captionMode: "words" },
   ],
 } as unknown as KinoProps;
 
 describe("inspectPlan", () => {
   it("summarises the resolved render plan", () => {
     const p = inspectPlan(props);
-    expect(p).toMatchObject({ fps: 30, faceless: true, background: "mesh" });
+    expect(p).toMatchObject({ fps: 30, presenter: false, background: "mesh" });
     expect(p.durationSec).toBeCloseTo(5);
-    expect(p.segments[0]).toMatchObject({ index: 0, kind: "avatar", startSec: 0, endSec: 2, durSec: 2, captionMode: "phrase", hasKicker: false });
-    expect(p.segments[1]).toMatchObject({ index: 1, kind: "app", asset: "x.png", captionMode: "words", hasKicker: true });
+    expect(p.segments[0]).toMatchObject({ index: 0, kind: "scene", startSec: 0, endSec: 2, durSec: 2, captionMode: "phrase", hasKicker: false });
+    expect(p.segments[1]).toMatchObject({ index: 1, kind: "video", source: "x.png", captionMode: "words", hasKicker: true });
   });
 });
 
@@ -31,8 +31,8 @@ describe("parseTimes", () => {
 
 describe("pickFrames", () => {
   const segs = [
-    { kind: "avatar", startSec: 0, endSec: 2 },
-    { kind: "app", startSec: 2.3, endSec: 5 },
+    { kind: "scene", startSec: 0, endSec: 2 },
+    { kind: "video", startSec: 2.3, endSec: 5 },
   ];
   it("at-list → one frame per timestamp", () => {
     expect(pickFrames(segs, 30, { at: [1, 4] })).toEqual([
@@ -41,7 +41,10 @@ describe("pickFrames", () => {
     ]);
   });
   it("segment → the midpoint frame of that segment", () => {
-    expect(pickFrames(segs, 30, { segment: 1 })).toEqual([{ frame: Math.round(3.65 * 30), label: "1 app" }]);
+    expect(pickFrames(segs, 30, { segment: 1 })).toEqual([{ frame: Math.round(3.65 * 30), label: "1 video" }]);
+  });
+  it("out-of-range segment → clear error, not undefined deref", () => {
+    expect(() => pickFrames(segs, 30, { segment: 2 })).toThrow(/--segment 2 out of range .*2 segments.*0\.\.1/);
   });
   it("default → one midpoint frame per beat (storyboard)", () => {
     const r = pickFrames(segs, 30, {});

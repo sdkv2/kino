@@ -19,7 +19,7 @@ spec → validate → voiceover → avatar plan/trim → stage assets → backgr
 
 - **validate** — parse the spec, resolve provider/voice/look, check every SFX/music/asset ref. A bad ref fails here, **before** any paid API call.
 - **voiceover** — one ElevenLabs read per segment `text`, stitched with gaps into the VO track (skipped/silent under `--mock`).
-- **avatar plan/trim** — pick the on-camera (`avatar`) beats, trim the VO to just those windows, lip-sync them at the provider. No `avatar` beats or `provider: none` → faceless, this stage is skipped. See [Avatars](avatars.md).
+- **presenter plan/trim** — pick the on-camera beats (a `scene` whose `source` is a presenter), trim the VO to just those windows, lip-sync them at the provider. No presenter sources or `provider: none` → this stage is skipped. See [Avatars](avatars.md).
 - **stage assets** — copy the spec's assets (footage, frames, images), resolve SFX/music, download the brand font.
 - **render** — kino's frame engine (headless Chromium) composites captions, background/overlays, footage, and audio into frames and encodes the MP4, once per `format`.
 
@@ -56,6 +56,20 @@ Paid, slow outputs are content-cached under `.kino-cache/` and keyed by a hash o
 - **Avatar** — cached on provider + look/portrait + the trimmed-audio bytes. Unchanged presenter beats are reused across rebuilds.
 
 So the second build after a small edit is fast and cheap — only the changed beats re-hit an API.
+
+## Render speed (shader / glass)
+
+Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Env levers:
+
+| Env | Effect |
+|---|---|
+| `KINO_GPU=1` | Hardware ANGLE (Metal on macOS) instead of SwiftShader CPU GL. Faster; not bit-identical across machines. Frame cache keys `gpu` vs `sw` separately. |
+| `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
+| `KINO_SHADER_FXAA=0` | Disable the default FXAA edge post-pass on shader backgrounds. |
+| `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
+| `KINO_CONCURRENCY=N` | Chrome worker count (default cap 8 short / 12 long). |
+
+Example: `KINO_GPU=1 kino build specs/foo.json --mock`
 
 ## Variants & batch
 

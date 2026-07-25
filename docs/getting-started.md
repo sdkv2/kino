@@ -1,6 +1,6 @@
 # Getting started
 
-**kino** turns an agent-authored JSON **spec** into a finished vertical video: ElevenLabs voiceover → optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless** animated background → deterministic frame composite → 9:16 / 3:4 MP4. You (or a driving agent) supply the creative as JSON; kino handles deterministic production.
+**kino** turns a JSON **spec** into a finished video: ElevenLabs voiceover → a background / motion graphic, with an optional AI presenter (HeyGen / Hedra / Replicate) → deterministic frame composite → MP4 (9:16, 3:4, 16:9, …). You (or a driving agent) author the creative as JSON; kino handles deterministic production.
 
 This guide takes you from a clean checkout to your first rendered video. For the full command list see the [CLI reference](cli-reference.md); for the JSON format see the [Spec reference](spec-reference.md).
 
@@ -11,11 +11,11 @@ This guide takes you from a clean checkout to your first rendered video. For the
 | **Node 20+** | runtime (the CLI is ESM) |
 | **ffmpeg / ffprobe** | audio muxing, frame extraction |
 | **ImageMagick** (`magick`) | storyboard contact sheets + frame montages |
-| **ElevenLabs API key** | voiceover (required for real renders — faceless and most avatar setups) |
-| HeyGen / Hedra / Replicate key | only if you use an AI avatar (optional) |
+| **ElevenLabs API key** | voiceover (required for real renders, with or without a presenter) |
+| HeyGen / Hedra / Replicate key | only if a beat asks for an AI presenter (optional) |
 
-Faceless needs only ElevenLabs. Avatar builds usually need it too (kino VO → lip-sync), plus the
-avatar provider. Get a key via [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) (referral —
+Builds with no presenter need only ElevenLabs. Presenter builds usually need it too (kino VO → lip-sync), plus the
+presenter provider. Get a key via [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) (referral —
 supports the project). With `--mock` you can preview structure and timing with **no API keys at all**
 (silent VO + placeholder visuals).
 
@@ -41,6 +41,11 @@ Or install by hand:
 cd ~/kino && npm install && npm run build && npm link   # provides the `kino` command
 ```
 
+No install at all also works — `npx @sdkv2/kino <command>` runs the published package, and
+Puppeteer's Chromium ships with it. ffmpeg/ffprobe use your system install when they're on
+PATH and fall back to a bundled binary otherwise. `npx` re-resolves dependencies on each first
+run, so `npm i -g @sdkv2/kino` is worth it once you use kino regularly.
+
 ## Verify your environment
 
 ```bash
@@ -60,11 +65,11 @@ Every build runs inside a **project**:
 - `kino projects --new <name> [--brand <brand>]` adds more projects (omit `--brand` for a brandless project on kino defaults); `kino projects` lists what exists.
 - A spec must live under a project's `specs/`. Building a spec that isn't inside a project fails with a message telling you to create one.
 
-A **brand** (`brand.md`) is YAML frontmatter (an optional subset of palette/font/voice/disclosure and other settings) followed by a free-form guidelines body. The frontmatter holds the palette, fonts, disclosures, default avatar provider, voice/look aliases, and banned phrases; the body is prose for the driving agent. Everything is optional and falls back to kino defaults — see [Spec reference → brand.md](spec-reference.md#brandmd).
+A **brand** (`brand.md`) is YAML frontmatter (an optional subset of palette/font/voice/disclosure and other settings) followed by a free-form guidelines body. The frontmatter holds the palette, fonts, disclosures, default presenter provider, voice/look aliases, and banned phrases; the body is prose for the driving agent. Everything is optional and falls back to kino defaults — see [Spec reference → brand.md](spec-reference.md#brandmd).
 
 ## Write a spec and render it
 
-A spec is a JSON file describing the video as a list of **beats** (segments). Each beat is an `avatar` (talking head / faceless VO), an `app` (a screenshot cut-in), or a `motion` graphic. Minimal faceless example:
+A spec is a JSON file describing the video as a list of **beats** (segments). Each beat is a `scene` (voiceover over the background — the default, so `kind` is optional), a `video` (footage or a screenshot cut in), or a `motion` graphic. Minimal example:
 
 ```json
 {
@@ -72,7 +77,7 @@ A spec is a JSON file describing the video as a list of **beats** (segments). Ea
   "background": "aurora",
   "segments": [
     { "kind": "motion", "source": "motion/hook.html", "text": "Most cover letters get rejected in six seconds." },
-    { "kind": "avatar", "text": "Here's how to fix yours.", "caption": "Fix yours" }
+    { "text": "Here's how to fix yours.", "caption": "Fix yours" }
   ]
 }
 ```
@@ -100,6 +105,7 @@ Renders land at `projects/<name>/out/<title>/<title>[-<tag>]-<format>.mp4` (e.g.
 - **[CLI reference](cli-reference.md)** — every `kino` command and flag.
 - **[Spec reference](spec-reference.md)** — the full JSON spec, `brand.md`, and `project.json`.
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
-- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — faceless backgrounds, logo, captions, kickers.
+- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — backgrounds, logo, captions, kickers, shaders.
+- **[Segmentation](segmentation.md)** — `kino segment` masks + `regionShader`.
 - Agent skills (canonical): [`skills/`](../skills/). `kino skills --install` (also `kino init`) creates local (gitignored) symlinks under `.agents` / `.cursor` / `.claude` / `.codex`.
-- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`. Also: `npx skills add sdkv2/kino`.
+- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`, `shader-backgrounds`. Also: `npx skills add sdkv2/kino`.

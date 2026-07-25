@@ -1,0 +1,85 @@
+import { execa } from "execa";
+import { extname, join } from "node:path";
+import { FFMPEG_PATH } from "../media/binPaths.js";
+import { writeManifest, type MaskManifest } from "./manifest.js";
+import type { Backend, SegmentRequest, SegmentResult } from "./backend.js";
+
+// ponytail: fixed 1080x1920 canvas — mock never probes the real input, deterministic output is
+// the point (CI-testable with no Mac/model). Bump if a caller actually needs a different frame size.
+const WIDTH = 1080;
+const HEIGHT = 1920;
+const VIDEO_EXT = /\.(mp4|mov|webm|mkv)$/i;
+
+// Centered ellipse, luma-only geq: white inside the ellipse, black outside. Shared by the image
+// and video paths so both mocks look the same shape.
+function ellipseExpr(): string {
+  const cx = WIDTH / 2;
+  const cy = HEIGHT / 2;
+  const rx = WIDTH * 0.28;
+  const ry = HEIGHT * 0.26;
+  return `if(lt(pow((X-${cx})/${rx},2)+pow((Y-${cy})/${ry},2),1),255,0)`;
+}
+
+async function writeMaskPng(out: string): Promise<void> {
+  await execa(FFMPEG_PATH, [
+    "-y", "-loglevel", "error",
+    "-f", "lavfi", "-i", `color=black:s=${WIDTH}x${HEIGHT}`,
+    "-frames:v", "1",
+    "-vf", `geq=lum='${ellipseExpr()}'`,
+    "-pix_fmt", "gray",
+    out,
+  ]);
+}
+
+async function writeMaskMp4(out: string): Promise<void> {
+  await execa(FFMPEG_PATH, [
+    "-y", "-loglevel", "error",
+    "-f", "lavfi", "-i", `color=black:s=${WIDTH}x${HEIGHT}:r=30:d=2`,
+    // cb/cr pinned to neutral: geq only fills the planes you give it an expression for, so a
+    // lum-only filter leaves chroma at whatever the lavfi source carried. That shipped a mask.mp4
+    // that decodes GREEN rather than grayscale — the R channel read 73/255 inside the ellipse and
+    // 0 outside, so a consumer thresholding at 0.5 saw no subject anywhere.
+    "-vf", `geq=lum='${ellipseExpr()}':cb='128':cr='128'`,
+    // Lossless 4:4:4, matching the real runners: 4:2:0 puts a multi-object mask's G/B channels at
+    // half resolution and breaks kinoMaskDist's analytic gate. Free — binary masks code losslessly
+    // smaller than crf 16. See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+    "-pix_fmt", "yuv444p", "-c:v", "libx264", "-qp", "0",
+    out,
+  ]);
+}
+
+export const mockBackend: Backend = {
+  name: "mock",
+  async run(req: SegmentRequest): Promise<SegmentResult> {
+    const isVideo = VIDEO_EXT.test(extname(req.input));
+    const kind: MaskManifest["kind"] = isVideo ? "video" : "image";
+
+    let fps: number | undefined;
+    let frames: number | undefined;
+    if (isVideo) {
+      await writeMaskMp4(join(req.outDir, "mask.mp4"));
+      fps = 30;
+      frames = 60;
+    } else {
+      await writeMaskPng(join(req.outDir, "mask.png"));
+    }
+
+    const manifest: MaskManifest = {
+      kind,
+      source: req.input,
+      prompt: req.prompt,
+      width: WIDTH,
+      height: HEIGHT,
+      ...(fps !== undefined ? { fps } : {}),
+      ...(frames !== undefined ? { frames } : {}),
+      objects: [{ id: 0, label: req.prompt, channel: isVideo ? "r" : "gray" }],
+      backend: "mock",
+      // The mock produces a static per-frame ellipse — zero temporal tracking. Report the capability
+      // honestly (false), never the caller's request. (coreml hardwires false the same way.)
+      tracked: false,
+    };
+    writeManifest(req.outDir, manifest);
+
+    return { manifest, outDir: req.outDir };
+  },
+};

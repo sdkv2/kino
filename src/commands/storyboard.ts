@@ -18,7 +18,7 @@ export async function storyboard(
   // caption's overflow or a collision with a `texts` overlay actually shows. Cap at 4.
   const perBeat = Math.min(4, Math.max(1, Math.round(Number(opts.frames) || 2)));
   const picks = pickFrames(r.props.segments, r.props.fps, {}, perBeat);
-  const format = r.formats[0] as "9:16" | "3:4";
+  const format = r.formats[0] as "9:16" | "3:4" | "16:9";
   const frames = picks.map((p, i) => ({ frame: p.frame, name: `sb-${i}` }));
   const outDir = join(r.project.outDir(r.spec.title), "stills");
   const stills = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir });

@@ -5,29 +5,29 @@ import { computeTimings } from "../src/vo/vo.js";
 const GAP = 0.32;
 
 describe("planAvatarWindows", () => {
-  it("returns no windows and no avatar clips when nothing is on camera", () => {
+  it("returns no windows and no presenter clips when nothing is on camera", () => {
     const timings = computeTimings([2, 2], GAP);
-    const r = planAvatarWindows(["app", "app"], timings, GAP);
+    const r = planAvatarWindows([false, false], timings, GAP);
     expect(r.avatarIndices).toEqual([]);
     expect(r.windows).toEqual([]);
   });
 
   it("makes one window covering everything when every segment is on camera", () => {
     const timings = computeTimings([2, 3], GAP);
-    const r = planAvatarWindows(["avatar", "avatar"], timings, GAP);
+    const r = planAvatarWindows([true, true], timings, GAP);
     expect(r.avatarIndices).toEqual([0, 1]);
     expect(r.windows).toHaveLength(1);
     expect(r.windows[0]).toMatchObject({ fromSec: 0, toSec: timings[1].endSec, audioStartSec: 0 });
   });
 
-  it("splits avatar runs around app cut-ins, billing only the on-camera clips", () => {
-    // avatar, avatar, app, app, avatar  → windows [0..1] and [4..4]
+  it("splits presenter runs around video cut-ins, billing only the on-camera clips", () => {
+    // on, on, cut-in, cut-in, on  → windows [0..1] and [4..4]
     const durs = [2, 1.5, 3, 2, 1];
-    const kinds = ["avatar", "avatar", "app", "app", "avatar"];
+    const kinds = [true, true, false, false, true];
     const timings = computeTimings(durs, GAP);
     const r = planAvatarWindows(kinds, timings, GAP);
 
-    expect(r.avatarIndices).toEqual([0, 1, 4]); // app clips never reach the avatar provider
+    expect(r.avatarIndices).toEqual([0, 1, 4]); // cut-in clips never reach the presenter provider
     expect(r.windows).toHaveLength(2);
 
     // window A: from seg0 start, held to the next segment's start (gap-fill); plays the clip from 0

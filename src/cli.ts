@@ -9,15 +9,18 @@ import { formatCliError } from "./cliError.js";
 import { KINO_VERSION } from "./version.js";
 
 const program = new Command();
-program.name("kino").description("Agent-driven short-form video production").version(KINO_VERSION);
+program.name("kino").description("Spec driven video development").version(KINO_VERSION);
 
 program
   .command("build <spec>")
   .description("Generate a video from a spec (vo → avatar → render)")
-  .option("--mock", "skip all paid APIs (silent VO + placeholder avatar)")
-  .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4")
+  .option("--draft", "fast, free preview: silent VO + placeholder avatar + low-quality encode")
+  .option("--no-tts", "skip voiceover — full-quality SILENT render (music/SFX still play)")
+  .option("--no-avatar", "skip the presenter — full-quality FACELESS render")
+  .option("--mock", "alias of --draft (deprecated)")
+  .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4,16:9")
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
-  .option("--background <kind>", "override faceless background: glow|image|mesh|aurora|particles|grid|custom")
+  .option("--background <kind>", "override the background: glow|image|mesh|aurora|particles|grid|custom")
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
@@ -54,23 +57,24 @@ program
   .option("--montage", "tile multiple stills into one contact sheet")
   .option("--segment <n>", "render the midpoint of segment n")
   .option("--word <word>", "center the sheet on a spoken word's start (with --segment; implies montage)")
-  .option("--format <fmt>", "9:16 or 3:4")
+  .option("--format <fmt>", "9:16 | 3:4 | 16:9")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
-  .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
+  .option("--platform <name>", "overlay in-feed safe zones (guide only): tiktok | reels | shorts")
   .option("--grid", "overlay a rule-of-thirds grid for composition QA")
+  .option("--measure", "print exact geometry (center X/Y + Δ-from-center) of every [data-measure] element — deterministic alignment QA")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
 program
   .command("storyboard <spec>")
   .description("Render per-beat stills (composition + full reveal), tiled into a labeled contact sheet")
-  .option("--format <fmt>", "9:16 or 3:4")
+  .option("--format <fmt>", "9:16 | 3:4 | 16:9")
   .option("--frames <n>", "frames per beat (default 2: composition + fully-revealed end-state; the ·full tile shows overflow/overlaps)")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
-  .option("--platform <name>", "overlay in-feed safe zones: tiktok | reels | shorts")
+  .option("--platform <name>", "overlay in-feed safe zones (guide only): tiktok | reels | shorts")
   .action(async (s, o) => (await import("./commands/storyboard.js")).storyboard(s, o));
 
 program
@@ -93,6 +97,19 @@ program
   .option("--mock", "offline canned transcript (no ffmpeg/network)")
   .action(async (v, o) => {
     await (await import("./commands/transcribe.js")).transcribe(v, o);
+  });
+
+program
+  .command("segment <input>")
+  .description("Generate object masks (Mac/CoreML or CUDA/PyTorch) for an image or video, consumed as shader texture channels")
+  .option("--prompt <text>", "text prompt naming the object(s) to segment (required)")
+  .option("--objects <n>", "number of objects to track (max 4, default 1)")
+  .option("--out <name>", "output subdir name under assets/masks/ (default: input's basename)")
+  .option("--no-track", "image-style per-frame segmentation instead of video object tracking")
+  .option("--backend <name>", "coreml | cuda | mock (default: coreml on macOS, cuda on Linux/Windows+NVIDIA)")
+  .option("--format <fmt>", "json (default: human summary, or JSON when stdout isn't a TTY)")
+  .action(async (input, o) => {
+    await (await import("./commands/segment.js")).segment(input, o);
   });
 
 program
@@ -140,7 +157,7 @@ program
 
 program
   .command("pexels <query>")
-  .description("Search Pexels stock videos (portrait by default); --get <n> downloads into assets/pexels/")
+  .description("Search Pexels stock VIDEOS (portrait by default); --get <n> downloads into assets/pexels/. For still images use `kino photos`.")
   .option("--get <n>", "download result #n from the search")
   .option("--count <n>", "results to list (default 8)")
   .option("--landscape", "search landscape instead of portrait")
@@ -150,7 +167,7 @@ program
 
 program
   .command("photos <query>")
-  .description("Search Pexels stock photos (portrait by default); --get <n> downloads into assets/pexels/")
+  .description("Search Pexels stock PHOTOS (portrait by default); --get <n> downloads the full-res original into assets/pexels/. For video clips use `kino pexels`.")
   .option("--get <n>", "download result #n from the search")
   .option("--count <n>", "results to list (default 8)")
   .option("--landscape", "search landscape instead of portrait")
@@ -213,10 +230,19 @@ program
   )
   .action(async (o) => (await import("./commands/skills.js")).skills(o));
 
-program.parseAsync(process.argv).catch((err) => {
-  // One clean line instead of an uncaught stack dump on every expected failure (bad spec, missing
-  // brand, lint violation…). Full stack still available with KINO_DEBUG=1.
-  log.error(formatCliError(err));
-  if (process.env.KINO_DEBUG) console.error(err);
-  process.exit(1);
-});
+program
+  .parseAsync(process.argv)
+  .then(() => {
+    // Exit explicitly instead of waiting for the event loop to drain: puppeteer's CDP
+    // WebSocket transport isn't reliably unref'd across versions/platforms, so a render
+    // command can finish writing its output and then hang forever with no visible work
+    // left to do.
+    process.exit(0);
+  })
+  .catch((err) => {
+    // One clean line instead of an uncaught stack dump on every expected failure (bad spec, missing
+    // brand, lint violation…). Full stack still available with KINO_DEBUG=1.
+    log.error(formatCliError(err));
+    if (process.env.KINO_DEBUG) console.error(err);
+    process.exit(1);
+  });

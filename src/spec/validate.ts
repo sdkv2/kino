@@ -29,10 +29,10 @@ export function complianceScan(spec: Spec, brand: Brand): ComplianceHit[] {
 // needs, applying the brand-alias passthrough (an alias resolves via brand.voiceAliases /
 // lookAliases; an unknown alias is passed through verbatim as a raw id). Note the deliberate
 // asymmetry around "missing" values: resolveVoice returns '' as a "no voice configured" sentinel
-// because a faceless build is valid, whereas resolveVoiceLook throws — an avatar build with no
+// because a presenter-less build is valid, whereas resolveVoiceLook throws — a presenter build with no
 // voice or look is unrecoverable, so it fails loud rather than producing a silent empty render.
 
-/** spec.provider, else brand.defaultProvider, else "none" (faceless). */
+/** spec.provider, else brand.defaultProvider, else "none" (no presenter). */
 export function resolveProvider(spec: Spec, brand: Brand): Provider {
   return (spec.provider ?? brand.defaultProvider ?? "none") as Provider;
 }
@@ -40,7 +40,7 @@ export function resolveProvider(spec: Spec, brand: Brand): Provider {
 /**
  * Resolve the voice id: spec.voice, else brand.defaultVoice, mapped through brand.voiceAliases
  * (unknown alias passes through as a raw id). Returns '' when nothing is configured — a valid
- * "no voice" state for faceless builds, not an error.
+ * "no voice" state for presenter-less builds, not an error.
  */
 export function resolveVoice(spec: Spec, brand: Brand): string {
   const alias = spec.voice ?? brand.defaultVoice;
@@ -78,9 +78,9 @@ export function assertAssetsExist(spec: Spec, project: Project): void {
     if (seg.voFile && !existsSync(project.assetPath(seg.voFile))) {
       throw new Error(`Missing voFile for segment[${i}]: assets/${seg.voFile}`);
     }
-    if (seg.kind !== "app") continue;
-    if (!existsSync(project.assetPath(seg.asset))) {
-      throw new Error(`Missing asset for segment[${i}]: assets/${seg.asset}`);
+    if (seg.kind !== "video") continue;
+    if (!existsSync(project.assetPath(seg.source))) {
+      throw new Error(`Missing source for segment[${i}]: assets/${seg.source}`);
     }
     if (seg.frame && !existsSync(project.assetPath(seg.frame.src))) {
       throw new Error(`Missing frame for segment[${i}]: assets/${seg.frame.src}`);
@@ -173,15 +173,15 @@ export function assertSeamlessLoop(spec: Spec, brand?: Brand): void {
   }
 }
 
-/** Soft nudge when faceless work is about to ship on stock mesh with no custom stage. */
+/** Soft nudge when background-led work is about to ship on stock mesh with no custom stage. */
 export function assertBackgroundChoice(spec: Spec, brand: Brand): void {
   const bg = spec.background ?? brand.background ?? "glow";
   if (bg !== "mesh" && bg !== "aurora") return;
   const hasCustom = !!(spec.backgroundComponent ?? brand.backgroundComponent);
   if (hasCustom) return;
-  const facelessHeavy =
-    spec.segments.filter((s) => s.kind === "avatar" || s.kind === "motion").length >= 2;
-  if (!facelessHeavy) return;
+  const backgroundHeavy =
+    spec.segments.filter((s) => s.kind === "scene" || s.kind === "motion").length >= 2;
+  if (!backgroundHeavy) return;
   log.warn(
     `background "${bg}" is a stock preset — for brand identity prefer ` +
       `"background": "custom", "backgroundComponent": "brand-wash" (or your own draw fn). ` +

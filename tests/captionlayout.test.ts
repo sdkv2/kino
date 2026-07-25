@@ -16,14 +16,14 @@ describe("captionBandBottom", () => {
     const s = seg({ caption: "", captionMode: "words", words: [{ word: "hi", start: 0, end: 0.3 }] });
     expect(captionBandBottom(s, false)).toBe(CAPTION_BOTTOM);
   });
-  it("returns 0 for a faceless avatar beat (hero caption is centered, not in the bottom band)", () => {
-    expect(captionBandBottom(seg({ kind: "avatar", caption: "hook" }), false)).toBe(0);
+  it("returns 0 for a presenter-less scene beat (hero caption is centered, not in the bottom band)", () => {
+    expect(captionBandBottom(seg({ kind: "scene", caption: "hook" }), false)).toBe(0);
   });
-  it("returns 0 for a faceless CTA beat (end card is hero-centered, not lower-third)", () => {
-    expect(captionBandBottom(seg({ kind: "avatar", caption: "download free", cta: true }), false)).toBe(0);
+  it("returns 0 for a presenter-less CTA beat (end card is hero-centered, not lower-third)", () => {
+    expect(captionBandBottom(seg({ kind: "scene", caption: "download free", cta: true }), false)).toBe(0);
   });
   it("returns the band for an app beat with a caption", () => {
-    expect(captionBandBottom(seg({ kind: "app", asset: "x.png", caption: "look" }), true)).toBe(CAPTION_BOTTOM);
+    expect(captionBandBottom(seg({ kind: "video", source: "x.png", caption: "look" }), true)).toBe(CAPTION_BOTTOM);
   });
 });
 
@@ -39,10 +39,10 @@ describe("hasCaptionContent", () => {
 });
 
 describe("isHeroCaption", () => {
-  it("is true for all faceless avatar beats (hooks and CTA end cards)", () => {
-    expect(isHeroCaption({ kind: "avatar" }, false)).toBe(true);
-    expect(isHeroCaption({ kind: "avatar", cta: true }, false)).toBe(true);
-    expect(isHeroCaption({ kind: "avatar" }, true)).toBe(false);
-    expect(isHeroCaption({ kind: "app" }, false)).toBe(false);
+  it("is true for all presenter-less scene beats (hooks and CTA end cards)", () => {
+    expect(isHeroCaption({ kind: "scene" }, false)).toBe(true);
+    expect(isHeroCaption({ kind: "scene", cta: true }, false)).toBe(true);
+    expect(isHeroCaption({ kind: "scene" }, true)).toBe(false);
+    expect(isHeroCaption({ kind: "video" }, false)).toBe(false);
   });
 });

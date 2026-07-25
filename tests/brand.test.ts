@@ -42,6 +42,34 @@ describe("loadBrand", () => {
     expect(b.disclosure).toBe(""); // no default disclosure
     expect(b.captionStyle.fontSize).toBe(74); // defaulted
   });
+  it("keeps the new disclosure pair as written", () => {
+    const dir = brandDirWith('---\nname: acme\ndisclosure: "AI-generated"\npresenterDisclosure: "AI presenter"\n---\nguide\n');
+    const b = loadBrand(dir);
+    expect(b.disclosure).toBe("AI-generated");
+    expect(b.presenterDisclosure).toBe("AI presenter");
+  });
+
+  // Pre-1.22 brands named these around the presenter being the default. An AI disclosure must
+  // never silently drop or swap, so the migration is asserted rather than assumed.
+  it("migrates a pre-1.22 disclosure pair without changing which text shows where", () => {
+    const dir = brandDirWith('---\nname: acme\ndisclosure: "AI presenter"\nfacelessDisclosure: "AI-generated"\n---\nguide\n');
+    const b = loadBrand(dir);
+    expect(b.disclosure).toBe("AI-generated"); // was facelessDisclosure — shown off camera
+    expect(b.presenterDisclosure).toBe("AI presenter"); // was the on-camera disclosure
+  });
+
+  it("keeps a lone pre-1.22 disclosure showing in both cases", () => {
+    const dir = brandDirWith('---\nname: acme\ndisclosure: "AI-generated"\n---\nguide\n');
+    const b = loadBrand(dir);
+    expect(b.disclosure).toBe("AI-generated");
+    expect(b.presenterDisclosure ?? b.disclosure).toBe("AI-generated");
+  });
+
+  it("migrates facelessBackdrop to backdrop", () => {
+    const dir = brandDirWith('---\nname: acme\nfacelessBackdrop: "brand/stage.png"\n---\nguide\n');
+    expect(loadBrand(dir).backdrop).toBe("brand/stage.png");
+  });
+
   it("a frontmatter-less brand.md resolves to all defaults", () => {
     const dir = brandDirWith("# acme guidelines\n- calm, plain-spoken\n");
     const b = loadBrand(dir);
@@ -78,7 +106,7 @@ describe("resolveVoice (lazy)", () => {
 
 describe("validateSpec (no eager look requirement)", () => {
   it("does not throw for a faceless spec with no voice/look", () => {
-    const spec = { segments: [{ kind: "avatar", text: "hi", caption: "c" }] } as unknown as Spec;
+    const spec = { segments: [{ kind: "scene", text: "hi", caption: "c" }] } as unknown as Spec;
     const project = { assetPath: (r: string) => "/nope/" + r } as unknown as Parameters<typeof validateSpec>[2];
     expect(() => validateSpec(spec, DEFAULT_BRAND, project)).not.toThrow();
   });

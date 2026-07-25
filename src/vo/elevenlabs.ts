@@ -79,10 +79,15 @@ export async function ttsWithTimestamps(
   return a ? charsToWords(a.characters, a.character_start_times_seconds, a.character_end_times_seconds) : [];
 }
 
-// --mock timestamps: evenly spaced fake word timings over the silent clip.
-export async function ttsMockWithTimestamps(text: string, out: string): Promise<WordTiming[]> {
-  const words = text.trim().split(/\s+/);
-  const per = 0.38;
-  await genSilence(Math.max(0.8, words.length * per), out);
+// --mock / silent timestamps: evenly spaced fake word timings over a silent clip. With no
+// `durSec`, the clip is paced at 0.38s/word (the default estimate). Pass `durSec` (a segment's
+// `dur`) to force an exact beat length — words spread evenly across it — for silent/no-tts beats
+// that must hit a fixed duration (art films, music-locked motion) rather than a word estimate.
+export async function ttsMockWithTimestamps(text: string, out: string, durSec?: number): Promise<WordTiming[]> {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const fixed = typeof durSec === "number" && durSec > 0;
+  const total = fixed ? durSec! : Math.max(0.8, words.length * 0.38);
+  const per = fixed && words.length ? total / words.length : 0.38;
+  await genSilence(total, out);
   return words.map((w, i) => ({ word: w, start: i * per, end: (i + 1) * per }));
 }

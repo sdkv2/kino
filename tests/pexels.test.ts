@@ -103,15 +103,16 @@ describe("pickFile", () => {
 });
 
 describe("pickPhotoUrl", () => {
-  it("prefers the oriented crop for portrait/landscape", () => {
-    expect(pickPhotoUrl(photo(), "portrait")).toContain("portrait.jpg");
-    expect(pickPhotoUrl(photo(), "landscape")).toContain("landscape.jpg");
+  it("prefers the full-res original (search already filtered orientation — the crop only downscales)", () => {
+    expect(pickPhotoUrl(photo(), "portrait")).toContain("original.jpg");
+    expect(pickPhotoUrl(photo(), "landscape")).toContain("original.jpg");
   });
-  it("falls back to large2x then original when oriented URL is empty", () => {
-    expect(pickPhotoUrl(photo({ portrait: "", landscape: "" }), "portrait")).toContain("large2x.jpg");
+  it("falls back original → large2x → large → oriented crop as sizes go missing", () => {
+    expect(pickPhotoUrl(photo({ original: "" }), "landscape")).toContain("large2x.jpg");
+    expect(pickPhotoUrl(photo({ original: "", large2x: "" }), "landscape")).toContain("large.jpg");
     expect(
-      pickPhotoUrl(photo({ portrait: "", landscape: "", large2x: "", large: "" }), "portrait"),
-    ).toContain("original.jpg");
+      pickPhotoUrl(photo({ original: "", large2x: "", large: "" }), "landscape"),
+    ).toContain("landscape.jpg");
   });
 });
 

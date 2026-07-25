@@ -1,11 +1,11 @@
-// Pipeline backbone: spec → VO → avatar plan/trim → faceless background → fonts → frame render.
+// Pipeline backbone: spec → VO → presenter plan/trim → background → fonts → frame render.
 // prepare() is the shared resolver that does everything up to (but not including) the final encode;
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
 // variant-tagging on top.
-import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, isAbsolute } from "node:path";
+import { basename, dirname, extname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
@@ -18,18 +18,20 @@ import { contentHash } from "../media/hash.js";
 import { buildVO, GAP } from "../vo/vo.js";
 import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
+import { presenterBeats, resolvePresenterPin } from "../avatar/source.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
 import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
-import { resolveBackgroundComponent } from "../media/backgroundLib.js";
+import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { KinoProps, WordTiming } from "../render/props.js";
+import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, WordTiming } from "../render/props.js";
+import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
-import { resolveMotionGraphic, type MotionGraphicRefInput } from "../render/motiongraphic.js";
+import { resolveMotionGraphic, sanitizeMotionHtml, type MotionGraphicRefInput } from "../render/motiongraphic.js";
 import { beatRelativeWords, resolveWordAnchors } from "../render/motionVars.js";
 import { probeFramePicks, isUnderAnimated } from "../render/motionProbe.js";
 import { checkLoopSeam, imageMeanDiff } from "../media/loopSeam.js";
@@ -41,6 +43,54 @@ import { log } from "../log.js";
 // The background colours themselves come from the brand palette (see DEFAULT_BRAND.colors in
 // config/brand.ts).
 const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
+
+// Resolve an app beat's regionShader spec → RegionShaderProps: read each mask's manifest for kind +
+// the chosen object's channel, stage the mask file into /public (like frame.src / asset), and load
+// each region's .frag/.glsl body the same way a custom shader background is loaded. `mask`+`object`
+// is the single-entry shorthand for `masks`. An entry's own `subject` shades just that mask
+// (per-object regions); entries without one fall back to the top-level `subject`, which is how
+// several independently `kino segment`-ed subjects share one treatment on one background.
+function resolveRegionShader(
+  rs: {
+    mask?: string;
+    masks?: { mask: string; object: number; subject?: string }[];
+    subject?: string;
+    background?: string;
+    object: number;
+    // Shared by every body in the beat's one program; `keyframes[].at` is beat-relative seconds.
+    // The 4-slot ceiling is enforced in the schema (see slotParamNames), so no re-check here.
+    params?: Record<string, BgParamValue>;
+    keyframes?: BgKeyframe[];
+  },
+  project: Project,
+  stageAsset: (rel: string) => void,
+): RegionShaderProps {
+  const loadBody = (ref: string | undefined) => (ref ? readFileSync(resolveBackgroundComponent(ref, project), "utf8") : null);
+  const entries = rs.masks ?? [{ mask: rs.mask!, object: rs.object, subject: undefined }];
+  const masks = entries.map(({ mask, object, subject }) => {
+    const manifest = readManifest(project.assetPath(mask));
+    // Image masks carry every object in the single union mask.png (all channel "gray"); per-object
+    // image selection isn't wired, so object>0 would silently pick the same union — reject it loudly.
+    // Multi-object addressing lives on video masks (distinct R/G/B channels).
+    if (manifest.kind === "image" && object > 0) {
+      throw new Error(`regionShader object must be 0 for image mask "${mask}" — per-object selection is only supported on video masks.`);
+    }
+    const obj = manifest.objects[object];
+    if (!obj) {
+      throw new Error(`regionShader object ${object} out of range for mask "${mask}" (${manifest.objects.length} objects)`);
+    }
+    const maskRel = `${mask}/${manifest.kind === "video" ? "mask.mp4" : "mask.png"}`;
+    stageAsset(maskRel);
+    return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel, subjectCode: loadBody(subject) };
+  });
+  return {
+    masks,
+    subjectCode: loadBody(rs.subject),
+    backgroundCode: loadBody(rs.background),
+    params: rs.params,
+    keyframes: rs.keyframes,
+  };
+}
 
 // Resolve the portrait image hedra/replicate lip-sync against (heygen uses a hosted look id instead).
 function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider: Provider): string {
@@ -55,6 +105,18 @@ function resolveSourceImage(spec: Spec, brand: Brand, project: Project, provider
   const abs = isAbsolute(img) ? img : join(project.workspaceRoot, img);
   if (!existsSync(abs)) throw new Error(`Avatar image not found: ${abs}`);
   return abs;
+}
+
+// Let a spec path be given relative to its project, not just cwd: `still specs/x.json --project p`
+// now resolves `projects/p/specs/x.json`. Tries as-given first (abs / cwd-relative), then under the
+// project root, then its specs/ dir. Falls through unchanged so a genuinely missing file still
+// throws a clear ENOENT downstream.
+function resolveSpecPathIn(specPath: string, project: Project): string {
+  if (existsSync(specPath)) return specPath;
+  for (const cand of [join(project.projectRoot, specPath), join(project.projectRoot, "specs", basename(specPath))]) {
+    if (existsSync(cand)) return cand;
+  }
+  return specPath;
 }
 
 // Resolve an optional brand asset (logo/backdrop) — brands are shared, so paths are workspace-relative.
@@ -79,7 +141,7 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
 export interface PrepareResult {
   props: KinoProps;
   publicDir: string;
-  formats: Array<"9:16" | "3:4">;
+  formats: Array<"9:16" | "3:4" | "16:9">;
   project: Project;
   spec: Spec;
   labelFont: string | null; // absolute TTF path for storyboard/montage labels, if resolved
@@ -90,9 +152,20 @@ export interface PrepareResult {
 // inspection commands (still/storyboard/inspect) so they share the exact pipeline.
 export async function prepare(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; project?: string },
+  opts: {
+    mock?: boolean; // deprecated alias of `draft`
+    draft?: boolean;
+    tts?: boolean; // default true on a full render; false = silent (full quality). commander --no-tts.
+    avatar?: boolean; // default true on a full render; false = no presenter. commander --no-avatar.
+    format?: string;
+    provider?: string;
+    background?: string;
+    font?: string;
+    project?: string;
+  },
 ): Promise<PrepareResult> {
   const project = resolveProject({ specPath, project: opts.project });
+  specPath = resolveSpecPathIn(specPath, project);
   loadEnv(project.workspaceRoot);
   const spec = parseSpec(JSON.parse(readFileSync(specPath, "utf8")));
 
@@ -108,48 +181,65 @@ export async function prepare(
     captionMode: pc?.captionMode ?? rawBrand.captionMode,
   };
   validateSpec(spec, brand, project);
-  const provider = (opts.provider as Provider | undefined) ?? resolveProvider(spec, brand);
-  const mock = !!opts.mock;
+  // Three independent build axes (draft/mock is just the all-off, no-spend preset):
+  //   draft  → fast free preview: silent VO + placeholder presenter + veryfast/low-SS encode
+  //   tts    → real voiceover (off = silent, but FULL quality). commander --no-tts.
+  //   avatar → real presenter  (off = no presenter, full quality; forced off whenever tts is off,
+  //            since a lip-synced presenter has nothing to sync to). commander --no-avatar.
+  const draft = !!(opts.draft || opts.mock);
+  const tts = !draft && opts.tts !== false;
+  const wantAvatar = tts && opts.avatar !== false;
+  // A beat may pin its provider/look via `source: "heygen:look-id"`; otherwise "avatar:" takes
+  // whatever the spec/brand/project configures. --no-avatar (or silent) drops to "none".
+  const pin = resolvePresenterPin(spec);
+  const provider = wantAvatar
+    ? ((opts.provider as Provider | undefined) ?? pin?.provider ?? resolveProvider(spec, brand))
+    : "none";
   const voiceId = resolveVoice(spec, brand);
   // A spec whose every beat imports real VO (voFile) needs no TTS voice at all.
   const needsTts = spec.segments.some((s) => !s.voFile);
-  if (!mock && needsTts && !voiceId) {
-    throw new Error("No voice for a real build — set spec.voice or the brand's defaultVoice (or use --mock).");
+  if (tts && needsTts && !voiceId) {
+    throw new Error("No voice for a speaking build — set spec.voice or the brand's defaultVoice (or use --no-tts / --draft).");
   }
-  const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4">;
+  const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4" | "16:9">;
   const cache = new Cache(project.cache);
 
-  log.info(`Building ${spec.title} · ${provider}${mock ? " · MOCK — no API spend" : ""}`);
+  const modeNote = draft ? " · draft (fast preview, no API spend)" : tts ? "" : " · no VO (silent, full quality)";
+  log.info(`Building ${spec.title} · ${provider}${modeNote}`);
 
   log.step("voiceover");
   const vo = await buildVO({
     spec,
     voiceId,
     cache,
-    // All-voFile specs can run keyless (whisper STT); mixed/TTS specs still require the key.
-    apiKey: mock || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
-    mock,
+    // No TTS → silent placeholder track (buildVO mock path), no key. All-voFile specs can run
+    // keyless (whisper STT); mixed/TTS specs still require the key.
+    apiKey: !tts || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
+    mock: !tts,
     model: resolveVoiceModel(spec, brand),
     needClips: provider !== "none",
     resolveAsset: (rel) => project.assetPath(rel),
   });
 
-  log.step("avatar");
-  const plan = planAvatarWindows(spec.segments.map((s) => s.kind), vo.timings, GAP);
-  const avatarWindows = plan.windows; // contiguous on-camera runs: avatar placement + steady faceless logo
+  log.step("presenter");
+  const plan = planAvatarWindows(presenterBeats(spec), vo.timings, GAP);
+  const avatarWindows = plan.windows; // contiguous on-camera runs: presenter placement + steady logo
   let avatarRel: string | null = null;
   let avatarPath: string | null = null;
   if (provider === "none" || plan.avatarIndices.length === 0) {
-    log.info("  · faceless (no avatar generated)");
+    log.info("  · no presenter");
   } else {
     const avTrack = await stitchAvatarTrack(vo.clips, plan.avatarIndices, cache);
-    const source = provider === "heygen" ? resolveVoiceLook(spec, brand).lookId : resolveSourceImage(spec, brand, project, provider);
-    avatarPath = await buildAvatar({ provider, audioPath: avTrack, source, brand, cache, mock });
+    // A beat's pinned look (after the colon in `source`) overrides the spec/brand one.
+    const source =
+      pin?.look ??
+      (provider === "heygen" ? resolveVoiceLook(spec, brand).lookId : resolveSourceImage(spec, brand, project, provider));
+    avatarPath = await buildAvatar({ provider, audioPath: avTrack, source, brand, cache, mock: false });
     avatarRel = "avatar.mp4";
     log.info(`  · ${plan.avatarIndices.length}/${spec.segments.length} segments on camera (trimmed)`);
   }
 
-  // Stage everything the render page reads via staticFile(): app assets, the avatar clip, and the VO track.
+  // Stage everything the render page reads via staticFile(): video assets, the presenter clip, and the VO track.
   const publicDir = join(project.outDir(spec.title), "_public");
   mkdirSync(publicDir, { recursive: true });
   const staged = new Set<string>();
@@ -161,9 +251,18 @@ export async function prepare(
     copyFileSync(project.assetPath(rel), dest);
   };
   for (const seg of spec.segments) {
-    if (seg.kind === "app") {
-      stageAsset(seg.asset);
+    if (seg.kind === "video") {
+      stageAsset(seg.source);
       if (seg.frame) stageAsset(seg.frame.src);
+    }
+  }
+  // Motion HTML can't use relative url() in CSS (determinism lint) — raster siblings are served via
+  // <img src="/public/motion/..."> and staged here.
+  const motionAssets = join(project.projectRoot, "assets", "motion");
+  if (existsSync(motionAssets)) {
+    for (const f of readdirSync(motionAssets)) {
+      if (/\.(html|js|json)$/i.test(f)) continue;
+      stageAsset(`motion/${f}`);
     }
   }
   if (avatarRel && avatarPath) copyFileSync(avatarPath, join(publicDir, avatarRel));
@@ -211,11 +310,12 @@ export async function prepare(
   const bgKind = (opts.background as ReturnType<typeof resolveBackgroundKind> | undefined) ?? resolveBackgroundKind(brand, spec);
   let bgImageRel: string | null = null;
   let bgCustomCode: string | null = null;
+  let bgShaderCode: string | null = null;
   if (bgKind === "image") {
-    const imgAbs = resolveBrandFile(brand.facelessBackdrop, project);
-    if (!imgAbs) throw new Error('background "image" needs brand.facelessBackdrop');
-    copyFileSync(imgAbs, join(publicDir, "faceless-bg.png"));
-    bgImageRel = "faceless-bg.png";
+    const imgAbs = resolveBrandFile(brand.backdrop, project);
+    if (!imgAbs) throw new Error('background "image" needs brand.backdrop');
+    copyFileSync(imgAbs, join(publicDir, "backdrop.png"));
+    bgImageRel = "backdrop.png";
   } else if (bgKind === "custom") {
     const compRef = spec.backgroundComponent ?? brand.backgroundComponent;
     if (!compRef) {
@@ -224,13 +324,45 @@ export async function prepare(
           '(bare id e.g. "brand-wash", or a path). See `kino backgrounds`.',
       );
     }
-    bgCustomCode = readFileSync(resolveBackgroundComponent(compRef, project), "utf8");
+    const compPath = resolveBackgroundComponent(compRef, project);
+    const code = readFileSync(compPath, "utf8");
+    if (isShaderPath(compPath)) bgShaderCode = code;
+    else bgCustomCode = code;
+  }
+  // Shader texture channels (uTex0..uTex3): images staged into /public, motion HTML sanitized and
+  // rasterized page-side at load. Only meaningful when the background is a shader.
+  const bgTextures: BgTexture[] = [];
+  if (spec.backgroundTextures?.length) {
+    if (!bgShaderCode) {
+      throw new Error('backgroundTextures needs a shader background (backgroundComponent → .frag/.glsl)');
+    }
+    spec.backgroundTextures.forEach((entry, i) => {
+      const ref = typeof entry === "string" ? entry : entry.source;
+      const param = typeof entry === "object" && "param" in entry ? entry.param : undefined;
+      const isVideo = typeof entry === "object" && "kind" in entry && entry.kind === "video";
+      const asAsset = project.assetPath(ref);
+      const abs = existsSync(asAsset) ? asAsset : isAbsolute(ref) ? ref : join(project.workspaceRoot, ref);
+      if (!existsSync(abs)) throw new Error(`backgroundTextures[${i}] not found: tried assets/${ref} and ${ref}`);
+      const ext = extname(abs).toLowerCase();
+      if (ext === ".html") {
+        bgTextures.push({ kind: "html", src: null, html: sanitizeMotionHtml(readFileSync(abs, "utf8")), param });
+      } else {
+        if (param) throw new Error(`backgroundTextures[${i}]: param only applies to .html sources`);
+        // Video masks and static images both stage a file under /public; only the kind differs
+        // (video is seeked + redrawn per frame, image uploads once).
+        const staged = `bg-tex-${i}${ext}`;
+        copyFileSync(abs, join(publicDir, staged));
+        bgTextures.push({ kind: isVideo ? "video" : "image", src: staged, html: null });
+      }
+    });
   }
   const bgColors = resolveBackgroundColors(brand);
   const background = {
     kind: bgKind,
     image: bgImageRel,
     customCode: bgCustomCode,
+    shaderCode: bgShaderCode,
+    textures: bgTextures,
     params: {
       colorA: bgColors[0],
       colorB: bgColors[1],
@@ -293,7 +425,7 @@ export async function prepare(
       ref: {
         source: string;
         params?: Record<string, number | string>;
-        keyframes?: { at?: number; atWord?: string | number; params: Record<string, number | string>; ease?: "linear" | "easeInOut" | "overshoot" | "spring" }[];
+        keyframes?: { at?: number; atWord?: string | number; params: Record<string, number | string>; ease?: import("../render/bgparams.js").Ease }[];
         triggers?: { at?: number; atWord?: string | number; action: string }[];
         loop?: boolean;
       },
@@ -307,7 +439,7 @@ export async function prepare(
     });
     const base = {
       kind: seg.kind,
-      asset: seg.kind === "app" ? seg.asset : undefined,
+      source: seg.kind === "video" ? seg.source : undefined,
       caption: seg.caption ?? "",
       startSec,
       endSec,
@@ -320,9 +452,9 @@ export async function prepare(
       captionReveal: look.reveal,
       texts: resolveTexts(seg.texts, startSec, endSec, brand.captionStyle.fontSize, look),
     };
-    if (seg.kind === "app") {
+    if (seg.kind === "video") {
       const shot = pickShot(appIdx, seg.shot as Shot | undefined);
-      const isVideo = /\.(mp4|mov)$/i.test(seg.asset ?? "");
+      const isVideo = /\.(mp4|mov)$/i.test(seg.source ?? "");
       const transition = pickTransition(appIdx, seg.transition as Transition | undefined, isVideo);
       appIdx++;
       return {
@@ -334,6 +466,7 @@ export async function prepare(
         speed: seg.speed,
         pauseAt: seg.pauseAt,
         frame: seg.frame,
+        regionShader: seg.regionShader ? resolveRegionShader(seg.regionShader, project, stageAsset) : undefined,
         kickerKeyframes: seg.kickerKeyframes,
         zoomKeyframes: seg.zoomKeyframes,
         kicker: seg.kicker
@@ -344,7 +477,7 @@ export async function prepare(
           : undefined,
       };
     }
-    if (seg.kind === "avatar") {
+    if (seg.kind === "scene") {
       return {
         ...base,
         cta: seg.cta || undefined,
@@ -384,13 +517,13 @@ export async function prepare(
       captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
       film: resolveFilm(spec, brand),
     },
-    fps: 30,
+    fps: spec.fps ?? 30,
     avatar: avatarRel,
     avatarWindows,
     voTrack: "vo.mp3",
     logo,
     background,
-    disclosure: avatarRel ? brand.disclosure : (brand.facelessDisclosure ?? brand.disclosure),
+    disclosure: avatarRel ? (brand.presenterDisclosure ?? brand.disclosure) : brand.disclosure,
     sfx,
     music,
     segments: renderSegments,
@@ -401,9 +534,23 @@ export async function prepare(
 
 export async function build(
   specPath: string,
-  opts: { mock?: boolean; format?: string; provider?: string; background?: string; font?: string; tag?: string; project?: string },
+  opts: {
+    mock?: boolean; // deprecated alias of draft
+    draft?: boolean;
+    tts?: boolean;
+    avatar?: boolean;
+    format?: string;
+    provider?: string;
+    background?: string;
+    font?: string;
+    tag?: string;
+    project?: string;
+  },
 ): Promise<string[]> {
   const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
+  // Only a draft is low-quality; a full render — even a silent (--no-tts) or presenter-less (--no-avatar)
+  // one — keeps final quality and a clean, untagged filename.
+  const draft = !!(opts.draft || opts.mock);
   // Under-animation probe: sample each full-screen motion beat at a few progress points and warn
   // when the frames barely differ — a poster with a dissolve, not motion. Never fails the build.
   try {
@@ -431,16 +578,16 @@ export async function build(
     log.warn(`motion probe skipped: ${(e as Error).message}`);
   }
   log.step("render");
-  // Tag variant renders (explicit --tag, else a --background/--font override, else mock) so a
+  // Tag variant renders (explicit --tag, else a --background/--font override, else draft) so a
   // preview or variant never overwrites the shipped default render.
   const autoTag =
     opts.tag ??
     opts.background ??
     (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined) ??
-    (opts.mock ? "mock" : undefined);
+    (draft ? "draft" : undefined);
   const outName = variantName(spec.title, autoTag);
-  // Mock builds are previews — take the fast encode preset; real builds keep the final quality.
-  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: opts.mock ? "veryfast" : "medium" });
+  // Drafts are previews — take the fast encode preset; full renders keep the final quality.
+  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: draft ? "veryfast" : "medium" });
   for (const o of outs) {
     // AAC pad past the last video frame → players flash black at EOF (and break seamless loops).
     try {

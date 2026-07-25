@@ -37,23 +37,39 @@ export function findUp(startDir: string, marker: string, existsFn: (p: string) =
   }
 }
 
-// Resolve the shared workspace: nearest ancestor of cwd that contains brands/.
-// Throws when none exists — silent cwd fallback hid "not in a workspace" mistakes.
+// Resolve the shared workspace: nearest ancestor of cwd that contains projects/ or brands/.
+// Brands are optional (DEFAULT_BRAND); projects/ alone is enough. Throws when none exists —
+// silent cwd fallback hid "not in a workspace" mistakes.
 // Pass `{ create: true }` when scaffolding (kino init) so a new root can be born at cwd.
 export function resolveWorkspace(
   cwd: string = process.cwd(),
   opts: { create?: boolean } = {},
 ): Workspace {
-  const workspaceRoot = findUp(cwd, "brands") ?? (opts.create ? cwd : null);
+  // Walk up; first dir with projects/ or brands/ wins. Nearer projects/ also keeps nested
+  // demos/ from latching onto a parent brands/.
+  let workspaceRoot: string | null = null;
+  let dir = cwd;
+  for (;;) {
+    if (existsSync(join(dir, "projects")) || existsSync(join(dir, "brands"))) {
+      workspaceRoot = dir;
+      break;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  if (!workspaceRoot) workspaceRoot = opts.create ? cwd : null;
   if (!workspaceRoot) {
     throw new Error(
-      `No brands/ found above ${cwd}. Run from a kino workspace, or scaffold one with: kino init <brand>`,
+      `No kino workspace found above ${cwd} (looked for projects/ or brands/). ` +
+        `Run from a workspace, or: kino init`,
     );
   }
+  const root = workspaceRoot;
   return {
-    workspaceRoot,
-    cache: join(workspaceRoot, ".kino-cache"),
-    brandDir: (name) => join(workspaceRoot, "brands", name),
+    workspaceRoot: root,
+    cache: join(root, ".kino-cache"),
+    brandDir: (name) => join(root, "brands", name),
   };
 }
 
@@ -63,8 +79,8 @@ export function resolveWorkspace(
 //   - spec path    → nearest ancestor that contains project.json
 export function resolveProject(opts: { specPath?: string; project?: string; cwd?: string } = {}): Project {
   const cwd = opts.cwd ?? process.cwd();
-  // Resolve project first so a nested demos/ workspace (with its own brands/) wins over a parent
-  // repo that also has brands/ — findUp from cwd alone would latch onto the parent.
+  // Resolve project first so a nested demos/ workspace (own projects/ or brands/) wins over a
+  // parent repo — findUp from cwd alone would latch onto the parent.
   let projectRoot: string | null;
   if (opts.project) {
     // Named project: search workspace from cwd, then look under that workspace's projects/
@@ -95,7 +111,7 @@ export function resolveProject(opts: { specPath?: string; project?: string; cwd?
   }
 
   const pr = projectRoot; // narrowed to string
-  // Nearest brands/ to the project (demos/… → demos; repo root projects → repo root)
+  // Nearest workspace marker to the project (demos/… → demos; repo root projects → repo root)
   const ws = resolveWorkspace(pr);
   return {
     ...ws,

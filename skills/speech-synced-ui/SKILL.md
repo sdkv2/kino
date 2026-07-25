@@ -72,7 +72,7 @@ override the beat to `phrase` + omit caption.
 display — the spoken line does. Want `"one command"` over a busy dashboard? Force
 `"captionMode": "phrase"` on that app beat.
 
-Montage reel pattern: consecutive `app` beats, omit caption, `transition: "cut"`,
+Montage reel pattern: consecutive `video` beats, omit caption, `transition: "cut"`,
 short VO nouns per beat (`"The timer."`).
 
 ## Typed text — pick a grain
@@ -214,7 +214,7 @@ overlays paint at full opacity from frame 0. Use `"transition": "cut"` on that b
 Consecutive `kind:"motion"` beats **auto-dissolve** (~15 frames / 0.5s at 30fps):
 
 1. Outgoing graphic **holds** through the VO gap (frozen at `--progress: 1`) — no flash of
-   faceless backdrop between clips.
+   brand backdrop between clips.
 2. Incoming graphic **fades in** on top of that hold.
 3. First motion beat does **not** fade in (loop seam / cold open stays opaque).
 4. Last motion beat is **not** extended past VO end.

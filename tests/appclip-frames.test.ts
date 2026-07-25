@@ -67,12 +67,12 @@ describe("app cut-in frame accuracy (clip window + speed + pauseAt)", () => {
       avatarWindows: [],
       voTrack: null,
       logo: null,
-      background: { kind: "solid", image: null, customCode: null, params: { colorA: "#000000", colorB: "#000000", colorC: "#000000", intensity: 0 }, keyframes: [], triggers: [] },
+      background: { kind: "solid", image: null, customCode: null, shaderCode: null, params: { colorA: "#000000", colorB: "#000000", colorC: "#000000", intensity: 0 }, keyframes: [], triggers: [] },
       disclosure: "",
       segments: [
         {
-          kind: "app",
-          asset: "app.mp4",
+          kind: "video",
+          source: "app.mp4",
           caption: "",
           startSec: 0,
           endSec: 2,

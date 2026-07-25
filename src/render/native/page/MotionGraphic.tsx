@@ -5,8 +5,9 @@ import React, { useLayoutEffect, useRef } from "react";
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { Theme, MotionGraphicProps, MotionEnv } from "../../props.js";
 import { paramsAt, pulseAt, progressCurves } from "../../bgparams.js";
-import { buildMotionVars, wordsShownAt } from "../../motionVars.js";
+import { buildMotionVars, wordsShownAt, cameraBlurVars } from "../../motionVars.js";
 import { sanitizeMotionHtml } from "../../sanitizeMotion.js";
+import { applyLiquidGlass } from "./liquidGlass";
 import { lottiePlaybackRate } from "../../lottie.js";
 import { LottieFrame, lottieMeta } from "./lottie";
 
@@ -16,7 +17,7 @@ import { LottieFrame, lottieMeta } from "./lottie";
 // motion-graphic contract (docs/motion-graphics.md, `kino motion`) documents — same bytes, same pixels.
 const KINO_SCRUB_STYLE =
   "<style>*{animation-play-state:paused !important;transition:none !important}" +
-  ":host{--kino-ease-out:cubic-bezier(.22,1,.36,1);--kino-ease-in-out:cubic-bezier(.65,0,.35,1);" +
+  ":host{--kino-ease-in:cubic-bezier(.55,0,1,.45);--kino-ease-out:cubic-bezier(.22,1,.36,1);--kino-ease-in-out:cubic-bezier(.65,0,.35,1);" +
   "--kino-ease-overshoot:cubic-bezier(.34,1.56,.64,1);--kino-ease-spring:cubic-bezier(.22,1.4,.3,1)}" +
   ".kino-anim,.kino-rise,.kino-blur-rise,.kino-pop,.kino-wipe{animation-duration:1s !important;" +
   "animation-fill-mode:both !important;animation-iteration-count:1 !important;" +
@@ -30,6 +31,7 @@ const KINO_SCRUB_STYLE =
   "@keyframes kino-pop{0%{opacity:0;transform:scale(.7)}40%{opacity:1;transform:scale(1.08)}70%{transform:scale(1)}100%{opacity:1;transform:scale(1)}}" +
   "@keyframes kino-wipe{0%{clip-path:inset(0 100% 0 0)}40%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 0)}}" +
   ".kino-pulse{opacity:var(--pulse,0);transform:scale(calc(.88 + var(--pulse,0) * .18))}" +
+  ".kino-camera{filter:blur(calc(var(--cam-blur,0) * 1px));will-change:transform,filter}" +
   ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}" +
   ".kino-fade-edges{-webkit-mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);" +
   "mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent)}" +
@@ -77,6 +79,13 @@ const ShadowHtml: React.FC<{ html: string; vars: Record<string, string> }> = ({ 
     for (const [k, v] of Object.entries(vars)) host.style.setProperty(k, v);
   });
 
+  // Per-frame liquid-glass pass: renders refraction mirrors for `.kino-glass` elements after the
+  // html + vars are in place. Background layers commit earlier in the tree, so their canvas holds
+  // this frame's pixels by the time this runs (same flushSync seek).
+  useLayoutEffect(() => {
+    applyLiquidGlass(shadowRef.current);
+  });
+
   return <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />;
 };
 
@@ -91,21 +100,35 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
   const { fps, width, height } = useVideoConfig();
   const tt = frame / fps;
   const resolved = paramsAt(data.params, data.keyframes, tt, { implicitBase: true });
+  const prevResolved =
+    frame > 0 ? paramsAt(data.params, data.keyframes, tt - 1 / fps, { implicitBase: true }) : undefined;
+  const nextResolved =
+    frame < durationFrames - 1
+      ? paramsAt(data.params, data.keyframes, tt + 1 / fps, { implicitBase: true })
+      : undefined;
+  const hasCam = "cam" in data.params || data.keyframes.some((k) => "cam" in k.params);
   const pulse = pulseAt(data.triggers, tt);
   const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
   const curves = progressCurves(progress);
 
   const words = data.words ?? [];
   const wordsShown = wordsShownAt(words, tt);
+  const { camVel, camBlur } = cameraBlurVars(resolved, prevResolved, nextResolved, fps, hasCam);
   const vars = buildMotionVars(t, {
     frame,
     t: tt,
     progress,
     pulse,
     params: resolved,
+    fps,
+    prevParams: prevResolved,
+    nextParams: nextResolved,
+    hasCam,
     captionBottom,
     wordsShown,
     wordCount: words.length,
+    width,
+    height,
   });
 
   // Tier 2: a procedural source is the body of render(env); memoize the compiled fn and evaluate it
@@ -127,6 +150,7 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       frame,
       t: tt,
       progress,
+      in: curves.in,
       out: curves.out,
       inout: curves.inout,
       overshoot: curves.overshoot,
@@ -134,6 +158,8 @@ export const MotionGraphic: React.FC<{ data: MotionGraphicProps; durationFrames:
       edge: curves.edge,
       pulse,
       params: resolved,
+      camVel,
+      camBlur,
       palette: { mint: t.mint, green: t.green, night: t.night, white: t.white, gold: t.gold, font: t.font },
       width,
       height,

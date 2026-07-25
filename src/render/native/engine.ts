@@ -9,15 +9,30 @@ import type { Browser, Page } from "puppeteer";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
-import { acquireBrowser, releaseBrowser } from "./browser.js";
+import { acquireBrowser, glMode, releaseBrowser } from "./browser.js";
 import { frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
 
+/** 1–4 supersample. Default 2. Mock/draft → 1 unless KINO_SHADER_SSAA overrides. */
+function resolveShaderSS(env: NodeJS.ProcessEnv = process.env, opts?: { mock?: boolean }): number {
+  const e = Number(env.KINO_SHADER_SSAA);
+  if (Number.isFinite(e) && e >= 1 && e <= 4) return Math.round(e);
+  if (opts?.mock || env.KINO_SHADER_DRAFT === "1") return 1;
+  return 2;
+}
+
+/** FXAA edge post-pass on every shader background — cheap analytic AA on top of SS, so silhouettes
+ *  stay clean without a higher (costlier) SS. On by default; KINO_SHADER_FXAA=0 disables. */
+function resolveShaderFXAA(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.KINO_SHADER_FXAA !== "0";
+}
+
 const DIMS: Record<string, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "3:4": { width: 1080, height: 1440 },
+  "16:9": { width: 1920, height: 1080 },
 };
 
 export type EncodePreset = "medium" | "veryfast";
@@ -54,10 +69,10 @@ function concurrency(totalFrames: number): number {
   const env = Number(process.env.KINO_CONCURRENCY);
   if (Number.isFinite(env) && env >= 1) return Math.round(env);
   // Capture parallelism scales per browser process (see browser.ts), but each worker costs a
-  // Chrome launch + page boot — only long renders amortize a big pool. Short clips (tests,
-  // per-beat previews) keep 4; 20s+ videos take up to 8. Two cores stay free for encode/extract.
-  const cap = totalFrames > 600 ? 8 : 4;
-  return Math.min(cap, Math.max(1, cpus().length - 2));
+  // Chrome launch + page boot — only long renders amortize a big pool. Short clips keep 8;
+  // 20s+ videos take up to 12. Leave one core for encode/extract.
+  const cap = totalFrames > 600 ? 12 : 8;
+  return Math.min(cap, Math.max(1, cpus().length - 1));
 }
 
 // The render server and its config are process-wide singletons the pages re-read via kinoLoad();
@@ -128,7 +143,14 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
   return {
     page: p,
     seek: async (frame: number) => {
-      await p.evaluate(`window.kinoSeek(${frame})`);
+      // Read window.__kinoFatal in the SAME evaluate as the seek — one CDP round-trip per frame,
+      // not two. A shader that won't compile leaves the beat rendering without it, so without
+      // this the render completes and ships a silently flat frame (see page/fatal.ts). kinoSeek
+      // already awaits region-shader init, so any fault is recorded by the time it resolves.
+      const fatal = (await p.evaluate(
+        `window.kinoSeek(${frame}).then(() => window.__kinoFatal ?? null)`,
+      )) as string | null;
+      if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
     },
     shot: async () => Buffer.from(await p.screenshot({ type: "jpeg", quality: 95 })),
   };
@@ -268,6 +290,8 @@ async function pointServerAt(opts: {
   width: number;
   height: number;
   total: number;
+  shaderSS: number;
+  shaderFXAA: boolean;
 }): Promise<{ url: string }> {
   const pageJs = await getPageBundle();
   return ensureRenderServer({
@@ -280,6 +304,8 @@ async function pointServerAt(opts: {
       height: opts.height,
       durationInFrames: opts.total,
       media: opts.media,
+      shaderSS: opts.shaderSS,
+      shaderFXAA: opts.shaderFXAA,
     }),
   });
 }
@@ -287,7 +313,7 @@ async function pointServerAt(opts: {
 export interface NativeRenderOpts {
   props: KinoProps;
   publicDir: string;
-  formats: Array<"9:16" | "3:4">;
+  formats: Array<"9:16" | "3:4" | "16:9">;
   outDir: string;
   title: string;
   preset?: EncodePreset; // veryfast for mock/preview builds; medium (default) for finals
@@ -309,6 +335,10 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   const total = durationInFrames(props);
   const n = Math.min(concurrency(total), total);
   const slots = Array.from({ length: n }, (_, i) => i);
+  // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
+  const ss = resolveShaderSS(process.env, { mock: preset === "veryfast" });
+  const fx = resolveShaderFXAA(process.env);
+  const mode = glMode();
   try {
     const endSec = total / props.fps;
     // Browser launches overlap frame extraction + the audio mix — none depend on each other.
@@ -323,13 +353,23 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     try {
       for (const fmt of formats) {
         const { width, height } = DIMS[fmt];
-        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx });
         const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
         lap(`pages-boot ${fmt}`);
         // Capture cache: unchanged beats reuse their stored JPEGs; only dirty frames hit Chrome.
-        // Keyed per encode preset — mock (veryfast) and final (medium) share captures fine, but the
-        // cache lives beside the outputs, so a preview and a final build read the same store.
-        const sigs = frameSignatures({ props, publicDir, pageJsHash: await getPageBundleHash(), width, height, total, fps: props.fps });
+        // mode + shaderSS are in the global sig so GPU/SW and SS=1/2 never cross-serve.
+        const sigs = frameSignatures({
+          props,
+          publicDir,
+          pageJsHash: await getPageBundleHash(),
+          width,
+          height,
+          total,
+          fps: props.fps,
+          mode,
+          shaderSS: ss,
+          shaderFXAA: fx,
+        });
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset });
@@ -352,19 +392,65 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   }
 }
 
+// Deterministic layout geometry for one element (a `[data-measure]`-tagged node), so alignment is
+// read as numbers instead of eyeballed off a screenshot. All px are frame px (viewport is set at
+// deviceScaleFactor 1, so CSS px == canvas px); dxPct/dyPct are the signed offset of the element
+// center from the frame center (0 = dead center).
+export interface ElementMeasure {
+  label: string;
+  x: number; y: number; w: number; h: number;
+  cx: number; cy: number;
+  cxPct: number; cyPct: number;
+  dxPct: number; dyPct: number;
+}
+export interface FrameMeasure {
+  name: string;
+  width: number; height: number;
+  elements: ElementMeasure[];
+}
+
+// Serialized into the render page and run after a seek: walk the light DOM + every shadow root and
+// report the geometry of each element carrying a `data-measure` attribute. Pure browser code (no
+// Node refs) so puppeteer can .toString() it across the boundary.
+function collectMeasurements(): { width: number; height: number; elements: ElementMeasure[] } {
+  const W = window.innerWidth, H = window.innerHeight;
+  const out: ElementMeasure[] = [];
+  const walk = (root: Document | ShadowRoot): void => {
+    root.querySelectorAll("[data-measure]").forEach((el) => {
+      const r = (el as HTMLElement).getBoundingClientRect();
+      const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+      out.push({
+        label: el.getAttribute("data-measure") || el.tagName.toLowerCase(),
+        x: r.x, y: r.y, w: r.width, h: r.height, cx, cy,
+        cxPct: (cx / W) * 100, cyPct: (cy / H) * 100,
+        dxPct: (cx / W) * 100 - 50, dyPct: (cy / H) * 100 - 50,
+      });
+    });
+    root.querySelectorAll("*").forEach((el) => {
+      const sr = (el as HTMLElement).shadowRoot;
+      if (sr) walk(sr);
+    });
+  };
+  walk(document);
+  return { width: W, height: H, elements: out };
+}
+
 export interface NativeStillsOpts {
   props: KinoProps;
   publicDir: string;
-  format: "9:16" | "3:4";
+  format: "9:16" | "3:4" | "16:9";
   frames: Array<{ frame: number; name: string }>;
   outDir: string;
+  // If provided, the engine collects [data-measure] element geometry at each rendered frame and
+  // pushes one FrameMeasure per frame into this array (out-param — keeps the string[] return stable).
+  measureSink?: FrameMeasure[];
 }
 
 export function renderStillsNative(opts: NativeStillsOpts): Promise<string[]> {
   return withRenderLock(() => renderStillsLocked(opts));
 }
 
-async function renderStillsLocked({ props, publicDir, format, frames, outDir }: NativeStillsOpts): Promise<string[]> {
+async function renderStillsLocked({ props, publicDir, format, frames, outDir, measureSink }: NativeStillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), "kino-native-still-"));
   try {
@@ -391,7 +477,9 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir }: 
 
     const { width, height } = DIMS[format];
     try {
-      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total });
+      const ss = resolveShaderSS(process.env);
+      const fx = resolveShaderFXAA(process.env);
+      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx });
       const handle = await workerPage(0, browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {
@@ -399,6 +487,32 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir }: 
         const out = join(outDir, `${name}.png`);
         await handle.page.screenshot({ type: "png", path: out as `${string}.png` });
         outs.push(out);
+        if (measureSink) {
+          // String form avoids tsx __name injection on nested fns passed to puppeteer.
+          const m = (await handle.page.evaluate(`(() => {
+            const W = window.innerWidth, H = window.innerHeight;
+            const out = [];
+            function walk(root) {
+              root.querySelectorAll("[data-measure]").forEach(function(el) {
+                const r = el.getBoundingClientRect();
+                const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+                out.push({
+                  label: el.getAttribute("data-measure") || el.tagName.toLowerCase(),
+                  x: r.x, y: r.y, w: r.width, h: r.height, cx: cx, cy: cy,
+                  cxPct: (cx / W) * 100, cyPct: (cy / H) * 100,
+                  dxPct: (cx / W) * 100 - 50, dyPct: (cy / H) * 100 - 50
+                });
+              });
+              root.querySelectorAll("*").forEach(function(el) {
+                const sr = el.shadowRoot;
+                if (sr) walk(sr);
+              });
+            }
+            walk(document);
+            return { width: W, height: H, elements: out };
+          })()`)) as { width: number; height: number; elements: ElementMeasure[] };
+          measureSink.push({ name, width: m.width, height: m.height, elements: m.elements });
+        }
       }
       return outs;
     } finally {

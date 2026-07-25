@@ -1,8 +1,8 @@
 # Avatars & presenters
 
-kino renders two kinds of beat. An **avatar** beat (`kind: "avatar"`) is an on-camera AI presenter, lip-synced to the segment's voiceover. Everything else — `app` footage, `motion` graphics, faceless hero text — renders over a [background](backgrounds-and-overlays.md) with no face. One spec can mix them: only the `avatar` beats are sent to a provider, and the VO is **trimmed to just those on-camera windows** before generation, so you pay only for the talking beats.
+A presenter is a **video source**, not a beat type. Give a [`scene`](spec-reference.md#scene-segment) beat `"source": "avatar:"` (or pin one: `"heygen:look-id"`) and kino composites an on-camera AI presenter over the background, lip-synced to that beat's voiceover. Every other beat — `video` footage, `motion` graphics, plain hero text — renders with no face. One spec can mix them: only the presenter beats are sent to a provider, and the VO is **trimmed to just those on-camera windows** before generation, so you pay only for the talking beats.
 
-No avatar beats (or `provider: "none"`) → a fully **faceless** build. That's a valid, cheaper default; reach for a presenter when a face earns the beat.
+No presenter sources (or `provider: "none"`) → a build with no face at all. That's the default, and the cheaper one; reach for a presenter when a face earns the beat.
 
 For the full production playbook (structure, cost discipline, compliance), see the [`video-production`](../skills/video-production/SKILL.md) skill. This page is the field reference. Commands: [`build`](cli-reference.md#build), [`avatars`](cli-reference.md#avatars), [`doctor`](cli-reference.md#doctor). Spec fields: [Spec reference](spec-reference.md#top-level-fields).
 
@@ -15,11 +15,11 @@ For the full production playbook (structure, cost discipline, compliance), see t
 
 ## Choosing a provider
 
-Set `provider` on the spec (or `brand.defaultProvider`). Resolution: `spec.provider` → `brand.defaultProvider` → `"none"` (faceless).
+A beat that pins its provider (`"source": "heygen:"`) wins; otherwise `"avatar:"` resolves `spec.provider` → `brand.defaultProvider` → `"none"`. kino generates **one presenter clip per build**, so beats that pin different providers or looks fail the build rather than one silently winning.
 
 | Provider | Engine | `avatarLook` is… | Key / dep |
 |---|---|---|---|
-| `none` | — (faceless) | — | none |
+| `none` | — (no presenter) | — | none |
 | `heygen` | HeyGen Avatar-IV photo avatars | a **look id or alias** | `heygen` CLI + `HEYGEN_API_KEY` |
 | `hedra` | Hedra Character-3 | a **portrait image** path/url | `HEDRA_API_KEY` |
 | `replicate` | Open-source lip-sync (default `bytedance/omni-human`) | a **portrait image** path/url | `REPLICATE_API_TOKEN` |
@@ -40,7 +40,7 @@ Brand defaults: `brand.defaultLook` (fallback look/portrait), `brand.avatarImage
 An `avatar` segment speaks its `text` on camera:
 
 ```json
-{ "kind": "avatar", "text": "Paste the job post — we rebuild the bullets.", "cta": true }
+{ "source": "avatar:", "text": "Paste the job post — we rebuild the bullets.", "cta": true }
 ```
 
 - **`text`** — spoken VO (required); drives lip-sync + caption timing.
@@ -62,9 +62,9 @@ Overridable per brand (raw provider knobs — most brands never touch them):
 Avatar generation is the slow, paid step. Iterate structure without it:
 
 - **`kino build <spec> --mock`** — placeholder avatar, no API spend. Verify beats, timing, captions, layout first.
-- **`kino still` / `kino storyboard`** — render frames/contact sheets without a full build (faceless/mock render).
+- **`kino still` / `kino storyboard`** — render frames/contact sheets without a full build (mock render, no presenter).
 - Real avatar output is **content-cached** on provider + look/portrait + trimmed-audio bytes: an unchanged presenter beat is reused across rebuilds, so only edited beats re-generate.
 
 ## Disclosure & cost
 
-An AI presenter usually needs an on-screen disclosure. Set `brand.disclosure` (e.g. `"AI-generated"`) — it renders on every avatar build; `brand.facelessDisclosure` covers faceless output. Providers bill per generated second and vary in quality/price — validate the read with `--mock` and stills before spending. The [`video-production`](../skills/video-production/SKILL.md) skill carries the cost/compliance guardrails.
+An AI presenter usually needs an on-screen disclosure. Set `brand.disclosure` (e.g. `"AI-generated"`) — it renders on every build; `brand.presenterDisclosure` overrides it whenever a presenter is on screen. Providers bill per generated second and vary in quality/price — validate the read with `--mock` and stills before spending. The [`video-production`](../skills/video-production/SKILL.md) skill carries the cost/compliance guardrails.

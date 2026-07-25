@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header.webp" alt="kino — spec driven video development" width="900">
+  <img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-header-hq4.webp" alt="kino — spec driven video engine" width="900">
 </p>
 
-<p align="center"><em>spec driven video development · /ˈkiːnoʊ/</em></p>
+<p align="center"><em>the video engine · spec driven video development · /ˈkiːnoʊ/</em></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
@@ -14,10 +14,13 @@
 
 ---
 
-**kino** turns a JSON spec into a finished video. You (or an agent) write the spec; kino renders
-it: ElevenLabs voiceover, an optional AI avatar (HeyGen / Hedra / Replicate) or a **faceless**
-background / motion graphic, composited by an in-house headless-Chrome engine to MP4
-(9:16, 3:4, 16:9, …). Same spec → same frames.
+**kino** is a video engine: a framework you author in and a renderer that turns what you wrote
+into a finished MP4. You (or an agent) write a JSON spec; kino renders it — ElevenLabs voiceover,
+a background or motion graphic, and an optional AI presenter (HeyGen / Hedra / Replicate),
+composited frame-by-frame in headless Chrome (9:16, 3:4, 16:9, …). Same spec → same frames.
+
+The spec is the source; the MP4 is the build artifact. Edits are spec edits and a rebuild, not
+timeline drags — so revisions diff, review, and version like code.
 
 ## Showcase
 
@@ -34,109 +37,67 @@ background / motion graphic, composited by an in-house headless-Chrome engine to
 </tr>
 </table>
 
-<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> from a JSON spec — faceless, ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
+<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> from a JSON spec, with ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
 
 ## Pipeline at a glance
 ```
-spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ avatar plan + trim
-          ─▶ avatar (HeyGen/Hedra/Replicate) or faceless background / motion graphics
+spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ presenter plan + trim
+          ─▶ background / motion graphics, plus an optional presenter (HeyGen/Hedra/Replicate)
           ─▶ native render (headless Chrome) ─▶ ffmpeg ─▶ out/<title>/…mp4
 ```
 No LLM inside the CLI: every step is deterministic, so the same spec renders the same video.
 
-## Install
-```bash
-git clone https://github.com/sdkv2/kino.git ~/kino     # clone the toolchain once
-cd <your-project> && bash ~/kino/setup.sh              # install `kino` + write a project .env
-```
-On Windows (or anywhere without bash): `node ~/kino/setup.mjs` — same installer, pure Node.
-`setup.sh`/`setup.mjs` is a guided installer: prerequisite checks (Node 20+, ffmpeg, ImageMagick —
-offers to install what's missing via brew/apt/winget), `npm install` / `build` / `link`, then an
-API-key walkthrough (written to a `chmod 600`, git-ignored `.env`; re-runs keep existing keys).
-Manual install:
-```bash
-cd ~/kino && npm install && npm run build && npm link
-```
-Requires Node 20+, ffmpeg/ffprobe (+ ImageMagick for storyboards). Real VO needs an
-[ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project).
-Faceless builds need only that. Avatar builds also need the avatar provider's key, plus
-ElevenLabs whenever kino drives the voice (most setups).
-
 ## Quickstart
 ```bash
-cd <project> && npx @sdkv2/kino init acme            # scaffold .env, brand.md, dirs + a sample spec
-npx @sdkv2/kino doctor                               # preflight: API keys, ffmpeg/ffprobe, heygen CLI
-npx @sdkv2/kino build projects/acme/specs/sample.json --mock  # free structural preview (no API spend)
+cd <your-project>
+npx @sdkv2/kino init acme                                     # scaffold .env, brand.md, dirs + a sample spec
+npx @sdkv2/kino build projects/acme/specs/sample.json --mock  # free structural preview, no API spend
 npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → projects/acme/out/sample/
 ```
-`kino init` writes a ready-to-build faceless sample (provider `none`, $0), so the first
-`kino build` works with no editing. Swap in your own spec once the preview looks right.
+`init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with
+no editing. Swap in your own spec once the preview looks right.
 
-`npx` pulls Node deps fresh each first run — Puppeteer's Chromium is bundled. ffmpeg/ffprobe use
-your system install if on PATH, otherwise fall back to a bundled binary automatically. For
-frequent use, `npm i -g @sdkv2/kino` avoids the npx resolve overhead.
+Needs Node 20+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Real voiceover needs
+an [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project);
+presenter builds also need their provider's key. `kino doctor` checks all of it.
+
+Repo install, Windows, or the guided API-key walkthrough:
+[getting started](docs/getting-started.md).
 
 ## Agent skills
 
-Agent playbooks (`video-production`, `ad-voice`, `adversarial-critique`, …) are in
-[`skills/`](skills/) — the only copy in the repo.
-
-**From any project** (Cursor / Claude Code / Codex / …):
+Playbooks that teach a coding agent to write specs (`video-production`, `ad-voice`,
+`motion-design`, `shader-backgrounds`, …) live in [`skills/`](skills/).
 
 ```bash
-npx skills add sdkv2/kino
-# or one skill:  npx skills add sdkv2/kino@ad-voice
+npx skills add sdkv2/kino    # from any project — Cursor / Claude Code / Codex / …
+kino skills --install        # inside a kino workspace — symlinks into .agents .cursor .claude .codex
 ```
 
-**Inside a kino workspace** (after clone / `npm link`):
-
-```bash
-kino skills --install                 # local symlinks → .agents .cursor .claude .codex (gitignored; also run by kino init)
-kino skills --install --agents cursor,claude
-```
-
-Agent fan-out dirs stay off git so they do not clutter the tree. Details: [`skills/README.md`](skills/README.md).
+Details: [`skills/README.md`](skills/README.md).
 
 ## Features
-- **Avatar engines** — `none` (faceless, $0), `heygen` (Avatar-IV), `hedra` (Character-3),
-  `replicate` (open-source lip-sync). Avatars are trimmed to on-camera segments to cut spend;
-  VO + avatar are content-hash cached.
-- **Faceless backgrounds** — `glow`, `image`, `mesh`, `aurora`, `particles`, `grid`, `custom` —
-  frame-deterministic Canvas2D, auto-coloured from the brand.
-- **Captions** — `phrase` (editorial block) or `words` (revealed word-by-word, synced to real VO
-  timestamps, with active-word highlight + per-segment emphasis).
-- **Fonts** — pick a name from `kino fonts` (fetched on demand from Google Fonts into
-  `~/.kino/fonts/`), or use any raw CSS family.
-- **Stock media** — `kino pexels` (video) and `kino photos` (stills) search Pexels (portrait-first)
-  into project assets; same `PEXELS_API_KEY`. `.mp4` / `.jpg` work in app cut-ins.
-- **Animated backgrounds & overlays** — backgrounds, logo, captions, and kickers are all tweenable
-  on one keyframe layer (`backgroundKeyframes`/`logoKeyframes`/…), with timed `backgroundTriggers`.
-- **Motion graphics** — author a self-contained HTML/CSS file in `assets/motion/`; kino drives it
-  per-frame via CSS variables, with scrubbed `@keyframes` and a `.kino-cliptext` helper, sanitized
-  and determinism-linted. See [docs/motion-graphics.md](docs/motion-graphics.md).
-- **Branding & compliance** — logo mark + a per-mode AI `disclosure`; brand `bannedPhrases` fail
-  the build (no guaranteed-outcome copy).
-- **Inspect & iterate** — `inspect` (plan as JSON), `still`/`storyboard` (fast mock previews),
+- **Presenters as a video source** — a beat asks for one with `"source": "avatar:"` (or pins
+  `heygen:`/`hedra:`/`replicate:`). Trimmed to on-camera beats to cut spend, and content-hash cached.
+- **Backgrounds** — `glow`, `image`, `mesh`, `aurora`, `particles`, `grid`, `custom`,
+  auto-coloured from the brand. Plus WebGL shaders and `kino segment` masking.
+- **Captions** — an editorial block, or word-by-word revealed against real VO timestamps.
+- **Motion graphics** — HTML/CSS/JS/Lottie beats driven per-frame, sanitized and determinism-linted.
+- **Animated everything** — backgrounds, logo, captions, and kickers tween on one keyframe layer.
+- **Fonts & stock media** — any Google font by name (`kino fonts`); Pexels video and stills
+  (`kino pexels`, `kino photos`) pulled straight into project assets.
+- **Branding & compliance** — brand-wide palette, fonts, logo, AI `disclosure`, and
+  `bannedPhrases` that fail the build.
+- **Inspect & iterate** — `inspect` (plan as JSON), `still`/`storyboard` (free previews),
   `frames` (extract from a render). Built for tight agent loops.
-- **Brands & projects** — `brands/<name>/brand.md` (markdown frontmatter + guidelines) is shared;
-  every build runs inside a `projects/<name>/` (its own specs/assets/out + a `project.json` that
-  assigns a brand). `kino init <brand>` scaffolds the first one; `kino projects --new` adds more.
+- **Brands & projects** — a shared `brand.md` per brand; every build runs inside its own
+  `projects/<name>/` with separate specs, assets, and output.
 
 ## How kino drives motion graphics
 
-There is no running timeline: kino seeks headless Chrome to frame *N*, sets CSS custom properties
-on the graphic, and screenshots — every frame. The JSON spec owns the clock; the graphic is a
-stateless canvas that reads the variables and paints that one frame, so the same spec always
-renders the same pixels.
-
-Each frame the graphic receives:
-
-- `--progress` (`0 → 1` across the beat) plus eased curves — `--kino-out`, `--kino-inout`,
-  `--kino-overshoot`, `--kino-spring`, and seam-safe `--kino-edge`
-- `--pulse` — a fast-attack, decaying envelope fired by spec `triggers` (punches timed to VO words)
-- `--<param>` — every key in the spec's `params`, tweened by `keyframes`
-- brand palette + fonts (`--kino-mint`, `--kino-font`, …) and per-word voiceover timings
-  (`--kino-words-shown` / `env.words`), so typed UIs land characters in sync with the speech
+There is no running timeline. kino seeks headless Chrome to frame *N*, sets CSS custom properties
+on the graphic, and screenshots — every frame. The spec owns the clock; the graphic is a stateless
+canvas that reads the variables and paints that one frame, so the same spec renders the same pixels.
 
 ```json
 { "kind": "motion", "source": "motion/stat.html", "text": "Eighty-six percent match.",
@@ -145,18 +106,18 @@ Each frame the graphic receives:
   "triggers":  [{ "at": 0.2, "action": "pulse" }] }
 ```
 
-Real CSS `@keyframes` work too: kino force-pauses all animations and scrubs `.kino-anim` elements
-across the beat via a `--progress`-driven negative `animation-delay`. Three tiers by file extension:
+Each frame the graphic gets `--progress` (`0 → 1` across the beat) and eased curves off it, a
+`--pulse` envelope fired by `triggers`, every `params` key tweened by `keyframes`, and the brand
+palette, fonts, and per-word VO timings — so typed UIs land characters in sync with the speech.
+Three tiers by file extension:
 
 | Source | Model |
 |---|---|
 | `.html` | declarative CSS reading the variable contract |
 | `.js` | pure `render(env) → HTML`, re-evaluated per frame (loops, computed geometry) |
-| `.json` | Lottie, frame-seeked with `goToAndStop` — stretched, looped, or word-fired by `triggers` |
+| `.json` | Lottie, frame-seeked with `goToAndStop` |
 
-Every graphic is lint-checked for determinism (no `transition`, timers, `Date.now`,
-`Math.random`, network) and sanitized into a Shadow DOM before render. Full contract:
-[docs/motion-graphics.md](docs/motion-graphics.md).
+Full contract, including the determinism lint: [docs/motion-graphics.md](docs/motion-graphics.md).
 
 ## Documentation
 Longer guides are in [`docs/`](docs/):
@@ -164,7 +125,8 @@ Longer guides are in [`docs/`](docs/):
 - [CLI reference](docs/cli-reference.md) — every command + flag.
 - [Spec reference](docs/spec-reference.md) — the JSON spec, `brand.md`, `project.json`.
 - [Motion graphics](docs/motion-graphics.md) — author custom animated beats/overlays in HTML/CSS.
-- [Backgrounds & overlays](docs/backgrounds-and-overlays.md) — faceless backgrounds, logo, captions, kickers.
+- [Backgrounds & overlays](docs/backgrounds-and-overlays.md) — backgrounds, logo, captions, kickers.
+- [Segmentation](docs/segmentation.md) — `kino segment` masks and `regionShader`.
 
 ## Development
 ```bash
@@ -174,8 +136,13 @@ npm run dev -- <args>   # run the CLI from source via tsx
 ```
 Work on a feature branch (`feat/…`, `fix/…`, `chore/…`), bump `version` in `package.json` for
 releases, and open a PR to `main`. Version history lives in [`CHANGELOG.md`](CHANGELOG.md).
+Sign off your commits (`git commit -s`) and add yourself to the
+[CLA signatures](.github/CLA.md#signatures) on your first PR.
 Full guidelines: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © sdkv2
+[MIT](LICENSE) © sdkv2 — the code.
+
+"kino", the wordmark, and the logo are trademarks of sdkv2 and are not covered by the MIT licence.
+Fork freely; give your fork its own name. Questions: open an issue.

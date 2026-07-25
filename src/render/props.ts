@@ -1,6 +1,7 @@
 // Shared prop types for the render composition. Lives in compiled-land so both the
 // CLI (render.ts, build.ts) and the render page .tsx (bundled by esbuild) can import it.
 import type { CaptionStyle, CaptionAnimation, CaptionReveal, ResolvedText } from "./textStyles.js";
+import type { Ease } from "./bgparams.js";
 
 export interface Theme {
   font: string;
@@ -32,22 +33,51 @@ export interface AppFrame {
   inset: { x: number; y: number; w: number; h: number }; // % of composition
 }
 
+// Per-mask-region shaders for an app beat: the segmentation mask(s) split the frame into a subject
+// region (union of every entry's mask>0.5) and a background region (none of them), each running its
+// own GLSL body (or a null passthrough of the asset pixels). Up to 4 mask entries (1 is the common
+// case); each maskSrc is a public-relative mask.png/mask.mp4, channel says which texel channel
+// (from that mask's manifest object) carries its coverage.
+export interface RegionShaderMask {
+  maskSrc: string; // public-relative mask.png (image) or mask.mp4 (video)
+  maskKind: "image" | "video";
+  channel: "r" | "g" | "b" | "a" | "gray"; // manifest object's coverage channel
+  subjectCode?: string | null; // GLSL body for THIS mask's region; null/absent = the shared subjectCode
+}
+export interface RegionShaderProps {
+  // 1..4 entries. Each shades its own region, falling back to subjectCode where it has no
+  // subjectCode of its own; later entries paint OVER earlier ones where masks overlap.
+  masks: RegionShaderMask[];
+  subjectCode: string | null; // GLSL mainImage body for masks without their own, or null = passthrough asset pixels
+  backgroundCode: string | null; // GLSL mainImage body elsewhere, or null = passthrough
+  // Author params + tweens shared by EVERY body in this beat's program (subjectCode, backgroundCode
+  // and each masks[].subjectCode) — there is ONE uParam0..3 bank in the one program they share, so
+  // per-entry sets would need per-entry banks and blow the 4-slot ceiling immediately. Numeric
+  // non-reserved names pack into uParam slots as `u_<name>`; colorA/B/C + intensity drive their own
+  // uniforms. `keyframes[].at` is BEAT-RELATIVE seconds (0 = beat start) — RegionShader sits inside
+  // the beat's Sequence, so its clock is already beat-local and iTime agrees with it. See
+  // docs/superpowers/specs/2026-07-25-region-params-design.md.
+  params?: Record<string, BgParamValue>;
+  keyframes?: BgKeyframe[];
+}
+
 export interface KinoSegment {
-  kind: "avatar" | "app" | "motion";
-  asset?: string;
+  kind: "scene" | "video" | "motion";
+  source?: string; // video beats: the asset path this beat composites
   caption: string; // "" = no caption for this beat (spec caption is optional; build coalesces)
   startSec: number;
   endSec: number;
-  /** Faceless avatar beats (including cta:true end cards) use centered hero captions. */
+  /** Presenter-less scene beats (including cta:true end cards) use centered hero captions. */
   cta?: boolean;
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
-  transition?: string; // resolved in/out transition for app cut-ins
+  transition?: string; // resolved in/out transition for video cut-ins
   clipFrom?: number; // seconds into source asset
   clipTo?: number;
   speed?: number; // playbackRate; default 1
   pauseAt?: number; // seconds from segment start → freeze for rest of beat
   frame?: AppFrame;
+  regionShader?: RegionShaderProps; // mask-split dual shader for this video beat (subject vs background regions)
   captionMode?: "phrase" | "words"; // "words" = spoken text revealed word-by-word, synced to VO
   words?: WordTiming[]; // absolute word timings (present for captionMode "words")
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
@@ -56,7 +86,7 @@ export interface KinoSegment {
   captionReveal?: CaptionReveal; // words-mode reveal: "word" (per-word pop, default) | "all" (whole line, highlight tracks VO)
   texts?: ResolvedText[]; // standalone stylised text overlays, absolute-timed
   captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)
-  kickerKeyframes?: BgKeyframe[]; // tween the kicker (app segments)
+  kickerKeyframes?: BgKeyframe[]; // tween the kicker (video segments)
   zoomKeyframes?: BgKeyframe[]; // camera push/pan on the footage+chrome group (beat-relative: at = sec from beat start)
   motion?: MotionGraphicProps; // resolved graphic for kind === "motion"
   motionOverlay?: MotionGraphicProps; // resolved overlay graphic layered on this beat
@@ -74,16 +104,32 @@ export type BgParamValue = number | string;
 export interface BgKeyframe {
   at: number;
   params: Record<string, BgParamValue>;
-  ease?: "linear" | "easeInOut" | "overshoot" | "spring";
+  ease?: Ease;
 }
 export interface BgTrigger {
   at: number;
   action: string;
 }
+// A shader-background texture channel (uTex0..uTex3), resolved at build time.
+// kind="image": staged file under /public. kind="html": sanitized motion-style markup the page
+// rasterizes (foreignObject) — brand fonts and --kino-* palette vars apply. With `param` set, the
+// markup is re-rasterized EVERY FRAME at that background param's value (0..1 → the markup's 1s
+// CSS @keyframes) — true per-frame animation. Without it, a single static raster.
+// kind="video": staged .mp4/.webm under /public (e.g. a segmentation mask), seeked to frame/fps and
+// drawn to a canvas EVERY FRAME so uTexN sees this frame's pixels.
+export interface BgTexture {
+  kind: "image" | "html" | "video";
+  src: string | null; // public-relative file, for kind="image" | "video"
+  html: string | null; // sanitized markup, for kind="html"
+  param?: string; // html only: per-frame scrub driven by this background param (0..1)
+}
+
 export interface BackgroundProps {
   kind: "glow" | "image" | "mesh" | "aurora" | "particles" | "grid" | "solid" | "custom";
   image: string | null; // staticFile-relative path, for kind="image"
-  customCode: string | null; // draw-fn source, for kind="custom"
+  customCode: string | null; // Canvas2D draw-fn source, for kind="custom" (.js)
+  shaderCode: string | null; // GLSL mainImage body, for kind="custom" (.frag/.glsl)
+  textures?: BgTexture[]; // shader texture channels uTex0..uTex3 (empty/absent for non-shader kinds)
   params: Record<string, BgParamValue>; // base param values (tweened by keyframes)
   keyframes: BgKeyframe[]; // agent-authored param tweens over time
   triggers: BgTrigger[]; // agent-authored one-shot actions (e.g. pulse)
@@ -110,7 +156,9 @@ export interface MotionEnv {
   frame: number; // integer frame within the beat
   t: number; // seconds within the beat
   progress: number; // 0 → 1 across the beat (linear)
-  /** Ease-out cubic of progress — soft landings without hand-rolled (1-p)^n. */
+  /** Ease-in cubic of progress — slow start, fast finish. */
+  in: number;
+  /** Ease-out cubic of progress — fast start, soft landing. */
   out: number;
   /** Smoothstep of progress. */
   inout: number;
@@ -122,6 +170,10 @@ export interface MotionEnv {
   edge: number;
   pulse: number; // 0 → 1 trigger envelope (fast attack, exponential decay)
   params: Record<string, BgParamValue>; // resolved spec params at this frame
+  /** |cam[t] − cam[t−1]| × fps when the spec defines `cam`; else 0. */
+  camVel: number;
+  /** px-ready blur strength for `.kino-camera` (0 when settled or no `cam` param). */
+  camBlur: number;
   palette: { mint: string; green: string; night: string; white: string; gold: string; font: string };
   width: number; // canvas px (1080 for 9:16)
   height: number; // canvas px (1920 for 9:16)
@@ -130,7 +182,7 @@ export interface MotionEnv {
   duration: number; // beat length in seconds
 }
 
-// Brand mark overlay (faceless talking beats): resolved layout + an agent keyframe track.
+// Brand mark overlay (presenter-less talking beats): resolved layout + an agent keyframe track.
 export interface LogoProps {
   src: string; // staticFile-relative
   sizePx: number;
@@ -160,11 +212,11 @@ export interface MusicProps {
 export interface KinoProps {
   theme: Theme;
   fps: number;
-  avatar: string | null; // staticFile-relative path to the (trimmed) avatar clip, or null for faceless
-  avatarWindows: AvatarWindow[]; // placements of the avatar clip; empty when faceless
+  avatar: string | null; // staticFile-relative path to the (trimmed) presenter clip, or null when there is none
+  avatarWindows: AvatarWindow[]; // placements of the presenter clip; empty when there is no presenter
   voTrack: string | null; // staticFile-relative path to the full VO audio track
-  logo: LogoProps | null; // brand mark shown on faceless talking beats
-  background: BackgroundProps; // faceless background engine selection
+  logo: LogoProps | null; // brand mark shown on presenter-less talking beats
+  background: BackgroundProps; // background engine selection
   disclosure: string;
   sfx?: SfxProps[]; // free-placed sound effects
   music?: MusicProps | null; // music bed, ducked while VO speaks

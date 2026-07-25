@@ -8,7 +8,8 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 
 - Build & preview — [`build`](#build) · [`still`](#still) · [`storyboard`](#storyboard) · [`retune`](#retune) · [`batch`](#batch) · [`inspect`](#inspect)
 - Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor) · [`skills`](#skills) · [`update`](#update)
-- Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion) · [`pexels`](#pexels) · [`photos`](#photos) · [`music`](#music)
+- Assets — [`segment`](#segment) · [`pexels`](#pexels) · [`photos`](#photos) · [`music`](#music)
+- Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion)
 - Reference-video analysis (research only) — [`transcribe`](#transcribe) · [`scan`](#scan) · [`frames`](#frames)
 - Audio analysis — [`audio-markers`](#audio-markers)
 
@@ -26,9 +27,9 @@ kino build <spec> [options]
 | Option | Value | Meaning |
 |---|---|---|
 | `--mock` | — | Skip all paid APIs (silent VO + placeholder avatar). Free structural render. |
-| `--format <list>` | e.g. `9:16,3:4` | Comma-separated output formats. |
+| `--format <list>` | e.g. `9:16,3:4,16:9` | Comma-separated output formats. |
 | `--provider <name>` | `none\|heygen\|hedra\|replicate` | Override the avatar engine for this render. |
-| `--background <kind>` | `glow\|image\|mesh\|aurora\|particles\|grid\|custom` | Override the faceless background. |
+| `--background <kind>` | `glow\|image\|mesh\|aurora\|particles\|grid\|custom` | Override the background. |
 | `--font <name>` | font name | Override `brand.font` for this render (see [`fonts`](#fonts)). |
 | `--project <name>` | project | Use `projects/<name>` (else inferred from the spec path). |
 | `--tag <label>` | label | Suffix the output filename so variants are kept (auto-set from `--background`/`--font`). |
@@ -57,11 +58,11 @@ kino still <spec> [options]
 | `--montage` | — | Tile multiple stills into one contact sheet (also implied by `--around`). |
 | `--segment <n>` | index | Render the midpoint of segment `n`. |
 | `--word <word>` | spoken word | With `--segment`: center the `--around` sheet on that word's spoken start (case/punctuation-insensitive) — no hand-copying times from `inspect`. Word times shift when copy changes; this always resolves against the current VO. |
-| `--format <fmt>` | `9:16\|3:4` | Output format. |
+| `--format <fmt>` | `9:16\|3:4\|16:9` | Output format. |
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Use real VO/avatar + true timing (default: mock, free). |
-| `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA. Still-only — not on `build`. |
+| `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA — **guide only**; non-critical chrome (nav bars, docks) may sit in the shaded bands. Still-only — not on `build`. |
 | `--grid` | — | Overlay a rule-of-thirds grid for composition QA (fill budget / dead bands). Still-only — not on `build`. |
 
 ```bash
@@ -84,12 +85,12 @@ kino storyboard <spec> [options]
 
 | Option | Value | Meaning |
 |---|---|---|
-| `--format <fmt>` | `9:16\|3:4` | Output format. |
+| `--format <fmt>` | `9:16\|3:4\|16:9` | Output format. |
 | `--frames <n>` | number | Frames per beat (default `2`: composition + fully-revealed end-state; a 3rd/4th `·full` tile surfaces overflow/overlaps). |
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
 | `--real` | — | Real VO/avatar + true timing (default: mock, free). |
-| `--platform <name>` | `tiktok\|reels\|shorts` | Same safe-zone overlay as [`still`](#still). |
+| `--platform <name>` | `tiktok\|reels\|shorts` | Same safe-zone overlay as [`still`](#still) — guide only; protect hooks/CTAs, not decorative chrome. |
 
 ```bash
 kino storyboard specs/lie-test.json
@@ -291,9 +292,39 @@ Show how to author motion-graphic HTML files + the CSS-variable contract. See [M
 kino motion
 ```
 
+---
+
+## Assets
+
+### `segment`
+Generate object masks from an image or video for shader / `regionShader` use. Writes
+`assets/masks/<name>/` (`mask.png` or `mask.mp4` + `manifest.json`). **Authoring** needs CoreML
+(macOS) or CUDA (NVIDIA); **render** that consumes masks is cross-platform. Full guide:
+[Segmentation](segmentation.md).
+
+```
+kino segment <input> --prompt <text> [options]
+```
+
+| Option | Value | Meaning |
+|---|---|---|
+| `--prompt <text>` | text | Object to segment ("the person"). Required. |
+| `--objects <n>` | 1–4 | Cap objects packed into mask R/G/B/A (default `1`). |
+| `--out <name>` | name | Subdir under `assets/masks/` (default: input basename). |
+| `--no-track` | — | Video: force per-frame (no temporal tracking). |
+| `--backend <name>` | `coreml\|cuda\|mock` | Default: `coreml` on macOS, `cuda` elsewhere. `mock` = synthetic ellipse, any platform. |
+| `--format <fmt>` | `json` | Machine-readable manifest on stdout (auto when non-TTY). |
+
+**Capability note:** CoreML video is per-frame (`tracked:false` — flicker possible). CUDA runs the full SAM3.1 tracker (`tracked:true`). Prefer CUDA for coherent video masks; use CoreML for images / Mac authoring.
+
+```bash
+kino segment assets/clip.mp4 --prompt "the person"
+kino segment photo.jpg --prompt "the car" --backend mock   # CI / non-Mac
+```
+
 ### `pexels`
 Search Pexels stock **videos** (portrait by default) and download one into a project's `assets/pexels/`.
-Downloaded clips are referenced from `app` segments like any asset (`"asset": "pexels/<id>.mp4"`).
+Downloaded clips are referenced from `video` segments like any asset (`"source": "pexels/<id>.mp4"`).
 Requires `PEXELS_API_KEY` in `.env` (free — [pexels.com/api](https://www.pexels.com/api/)).
 
 ```
@@ -311,7 +342,7 @@ kino pexels "city commute at night" --get 2 --project x  # download match 2 → 
 
 ### `photos`
 Search Pexels stock **photos** (portrait by default) and download one into `assets/pexels/`.
-Same key as `kino pexels`. Reference from `app` segments (`"asset": "pexels/<id>.jpg"`).
+Same key as `kino pexels`. Reference from `video` segments (`"source": "pexels/<id>.jpg"`).
 
 ```
 kino photos "coffee desk morning light"                      # list: #, id, size, author, thumb

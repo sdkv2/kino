@@ -1,7 +1,7 @@
 # motion-lottie — Tier 3 Lottie fixtures
 
 Two small, hand-authored Lottie JSON files used as reference fixtures for kino's **Tier 3**
-motion-graphic engine (embedded Lottie animations, played via `@remotion/lottie`). They're also
+motion-graphic engine (embedded Lottie animations, played via `lottie-web`). They're also
 the render fixtures for [`tests/render-lottie.test.ts`](../../tests/render-lottie.test.ts).
 
 | File | Shape |

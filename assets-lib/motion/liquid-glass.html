@@ -1,0 +1,47 @@
+<!-- liquid-glass — a real Apple-style Liquid Glass panel (refraction, not frosted blur).
+     Copy into a project's assets/motion/ and edit the .card content/size. Needs a STRUCTURED, colorful
+     background behind it to refract (pair with a shader background, e.g. backgroundComponent:"liquid-orb").
+     How it works:
+       • `class="kino-glass"` — the engine renders a per-pixel refraction mirror behind the element:
+         a rounded-rect SDF lens over the frame's background canvas, warp concentrated at the rim,
+         clear center, per-channel chromatic dispersion, luminous film. True displacement (WebGL),
+         not the feOffset/backdrop-filter approximation (Chromium can't run feImage displacement maps
+         in backdrop-filter — see docs/motion-graphics.md).
+       • Keep the element's own background transparent — the film is drawn inside the mirror
+         (tune with --glass-film). Knobs (all optional, tweenable via params/keyframes):
+         --glass-strength (px, default 26) · --glass-band (px, default max(radius,48)) ·
+         --glass-chroma (default 0.07) · --glass-profile (default 2.2) ·
+         --glass-film (default rgba(255,255,255,0.13)) · --glass-saturate (1.25) · --glass-brightness (1.06)
+       • The bright border, wrapping edge-rim highlight (::after) and diagonal specular sheen (::before)
+         make it read as lit glass — keep them; content sits at z-index ≥ 1.
+     Works over shader (.frag) and Canvas2D draw-fn backgrounds. Over avatar/app footage the mirror
+     is skipped gracefully (film + sheen only). -->
+<style>
+  .stage { position: absolute; inset: 0; font-family: var(--kino-font, -apple-system, sans-serif); color: #fff; }
+  .card {
+    position: absolute; left: 0; right: 0; margin-inline: auto; top: 30%; width: 76%; height: 30%;
+    box-sizing: border-box; border-radius: 8vw;
+    border: 1px solid rgba(255,255,255,0.55);     /* bright lit edge */
+    box-shadow: 0 30px 60px rgba(0,0,0,0.34),
+                inset 0 4px 22px rgba(255,255,255,0.26);  /* soft top inner glow */
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6.4vw; font-weight: 800; letter-spacing: -0.02em; text-shadow: 0 2px 16px rgba(0,0,0,0.45);
+  }
+  /* Bright refractive edge rim that wraps the rounded rect (the signature liquid-glass lit edge). */
+  .card::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1;
+    box-shadow: inset 7px 7px 8px -9px rgba(255,255,255,0.95),
+                inset -8px -8px 8px -9px rgba(255,255,255,0.95),
+                inset 0 0 0 1px rgba(255,255,255,0.16);
+    filter: brightness(1.12);
+  }
+  /* Diagonal specular sheen sliding across the surface. */
+  .card::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1;
+    background: linear-gradient(125deg,
+      rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.08) 20%,
+      rgba(255,255,255,0) 44%, rgba(255,255,255,0) 76%, rgba(255,255,255,0.16) 100%);
+    mix-blend-mode: screen;
+  }
+</style>
+<div class="stage" data-measure="stage"><div class="card kino-glass" data-measure="card"><span style="position:relative;z-index:2">Liquid Glass</span></div></div>

@@ -1,7 +1,5 @@
-// Native-engine port of the composition components. Layout, styling and animation math are kept
-// line-for-line with the legacy composition so the two engines render identically; only the frame
-// plumbing differs: primitives come from ./runtime, video frames from ./media (pre-extracted), and
-// fonts are loaded once at page boot (index.tsx) instead of per-component.
+// Composition components for the native render page. Primitives from ./runtime, video frames from
+// ./media (ffmpeg pre-extract), fonts loaded once at page boot (index.tsx).
 import React from "react";
 import { AbsoluteFill, Easing, Freeze, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
 import { FrameVideo } from "./media";
@@ -12,6 +10,7 @@ import { shotTransform, type Shot, type Transition } from "../../motion.js";
 import { activeWordIndex, isHighlightWord, normWord } from "../../captions.js";
 import { paramsAt } from "../../bgparams.js";
 import { CanvasBackground } from "./CanvasBackground";
+import { ShaderBackground } from "./ShaderBackground";
 import { getPreset, type DrawFn } from "../../backgrounds/presets.js";
 import { CAPTION_BOTTOM } from "../../captionLayout.js";
 import { luminance, filmFinishParams } from "../../filmFinish.js";
@@ -176,10 +175,11 @@ const ImageBg: React.FC<{ src: string; t: Theme }> = ({ src, t }) => {
 };
 
 // Dispatcher: glow = CSS drift; image = Ken-Burns photo; mesh/aurora/particles/grid/solid = canvas
-// presets (solid is the loop-safe static one); custom = the brand's own draw fn. Animated backgrounds
-// get the legibility scrim.
+// presets (solid is the loop-safe static one); custom = brand draw fn or .frag shader.
+// Canvas/image get a legibility Scrim. Shader backgrounds do NOT — the frag owns exposure, and
+// liquid-glass samples the raw canvas (a CSS scrim would darken the scene while glass stayed bright).
 export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps }> = ({ t, background }) => {
-  const { kind, customCode, params, keyframes, triggers, image } = background;
+  const { kind, customCode, shaderCode, params, keyframes, triggers, image } = background;
   const draw = React.useMemo<DrawFn | undefined>(() => {
     if (kind === "custom" && customCode) {
       // TRUST BOUNDARY: new Function() executes config-supplied code. This is safe ONLY because the
@@ -196,6 +196,13 @@ export const FacelessBackdrop: React.FC<{ t: Theme; background: BackgroundProps 
       <AbsoluteFill>
         <ImageBg src={staticFile(image)} t={t} />
         <Scrim t={t} />
+      </AbsoluteFill>
+    );
+  }
+  if (kind === "custom" && shaderCode) {
+    return (
+      <AbsoluteFill>
+        <ShaderBackground shaderSrc={shaderCode} params={params} keyframes={keyframes} triggers={triggers} t={t} />
       </AbsoluteFill>
     );
   }
@@ -262,7 +269,7 @@ export const TweenOverlay: React.FC<{ keyframes: BgKeyframe[]; children: React.R
   );
 };
 
-// Brand mark for faceless talking beats — configurable size/position, agent-tweenable.
+// Brand mark for presenter-less talking beats — configurable size/position, agent-tweenable.
 export const Logo: React.FC<{ src: string; sizePx: number; x: number; y: number; keyframes: BgKeyframe[]; fromSec: number }> = ({
   src,
   sizePx,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMotionVars, wordsShownAt, beatRelativeWords, resolveWordAnchors } from "../src/render/motionVars.js";
+import { buildMotionVars, wordsShownAt, beatRelativeWords, resolveWordAnchors, cameraBlurVars } from "../src/render/motionVars.js";
 
 const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#ffffff", captionFontSize: 74, captionStroke: 9 };
 const dyn = { frame: 12, t: 0.4, progress: 0.5, pulse: 0.25, params: {} as Record<string, number | string> };
@@ -20,7 +20,8 @@ describe("buildMotionVars", () => {
     expect(v["--t"]).toBe("0.4000");
     expect(v["--progress"]).toBe("0.5000");
     expect(v["--pulse"]).toBe("0.2500");
-    expect(Number(v["--kino-out"])).toBeGreaterThan(0.5);
+    expect(v["--kino-in"]).toBeDefined();
+    expect(v["--kino-out"]).toBeDefined();
     expect(Number(v["--kino-edge"])).toBeCloseTo(1, 3); // sin(π/2) at progress 0.5
     expect(v["--kino-inout"]).toBeDefined();
     expect(v["--kino-overshoot"]).toBeDefined();
@@ -47,6 +48,78 @@ describe("buildMotionVars", () => {
     const v = buildMotionVars(theme, dyn);
     expect(v["--kino-words-shown"]).toBe("0");
     expect(v["--kino-word-count"]).toBe("0");
+  });
+  it("exposes composition aspect when width and height are set", () => {
+    const v = buildMotionVars(theme, { ...dyn, width: 1920, height: 1080 });
+    expect(v["--kino-aspect"]).toBe("1.7778");
+  });
+  it("emits zero camera blur vars when the spec has no cam param", () => {
+    const v = buildMotionVars(theme, dyn);
+    expect(v["--cam-vel"]).toBe("0.0000");
+    expect(v["--cam-blur"]).toBe("0.0000");
+  });
+  it("emits velocity-blur vars when cam is tweened", () => {
+    const v = buildMotionVars(theme, {
+      ...dyn,
+      fps: 30,
+      hasCam: true,
+      params: { cam: 0.5 },
+      prevParams: { cam: 0.48 },
+      nextParams: { cam: 0.52 },
+    });
+    expect(Number(v["--cam-vel"])).toBeCloseTo(0.6); // |0.5-0.48| * 30
+    expect(Number(v["--cam-blur"])).toBeGreaterThan(0);
+    expect(Number(v["--cam-blur"])).toBeLessThanOrEqual(24);
+  });
+  it("blurs frame 0 while zoomed in even before backward velocity exists", () => {
+    const v = buildMotionVars(theme, {
+      ...dyn,
+      fps: 30,
+      hasCam: true,
+      params: { cam: 0, camBlur: 14 },
+      nextParams: { cam: 0.02 },
+    });
+    expect(Number(v["--cam-blur"])).toBeGreaterThan(0);
+    expect(Number(v["--cam-vel"])).toBeGreaterThan(0);
+  });
+  it("clears blur when cam is settled at 1", () => {
+    const v = buildMotionVars(theme, {
+      ...dyn,
+      fps: 30,
+      hasCam: true,
+      params: { cam: 1 },
+      prevParams: { cam: 0.99 },
+    });
+    expect(Number(v["--cam-vel"])).toBeCloseTo(0.3);
+    expect(v["--cam-blur"]).toBe("0.0000"); // (1 - cam) falloff
+  });
+});
+
+describe("cameraBlurVars", () => {
+  it("returns zeros when hasCam is false", () => {
+    expect(cameraBlurVars({ cam: 0.5 }, { cam: 0.4 }, { cam: 0.6 }, 30, false)).toEqual({
+      camVel: 0,
+      camBlur: 0,
+    });
+  });
+  it("rest-blurs frame 0 at cam=0 (opening zoom) without prevParams", () => {
+    const { camVel, camBlur } = cameraBlurVars({ cam: 0, camBlur: 14 }, undefined, undefined, 30, true);
+    expect(camVel).toBe(0);
+    expect(camBlur).toBeCloseTo(3.08); // 14 * 0.22 rest mix
+  });
+  it("uses forward velocity on frame 0 when nextParams is present", () => {
+    const { camVel, camBlur } = cameraBlurVars({ cam: 0 }, undefined, { cam: 0.05 }, 30, true);
+    expect(camVel).toBeCloseTo(1.5);
+    expect(camBlur).toBeGreaterThan(3.08);
+  });
+  it("uses camBlur param as strength (default 12)", () => {
+    const hi = cameraBlurVars({ cam: 0.5, camBlur: 20 }, { cam: 0.48 }, { cam: 0.52 }, 30, true);
+    const lo = cameraBlurVars({ cam: 0.5 }, { cam: 0.48 }, { cam: 0.52 }, 30, true);
+    expect(hi.camBlur).toBeGreaterThan(lo.camBlur);
+  });
+  it("clamps blur at 18px", () => {
+    const { camBlur } = cameraBlurVars({ cam: 0 }, { cam: 1 }, { cam: 0.5 }, 30, true);
+    expect(camBlur).toBeLessThanOrEqual(18);
   });
 });
 

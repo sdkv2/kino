@@ -18,8 +18,8 @@ describe("spec voFile", () => {
       parseSpec({
         ...base,
         segments: [
-          { kind: "avatar", text: "hi", voFile: "vo/a.mp3" },
-          { kind: "app", asset: "s.png", text: "hi", voFile: "vo/b.wav" },
+          { kind: "scene", text: "hi", voFile: "vo/a.mp3" },
+          { kind: "video", source: "s.png", text: "hi", voFile: "vo/b.wav" },
           { kind: "motion", source: "motion/x.html", text: "hi", voFile: "vo/c.m4a" },
         ],
       }),

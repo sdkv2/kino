@@ -3,6 +3,7 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { Theme, BgParamValue, BgKeyframe, BgTrigger } from "../../props.js";
 import { paramsAt, pulseAt } from "../../bgparams.js";
 import type { DrawFn } from "../../backgrounds/presets.js";
+import { registerBackdrop } from "./liquidGlass";
 
 // Generic frame-driven canvas. Each frame: clear + paint night, resolve the agent's tweened params
 // + trigger pulse at the current time, then run `draw`. useLayoutEffect (sync, pre-paint) runs
@@ -34,6 +35,7 @@ export const CanvasBackground: React.FC<{
     ctx.fillRect(0, 0, width, height);
     const tt = frame / fps;
     draw(ctx, { frame, fps, width, height, params: paramsAt(params, keyframes, tt), pulse: pulseAt(triggers, tt) });
+    registerBackdrop(canvas, width, height); // let kino-glass mirrors refract this frame's pixels
   });
 
   return (

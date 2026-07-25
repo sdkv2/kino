@@ -34,8 +34,9 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 | Variable | Value |
 |---|---|
 | `--frame` | integer frame within the beat |
-| `--t` | seconds within the beat |
-| `--progress` | `0 → 1` across the beat (linear — prefer eased vars below for entrances) |
+| `--t` | seconds within the beat — **use for real-time clocks** (scrubbers, elapsed timers); ticks 1:1 with render time |
+| `--progress` | `0 → 1` across the beat (linear — prefer eased vars below for entrances; **not** for playback clocks) |
+| `--kino-in` | ease-in cubic of `--progress` (slow start) |
 | `--kino-out` | ease-out cubic of `--progress` (soft landings) |
 | `--kino-inout` | smoothstep of `--progress` |
 | `--kino-overshoot` | back-out of `--progress` (may briefly exceed `1` — great for `scale`) |
@@ -84,7 +85,7 @@ Agent playbooks: recipes (caption-free montage, spoof chat window, camera-follow
     '<b style="opacity:' + (caretOn ? 1 : 0) + '">█</b></span>';
   ```
 
-  Works in a full-screen `kind:"motion"` beat **and** as a `motionOverlay` on an `app`/`avatar` beat (the
+  Works in a full-screen `kind:"motion"` beat **and** as a `motionOverlay` on a `video`/`scene` beat (the
   overlay gets its host beat's words).
 
 ### Camera zoom / pan inside a motion graphic
@@ -128,7 +129,7 @@ Both carry the timing controls:
 }
 ```
 
-`ease` ∈ `linear | easeInOut | overshoot | spring`. Each param surfaces as `--<key>`; a `pulse` trigger surfaces as a decaying `--pulse` envelope.
+`ease` ∈ `linear | easeIn | easeOut | easeInOut | easeInQuad | easeOutQuad | easeInOutQuad | easeInCubic | easeOutCubic | easeInOutCubic | easeInQuart | easeOutQuart | easeInOutQuart | easeInExpo | easeOutExpo | easeInOutExpo | overshoot | spring`. Each param surfaces as `--<key>`; a `pulse` trigger surfaces as a decaying `--pulse` envelope.
 
 **Anchor to spoken words, not seconds.** Every motion keyframe/trigger accepts `atWord` in place of
 `at`: a word (`"atWord": "match"` — first occurrence, case/punctuation-insensitive) or a word index
@@ -248,6 +249,12 @@ kino injects a small, opt-in utility kit so you don't re-derive common motion. E
 
 **`kino-pulse`** — maps the `--pulse` envelope to an opacity + scale pop. Place spec `triggers` with `action:"pulse"` at the VO word times (from `kino inspect`) and the element punches on each word. The envelope attacks in ~45ms then decays (punchier than a soft half-life fade).
 
+**Do not put `kino-pulse` on always-visible primary chrome** (play buttons, nav bars, hero labels).
+The class sets `opacity: var(--pulse, 0)` — the element is **hidden** whenever `--pulse` is 0 (almost
+the entire beat). Use it only on accent elements meant to flash on a spoken word (dots, chips, rings
+behind a control). For a persistent control that should subtly react to a trigger, drive
+`transform`/`box-shadow` off `var(--pulse)` in your own class instead.
+
 ```html
 <style>.dot { width:24vw; height:24vw; border-radius:50%; background:var(--kino-green); }</style>
 <div class="dot kino-pulse"></div>
@@ -265,7 +272,40 @@ kino injects a small, opt-in utility kit so you don't re-derive common motion. E
 .pop  { transform: scale(var(--kino-overshoot)); }       /* may exceed 1 mid-beat */
 ```
 
+**`kino-camera`** — velocity-blur on camera moves. Keyframe a `cam` param (`0→1` over ~2s) in the spec;
+kino injects `--cam-vel` and `--cam-blur` each frame. Frame 0 is blurred when `cam=0` (rest softness +
+forward velocity lookahead); blur peaks mid-move and clears on settle.
+
+```html
+<div class="cam kino-camera" style="transform:scale(calc(1.38 - 0.38 * var(--cam)))">…</div>
+```
+```jsonc
+"motionOverlay": {
+  "params": { "cam": 0, "camBlur": 14 },
+  "keyframes": [
+    { "at": 0, "params": { "cam": 0 } },
+    { "at": 2, "params": { "cam": 1 }, "ease": "easeInOut" }
+  ]
+}
+```
+
+Optional `camBlur` (default 12) scales strength. Tier-2 gets `env.camVel` / `env.camBlur`.
+
 Tier-2 gets the same numbers as `env.out` / `env.inout` / `env.overshoot` / `env.spring` / `env.edge`.
+
+**Playback clocks (scrubbers, elapsed timers)** — drive from `--t`, not `--progress`. `--progress`
+maps the whole beat to `0→1`; a scrubber keyed to `progress * N` outruns the timestamp when real VO
+changes beat length. Use one shared elapsed clock for both the label and the bar:
+
+```css
+.wrap {
+  --track-secs: 198;   /* e.g. 3:18 */
+  --start-secs: 42;    /* e.g. 0:42 at beat start */
+  --elapsed: calc(var(--start-secs) + var(--t));
+}
+.bar  { width: calc(var(--elapsed) / var(--track-secs) * 100%); }
+.knob { left:   calc(var(--elapsed) / var(--track-secs) * 100%); }
+```
 
 **`kino-fade-edges`** — a top/bottom mask gradient that feathers overflowing or scrolling content so it doesn't hard-cut at the frame edge.
 
@@ -297,6 +337,59 @@ kino injects a small SVG filter library plus finish helpers, so you can add anal
 ```
 
 Grain is subtle by design — set the element's `opacity` higher for a heavier stock. The displacement filter is great on text or shape edges for a rough, screen-printed feel: `<h1 style="filter:url(#kino-displace)">…</h1>`.
+
+### Liquid glass (`kino-glass`)
+
+Add `class="kino-glass"` to a positioned element and the engine renders a **true refraction mirror**
+behind it: each frame the background canvas region under the element is sampled through an SDF lens
+(WebGL) — warp + blur concentrated at the rim, frosted body (`--glass-frost`), per-channel chromatic
+dispersion, luminous film. Default silhouette is a rounded rect (`--glass-morph: 2`); morph/tilt knobs
+can lerp triangle → circle → round-rect and rotate the SDF in-shader. This is the real Apple Liquid
+Glass material, and the only way to get it: Chromium's compositor cannot run `feImage` displacement
+maps inside `backdrop-filter` (they silently degrade to a uniform white-map shift), so backdrop-filter
+can never do more than frosted blur + axial `feOffset` approximations.
+
+```html
+<div class="card kino-glass" style="border-radius:8vw">…content at z-index ≥ 1…</div>
+```
+
+Rules and knobs:
+
+- **Keep the element's own `background` transparent** — the film is drawn inside the mirror
+  (`--glass-film`). The mirror injects at `z-index:-1`; give your content `z-index: 1+`.
+- Silhouette is **SDF alpha** (not CSS `border-radius` clip) — outside the shape is transparent.
+  For morph demos use a square container large enough for tilt clearance; set `border-radius` for
+  the round-rect corner size when morphing toward rect.
+- **Do not CSS-`transform: rotate()` the glass element** — that breaks backdrop sampling. Tilt via
+  `--glass-tilt` instead (SDF rotates in local px; element stays axis-aligned).
+- Works over **shader (`.frag`) and Canvas2D draw-fn backgrounds**. As a `motionOverlay` on
+  avatar/app beats there is no canvas backdrop, so the mirror is skipped gracefully (style a film
+  fallback if the panel must read there).
+- All knobs are CSS custom properties read per frame — tweenable via `params`/`keyframes`:
+
+| Var | Default | Meaning |
+|---|---|---|
+| `--glass-strength` | `26` | max rim displacement (px) |
+| `--glass-band` | `max(radius, 48)` | rim band width (px) |
+| `--glass-chroma` | `0.07` | RGB dispersion spread |
+| `--glass-profile` | `2.2` | lens falloff exponent (higher = tighter rim) |
+| `--glass-frost` | `0` | body frost blur radius (px) — frosted glass fill |
+| `--glass-edge-blur` | `0` | extra blur at the rim (px), on top of frost |
+| `--glass-film` | `rgba(255,255,255,0.13)` | luminous film over the refraction |
+| `--glass-saturate` | `1.25` | backdrop saturation boost |
+| `--glass-brightness` | `1.06` | backdrop brightness boost |
+| `--glass-morph` | `2` | continuum: `0` triangle → `1` circle → `2` round-rect. **Pair mode** (when `--glass-from` ≥ 0): `0..1` blend between from→to |
+| `--glass-from` | _(unset / `-1`)_ | optional shape id `0\|1\|2`. Set ≥0 to morph **directly** between two shapes (skips the continuum middle) |
+| `--glass-to` | `2` | pair-mode target shape id `0\|1\|2` |
+| `--glass-tilt` | `0` | SDF rotation in degrees (no CSS rotate) |
+
+Pair-mode morph is `0→1` along one edge only. To chain (rect→tri→circ), finish the first blend (`morph: 1`), then **retarget** `from`/`to`/`morph: 0` on the next keyframe with `"ease": "hold"` so shape ids snap instead of lerping through illegal middles.
+
+Pair with a bright border / diagonal sheen for quiet rect cards; morphing shapes get a soft lit rim
+from the SDF itself. Copyable reference: `assets-lib/motion/liquid-glass.html` (bare id
+`liquid-glass`). Needs a STRUCTURED, colorful background to refract (e.g.
+`backgroundComponent: "liquid-orb"`); refraction of a flat field is invisible. Uniform corner radii
+only (the first corner value is used for morph=2).
 
 ## Procedural graphics (Tier 2)
 
@@ -337,14 +430,14 @@ When a graphic needs organic illustrated motion, complex vector morphs, or desig
 { "kind": "motion", "source": "motion/confetti.json", "text": "We just shipped it." }
 ```
 
-Tier-3 Lottie works in **all three motion slots**: a full-screen `kind:"motion"` beat, a `motionOverlay` on an `avatar` beat, and a `motionOverlay` on an `app` beat.
+Tier-3 Lottie works in **all three motion slots**: a full-screen `kind:"motion"` beat, a `motionOverlay` on a `scene` beat, and a `motionOverlay` on a `video` beat.
 
 ### Playback
 
 By default the animation plays **once, stretched** so its full duration spans the beat — matching the system's "everything is progress across the beat" model. Add `"loop": true` (a sibling of `source`) to loop the animation at native speed instead:
 
 ```json
-{ "kind": "app", "asset": "screens/dashboard.png", "text": "...", "caption": "...",
+{ "kind": "video", "source": "screens/dashboard.png", "text": "...", "caption": "...",
   "motionOverlay": { "source": "motion/sparkle.json", "loop": true } }
 ```
 

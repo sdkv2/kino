@@ -19,13 +19,21 @@ export const MediaProvider: React.FC<{ media: MediaMap; children: React.ReactNod
   <MediaCtx.Provider value={media}>{children}</MediaCtx.Provider>
 );
 
-/** The exact source frame for this composition-local frame (Freeze upstream pins the clock). */
-export const FrameVideo: React.FC<{ mediaKey: string; style?: React.CSSProperties }> = ({ mediaKey, style }) => {
+/** The /vframes URL of the exact source frame for this composition-local frame, or null if the key
+ *  is unset / this frame wasn't extracted (sparse stills). Same lookup FrameVideo uses — shared so
+ *  RegionShader's GL textures track the identical frame the DOM <img> would show. */
+export function useFrameImageUrl(mediaKey: string | undefined): string | null {
   const frame = useCurrentFrame();
-  const media = React.useContext(MediaCtx)[mediaKey];
+  const media = React.useContext(MediaCtx)[mediaKey ?? ""];
   if (!media) return null;
   const idx = Math.min(Math.max(0, frame), media.maxFrame);
   const file = media.byFrame[idx];
-  if (!file) return null;
-  return <img src={`/vframes/${media.dir}/${file}`} style={style} />;
+  return file ? `/vframes/${media.dir}/${file}` : null;
+}
+
+/** The exact source frame for this composition-local frame (Freeze upstream pins the clock). */
+export const FrameVideo: React.FC<{ mediaKey: string; style?: React.CSSProperties }> = ({ mediaKey, style }) => {
+  const url = useFrameImageUrl(mediaKey);
+  if (!url) return null;
+  return <img src={url} style={style} />;
 };

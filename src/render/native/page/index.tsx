@@ -9,6 +9,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { FrameProvider, type VideoConfig } from "./runtime";
 import { MediaProvider, type MediaMap } from "./media";
+import { loadBgTextures, prepareBgTextures } from "./bgTextures";
+import { awaitRegionShaders } from "./RegionShader";
 import { KinoVideo } from "./KinoVideo";
 import type { KinoProps } from "../../props.js";
 
@@ -18,6 +20,8 @@ interface RenderConfig {
   height: number;
   durationInFrames: number;
   media: MediaMap;
+  shaderSS?: number;
+  shaderFXAA?: boolean;
 }
 
 declare global {
@@ -26,6 +30,8 @@ declare global {
     kinoSeek: (frame: number) => Promise<void>;
     __kinoReady: boolean;
     __kinoError?: string;
+    __kinoShaderSS?: number;
+    __kinoShaderFXAA?: boolean;
   }
 }
 
@@ -99,11 +105,19 @@ const App: React.FC<{ cfg: RenderConfig; frame: number }> = ({ cfg, frame }) => 
 async function kinoSeek(frame: number): Promise<void> {
   const cfg = current;
   if (!cfg || !root) throw new Error("kinoSeek before kinoLoad");
+  // Live-scrub DOM textures rasterize for THIS frame before the commit, so the shader's upload
+  // inside the flushSync sees the fresh pixels (per-frame smooth, no flipbook stepping).
+  await prepareBgTextures(cfg.props, frame, cfg.props.fps);
   flushSync(() => root!.render(<App cfg={cfg} frame={frame} />));
-  await settleImages();
+  // RegionShader beats load textures / re-seek video sources in their layout effect (off-DOM, so
+  // settleImages can't see them) — await that work too before the frame is considered complete.
+  await Promise.all([settleImages(), awaitRegionShaders()]);
 }
 
 async function kinoLoad(): Promise<void> {
+  // Pages are cached per worker slot and re-loaded for the next render, so a fault recorded by
+  // the previous spec would otherwise fail this one (reportFatal is first-write-wins).
+  window.__kinoFatal = undefined;
   const cfg: RenderConfig = await (await fetch("/render-config.json", { cache: "no-store" })).json();
   document.documentElement.style.background = "#000";
   document.body.style.margin = "0";
@@ -117,6 +131,12 @@ async function kinoLoad(): Promise<void> {
   // Fonts must be resolvable before frame 0 — a fallback-font first frame is a determinism and
   // layout bug, not a cosmetic one.
   await syncFonts(cfg.props);
+  // Shader texture channels decode/rasterize once here; frames sample them synchronously.
+  await loadBgTextures(cfg.props);
+  // Shader/glass supersample (1–4). Mock builds default to 1; finals default to 2.
+  window.__kinoShaderSS = cfg.shaderSS ?? 2;
+  // FXAA edge post-pass on shader backgrounds. Default on (KINO_SHADER_FXAA=0 disables).
+  window.__kinoShaderFXAA = cfg.shaderFXAA ?? true;
   root ??= createRoot(container);
   current = cfg;
   await kinoSeek(0);

@@ -1,0 +1,22 @@
+{
+  "title": "per-object-zebras",
+  "format": ["16:9"],
+  "fps": 25,
+  "provider": "none",
+  "segments": [
+    {
+      "kind": "video",
+      "source": "pexels/zebras2s.mp4",
+      "text": "two zebras, two materials",
+      "caption": "two zebras, two materials",
+      "dur": 2,
+      "regionShader": {
+        "masks": [
+          { "mask": "masks/zebras", "object": 0, "subject": "backgrounds/region-object0-cyan.frag" },
+          { "mask": "masks/zebras", "object": 1, "subject": "backgrounds/region-object1-amber.frag" }
+        ],
+        "background": "backgrounds/region-backdrop.frag"
+      }
+    }
+  ]
+}

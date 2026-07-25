@@ -88,5 +88,5 @@ export async function pexels(
   await download(file.link, dest);
   noteAttribution(project.projectRoot, `Pexels #${v.id} — ${v.user.name} — assets/${rel}`);
   log.ok(dest);
-  process.stdout.write(`\nUse it in a spec's app segment:\n  { "kind": "app", "asset": "${rel}", ... }\n`);
+  process.stdout.write(`\nUse it in a spec's video segment:\n  { "kind": "video", "source": "${rel}", ... }\n`);
 }
