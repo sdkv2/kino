@@ -3,6 +3,7 @@
 // single source of truth for what an agent may author; keep it and docs/spec-reference.md in sync.
 // Exports the Spec type used throughout the pipeline. Note: keyframe/trigger `at` is in seconds
 // (resolved against frame/fps in the render layer).
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS } from "../render/textStyles.js";
 import { EASE_NAMES } from "../render/bgparams.js";
@@ -212,6 +213,13 @@ const SegmentUnion = z.discriminatedUnion("kind", [
           .optional(),
         subject: z.string().min(1).optional(), // .frag/.glsl body; masks without their own
         background: z.string().min(1).optional(), // .frag/.glsl body; region where none are
+        // A SECOND source for the BACKGROUND region: the subject stays the beat's own asset, the
+        // background shows this clip instead — a segmented subject cut onto footage that isn't the
+        // beat's. Project-relative image or video; video routes through the per-beat /vframes
+        // pipeline (a <video> seek never advances under headless capture, which is exactly why the
+        // page-global backgroundTextures video channel is still frozen — see
+        // docs/segmentation-tracking-todo.md). One per beat: there is one background region.
+        backdrop: z.string().min(1).optional(),
         // Author params shared by EVERY body in this beat's program — there is ONE uParam0..3 bank
         // in the single program the subject, background and per-mask bodies share. Numeric
         // non-reserved names alias to `u_<name>`; colorA/colorB/colorC (hex) and intensity drive
@@ -222,13 +230,20 @@ const SegmentUnion = z.discriminatedUnion("kind", [
         // it rides the beat when VO timing shifts. RegionShader's clock is already beat-local, and
         // this shares it with iTime. NOT absolute like backgroundKeyframes.
         keyframes: z.array(BgKeyframe).optional(),
+        // Extra sampler channels shared by every body in the beat: textures[i] → uTex{i+2} (uTex0 is
+        // the beat's own asset, uTex1 the cutout `backdrop`). An image uploads once; a motion .html
+        // rasterizes at composition size every frame, scrubbed by the beat's progress — a motion
+        // graphic the shader can SAMPLE rather than one composited above it (that is `motionOverlay`,
+        // which still works alongside). Max 2: uTex2..uTex3 are what the region program has left.
+        textures: z.array(z.string().min(1)).max(2).optional(),
       })
       // Strict so a mistyped or not-yet-supported key (e.g. `triggers` — no one-shot surface this
       // phase) fails loudly instead of being stripped into an unexplained still frame.
       .strict()
       .refine((v) => v.mask || v.masks, { message: "regionShader needs mask or masks" })
-      .refine((v) => v.subject || v.background || v.masks?.some((m) => m.subject), {
-        message: "regionShader needs at least one of subject/background (top-level or per-mask)",
+      // A backdrop counts: `mask` + `backdrop` with no .frag anywhere is the whole cutout spec.
+      .refine((v) => v.subject || v.background || v.backdrop || v.masks?.some((m) => m.subject), {
+        message: "regionShader needs at least one of subject/background/backdrop (top-level or per-mask)",
       })
       // Every body in the beat shares ONE uParam0..3 bank, so the cap is on the union of numeric
       // names across params + keyframes. extraParamNames would silently slice the extras away and
@@ -439,10 +454,20 @@ export function formatSpecError(err: z.ZodError): string {
     })
     .join("\n");
 }
-
 /** Parse a spec with helpful footgun messages (logoPosition on CTA, transition on motion, …). */
 export function parseSpec(input: unknown): Spec {
   const r = SpecSchema.safeParse(input);
   if (r.success) return r.data;
   throw new Error(formatSpecError(r.error));
+}
+
+/** Load and parse a spec JSON file from disk. */
+export function loadSpec(path: string): Spec {
+  const raw = readFileSync(path, "utf8");
+  try {
+    return parseSpec(JSON.parse(raw));
+  } catch (e) {
+    if (e instanceof SyntaxError) throw new Error(`Invalid JSON in spec file (${path}): ${e.message}`);
+    throw e;
+  }
 }

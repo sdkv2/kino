@@ -4,6 +4,9 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+
+## [2.0.0] — node 22 minimum
+- **Node ≥22 required**: `engines` bumped to `>=22`; `doctor`, `setup.sh`, `setup.mjs`, docs, and badge updated.
 - Workspace detection accepts `projects/` or `brands/` (brands optional since 1.21) — projects-only
   workspaces no longer fail with "No brands/ found".
 - `atWord` anchors on motion `keyframes`/`triggers` (word text or index) — resolved against each

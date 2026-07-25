@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg" alt="Node ≥20">
+  <img src="https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg" alt="Node ≥22">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/spec%20%E2%86%92%20MP4-black.svg" alt="spec → MP4">
   <a href="https://try.elevenlabs.io/7t4pgbmyxq67" title="Referral — supports the project"><img src="https://img.shields.io/badge/voiceover-ElevenLabs-000?logo=elevenlabs&logoColor=fff" alt="Voiceover by ElevenLabs"></a>
@@ -51,7 +51,7 @@ No LLM inside the CLI: every step is deterministic, so the same spec renders the
 ```bash
 cd <your-project>
 npx @sdkv2/kino init acme                                     # scaffold .env, brand.md, dirs + a sample spec
-npx @sdkv2/kino build projects/acme/specs/sample.json --mock  # free structural preview, no API spend
+npx @sdkv2/kino build projects/acme/specs/sample.json --draft  # free structural preview, no API spend
 npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → projects/acme/out/sample/
 ```
 `init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with

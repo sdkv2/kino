@@ -6,11 +6,12 @@
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, isAbsolute } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
-import { parseSpec, type Spec } from "../spec/schema.js";
+import { loadSpec, parseSpec, type Spec } from "../spec/schema.js";
 import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
@@ -27,7 +28,7 @@ import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, WordTiming } from "../render/props.js";
+import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
 import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
@@ -56,11 +57,13 @@ function resolveRegionShader(
     masks?: { mask: string; object: number; subject?: string }[];
     subject?: string;
     background?: string;
+    backdrop?: string;
     object: number;
     // Shared by every body in the beat's one program; `keyframes[].at` is beat-relative seconds.
     // The 4-slot ceiling is enforced in the schema (see slotParamNames), so no re-check here.
     params?: Record<string, BgParamValue>;
     keyframes?: BgKeyframe[];
+    textures?: string[];
   },
   project: Project,
   stageAsset: (rel: string) => void,
@@ -83,12 +86,38 @@ function resolveRegionShader(
     stageAsset(maskRel);
     return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel, subjectCode: loadBody(subject) };
   });
+  // The backdrop clip is staged like the mask/asset — the page fetches it from publicDir by this
+  // same relative path, and videoFrames.ts extracts it there when it's a video.
+  if (rs.backdrop) stageAsset(rs.backdrop);
+  // Extra sampler channels (uTex2..uTex3). A motion .html resolves and lints exactly like a
+  // motionOverlay source — same library ids, same determinism lint, same sanitizer — but its markup
+  // is rasterized into a texture the region bodies sample, instead of compositing above them.
+  // Tier-2 (.js) and Tier-3 (.json) stay overlay-only: their markup is produced per frame by the
+  // React layer, which the shader cannot reach (see docs/segmentation.md).
+  const textures: RegionTexture[] = (rs.textures ?? []).map((ref, i) => {
+    if (/\.(png|jpe?g|webp)$/i.test(ref)) {
+      const abs = project.assetPath(ref);
+      if (!existsSync(abs)) throw new Error(`regionShader.textures[${i}] not found: assets/${ref}`);
+      stageAsset(ref);
+      return { kind: "image" as const, src: ref, html: null };
+    }
+    const graphic = resolveMotionGraphic({ source: ref }, project);
+    if (!graphic.html) {
+      throw new Error(
+        `regionShader.textures[${i}] "${ref}": only Tier-1 .html rasterizes into a texture channel ` +
+          `(a .js/.json graphic renders per frame in the DOM layer — use motionOverlay for it).`,
+      );
+    }
+    return { kind: "html" as const, src: null, html: graphic.html };
+  });
   return {
     masks,
     subjectCode: loadBody(rs.subject),
     backgroundCode: loadBody(rs.background),
+    backdrop: rs.backdrop,
     params: rs.params,
     keyframes: rs.keyframes,
+    textures: textures.length ? textures : undefined,
   };
 }
 
@@ -133,9 +162,14 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
   const key = contentHash({ avClips, GAP, kind: "avtrack" });
   const cached = cache.get(key, "mp3");
   if (cached) return cached;
-  const tmp = join(mkdtempSync(join(tmpdir(), "kino-avtrk-")), "avtrack.mp3");
-  await stitchAudio(avClips, GAP, tmp);
-  return cache.put(key, "mp3", tmp);
+  const dir = scratchDir("kino-avtrk-");
+  try {
+    const tmp = join(dir, "avtrack.mp3");
+    await stitchAudio(avClips, GAP, tmp);
+    return cache.put(key, "mp3", tmp);
+  } finally {
+    releaseScratch(dir);
+  }
 }
 
 export interface PrepareResult {
@@ -167,7 +201,7 @@ export async function prepare(
   const project = resolveProject({ specPath, project: opts.project });
   specPath = resolveSpecPathIn(specPath, project);
   loadEnv(project.workspaceRoot);
-  const spec = parseSpec(JSON.parse(readFileSync(specPath, "utf8")));
+  const spec = loadSpec(specPath);
 
   // A project.json assigns a brand + optional default overrides (layered under spec/CLI).
   const pc = loadProjectConfig(project.projectConfigPath);
@@ -597,23 +631,28 @@ export async function build(
   try {
     const picks = probeFramePicks(props.segments, props.fps);
     if (picks.length) {
-      const dir = mkdtempSync(join(tmpdir(), "kino-probe-"));
-      const frames = picks.flatMap((p) => p.frames.map((f, j) => ({ frame: f, name: `probe-${p.segment}-${j}` })));
-      const outs = await renderStills({ props, publicDir, format: formats[0], frames, outDir: dir });
-      let k = 0;
-      for (const p of picks) {
-        const mine = outs.slice(k, k + p.frames.length);
-        k += p.frames.length;
-        const diffs: number[] = [];
-        for (let j = 1; j < mine.length; j++) diffs.push(await imageMeanDiff(mine[j - 1], mine[j]));
-        if (isUnderAnimated(diffs)) {
-          log.warn(
-            `segment[${p.segment}] motion graphic barely animates across the beat (probe Δ ` +
-              `${diffs.map((d) => d.toFixed(2)).join(" / ")}) — add entrance/life/speech layers (skills/motion-design)`,
-          );
+      const dir = scratchDir("kino-probe-");
+      // finally, not a trailing call: the enclosing catch deliberately swallows probe failures
+      // ("never fails the build"), so a throw here would silently orphan the whole probe dir.
+      try {
+        const frames = picks.flatMap((p) => p.frames.map((f, j) => ({ frame: f, name: `probe-${p.segment}-${j}` })));
+        const outs = await renderStills({ props, publicDir, format: formats[0], frames, outDir: dir });
+        let k = 0;
+        for (const p of picks) {
+          const mine = outs.slice(k, k + p.frames.length);
+          k += p.frames.length;
+          const diffs: number[] = [];
+          for (let j = 1; j < mine.length; j++) diffs.push(await imageMeanDiff(mine[j - 1], mine[j]));
+          if (isUnderAnimated(diffs)) {
+            log.warn(
+              `segment[${p.segment}] motion graphic barely animates across the beat (probe Δ ` +
+                `${diffs.map((d) => d.toFixed(2)).join(" / ")}) — add entrance/life/speech layers (skills/motion-design)`,
+            );
+          }
         }
+      } finally {
+        releaseScratch(dir);
       }
-      rmSync(dir, { recursive: true, force: true });
     }
   } catch (e) {
     log.warn(`motion probe skipped: ${(e as Error).message}`);

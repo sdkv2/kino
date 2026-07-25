@@ -36,3 +36,25 @@ kino still specs/cross-region-glass.json --at 1.2
 
 Expected: the subject reads as glass — invisible except for the bands bending through it and a
 bevel highlight riding the silhouette. See `docs/segmentation.md` § Cross-region sampling.
+
+## Cutout compositing (a different clip behind the subject)
+
+`cutout.json`: two tracked zebras cut off their own grassy plate and dropped onto an unrelated
+clip. No `.frag` at all — `masks` + `backdrop` is the whole spec, because with a backdrop bound the
+background region's passthrough IS the backdrop, cover-fit.
+
+Needs a two-object video mask and any second clip. With `projects/segtest`'s assets in place:
+
+```bash
+# assets/frag/zebras.mp4 + assets/masks/zebco (a real 2-object CoreML mask), and any clip at
+# assets/pexels/rain-glass.mp4 — the backdrop's aspect need not match the beat's.
+kino build specs/cutout.json --mock
+```
+
+Expected: both zebras over the other clip, and the backdrop **moving** (it routes through the
+per-beat `/vframes` pipeline, not a `<video>` seek).
+
+`region-erode2.frag` is the edge remedy: used as each mask's `subject`, it hands the outermost ~2px
+of the silhouette back to the backdrop, which clears the olive rim real footage bleeds in from its
+original background. It costs ~2px of mane detail — look at both before choosing. See
+`docs/segmentation.md` § Cutout compositing.

@@ -195,6 +195,15 @@ They are defined **only** inside a per-entry body. The top-level `subject` spans
 
 **The same `.frag` on two entries is a duplicate definition** if it declares anything at file scope — all bodies land in one translation unit, exactly as with `subject` vs `background` below. If two masks want the same treatment, that is what the top-level `subject` fallback is for: it compiles and runs **once** however many entries share it.
 
+**Two _different_ bodies collide the same way** if they happen to pick the same name. Only
+`mainImage` is renamed for you; every other file-scope `const`, `struct` and helper is shared
+across the whole program. Two independently-written frags that each open with a tuning constant —
+`const float SHOULDER = 26.0;` is a realistic collision, so is `float lum(vec3)` — fail to compile
+with `ERROR: 'SHOULDER' : redefinition`, naming a line in assembled source rather than in either
+file you wrote. Prefix file-scope names per body (`GLASS_SHOULDER`, `METAL_SHOULDER`) or keep them
+inside `mainImage`. See [How region shaders assemble](#how-region-shaders-assemble-for-the-curious)
+for the mechanism.
+
 **Cost.** Every region body runs for every pixel, so N distinct subject bodies plus the background is N+1 bodies per pixel, on the default SwiftShader (software) renderer. Nothing changes for specs that don't use per-entry subjects — with no per-entry `subject` anywhere, kino emits the union program byte-for-byte unchanged. Measured on an Apple M4, 1080×1920, 12 stills, SwiftShader:
 
 | bodies/px | shader ≈120 ALU ops/px | shader ≈750 ALU ops/px |
@@ -206,12 +215,82 @@ The marginal cost of one extra body is ~0.04 s/frame for the light shader and ~0
 
 Inside a region shader you can sample:
 - `uTex0` — the beat's own asset (the thing being segmented).
+- `uBackdrop` / `uBackdropSize` — a SECOND clip, when the beat sets `regionShader.backdrop`. See
+  [Cutout compositing](#cutout-compositing--a-different-clip-behind-the-subject).
 - the shader's own params/uniforms (`u_*` aliases, `iTime`, etc.) as any shader — see
   [Params and keyframes](#params-and-keyframes) below.
 - **from a subject body only** — `kinoBackground(out vec4, in vec2 fragCoord)`, the *shaded*
   background region, at any coordinate. See [Cross-region sampling](#cross-region-sampling).
 
 **Worked example:** `examples/segmentation/` — a blue disc image, a mock mask, a solid-red subject shader and solid-green background shader. Its `README.md` has the exact commands (make a fixture asset, `kino segment --backend mock`, `kino still`). You get a red ellipse (subject) on green (background) — the mask boundary is the seam.
+
+#### Cutout compositing — a different clip behind the subject
+
+Everything above reshapes the beat's **one** plate. `backdrop` adds a **second source**, so the
+segmented subject can sit on footage that isn't its own — virtual greenscreen, no green screen:
+
+```jsonc
+"regionShader": {
+  "mask": "masks/presenter",
+  "backdrop": "pexels/beach.mp4"      // project-relative, image or video
+}
+```
+
+That is the whole spec. No `.frag` anywhere: **the subject region shows the beat's asset, the
+background region shows the backdrop.** `mask` + `backdrop` now satisfies the "needs a shader body"
+check on its own.
+
+What a **passthrough** means, precisely:
+
+| | subject region (mask > 0.5) | background region |
+| --- | --- | --- |
+| no `backdrop` | `subject` body, else the beat asset stretched | `background` body, else the beat asset stretched |
+| **with `backdrop`** | unchanged | `background` body, else **the backdrop, cover-fit** |
+
+The subject side deliberately stays the beat's asset — the subject *is* the thing being cut out.
+
+**Both bodies can sample it** as `uBackdrop` / `uBackdropSize` (aliases for the otherwise-unused
+`uTex1` / `uTexSize1` slot), e.g. `kinoBackdrop(uBackdrop, uBackdropSize, fragCoord)`. And
+[`kinoBackground`](#cross-region-sampling) now means something better: with a backdrop and no
+`background` body, a glass subject refracts **the backdrop** rather than a hole punched to its own
+plate.
+
+**Fit is cover-fit.** A backdrop's aspect will not match the beat's; the backdrop fills the frame and
+crops on the long axis rather than squashing. (This is the first `uTexSize` kino uploads in a region
+shader. `uTexSize0` is still left at `(0,0)` on purpose — uploading it would silently switch every
+existing spec that calls `kinoBackdrop(uTex0, uTexSize0, …)` from stretch to cover-fit.)
+
+**Timing: the backdrop starts at the beat's start, one backdrop frame per composition frame.**
+Precisely, composition-local frame `n` shows the backdrop frame whose timestamp is nearest `n / fps`
+seconds; if the beat outlasts the clip the last frame holds. The beat's `clipFrom` / `speed` /
+`pauseAt` do **not** apply — they describe the beat's own source, and seeking an unrelated file to the
+same second is arbitrary. Trim the backdrop clip if you want a different window. There is no
+`backdropFrom` / `backdropSpeed`.
+
+Video backdrops **animate**: like video masks they route through the per-beat `/vframes` frame
+pipeline (job `rsbd<i>`), not the `<video>`-seek that leaves the generic `backgroundTextures` channel
+frozen at frame 0. `tests/render-region-backdrop.test.ts` renders at two times and reads both
+sources' frame index straight off the pixels.
+
+**Edges: expect a fringe, and look at it.** The composite mixes with a fixed
+`smoothstep(0.4, 0.6, m)`, and real footage bleeds its *original* background into the silhouette —
+a mask cut from grass carries an olive rim, which is invisible over the grass and obvious over a
+night-city backdrop. Measured on `projects/segtest`'s zebras over a rain-glass clip: green excess in
+the 2px band just inside the edge ran **+0.018** against **−0.006** deep inside the subject.
+
+The remedy is author-side, in a per-mask `subject` body — hand the outer band back to the backdrop:
+
+```glsl
+vec4 s = texture(uTex0, fragCoord / iResolution.xy);
+vec4 b; kinoBackground(b, fragCoord);
+float d = kinoMaskDist(uMaskSelf, uChannelSelf, fragCoord, 6.0);   // negative inside
+fragColor = mix(s, b, smoothstep(-3.0, -1.0, d));                  // ~2px erode
+```
+
+That cut the localized green excess to **+0.011** and visibly cleared the rim, at the cost of ~2px of
+mane detail. The compositing default is deliberately **unchanged** — every existing spec shares it.
+
+**Worked example:** `examples/segmentation/cutout.json`.
 
 #### Params and keyframes
 
@@ -322,6 +401,50 @@ straight off the pixels.
 
 **Worked example:** `examples/segmentation/cross-region-glass.json` with `region-glass.frag`
 (subject) and `region-tint.frag` (background treatment).
+
+#### Motion graphics as texture channels
+
+`textures` binds up to two extra samplers — `uTex2` and `uTex3` — that **every** body in the beat
+can read. (`uTex0` is always the beat's own asset and `uTex1` belongs to the cutout `backdrop`, so
+those two are what is left.) An image uploads once; a motion `.html`
+rasterizes at composition size **every frame**, scrubbed by the beat's own progress:
+
+```jsonc
+"regionShader": {
+  "mask": "masks/clip",
+  "subject": "backgrounds/glass.frag",     // refracts the badge (uTex2) behind the subject
+  "background": "backgrounds/plasma.frag",
+  "textures": ["motion/badge.html", "logo.png"]   // → uTex2, uTex3
+}
+```
+
+```glsl
+vec4 g = texture(uTex2, fragCoord / iResolution.xy);   // full-frame, aligned 1:1 with the beat
+c.rgb = mix(c.rgb, g.rgb, g.a);                        // straight alpha, not premultiplied
+```
+
+This is the difference between a graphic the shader can **see** and one merely stacked on top:
+`motionOverlay` composites above the region shader's output (and still works alongside `textures` —
+they are independent), so the shader cannot refract, displace, mask or light it. A texture channel
+can be all of those. Sampling the live overlay layer is not possible and never will be — it lives in
+a shadow root above the GL canvas, in a later commit than the shader's draw.
+
+- **Same file, same look.** `motion/badge.html` renders through the same scrub stylesheet, the same
+  `--progress`/`--kino-*` custom properties, the same brand palette and fonts, and the same
+  `filter:url(#kino-grain)` library it gets as a `motionOverlay`. `--progress` runs 0→1 across the
+  beat, exactly as an overlay's does, and the `regionShader` params double as `--<name>` CSS
+  variables — one keyframe track drives the shader and the graphic together.
+- **Tier-1 `.html` only.** A `.js` (Tier 2) or `.json` Lottie (Tier 3) graphic is produced per frame
+  by the React layer, which a raster cannot reach — build rejects them here and points at
+  `motionOverlay`. Video sources are not channels either (use `masks`, which routes through
+  `/vframes`).
+- **Unbound channels sample transparent black**, so a body may reference `uTex2` whether or not the
+  spec declares one.
+- **Cost**: one foreignObject rasterization per frame per animated channel, on top of the region
+  bodies. A static graphic (unchanged scrub CSS) re-uploads nothing.
+
+`tests/render-region-textures.test.ts` renders a channel whose opacity rides `.kino-anim` and reads
+the beat progress straight off the pixels.
 
 #### Distance to the mask edge
 

@@ -187,3 +187,39 @@ describe("kinoBackground (cross-region sampling)", () => {
     expect(assembleRegionShaderSource(null, BG, [], [A, B2])).not.toContain("kinoBackground");
   });
 });
+
+// --- Phase 5: cutout compositing — a SECOND source behind the masked subject -------------------
+// The backdrop rides the already-declared-but-unbound uTex1/uTexSize1 (region shaders bind only
+// uTex0), so the feature adds no uniform and — emitted conditionally, exactly as kinoBackground is —
+// costs a spec that doesn't use it nothing at all, byte for byte.
+// See docs/superpowers/specs/2026-07-25-cutout-compositing-design.md.
+describe("backdrop binding", () => {
+  it("emits byte-identical GLSL when there is no backdrop", () => {
+    expect(assembleRegionShaderSource(SUBJ, BG, [], [], false)).toBe(assembleRegionShaderSource(SUBJ, BG, []));
+    expect(assembleRegionShaderSource(SUBJ, null, [], [], false)).toBe(assembleRegionShaderSource(SUBJ, null, []));
+    expect(assembleRegionShaderSource(SUBJ, null, ["rim"], [A], false)).toBe(
+      assembleRegionShaderSource(SUBJ, null, ["rim"], [A]),
+    );
+    expect(assembleRegionShaderSource(SUBJ, null, [])).not.toContain("uBackdrop");
+  });
+
+  it("aliases uBackdrop/uBackdropSize onto the free uTex1 slot when there is one", () => {
+    const src = assembleRegionShaderSource(SUBJ, BG, [], [], true);
+    expect(src).toContain("#define uBackdrop uTex1");
+    expect(src).toContain("#define uBackdropSize uTexSize1");
+  });
+
+  it("makes a passthrough BACKGROUND the cover-fit backdrop, and leaves the subject on the asset", () => {
+    const src = assembleRegionShaderSource(null, null, [], [], true);
+    expect(src).toContain("kinoBackdrop(uTex1, uTexSize1, fragCoord)");
+    // Exactly one body switched: the subject passthrough still reads the beat's own plate, which is
+    // the whole point — the subject IS the thing being cut out.
+    expect((src.match(/texture\(uTex0, fragCoord \/ iResolution\.xy\)/g) ?? []).length).toBe(1);
+  });
+
+  it("leaves an explicit background body alone — it can sample uBackdrop itself", () => {
+    const src = assembleRegionShaderSource(SUBJ, BG, [], [], true);
+    expect(src).toContain(BG);
+    expect(src).not.toContain("kinoBackdrop(uTex1, uTexSize1, fragCoord)");
+  });
+});

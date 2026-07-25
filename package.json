@@ -3,7 +3,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.21.2",
+  "version": "2.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sdkv2/kino.git"
@@ -36,11 +36,11 @@
     "assets-lib"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "build": "tsc && node scripts/build-page.mjs",
-    "prepare": "tsc && node scripts/build-page.mjs",
+    "build": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
+    "prepare": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -59,6 +59,7 @@
     "@types/ffprobe-static": "^2.0.3",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
     "esbuild": "^0.28.1",
     "lottie-web": "^5.13.0",
     "react": "^18.3.1",

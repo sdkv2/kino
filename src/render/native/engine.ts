@@ -2,9 +2,10 @@
 // its index (the page re-renders synchronously per seek; videos are pre-extracted stills; audio is
 // mixed node-side), so the output is deterministic run-to-run. Public API mirrors render.ts.
 import { spawn } from "node:child_process";
-import { cpus, tmpdir } from "node:os";
-import { copyFileSync, mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
+import { cpus } from "node:os";
+import { copyFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { releaseScratch, scratchDir } from "../../scratch.js";
 import type { Browser, Page } from "puppeteer";
 import { log } from "../../log.js";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
@@ -69,11 +70,9 @@ function durationInFrames(props: KinoProps): number {
 function concurrency(totalFrames: number): number {
   const env = Number(process.env.KINO_CONCURRENCY);
   if (Number.isFinite(env) && env >= 1) return Math.round(env);
-  // Capture parallelism scales per browser process (see browser.ts), but each worker costs a
-  // Chrome launch + page boot — only long renders amortize a big pool. Short clips keep 8;
-  // 20s+ videos take up to 12. Leave one core for encode/extract.
-  const cap = totalFrames > 600 ? 12 : 8;
-  return Math.min(cap, Math.max(1, cpus().length - 1));
+  // Scale worker pool up to CPU core count - 1 (min 1, max 24) to utilize available hardware.
+  const logicalCores = Math.max(1, cpus().length - 1);
+  return Math.min(24, Math.max(1, logicalCores));
 }
 
 // The render server and its config are process-wide singletons the pages re-read via kinoLoad();
@@ -160,7 +159,7 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
 // Stream ordered JPEG frames (q95 — Chrome's PNG encoder is ~10× slower per frame; the legacy
 // engine's own frame format was JPEG) into a single libx264 encode (image2pipe on stdin) and mux
 // the mixed audio track in the same pass. bt709 tags + matrix match players' expectations.
-function startEncoder(opts: { fps: number; out: string; audio: string | null; preset: EncodePreset }): { stdin: NodeJS.WritableStream; done: Promise<void> } {
+function startEncoder(opts: { fps: number; out: string; audio: string | null; preset: EncodePreset }): { stdin: NodeJS.WritableStream; done: Promise<void>; kill: () => void } {
   const args = [
     "-y", "-loglevel", "error",
     "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(opts.fps), "-i", "-",
@@ -176,12 +175,16 @@ function startEncoder(opts: { fps: number; out: string; audio: string | null; pr
   ];
   const proc = spawn(FFMPEG_PATH, args, { stdio: ["pipe", "ignore", "pipe"] });
   let stderr = "";
-  proc.stderr.on("data", (d) => (stderr += d));
   const done = new Promise<void>((resolve, reject) => {
     proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg encode failed (${code}): ${stderr}`))));
     proc.on("error", reject);
   });
-  return { stdin: proc.stdin, done };
+  const kill = () => {
+    try {
+      proc.kill("SIGKILL");
+    } catch {}
+  };
+  return { stdin: proc.stdin, done, kill };
 }
 
 const writeFrame = (stdin: NodeJS.WritableStream, buf: Buffer) =>
@@ -326,7 +329,7 @@ export function renderVideoNative(opts: NativeRenderOpts): Promise<string[]> {
 
 async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium" }: NativeRenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
-  const scratch = mkdtempSync(join(tmpdir(), "kino-native-"));
+  const scratch = scratchDir("kino-native-");
   const t0 = Date.now();
   const lap = (m: string) => {
     if (process.env.KINO_NATIVE_DEBUG) console.error(`[native timing] ${m} +${Date.now() - t0}ms`);
@@ -381,10 +384,15 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset });
-        await renderFrameRange(handles, total, enc.stdin, cache);
-        lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
-        enc.stdin.end();
-        await enc.done;
+        try {
+          await renderFrameRange(handles, total, enc.stdin, cache);
+          lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
+          enc.stdin.end();
+          await enc.done;
+        } catch (err) {
+          enc.kill();
+          throw err;
+        }
         cache.commit();
         lap(`encode-flush ${fmt}`);
         const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
@@ -396,7 +404,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     }
     return outputs;
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    releaseScratch(scratch);
   }
 }
 
@@ -460,7 +468,7 @@ export function renderStillsNative(opts: NativeStillsOpts): Promise<string[]> {
 
 async function renderStillsLocked({ props, publicDir, format, frames, outDir, measureSink }: NativeStillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
-  const scratch = mkdtempSync(join(tmpdir(), "kino-native-still-"));
+  const scratch = scratchDir("kino-native-still-");
   try {
     const total = durationInFrames(props);
     const maxFrame = total - 1;
@@ -527,6 +535,6 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
       await releaseBrowser(0);
     }
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    releaseScratch(scratch);
   }
 }

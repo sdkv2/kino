@@ -82,6 +82,12 @@ import { mkdtempSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// These two shell out to ffmpeg (synthesize → decode → waveform PNG → spectrum PNG, four spawns),
+// so they need an integration-sized timeout rather than vitest's 5s default. The work itself is
+// ~70ms locally; the budget is headroom for a loaded or IO-starved CI runner, where process spawns
+// stall far longer than the work takes. Matches the 30s used by the other ffmpeg-backed tests.
+const FFMPEG_TIMEOUT = 30000;
+
 describe("analyzeAudio (ffmpeg integration)", () => {
   it("decodes, detects the burst, and writes json + wave + spectrum artifacts", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-mk-"));
@@ -100,7 +106,7 @@ describe("analyzeAudio (ffmpeg integration)", () => {
     expect(existsSync(spectrumPath)).toBe(true);
     const parsed = JSON.parse(readFileSync(jsonPath, "utf8"));
     expect(parsed.onsets).toEqual(markers.onsets);
-  });
+  }, FFMPEG_TIMEOUT);
 
   it("decodePcm returns normalized samples at the requested rate", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-pcm-"));
@@ -110,5 +116,5 @@ describe("analyzeAudio (ffmpeg integration)", () => {
     expect(s.length).toBeGreaterThan(15000);
     expect(s.length).toBeLessThan(18000);
     expect(Math.max(...Array.from(s.slice(0, 1000)))).toBeLessThanOrEqual(1.0);
-  });
+  }, FFMPEG_TIMEOUT);
 });

@@ -5,9 +5,9 @@
 // ponytail: energy-delta onsets, no BPM grid — swap in a real DSP dep if music-video beat
 // tracking is ever needed.
 
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import { decodeRawPcm, waveformPng, spectrumPng } from "./ffmpeg.js";
 
 export interface AudioMarkers {
@@ -84,13 +84,20 @@ const ANALYSIS_RATE = 16000;
 
 // Decode a file to normalized mono Float32 samples via ffmpeg (s16le → /32768).
 export async function decodePcm(file: string, sampleRate: number = ANALYSIS_RATE): Promise<Float32Array> {
-  const raw = join(mkdtempSync(join(tmpdir(), "kino-pcm-")), "a.raw");
-  await decodeRawPcm(file, raw, sampleRate);
-  const buf = readFileSync(raw);
-  const ints = new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 2));
-  const out = new Float32Array(ints.length);
-  for (let i = 0; i < ints.length; i++) out[i] = ints[i] / 32768;
-  return out;
+  // The raw dump is ~32 KB per second of audio, so leaking these was the single biggest
+  // contributor to the temp-dir pile — the decoded samples are all the caller needs.
+  const dir = scratchDir("kino-pcm-");
+  try {
+    const raw = join(dir, "a.raw");
+    await decodeRawPcm(file, raw, sampleRate);
+    const buf = readFileSync(raw);
+    const ints = new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 2));
+    const out = new Float32Array(ints.length);
+    for (let i = 0; i < ints.length; i++) out[i] = ints[i] / 32768;
+    return out;
+  } finally {
+    releaseScratch(dir);
+  }
 }
 
 export interface AnalyzeResult {

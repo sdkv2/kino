@@ -1,13 +1,14 @@
 import { execa } from "execa";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { describeStaleScratch, scanStaleScratch } from "../scratch.js";
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../media/binPaths.js";
 import { listMusicIds, listSfxIds } from "../media/sfx.js";
-import { launchBrowser, resolveExecutable } from "../render/native/browser.js";
+import { describeOrphanBrowsers, launchBrowser, resolveExecutable, scanOrphanBrowsers } from "../render/native/browser.js";
 import { resolveWhisper } from "../vo/whisper.js";
 import { log } from "../log.js";
 
@@ -29,7 +30,7 @@ export async function doctor(): Promise<void> {
   const samPython = process.env.KINO_SAM_PYTHON ?? join(homedir(), ".kino", "sam", "venv", "bin", "python");
   const samPythonOk = existsSync(samPython);
   const checks: Array<[string, boolean]> = [
-    [`node ${process.version} (need 20+)`, nodeMajor >= 20],
+    [`node ${process.version} (need 22+)`, nodeMajor >= 22],
     ["ffmpeg", await has(FFMPEG_PATH, ["-version"])],
     ["ffprobe", await has(FFPROBE_PATH, ["-version"])],
     [
@@ -64,6 +65,18 @@ export async function doctor(): Promise<void> {
     const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
     log.warn(`headless Chrome failed to launch — renders will fail. Point KINO_CHROME at a working Chrome/Chromium. (${msg})`);
   }
+
+  // Abandoned render scratch. A slow leak here is invisible until a build dies with ENOSPC, so it
+  // gets its own row rather than waiting for the disk to fill.
+  const scratchRoot = tmpdir();
+  const stale = describeStaleScratch(scanStaleScratch(scratchRoot), scratchRoot);
+  stale.level === "ok" ? log.ok(stale.message) : log.warn(stale.message);
+
+  // Stranded browsers are a separate severity from leftover dirs: a leftover dir is idle disk, a
+  // live orphan holds hundreds of MB of RAM each. Reported, never killed — the pids may belong to a
+  // render running in another terminal.
+  const orphans = describeOrphanBrowsers(scanOrphanBrowsers(scratchRoot));
+  orphans.level === "ok" ? log.ok(orphans.message) : log.warn(orphans.message);
 
   const sfx = listSfxIds();
   const music = listMusicIds();

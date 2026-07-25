@@ -1,4 +1,4 @@
-// kino setup — guided install: prerequisites (Node 20+, ffmpeg, ImageMagick), the `kino`
+// kino setup — guided install: prerequisites (Node 22+, ffmpeg, ImageMagick), the `kino`
 // command, and your API keys. Runs anywhere Node does, including Windows:
 //
 //   cd <your-project> && node /path/to/kino/setup.mjs      # .env lands in the current dir
@@ -84,7 +84,7 @@ async function main() {
   step("Prerequisites");
 
   const nodeMajor = Number(process.version.slice(1).split(".")[0]);
-  if (nodeMajor < 20) fail(`Node ${process.version} is too old — kino needs Node 20+.`);
+  if (nodeMajor < 22) fail(`Node ${process.version} is too old — kino needs Node 22+.`);
   ok(`node ${process.version}`);
 
   const missing = [];
@@ -197,7 +197,7 @@ async function main() {
   console.log(`    cd ${PROJECT_DIR}`);
   console.log(`    kino doctor                        ${DIM}# verify the environment${RST}`);
   console.log(`    kino init <brand>                  ${DIM}# scaffold a brand + first project${RST}`);
-  console.log(`    kino build specs/<spec>.json --mock  ${DIM}# free structural preview${RST}`);
+  console.log(`    kino build specs/<spec>.json --draft  ${DIM}# free structural preview${RST}`);
   console.log("");
 }
 

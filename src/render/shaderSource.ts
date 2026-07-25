@@ -230,6 +230,20 @@ const REGION_DISPATCH =
 const REGION_PASSTHROUGH =
   "void mainImage(out vec4 fragColor, in vec2 fragCoord){ fragColor = texture(uTex0, fragCoord / iResolution.xy); }";
 
+// Backdrop-side passthrough: with a `backdrop` clip bound, the BACKGROUND region shows that clip
+// rather than the beat's own plate — which is the whole cutout, and the only thing most specs will
+// want. Cover-fit (not the subject side's fragCoord/iResolution stretch) because the backdrop is an
+// unrelated clip whose aspect will not match the beat's; kinoCoverUV needs uTexSize1, which
+// RegionShader uploads for exactly this. The SUBJECT passthrough deliberately stays on uTex0 — the
+// subject is the thing being cut out, and a backdrop there would erase it.
+const REGION_BACKDROP_PASSTHROUGH =
+  "void mainImage(out vec4 fragColor, in vec2 fragCoord){ fragColor = kinoBackdrop(uTex1, uTexSize1, fragCoord); }";
+
+// Readable names for the backdrop's slot. It rides the ALREADY-DECLARED uTex1/uTexSize1 (region
+// shaders bind only uTex0), so no uniform is added, and emitting the aliases conditionally — the way
+// BG_FORWARD_DECL is emitted — keeps a spec without a backdrop byte-for-byte what it was.
+const BACKDROP_ALIASES = "#define uBackdrop uTex1\n#define uBackdropSize uTexSize1\n";
+
 /** Assemble ONE GLSL ES 3.00 fragment shader that splits the frame by the segmentation mask(s).
  *  A null body on either side is a passthrough of the beat asset (uTex0); every body's `mainImage`
  *  is #define-namespaced so they never collide in the one translation unit they share.
@@ -240,22 +254,29 @@ const REGION_PASSTHROUGH =
  *  Per-object (any entry of `maskBodies` non-null): each mask gets its own body, falling back to
  *  `subjectBody` where its entry is null, composited onto the background in ARRAY ORDER — later
  *  entries paint over earlier ones where masks overlap. `maskBodies` is index-aligned with
- *  RegionShaderProps.masks. See docs/superpowers/specs/2026-07-24-per-object-regions-design.md. */
+ *  RegionShaderProps.masks. See docs/superpowers/specs/2026-07-24-per-object-regions-design.md.
+ *
+ *  `hasBackdrop`: the beat binds a SECOND source (regionShader.backdrop) to uTex1 — a cutout over
+ *  footage that isn't the beat's own. Adds the uBackdrop/uBackdropSize aliases and makes a
+ *  passthrough BACKGROUND that backdrop, cover-fit. False emits exactly the bytes it always did.
+ *  See docs/superpowers/specs/2026-07-25-cutout-compositing-design.md. */
 export function assembleRegionShaderSource(
   subjectBody: string | null,
   backgroundBody: string | null,
   extraNames: string[] = [],
   maskBodies: (string | null)[] = [],
+  hasBackdrop = false,
 ): string {
   const aliases = paramAliases(extraNames);
   const subj = subjectBody ?? REGION_PASSTHROUGH;
-  const bg = backgroundBody ?? REGION_PASSTHROUGH;
+  const bg = backgroundBody ?? (hasBackdrop ? REGION_BACKDROP_PASSTHROUGH : REGION_PASSTHROUGH);
   const head =
     "#version 300 es\n" +
     "precision highp float;\n\n" +
     REGION_HEADER +
     (aliases ? "\n" + aliases : "") +
     "\n" +
+    (hasBackdrop ? BACKDROP_ALIASES : "") +
     GLSL_HELPERS +
     REGION_DISPATCH +
     "\nout vec4 kino_fragColor;\n\n";

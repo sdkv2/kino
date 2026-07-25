@@ -19,12 +19,14 @@
 import React, { useLayoutEffect, useRef } from "react";
 import { reportFatal } from "./fatal";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
-import type { RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
+import type { BgParamValue, RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
 import { assembleRegionShaderSource, MAX_REGION_MASKS, resolveUniforms, extraParamNames } from "../../shaderSource.js";
 import { SDF_MAX_PX } from "../../sdf.js";
 import { paramsAt } from "../../bgparams.js";
+import { buildMotionVars } from "../../motionVars.js";
 import { useFrameImageUrl, useSdfImageUrl } from "./media";
-
+import { buildTemplate, rasterAt, scrubCss, TEX_ROOT, type HtmlTemplate } from "./bgTextures";
+import { motionScrubCss, KINO_FILTERS } from "./motionCss";
 
 // The alias set baked into the compiled program: `#define u_<name> uParamI`. Derived from the base
 // params PLUS every keyframe so it is stable across frames — a per-frame resolved dict would drop
@@ -74,6 +76,9 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 interface Slot {
   handle: WebGLTexture;
   unit: number;
+  // Source pixel size, (0,0) until a real image lands. Only the backdrop slot's is uploaded (as
+  // uTexSize1) - kinoCoverUV/kinoBackdrop read it and treat (0,0) as "no reframe", i.e. stretch.
+  size: [number, number];
   frameVideo?: { lastUrl: string };
 }
 
@@ -84,13 +89,50 @@ interface Src {
   frameUrl: string | null; // this-frame /vframes URL when frameVideo (may be null at init in sparse stills)
 }
 
+// An extra sampler channel (uTex2..uTex3). `tpl` present ⇒ a motion .html that re-rasterizes every
+// frame at the beat's progress; `lastCss` is the raster identity (same CSS ⇒ same pixels ⇒ no work).
+interface TexChannel {
+  handle: WebGLTexture;
+  unit: number;
+  tpl?: HtmlTemplate;
+  lastCss?: string;
+}
+
 interface GLState {
   gl: WebGL2RenderingContext;
   prog: WebGLProgram;
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
   masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
-  sdfs: Slot[]; // parallel to masks; a placeholder where no distance field was written
+  texes: TexChannel[]; // uTex2..uTex3; entries past region.textures.length are transparent placeholders
+  backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
+  sdfs: Slot[]; // per mask: its precomputed distance field, or a placeholder where none was written
+}
+
+// uTex0 is the beat's own asset and uTex1 belongs to the cutout backdrop, so authored channels
+// start at uTex2 — two of them, the rest of what the region header declares.
+export const MAX_REGION_TEXTURES = 2;
+
+// CSS for one frame of a motion-HTML channel. Everything the shadow-root surface gives a motion
+// graphic, minus what only a live DOM layer can have (Lottie, per-frame procedural markup, triggers):
+// the scrub stylesheet with its host block rebound to the raster's wrapper class, the frame-driven
+// custom properties (--progress, the eased curves, the palette, each region param as --<name>), and
+// the generic 1s-convention scrub for author @keyframes outside the kino classes.
+function motionRasterCss(theme: Theme, params: Record<string, BgParamValue>, dyn: { frame: number; fps: number; progress: number; width: number; height: number }): string {
+  const vars = buildMotionVars(theme, {
+    frame: dyn.frame,
+    t: dyn.fps > 0 ? dyn.frame / dyn.fps : 0,
+    progress: dyn.progress,
+    pulse: 0,
+    params,
+    fps: dyn.fps,
+    width: dyn.width,
+    height: dyn.height,
+  });
+  const decls = Object.entries(vars)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(";");
+  return `${scrubCss(dyn.progress)} ${motionScrubCss(`.${TEX_ROOT}`)} .${TEX_ROOT}{${decls}}`;
 }
 
 function uploadTex(gl: WebGL2RenderingContext, unit: number, handle: WebGLTexture, src: TexImageSource): void {
@@ -120,14 +162,17 @@ async function makeSlot(
   let slot: Slot;
   if (src.frameVideo) {
     if (src.frameUrl) {
-      uploadTex(gl, unit, handle, await loadImage(src.frameUrl));
+      const img = await loadImage(src.frameUrl);
+      uploadTex(gl, unit, handle, img);
+      slot = { handle, unit, size: [img.naturalWidth, img.naturalHeight], frameVideo: { lastUrl: src.frameUrl } };
     } else {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+      slot = { handle, unit, size: [0, 0], frameVideo: { lastUrl: "" } };
     }
-    slot = { handle, unit, frameVideo: { lastUrl: src.frameUrl ?? "" } };
   } else {
-    uploadTex(gl, unit, handle, await loadImage(src.staticUrl));
-    slot = { handle, unit };
+    const img = await loadImage(src.staticUrl);
+    uploadTex(gl, unit, handle, img);
+    slot = { handle, unit, size: [img.naturalWidth, img.naturalHeight] };
   }
   if (samplerLoc) gl.uniform1i(samplerLoc, unit);
   return slot;
@@ -144,15 +189,73 @@ function makePlaceholderSlot(gl: WebGL2RenderingContext, unit: number, samplerLo
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
   if (samplerLoc) gl.uniform1i(samplerLoc, unit);
-  return { handle, unit };
+  return { handle, unit, size: [0, 0] };
 }
 
 // Upload this frame's extracted <img> into a frame-video slot when the /vframes URL changed. No-op
 // for static image slots and for repeat/absent URLs.
 async function updateFrameSlot(gl: WebGL2RenderingContext, slot: Slot, url: string | null): Promise<void> {
   if (!slot.frameVideo || !url || url === slot.frameVideo.lastUrl) return;
-  uploadTex(gl, slot.unit, slot.handle, await loadImage(url));
+  const img = await loadImage(url);
+  uploadTex(gl, slot.unit, slot.handle, img);
+  slot.size = [img.naturalWidth, img.naturalHeight];
   slot.frameVideo.lastUrl = url;
+}
+
+// Build the uTex2..uTex3 channels (uTex0 is the beat asset, uTex1 the cutout backdrop). An image uploads once, like any static source. A motion .html
+// gets a template measured at COMPOSITION size (a full-frame graphic positions its children with
+// inset:0 and would shrink-wrap to nothing under fit-content) at 1× (it is already authored at the
+// size it renders), plus the kino SVG filter library so filter:url(#kino-grain) resolves inside the
+// isolated SVG document. Channels the spec doesn't declare get a transparent 1×1 so every declared
+// sampler stays complete and reads (0,0,0,0) — "unbound channels sample transparent black".
+async function makeTexChannels(
+  gl: WebGL2RenderingContext,
+  region: RegionShaderProps,
+  loc: Record<string, WebGLUniformLocation | null>,
+  theme: Theme,
+  width: number,
+  height: number,
+): Promise<TexChannel[]> {
+  const defs = region.textures ?? [];
+  const out: TexChannel[] = [];
+  for (let i = 0; i < MAX_REGION_TEXTURES; i++) {
+    const unit = MAX_REGION_MASKS + 2 + i; // 0 = asset, 1..MAX_REGION_MASKS = masks, +1 = backdrop
+    const samplerLoc = loc[`uTex${i + 2}`];
+    const def = defs[i];
+    if (def?.kind === "image" && def.src) {
+      const slot = await makeSlot(gl, unit, { frameVideo: false, staticUrl: staticFile(def.src), frameUrl: null }, samplerLoc);
+      out.push({ handle: slot.handle, unit: slot.unit });
+    } else if (def?.kind === "html" && def.html) {
+      const tpl = await buildTemplate(def.html, theme, { size: { w: width, h: height }, scale: 1, defs: KINO_FILTERS });
+      // LINEAR, not the placeholder's NEAREST: a body that warps or offsets its lookup (refraction,
+      // displacement) samples between texels and would otherwise get blocky edges.
+      const handle = gl.createTexture()!;
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, handle);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      // Transparent until the first raster lands (updateTexChannel, same frame, before drawArrays).
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+      if (samplerLoc) gl.uniform1i(samplerLoc, unit);
+      out.push({ handle, unit, tpl });
+    } else {
+      out.push(makePlaceholderSlot(gl, unit, samplerLoc));
+    }
+  }
+  return out;
+}
+
+// Re-rasterize a motion-HTML channel for this frame and upload it. Same CSS ⇒ same pixels, so a
+// static graphic (or a repeated frame) skips both the raster and the upload. No cache: the scrub
+// value moves every frame, so entries would only accumulate.
+async function updateTexChannel(gl: WebGL2RenderingContext, ch: TexChannel, css: string): Promise<void> {
+  if (!ch.tpl || css === ch.lastCss) return;
+  const canvas = await rasterAt(ch.tpl, "", css, null);
+  if (!canvas) return;
+  uploadTex(gl, ch.unit, ch.handle, canvas);
+  ch.lastCss = css;
 }
 
 // Free a superseded program and its textures. The canvas keeps ONE WebGL2 context (getContext
@@ -164,7 +267,9 @@ function disposeGL(st: GLState | null): void {
   st.gl.deleteProgram(st.prog);
   st.gl.deleteTexture(st.asset.handle);
   for (const m of st.masks) st.gl.deleteTexture(m.handle);
-  for (const s of st.sdfs) st.gl.deleteTexture(s.handle);
+  for (const c of st.texes) st.gl.deleteTexture(c.handle);
+  for (const f of st.sdfs) st.gl.deleteTexture(f.handle);
+  if (st.backdrop) st.gl.deleteTexture(st.backdrop.handle);
 }
 
 // Compile the program + build the asset slot and every mask slot (real sources first, inert
@@ -176,6 +281,10 @@ async function initGL(
   maskSrcs: Src[],
   sdfSrcs: (Src | null)[],
   region: RegionShaderProps,
+  theme: Theme,
+  width: number,
+  height: number,
+  backdropSrc: Src | null,
 ): Promise<GLState | null> {
   try {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false });
@@ -189,6 +298,7 @@ async function initGL(
       region.backgroundCode,
       regionExtras(region),
       region.masks.map((m) => m.subjectCode ?? null),
+      !!backdropSrc,
     );
     const mk = (type: number, s: string): WebGLShader | null => {
       const sh = gl.createShader(type)!;
@@ -222,15 +332,16 @@ async function initGL(
     // The colour/intensity/pulse uniforms are declared in the region header but were never uploaded,
     // so they all read 0 — which would make `params: { colorA: "#ff0000" }` silently render black.
     // Region shaders now carry the same param surface backgrounds do, so bind the same set.
-    const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0",
+    const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0", "uTex1", "uTexSize1",
                    "iMouse", "uPulse", "uColorA", "uColorB", "uColorC", "uIntensity",
                    "uParam0", "uParam1", "uParam2", "uParam3"];
-    // uMaskTexN, not uMaskN: uMaskN is now a #define'd integer selector for kinoMaskDist, so
+    // uMaskTexN, not uMaskN: uMaskN is a #define'd integer selector for kinoMaskDist, so
     // getUniformLocation("uMask0") returns null and every mask sampler would silently keep its
     // default of texture unit 0 — i.e. sample the beat asset instead of the mask.
     for (let i = 0; i < MAX_REGION_MASKS; i++) {
       names.push(`uMaskTex${i}`, `uChannel${i}`, `uMaskSdf${i}`, `uMaskSdfMax${i}`);
     }
+    for (let i = 0; i < MAX_REGION_TEXTURES; i++) names.push(`uTex${i + 2}`);
     for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     const assetSlot = await makeSlot(gl, 0, assetSrc, loc.uTex0);
@@ -241,18 +352,33 @@ async function initGL(
         i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMaskTex${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMaskTex${i}`]),
       );
     }
-    // Distance fields live on the units above the masks. Whether a field is actually AVAILABLE is
-    // decided per frame in drawFrame, not here: on the first render pass every /vframes URL is
-    // still null (they resolve on the next pass), so anything latched at init would latch "no
-    // field" permanently. The mask slots have always worked this way — the slot is created now and
-    // its content arrives per frame — and the SDF slots have to follow the same lifecycle.
+    // The cutout's backdrop, on the unit past the masks (0 = asset, 1..MAX_REGION_MASKS = masks).
+    // uTexSize1 is the FIRST uTexSize this component has ever uploaded: kinoCoverUV/kinoBackdrop
+    // read it and treat (0,0) as "no reframe", which would stretch an unrelated clip to the beat's
+    // aspect. uTexSize0 is deliberately still not uploaded - doing so would silently switch every
+    // existing spec that calls kinoBackdrop(uTex0, uTexSize0, ...) from stretch to cover-fit.
+    let backdrop: Slot | null = null;
+    if (backdropSrc) {
+      backdrop = await makeSlot(gl, MAX_REGION_MASKS + 1, backdropSrc, loc.uTex1);
+      gl.uniform2f(loc.uTexSize1, backdrop.size[0], backdrop.size[1]);
+    }
+    // Authored channels sit on the units above the backdrop's, whether or not this beat has one —
+    // a spec-dependent unit would make the same textures[0] land on a different sampler per beat.
+    const texes = await makeTexChannels(gl, region, loc, theme, width, height);
+    // Distance fields sit ABOVE the authored channels: 0 = asset, 1..MAX_REGION_MASKS = masks,
+    // +1 = backdrop, +2..+MAX_REGION_TEXTURES = authored channels. Colliding with any of those
+    // would point a mask's field at someone else's texture.
+    //
+    // Whether a field is AVAILABLE is decided per frame in drawFrame, not here: on the first render
+    // pass every /vframes URL is still null (they resolve on the next pass), so anything latched at
+    // init would latch "no field" permanently. The mask slots have always worked this way.
     const sdfs: Slot[] = [];
     for (let i = 0; i < MAX_REGION_MASKS; i++) {
-      const unit = MAX_REGION_MASKS + 1 + i;
+      const unit = MAX_REGION_MASKS + 2 + MAX_REGION_TEXTURES + i;
       const src = sdfSrcs[i];
       sdfs.push(src ? await makeSlot(gl, unit, src, loc[`uMaskSdf${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMaskSdf${i}`]));
     }
-    return { gl, prog, loc, asset: assetSlot, masks, sdfs };
+    return { gl, prog, loc, asset: assetSlot, masks, texes, backdrop, sdfs };
   } catch (err) {
     console.error(String(err));
     return null;
@@ -272,15 +398,19 @@ async function drawFrame(
   width: number,
   height: number,
   fps: number,
+  theme: Theme,
+  durationFrames: number,
+  backdropSrc: Src | null,
 ): Promise<void> {
   try {
-    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, sdfSrcs, region);
+    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, sdfSrcs, region, theme, width, height, backdropSrc);
     const st = await initRef.current;
     if (!st) return;
     const { gl, prog, loc } = st;
     await updateFrameSlot(gl, st.asset, assetSrc.frameUrl);
     await Promise.all(maskSrcs.map((src, i) => updateFrameSlot(gl, st.masks[i], src.frameUrl)));
     await Promise.all(sdfSrcs.map((src, i) => (src ? updateFrameSlot(gl, st.sdfs[i], src.frameUrl) : Promise.resolve())));
+    if (st.backdrop && backdropSrc) await updateFrameSlot(gl, st.backdrop, backdropSrc.frameUrl);
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
@@ -297,11 +427,17 @@ async function drawFrame(
     // already seconds-from-beat-start. Same idiom as zoomKeyframes/captionKeyframes: the track rides
     // real VO timing instead of breaking when a beat shifts, and the params share one clock with
     // iTime. See docs/superpowers/specs/2026-07-25-region-params-design.md.
-    const u = resolveUniforms(
-      paramsAt(region.params ?? {}, region.keyframes ?? [], fps > 0 ? frame / fps : 0),
-      { frame, fps, width, height, pulse: 0 },
-      regionExtras(region),
-    );
+    const resolved = paramsAt(region.params ?? {}, region.keyframes ?? [], fps > 0 ? frame / fps : 0);
+    const u = resolveUniforms(resolved, { frame, fps, width, height, pulse: 0 }, regionExtras(region));
+    // Motion-HTML channels re-raster on the beat's OWN progress, the same 0→1 a motionOverlay of the
+    // identical markup would animate on — so the graphic reads the same whether it composites above
+    // the beat or gets sampled inside it. The region params double as its --<name> CSS vars, so one
+    // keyframe track drives the shader and the graphic together.
+    if (st.texes.some((c) => c.tpl)) {
+      const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
+      const css = motionRasterCss(theme, resolved, { frame, fps, progress, width, height });
+      await Promise.all(st.texes.map((ch) => updateTexChannel(gl, ch, css)));
+    }
     gl.uniform3f(loc.iResolution, width, height, 1);
     gl.uniform1f(loc.iTime, u.iTime);
     gl.uniform1i(loc.iFrame, u.iFrame);
@@ -319,6 +455,9 @@ async function drawFrame(
     gl.uniform1f(loc.uParam1, u.uParams[1]);
     gl.uniform1f(loc.uParam2, u.uParams[2]);
     gl.uniform1f(loc.uParam3, u.uParams[3]);
+    // Refreshed every frame, not just at init: a sparse still can build the backdrop slot before
+    // its /vframes image exists, so the size only becomes known on the first real upload above.
+    if (st.backdrop) gl.uniform2f(loc.uTexSize1, st.backdrop.size[0], st.backdrop.size[1]);
     for (let i = 0; i < MAX_REGION_MASKS; i++) {
       const m = region.masks[i];
       const ch = m ? CHANNEL_VEC[m.channel] ?? CHANNEL_VEC.gray : ZERO_VEC;
@@ -341,7 +480,9 @@ export const RegionShader: React.FC<{
   t: Theme;
   assetMediaKey?: string; // /vframes key when the beat asset is a video (else the asset is a static image)
   maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
-}> = ({ asset, region, t, assetMediaKey, maskMediaKeys }) => {
+  durationFrames?: number; // beat length — maps a motion-HTML texture channel's --progress 0→1, as MotionGraphic does
+  backdropMediaKey?: string; // /vframes key when region.backdrop is a video (else it's a static image)
+}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, durationFrames = 0, backdropMediaKey }) => {
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -352,22 +493,34 @@ export const RegionShader: React.FC<{
   // sparse-still frames). Same lookup FrameVideo uses, so the GL texture tracks the identical frame.
   // Fixed MAX_REGION_MASKS hook calls (rules of hooks) regardless of how many masks this beat has.
   const assetSrc: Src = { frameVideo: !!assetMediaKey, staticUrl: staticFile(asset), frameUrl: useFrameImageUrl(assetMediaKey) };
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const maskFrameUrls: (string | null)[] = [];
-  for (let i = 0; i < MAX_REGION_MASKS; i++) maskFrameUrls.push(useFrameImageUrl(maskMediaKeys?.[i]));
-  const sdfFrameUrls: (string | null)[] = [];
-  for (let i = 0; i < MAX_REGION_MASKS; i++) sdfFrameUrls.push(useSdfImageUrl(maskMediaKeys?.[i]));
-  /* eslint-enable react-hooks/rules-of-hooks */
+  const mUrl0 = useFrameImageUrl(maskMediaKeys?.[0]);
+  const mUrl1 = useFrameImageUrl(maskMediaKeys?.[1]);
+  const mUrl2 = useFrameImageUrl(maskMediaKeys?.[2]);
+  const mUrl3 = useFrameImageUrl(maskMediaKeys?.[3]);
+  const maskFrameUrls: (string | null)[] = [mUrl0, mUrl1, mUrl2, mUrl3];
+  // The matching distance-field frames, same fixed hook count for the same reason.
+  const sUrl0 = useSdfImageUrl(maskMediaKeys?.[0]);
+  const sUrl1 = useSdfImageUrl(maskMediaKeys?.[1]);
+  const sUrl2 = useSdfImageUrl(maskMediaKeys?.[2]);
+  const sUrl3 = useSdfImageUrl(maskMediaKeys?.[3]);
+  const sdfFrameUrls: (string | null)[] = [sUrl0, sUrl1, sUrl2, sUrl3];
   const maskSrcs: Src[] = region.masks.map((m, i) => ({
     frameVideo: m.maskKind === "video",
     staticUrl: staticFile(m.maskSrc),
     frameUrl: maskFrameUrls[i],
   }));
-  // One per mask entry, null only where a field can never exist (an image mask). A video mask
-  // always gets a slot; frameUrl being null just means "not this frame", which drives uMaskSdfMaxN.
+  // One per mask entry, null only where a field can never exist (an image mask). A video mask always
+  // gets a slot; frameUrl being null just means "not this frame", which drives uMaskSdfMaxN.
   const sdfSrcs: (Src | null)[] = region.masks.map((m, i) =>
     m.maskKind === "video" ? { frameVideo: true, staticUrl: "", frameUrl: sdfFrameUrls[i] } : null,
   );
+
+  // The cutout's second source. The hook runs unconditionally (rules of hooks); the Src is null when
+  // this beat has no backdrop, which is what keeps the program byte-identical for everyone else.
+  const backdropFrameUrl = useFrameImageUrl(backdropMediaKey);
+  const backdropSrc: Src | null = region.backdrop
+    ? { frameVideo: !!backdropMediaKey, staticUrl: staticFile(region.backdrop), frameUrl: backdropFrameUrl }
+    : null;
 
   // Everything initGL bakes in: every GLSL body (the assembled program) and the texture sources
   // (built once into slots). Per-frame /vframes URLs are deliberately NOT here — those re-upload
@@ -383,7 +536,16 @@ export const RegionShader: React.FC<{
     regionExtras(region).join(","),
     `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
     ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
-  ].join(" ");
+    // Which SDF slots initGL builds — NOT whether a field resolved this frame, which changes between
+    // the first and second render pass and would rebuild the program mid-still.
+    ...region.masks.map((m) => (m.maskKind === "video" ? "sdf" : "-")),
+    // Texture channels are built into slots by initGL too (an html channel measures + serializes
+    // its template there), so a spec differing only in its textures must not reuse cached state.
+    ...(region.textures ?? []).map((tex) => `${tex.kind}|${tex.src ?? tex.html?.length}`),
+    // Whether a backdrop exists is baked into the program (the uBackdrop aliases and the background
+    // passthrough), and its slot is built once at init - so it belongs in the key like the bodies.
+    `${backdropSrc?.frameVideo}|${backdropSrc?.staticUrl}`,
+  ].join(" ");
 
   useLayoutEffect(() => {
     const canvas = ref.current;
@@ -398,7 +560,7 @@ export const RegionShader: React.FC<{
       initRef.current = null;
       if (stale) void stale.then(disposeGL, () => {});
     }
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, sdfSrcs, region, frame, width, height, fps));
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, sdfSrcs, region, frame, width, height, fps, t, durationFrames, backdropSrc));
   });
 
   return (

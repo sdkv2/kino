@@ -1,7 +1,7 @@
 import { execa } from "execa";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "./binPaths.js";
 
 export async function probeDuration(file: string): Promise<number> {
@@ -55,33 +55,37 @@ export async function trimAudio(src: string, endSec: number, out: string): Promi
 
 // Keep 44100/128k MP3 in sync with elevenlabs.ts mp3_44100_128 (shared format + cache key).
 export async function stitchAudio(clips: string[], gapSec: number, out: string): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), "kino-stitch-"));
-  // Silence gap + faded clips are lossless WAV so the concat re-encode below is the ONLY mp3
-  // generation (no double-encode). 44100/mono matches the clips (see elevenlabs.ts mp3_44100_128).
-  const sil = join(dir, "sil.wav");
-  await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
-    "-t", String(gapSec), sil]);
-  // Declick every seam: ElevenLabs clips can end (or start) mid-waveform, so butting a pure-silence
-  // gap against a non-zero sample is an audible click at the end of each beat. An 8 ms in/out fade
-  // ramps each clip edge to zero; areverse fades the tail without needing the clip's duration.
-  const faded: string[] = [];
-  for (const [i, c] of clips.entries()) {
-    const f = join(dir, `f${i}.wav`);
-    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-i", c,
-      "-af", "afade=t=in:d=0.008,areverse,afade=t=in:d=0.008,areverse", f]);
-    faded.push(f);
+  const dir = scratchDir("kino-stitch-");
+  try {
+    // Silence gap + faded clips are lossless WAV so the concat re-encode below is the ONLY mp3
+    // generation (no double-encode). 44100/mono matches the clips (see elevenlabs.ts mp3_44100_128).
+    const sil = join(dir, "sil.wav");
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+      "-t", String(gapSec), sil]);
+    // Declick every seam: ElevenLabs clips can end (or start) mid-waveform, so butting a pure-silence
+    // gap against a non-zero sample is an audible click at the end of each beat. An 8 ms in/out fade
+    // ramps each clip edge to zero; areverse fades the tail without needing the clip's duration.
+    const faded: string[] = [];
+    for (const [i, c] of clips.entries()) {
+      const f = join(dir, `f${i}.wav`);
+      await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-i", c,
+        "-af", "afade=t=in:d=0.008,areverse,afade=t=in:d=0.008,areverse", f]);
+      faded.push(f);
+    }
+    const lines: string[] = [];
+    faded.forEach((c, i) => {
+      if (i > 0) lines.push(`file '${sil}'`);
+      lines.push(`file '${c}'`);
+    });
+    const list = join(dir, "list.txt");
+    writeFileSync(list, lines.join("\n"));
+    await execa(FFMPEG_PATH, [
+      "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+      "-i", list, "-c:a", "libmp3lame", "-b:a", "128k", out,
+    ]);
+  } finally {
+    releaseScratch(dir);
   }
-  const lines: string[] = [];
-  faded.forEach((c, i) => {
-    if (i > 0) lines.push(`file '${sil}'`);
-    lines.push(`file '${c}'`);
-  });
-  const list = join(dir, "list.txt");
-  writeFileSync(list, lines.join("\n"));
-  await execa(FFMPEG_PATH, [
-    "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
-    "-i", list, "-c:a", "libmp3lame", "-b:a", "128k", out,
-  ]);
 }
 
 // Pull a mono 16 kHz WAV out of a video (for speech-to-text). No video stream in the output.

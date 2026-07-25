@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { build } from "./build.js";
 import { applySets } from "../media/batchSet.js";
-import { parseSpec } from "../spec/schema.js";
+import { loadSpec, parseSpec } from "../spec/schema.js";
 import { resolveProject } from "../config/project.js";
 import { log } from "../log.js";
 
@@ -52,7 +52,7 @@ export async function batch(
   }
 
   const basePath = resolveBeside(absInput, file.base);
-  const baseSpec = parseSpec(JSON.parse(readFileSync(basePath, "utf8")));
+  const baseSpec = loadSpec(basePath);
   const project = resolveProject({
     specPath: basePath,
     project: opts.project,

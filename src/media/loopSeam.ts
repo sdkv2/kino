@@ -1,8 +1,8 @@
 // Post-build seamlessLoop check: extract first + last frame as raw RGB24 and compare.
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import { FFMPEG_PATH } from "./binPaths.js";
 import { SEAM_OK_MEAN, seamDiff } from "./seam.js";
 import { log } from "../log.js";
@@ -23,7 +23,7 @@ async function extractRawRgb(
 
 /** Mean channel Δ (0..255) between two same-size images, via ffmpeg PNG→raw RGB24 decode. */
 export async function imageMeanDiff(a: string, b: string): Promise<number> {
-  const dir = mkdtempSync(join(tmpdir(), "kino-imgdiff-"));
+  const dir = scratchDir("kino-imgdiff-");
   try {
     const ra = join(dir, "a.rgb");
     const rb = join(dir, "b.rgb");
@@ -31,13 +31,13 @@ export async function imageMeanDiff(a: string, b: string): Promise<number> {
     await extractRawRgb(b, rb, {});
     return seamDiff(readFileSync(ra), readFileSync(rb));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    releaseScratch(dir);
   }
 }
 
 /** Compare first vs last frame of an mp4. Logs ok/warn; never throws on soft mismatch. */
 export async function checkLoopSeam(videoPath: string): Promise<number> {
-  const dir = mkdtempSync(join(tmpdir(), "kino-seam-"));
+  const dir = scratchDir("kino-seam-");
   const first = join(dir, "first.rgb");
   const last = join(dir, "last.rgb");
   try {
@@ -59,6 +59,6 @@ export async function checkLoopSeam(videoPath: string): Promise<number> {
     else log.warn(`seamlessLoop seam noisy (mean Δ ${mean.toFixed(2)}/255) — check first≡last ready-state`);
     return mean;
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    releaseScratch(dir);
   }
 }
