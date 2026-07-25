@@ -7,6 +7,7 @@ import type { KinoProps } from "./props.js";
 import { interpolate } from "./interpolate.js";
 import { normalizeLayer, type Dims, type LayerDraw, type LayerSpec } from "./native/page/compositor/graph.js";
 import { MOTION_XFADE_FRAMES } from "./motion.js";
+import { hasCaptionContent } from "./captionLayout.js";
 
 export type { Dims };
 
@@ -103,6 +104,55 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       rect: full,
     });
   });
+
+  // 7. Standalone text overlays (spec `texts[]`), absolute-timed.
+  props.segments.forEach((s, i) => {
+    s.texts?.forEach((t, j) => {
+      const from = f(t.fromSec);
+      const to = f(t.toSec);
+      if (frame < from || frame >= to) return;
+      out.push({ id: `text${i}_${j}`, source: { providerId: `text${i}_${j}` }, rect: full });
+    });
+  });
+
+  // 8. Logo — presenter-less beats only (the avatar covers it on camera).
+  if (props.logo) {
+    const onCamera = props.avatar
+      ? props.avatarWindows.some((w) => frame >= f(w.fromSec) && frame < f(w.toSec))
+      : false;
+    if (!onCamera && frame >= f(props.logo.fromSec)) {
+      out.push({ id: "logo", source: { providerId: "logo" }, rect: full });
+    }
+  }
+
+  // 9. Captions. The raster is keyed by the ACTIVE WORD, not the frame: a words-mode caption
+  // re-rasters once per spoken word, and the per-word pop rides the quad instead.
+  props.segments.forEach((s, i) => {
+    const from = f(s.startSec);
+    const dur = f(s.endSec) - from;
+    const local = frame - from;
+    if (local < 0 || local >= dur) return;
+    if (!hasCaptionContent(s)) return;
+
+    let key = "phrase";
+    if (s.captionMode === "words" && s.words?.length) {
+      const tAbs = frame / props.fps;
+      let idx = 0;
+      for (let w = 0; w < s.words.length; w++) if (tAbs >= s.words[w].start) idx = w;
+      key = `w${idx}`;
+    }
+    out.push({ id: `caption${i}`, source: { providerId: `caption${i}`, key }, rect: full });
+  });
+
+  // 10. AI disclosure.
+  if (props.disclosure) {
+    out.push({ id: "disclosure", source: { providerId: "disclosure" }, rect: full });
+  }
+
+  // 11. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
+  if ((props.theme.film ?? 1) > 0) {
+    out.push({ id: "film", source: { providerId: "film" }, rect: full, blend: "normal" });
+  }
 
   return out.map(normalizeLayer);
 }
