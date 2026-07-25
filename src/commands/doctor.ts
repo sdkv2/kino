@@ -29,7 +29,7 @@ export async function doctor(): Promise<void> {
   const samPython = process.env.KINO_SAM_PYTHON ?? join(homedir(), ".kino", "sam", "venv", "bin", "python");
   const samPythonOk = existsSync(samPython);
   const checks: Array<[string, boolean]> = [
-    [`node ${process.version} (need 20+)`, nodeMajor >= 20],
+    [`node ${process.version} (need 22+)`, nodeMajor >= 22],
     ["ffmpeg", await has(FFMPEG_PATH, ["-version"])],
     ["ffprobe", await has(FFPROBE_PATH, ["-version"])],
     [

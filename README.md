@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg" alt="Node ≥20">
+  <img src="https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg" alt="Node ≥22">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/spec%20%E2%86%92%20MP4-black.svg" alt="spec → MP4">
   <a href="https://try.elevenlabs.io/7t4pgbmyxq67" title="Referral — supports the project"><img src="https://img.shields.io/badge/voiceover-ElevenLabs-000?logo=elevenlabs&logoColor=fff" alt="Voiceover by ElevenLabs"></a>
