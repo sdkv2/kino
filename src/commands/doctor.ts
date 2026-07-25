@@ -8,7 +8,7 @@ import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../media/binPaths.js";
 import { listMusicIds, listSfxIds } from "../media/sfx.js";
-import { launchBrowser, resolveExecutable } from "../render/native/browser.js";
+import { describeOrphanBrowsers, launchBrowser, resolveExecutable, scanOrphanBrowsers } from "../render/native/browser.js";
 import { resolveWhisper } from "../vo/whisper.js";
 import { log } from "../log.js";
 
@@ -71,6 +71,12 @@ export async function doctor(): Promise<void> {
   const scratchRoot = tmpdir();
   const stale = describeStaleScratch(scanStaleScratch(scratchRoot), scratchRoot);
   stale.level === "ok" ? log.ok(stale.message) : log.warn(stale.message);
+
+  // Stranded browsers are a separate severity from leftover dirs: a leftover dir is idle disk, a
+  // live orphan holds hundreds of MB of RAM each. Reported, never killed — the pids may belong to a
+  // render running in another terminal.
+  const orphans = describeOrphanBrowsers(scanOrphanBrowsers(scratchRoot));
+  orphans.level === "ok" ? log.ok(orphans.message) : log.warn(orphans.message);
 
   const sfx = listSfxIds();
   const music = listMusicIds();
