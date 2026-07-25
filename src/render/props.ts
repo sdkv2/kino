@@ -3,6 +3,7 @@
 import type { CaptionStyle, CaptionAnimation, CaptionReveal, ResolvedText } from "./textStyles.js";
 import type { Ease } from "./bgparams.js";
 import type { LayerEffect, LayerMask } from "./maskSpec.js";
+import type { PostFx } from "./postSpec.js";
 
 export interface Theme {
   font: string;
@@ -243,6 +244,8 @@ export interface KinoProps {
   sfx?: SfxProps[]; // free-placed sound effects
   music?: MusicProps | null; // music bed, ducked while VO speaks
   segments: KinoSegment[];
+  /** Full-frame post stage: grade → bloom → lens → film (compositor only). */
+  postFx?: PostFx;
   /** Still/storyboard only — in-feed safe-zone overlay. Never set by `kino build`. */
   platformGuide?: "tiktok" | "reels";
   /** Still only — rule-of-thirds grid overlay for composition QA. Never set by `kino build`. */

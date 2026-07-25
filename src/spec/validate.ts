@@ -9,6 +9,7 @@ import { resolveMotionSource } from "../media/motionLib.js";
 import { log } from "../log.js";
 import { KINO_VERSION } from "../version.js";
 import { validateSegmentFx } from "../render/maskSpec.js";
+import { validatePostFx } from "../render/postSpec.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -245,6 +246,8 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   }
   const fxErrors = spec.segments.flatMap((seg, i) => validateSegmentFx(seg, i));
   if (fxErrors.length) throw new Error(fxErrors.join("\n"));
+  const postErrors = validatePostFx((spec as { postFx?: unknown }).postFx);
+  if (postErrors.length) throw new Error(postErrors.join("\n"));
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
   assertAudioSources(spec, project);

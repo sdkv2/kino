@@ -111,6 +111,13 @@ Overlays paint at full opacity from frame 0. If the host `app`/`frame` fades in 
 typed text can float over the blurred ground. Use `"transition": "cut"` on that beat, or fade the overlay
 with the same envelope.
 
+### Beat handoffs (compositor)
+
+When the GL compositor is enabled, consecutive motion beats hand off with **shader transitions**
+during the overlap window (`MOTION_XFADE_FRAMES`), not a CSS opacity crossfade. The `transition`
+field on each beat still selects from the same vocabulary (`fade`, `dissolve`, `fly-left`,
+`fly-up`, `pop`, `cut`); only the renderer changes. Auto-vary (`pickTransition`) is unchanged.
+
 ## Driving it from the spec
 
 Reference the file two ways (see [Spec reference](spec-reference.md)):

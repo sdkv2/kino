@@ -361,6 +361,7 @@ export const SpecSchema = z
     // guidance + a post-build first/last-frame seam check (warn only). Not the same as segment
     // `loop` (Lottie playback).
     seamlessLoop: z.boolean().optional(),
+    postFx: z.unknown().optional(),
     segments: z.array(Segment).min(1),
   })
   .strict() // reject unknown top-level keys — a misplaced/misspelled key errors instead of silently no-op'ing
