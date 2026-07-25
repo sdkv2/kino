@@ -78,7 +78,9 @@ const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 function installHooks(): void {
   if (hooked) return;
   hooked = true;
-  // Covers normal return, an uncaught throw, and explicit process.exit().
+  // Covers normal return, an uncaught throw, and explicit process.exit(). This is also the only
+  // hook that does real work on Windows, where a kill terminates the target outright and the signal
+  // listeners below never run.
   process.on("exit", sweep);
   for (const sig of SIGNALS) {
     const onSignal = (): void => {

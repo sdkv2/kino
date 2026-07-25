@@ -29,9 +29,13 @@ export function setup(): void {
   base = join(tmpdir(), TESTRUN_DIRNAME);
   mkdirSync(base, { recursive: true });
   runRoot = mkdtempSync(join(base, "run-"));
-  // Workers are forked after globalSetup, so they inherit this and every tmpdir() call in a test
+  // Workers are forked after globalSetup, so they inherit these and every tmpdir() call in a test
   // (and in src code under test) resolves inside runRoot.
+  // All three: os.tmpdir() reads TMPDIR on POSIX but TEMP then TMP on Windows, so setting only
+  // TMPDIR would silently leave the Windows CI leg unisolated.
   process.env.TMPDIR = runRoot;
+  process.env.TEMP = runRoot;
+  process.env.TMP = runRoot;
   process.env.KINO_TEST_TMP_ROOT = runRoot;
 }
 

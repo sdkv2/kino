@@ -22,13 +22,22 @@ describe("test temp isolation", () => {
     expect(basename(dirname(process.env.KINO_TEST_TMP_ROOT!))).toBe(TESTRUN_DIRNAME);
   });
 
+  // os.tmpdir() reads TMPDIR on POSIX but TEMP then TMP on Windows. Setting only TMPDIR left the
+  // Windows CI leg unisolated while every local run looked fine, so assert all three explicitly.
+  it("redirects the temp env vars for every platform, not just POSIX", () => {
+    const root = process.env.KINO_TEST_TMP_ROOT;
+    expect(process.env.TMPDIR).toBe(root);
+    expect(process.env.TEMP).toBe(root);
+    expect(process.env.TMP).toBe(root);
+  });
+
   it("teardown removes the run root and everything under it", () => {
-    // setup() rebinds TMPDIR process-wide, so restore it or later tests in this file lose their
-    // temp dir.
-    const saved = process.env.TMPDIR;
+    // setup() rebinds the temp env vars process-wide; restore all three (TEMP/TMP matter on
+    // Windows) or later tests in this file point at a deleted dir.
+    const saved = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
     try {
       setup();
-      const root = process.env.TMPDIR!;
+      const root = process.env.KINO_TEST_TMP_ROOT!;
       const leaked = mkdtempSync(join(tmpdir(), "kino-would-have-leaked-"));
       writeFileSync(join(leaked, "render.png"), "x");
       expect(existsSync(leaked)).toBe(true);
@@ -36,16 +45,14 @@ describe("test temp isolation", () => {
       expect(existsSync(leaked)).toBe(false);
       expect(existsSync(root)).toBe(false);
     } finally {
-      process.env.TMPDIR = saved;
+      process.env.TMPDIR = saved.TMPDIR;
+      process.env.TEMP = saved.TEMP;
+      process.env.TMP = saved.TMP;
+      process.env.KINO_TEST_TMP_ROOT = saved.TMPDIR;
     }
   });
 
   it("teardown is safe to call when no run root is active", () => {
-    const saved = process.env.TMPDIR;
-    try {
-      expect(() => teardown()).not.toThrow();
-    } finally {
-      process.env.TMPDIR = saved;
-    }
+    expect(() => teardown()).not.toThrow();
   });
 });

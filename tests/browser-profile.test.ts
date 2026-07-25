@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { execa } from "execa";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { launchBrowser } from "../src/render/native/browser.js";
 import { liveScratchDirs } from "../src/scratch.js";
@@ -50,16 +50,16 @@ describe("chrome profile dir", () => {
 // profile dir while we delete it — leaving a residual dir behind on every ^C. Child processes that
 // can write into scratch have to be killed before the sweep, not after.
 describe("chrome profile dir on SIGINT", () => {
-  it("leaves no profile dir behind when a render is interrupted", async () => {
+  it.skipIf(process.platform === "win32")("leaves no profile dir behind when a render is interrupted", async () => {
     const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const loader = join(REPO, "node_modules", "tsx", "dist", "loader.mjs");
+    const loader = pathToFileURL(join(REPO, "node_modules", "tsx", "dist", "loader.mjs")).href;
     const fixtureDir = mkdtempSync(join(tmpdir(), "kino-browserfix-"));
     // Own TMPDIR so this assertion sees only what this child created.
     const childTmp = mkdtempSync(join(tmpdir(), "kino-browsertmp-"));
     const f = join(fixtureDir, "holder.mts");
     writeFileSync(
       f,
-      `import { launchBrowser } from ${JSON.stringify(join(REPO, "src", "render", "native", "browser.js"))};\n` +
+      `import { launchBrowser } from ${JSON.stringify(pathToFileURL(join(REPO, "src", "render", "native", "browser.js")).href)};\n` +
         `const b = await launchBrowser();\n` +
         `console.log("ready");\n` +
         `setTimeout(() => { void b; }, 60000);\n`,

@@ -3,20 +3,21 @@ import { execa } from "execa";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { STALE_BYTES_WARN, STALE_COUNT_WARN, describeStaleScratch, liveScratchDirs, releaseScratch, scanStaleScratch, scratchDir } from "../src/scratch.js";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 // The tsx *CLI* wraps the script in a parent process that translates signals, which would hide
 // whether the child was signal-terminated. Load the transform into one node process instead.
-const TSX_LOADER = join(REPO, "node_modules", "tsx", "dist", "loader.mjs");
+// file:// URLs, not bare paths: a Windows path like C:\... is not a valid ESM specifier.
+const TSX_LOADER = pathToFileURL(join(REPO, "node_modules", "tsx", "dist", "loader.mjs")).href;
 
 // Run a fixture script under tsx. The fixture prints its scratch dir on stdout line 1 then blocks,
 // so the parent can signal it mid-flight and inspect what survived. `.mts` so the file is
 // unambiguously ESM even though it lives outside the package.
 async function spawnHolder(body: string): Promise<{ dir: string; kill: (sig: NodeJS.Signals) => void; done: Promise<{ signal?: string; exitCode?: number }> }> {
   const f = join(mkdtempSync(join(tmpdir(), "kino-fixture-")), "holder.mts");
-  const mod = JSON.stringify(join(REPO, "src", "scratch.js"));
+  const mod = JSON.stringify(pathToFileURL(join(REPO, "src", "scratch.js")).href);
   writeFileSync(
     f,
     `import { scratchDir, releaseScratch } from ${mod};\n` +
@@ -46,6 +47,11 @@ async function spawnHolder(body: string): Promise<{ dir: string; kill: (sig: Nod
   };
 }
 
+// Windows has no POSIX signal delivery: process.kill() terminates the target outright, so no
+// handler runs and there is no signal-derived exit status to assert. The exit-path coverage
+// below (uncaught throw) still runs everywhere.
+const posixSignals = process.platform !== "win32";
+
 describe("scratch registry", () => {
   it("creates a registered directory under tmpdir with the given prefix", () => {
     const dir = scratchDir("kino-unit-");
@@ -68,7 +74,7 @@ describe("scratch registry", () => {
 
   // The disk-filling bug: a long render holds a scratch dir, the user hits ^C, and the
   // try/finally never unwinds. Cleanup has to survive the signal.
-  it("removes registered dirs when the process is interrupted with SIGINT", async () => {
+  it.skipIf(!posixSignals)("removes registered dirs when the process is interrupted with SIGINT", async () => {
     const h = await spawnHolder(`
       const d = scratchDir("kino-sigint-");
       writeFileSync(join(d, "big.bin"), Buffer.alloc(1024 * 1024));
@@ -83,7 +89,7 @@ describe("scratch registry", () => {
     expect(r.signal).toBe("SIGINT");
   }, 30000);
 
-  it("removes registered dirs when the process is terminated with SIGTERM", async () => {
+  it.skipIf(!posixSignals)("removes registered dirs when the process is terminated with SIGTERM", async () => {
     const h = await spawnHolder(`
       const d = scratchDir("kino-sigterm-");
       console.log(d);
@@ -106,7 +112,7 @@ describe("scratch registry", () => {
     expect(r.exitCode).toBe(1);
   }, 30000);
 
-  it("leaves an already-released dir alone and still exits cleanly", async () => {
+  it.skipIf(!posixSignals)("leaves an already-released dir alone and still exits cleanly", async () => {
     const h = await spawnHolder(`
       const d = scratchDir("kino-rel-");
       console.log(d);
