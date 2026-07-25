@@ -6,7 +6,12 @@
 
 ## Verdict
 
-<proceed | redesign | stop — filled in by Task 8>
+**proceed**
+
+- Worst-case: **proceed** — `14.375 ms ≤ 1.25 × 49.6 ms = 62.0 ms`.
+- Typical: **proceed** — `13.675 ms ≤ 1.00 × 49.2 ms = 49.2 ms`.
+- M3: **proceed** — no visible text degradation was observed for stroked captions, small labels, or gradient cards.
+- M6: **proceed** — the measured color and alpha difference is reconcilable.
 
 ## M1 — DOM-path baseline per-frame wall time
 
@@ -80,4 +85,26 @@ noise under plan Step 3, not M6's color-space stop signal.
 
 ## Projection
 
-<per-frame compositor estimate derived from M1/M2/M5, with the arithmetic shown>
+`examples/motion-flex/render-flex.ts` is worst case: adjacent beats crossfade for about 0.3 seconds
+(hero→stat and stat→orbit), so **two dynamic motion layers can be visible simultaneously**.
+Thus its `dynamic_raster_count = 2`; a typical advert uses `dynamic_raster_count = 1`, with one
+motion segment at a time. Captions use the default **12 frames per spoken word at 30 fps**, so
+`keyed_raster_amortized = 0.9 ms / 12 = 0.075 ms`.
+
+Worst-case compositor per-frame:
+
+```text
+= 2 × M2(motion, SS=2) + keyed_raster_amortized + draw + M5(best capture)
+= 2 × 0.7 ms + 0.075 ms + 2 ms + 10.9 ms
+= 14.375 ms
+```
+
+Typical advert compositor per-frame:
+
+```text
+= 1 × 0.7 ms + 0.075 ms + 2 ms + 10.9 ms
+= 13.675 ms
+```
+
+M5 canvas-toDataURL capture is the dominant term (10.9 ms); the worst-case dynamic full-screen
+raster term is 1.4 ms, so this result does not trigger redesign.
