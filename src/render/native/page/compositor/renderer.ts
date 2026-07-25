@@ -8,6 +8,7 @@ import { IDENTITY_TRANSFORM, type BlendMode, type LayerDraw, type TextureSource 
 import { TargetPool, type RenderTarget } from "./targets.js";
 import { applyMask, type MaskBinding } from "./masks.js";
 import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
+import { getPass, runChain, type EffectPass } from "./effects/index.js";
 
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
@@ -151,27 +152,38 @@ export class StageRenderer {
       const source = sources.get(layer.source.providerId);
       if (!source) continue;
 
-      if (layer.mask) {
+      const chain = layer.effects
+        .map((e) => ({ pass: getPass(e.kind), params: e.params }))
+        .filter((e): e is { pass: EffectPass; params: Record<string, number | string> } => Boolean(e.pass));
+
+      if (layer.mask || chain.length) {
         const rendered = this.drawToTarget(layer, source, frame);
         if (!rendered) continue;
-        const maskObj: LayerMask = "source" in layer.mask
-          ? (layer.mask as unknown as LayerMask)
-          : { source: { kind: "file", src: (layer.mask as any).providerId, channel: (layer.mask as any).channel ?? "a" }, feather: (layer.mask as any).feather, invert: (layer.mask as any).invert };
-        const resolved = resolveMaskDefaults(maskObj);
-        let binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
-        if (resolved.source.kind === "layer") {
-          const mt = maskTargets.get(resolved.source.layerId);
-          binding = { mask: mt ? mt.tex : null, sdf: null, sdfMax: 0 };
+
+        let current = rendered;
+        if (layer.mask) {
+          const maskObj: LayerMask = "source" in layer.mask
+            ? (layer.mask as unknown as LayerMask)
+            : { source: { kind: "file", src: (layer.mask as any).providerId, channel: (layer.mask as any).channel ?? "a" }, feather: (layer.mask as any).feather, invert: (layer.mask as any).invert };
+          const resolved = resolveMaskDefaults(maskObj);
+          let binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
+          if (resolved.source.kind === "layer") {
+            const mt = maskTargets.get(resolved.source.layerId);
+            binding = { mask: mt ? mt.tex : null, sdf: null, sdfMax: 0 };
+          }
+          const masked = applyMask(gl, this.pool, rendered, resolved, binding);
+          this.pool.release(rendered);
+          current = masked;
         }
-        const masked = applyMask(gl, this.pool, rendered, resolved, binding);
-        this.pool.release(rendered);
+
+        const finalTarget = chain.length ? runChain(gl, this.pool, current, chain, frame) : current;
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, this.width, this.height);
         gl.useProgram(this.prog);
         applyBlend(gl, layer.blend);
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, masked.tex);
+        gl.bindTexture(gl.TEXTURE_2D, finalTarget.tex);
         gl.uniformMatrix3fv(
           this.uModel,
           false,
@@ -179,7 +191,9 @@ export class StageRenderer {
         );
         gl.uniform1f(this.uOpacity, layer.opacity);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        this.pool.release(masked);
+
+        if (finalTarget !== current) this.pool.release(finalTarget);
+        this.pool.release(current);
         continue;
       }
 
@@ -190,6 +204,7 @@ export class StageRenderer {
       gl.viewport(0, 0, this.width, this.height);
       gl.useProgram(this.prog);
       applyBlend(gl, layer.blend);
+      gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.uniformMatrix3fv(this.uModel, false, modelMatrix(layer));
       gl.uniform1f(this.uOpacity, layer.opacity);
