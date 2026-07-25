@@ -162,8 +162,7 @@ describe("SpecSchema video beat regionShader", () => {
     expect(s.segments[0].kind === "video").toBe(true);
   });
 
-<<<<<<< HEAD
-  it("parses texture channels and caps them at the three uTex slots", () => {
+  it("parses texture channels and caps them at the two free uTex slots", () => {
     const s = SpecSchema.parse({
       ...valid,
       segments: [
@@ -175,14 +174,18 @@ describe("SpecSchema video beat regionShader", () => {
     });
     const seg = s.segments[0];
     expect(seg.kind === "video" && seg.regionShader?.textures).toEqual(["motion/badge.html", "logo.png"]);
-    // A 4th channel has no uTex to bind to (uTex0 is the beat's own asset) — reject rather than drop.
+    // A 3rd channel has no uTex to bind to (uTex0 is the beat's own asset, uTex1 the cutout
+    // backdrop) — reject rather than drop.
     expect(() =>
       SpecSchema.parse({
         ...valid,
         segments: [
-          { ...valid.segments[0], regionShader: { mask: "masks/x", subject: "a.frag", textures: ["a.html", "b.html", "c.html", "d.html"] } },
+          { ...valid.segments[0], regionShader: { mask: "masks/x", subject: "a.frag", textures: ["a.html", "b.html", "c.html"] } },
         ],
-=======
+      }),
+    ).toThrow();
+  });
+
   // Cutout compositing: `backdrop` is a SECOND source for the background region, and it is a
   // complete spec on its own — mask + backdrop with no .frag anywhere IS the virtual greenscreen,
   // so the "needs a body" refine has to count it.
@@ -212,7 +215,6 @@ describe("SpecSchema video beat regionShader", () => {
       SpecSchema.parse({
         ...valid,
         segments: [{ ...valid.segments[0], regionShader: { mask: "masks/x", backdropp: "pexels/beach.mp4" } }],
->>>>>>> origin/main
       }),
     ).toThrow();
   });
