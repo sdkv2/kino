@@ -175,7 +175,10 @@ required *within* the compositor path — same frame twice must be identical.
   immediately: the flag makes both paths reachable on one machine.
 - **Supersampling moves up** from per-shader to per-composite: the graph renders at SS×, and FXAA
   plus downsample happen once at `present`. Cleaner, but it means `html` rasters are requested at SS×
-  too — a cost M2 measures at both SS=1 and SS=2.
+  too — a cost M2 measures at both SS=1 and SS=2. **Phase 1 does not make this move.** Relocating SS
+  changes shader pixels, and phase 1's only job is parity, so the shader and region providers keep
+  their existing per-source SS/FXAA resolve and the composite-level move lands in phase 4 alongside
+  the other perf work.
 
 ## The mask and effect seam
 
