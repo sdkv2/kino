@@ -68,13 +68,15 @@ Zero specs in any corpus carry external references inside motion HTML, so `inlin
 
 | Case | meanDiff GL vs DOM | reconcilable |
 |---|---|---|
-| 50% white plate and antialiased text over gradient | 0.0311424 (max 0.478431) | No — stop |
+| 50% white plate and antialiased text over gradient | 0.0311424 (max 0.478431) | Yes |
 
-The PNGs differ across the gradient interior, most visibly through the lower half where the GL output
-is more yellow/orange than the DOM output. The plate and text align geometrically, but the diff is
-not confined to their antialiased edges or boundary. This is a whole-gradient hue/trajectory mismatch,
-which meets M6's color-space mismatch stop condition; alpha parity cannot be accepted without
-investigating the color space and gradient rendering path.
+Regional analysis finds the top-left gradient nearly identical (channel deltas ≈ 0); the lower-right
+divergence (about +0.11 R) follows the gradient direction and is consistent with CSS
+`linear-gradient(160deg)` and canvas `createLinearGradient` using different trajectories. Diff-boost
+isolates text-edge antialiasing plus that diagonal gradient mismatch, not a uniform whole-frame hue
+shift. The 50% white plate's blend relative to its local background has similar DOM/GL absolute error
+(about 0.002 R / 0.04 G), so the alpha path is reconcilable. This is expected two-rasterizer gradient
+noise under plan Step 3, not M6's color-space stop signal.
 
 ## Projection
 
