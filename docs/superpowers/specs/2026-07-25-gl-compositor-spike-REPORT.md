@@ -33,6 +33,10 @@ Log: `/tmp/kino-m1-typical.log` (typical), `/tmp/kino-m1-worst.log` (worst case)
 
 | Subject | SS | p50 ms | p95 ms |
 |---|---|---|---|
+| motion-fullscreen | 1 | 0.6 | 2.0 |
+| motion-fullscreen | 2 | 0.7 | 2.0 |
+| caption-line | 1 | 1.6 | 4.2 |
+| caption-line | 2 | 0.9 | 2.1 |
 
 ## M3 — Raster fidelity
 
