@@ -208,6 +208,8 @@ Inside a region shader you can sample:
 - `uTex0` — the beat's own asset (the thing being segmented).
 - the shader's own params/uniforms (`u_*` aliases, `iTime`, etc.) as any shader — see
   [Params and keyframes](#params-and-keyframes) below.
+- **from a subject body only** — `kinoBackground(out vec4, in vec2 fragCoord)`, the *shaded*
+  background region, at any coordinate. See [Cross-region sampling](#cross-region-sampling).
 
 **Worked example:** `examples/segmentation/` — a blue disc image, a mock mask, a solid-red subject shader and solid-green background shader. Its `README.md` has the exact commands (make a fixture asset, `kino segment --backend mock`, `kino still`). You get a red ellipse (subject) on green (background) — the mask boundary is the seam.
 
@@ -260,6 +262,66 @@ the params, not a silent drop.
 
 `tests/render-region-params.test.ts` renders one beat at three times and pins the tween, the
 beat-relative clock, and determinism.
+
+#### Cross-region sampling
+
+`texture(uTex0, uv + bend)` already refracts the beat's **plate**, and has always been available.
+When `background` is absent or a passthrough that is exactly right — the plate *is* what is visibly
+behind the subject, so bending the lookup gives you convincing tracked glass with no extra surface.
+
+It goes wrong the moment the background is a **treatment**. Refracting `uTex0` under a desaturating
+background shows the original saturated footage through the glass: a hole punched to a different
+image. For that case a subject body can call the background body directly, at any coordinate:
+
+```glsl
+vec4 b;  kinoBackground(b, fragCoord);            // the shaded background AT THIS PIXEL
+vec4 r;  kinoBackground(r, fragCoord + bend);     // refraction / displacement
+```
+
+No framebuffer is involved. The background body is a pure function of `fragCoord`, so evaluating it
+at an offset **is** the offset sample — exact, full-resolution, deterministic.
+
+- **Available in every subject body**: the top-level `subject`, each `masks[].subject`, and the
+  shared fallback. There is exactly one background region, so it means the same thing in all of them.
+- **Not available in the background body.** That would be recursion (illegal in GLSL) and has no
+  meaning; using it there is a loud compile error naming an undeclared function, against
+  line-numbered assembled source.
+- **A subject cannot sample another subject.** Under painter's order a subject body's output is
+  discarded outside its own mask, so "what does that subject look like here" has no answer exactly
+  where you would want to ask. Not offered.
+- **Call it from uniform control flow.** The background body may use `aastep` or `kinoMaskDist`,
+  which read screen-space derivatives — undefined inside a branch that differs across a fragment
+  quad, and silently wrong rather than loud. Call it unconditionally and `mix` afterwards. Branching
+  on the *coordinate you pass* is fine; branching on *whether you call it* is not.
+- **Derivatives inside it see your offset coordinate.** `fwidth` in the background body measures how
+  fast `fragCoord + offset` changes across the quad. For a smooth displacement that is correct; for
+  one that jumps between neighbouring pixels, `aastep` inside the background goes soft in that band.
+  Keep the displacement continuous.
+
+**Cost.** One call = one extra evaluation of the background body, and nothing else. Measured on an
+Apple M4, 1080×1920, 12 stills, SwiftShader, over a subject whose bevel already costs three
+`kinoMaskDist` calls at radius 70:
+
+| subject body | light background body | 10× heavier body |
+| --- | --- | --- |
+| trivial, no bend (the 2-body floor) | 0.269 s/frame | — |
+| refract `uTex0` (no call) | 0.642 s/frame | 0.839 s/frame |
+| 1 `kinoBackground` call | 0.661 s/frame (**+0.019**) | 0.951 s/frame (**+0.112**) |
+| 8 calls (frosted blur) | 0.728 s/frame (**+0.086**) | 1.305 s/frame (**+0.466**) |
+
+A single refraction tap is ~5% of what the bevel's distance-field lookups already cost — effectively
+free. The cost is `taps × background-body weight` and nothing else, so the one shape that gets dear
+is a **wide kernel over an expensive background**. That is the case a real two-pass framebuffer
+would fix, and it is the documented upgrade path; the helper's signature does not change if it lands.
+
+Nothing changes for specs that do not use it: kino emits the declaration only when a subject body
+names `kinoBackground`, so every other region program is byte-for-byte what it was.
+
+`tests/render-region-crosssample.test.ts` renders a monotone-ramp background and reads the offset
+straight off the pixels.
+
+**Worked example:** `examples/segmentation/cross-region-glass.json` with `region-glass.frag`
+(subject) and `region-tint.frag` (background treatment).
 
 #### Distance to the mask edge
 
