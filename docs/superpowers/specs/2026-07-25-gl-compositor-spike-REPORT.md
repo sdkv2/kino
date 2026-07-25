@@ -10,14 +10,17 @@
 
 ## M1 — DOM-path baseline per-frame wall time
 
+Both baselines render at **1080×1920** (`9:16`).
+
 Typical: `projects/kino-meta/specs/advert.json`, built with `--draft --mock`. Motion segments,
 mesh background, and VO captions — representative of a real project spec and buildable without
 external assets. The design doc originally named `examples/segmentation/per-object-zebras.json`,
-but the CLI only accepts project-local specs and that fixture's `pexels/zebras2s.mp4` /
-`masks/zebras` assets are missing from this worktree.
+but flat `examples/` specs are unbuildable by `kino build` (project-local only) and that fixture's
+`pexels/zebras2s.mp4` / `masks/zebras` assets are missing from this worktree; **controller waiver:**
+advert approved as the typical substitute.
 
 Worst case: `examples/motion-flex/render-flex.ts`, rendered with `FLEX_VIDEO=1` through the same
-native render path. The three motion beats cover the 14.7-second timeline.
+native render path at 1080×1920. The three motion beats cover the 14.7-second timeline.
 
 Log: `/tmp/kino-m1-typical.log` (typical), `/tmp/kino-m1-worst.log` (worst case).
 
