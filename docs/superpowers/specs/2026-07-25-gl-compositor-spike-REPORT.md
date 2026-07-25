@@ -68,6 +68,13 @@ Zero specs in any corpus carry external references inside motion HTML, so `inlin
 
 | Case | meanDiff GL vs DOM | reconcilable |
 |---|---|---|
+| 50% white plate and antialiased text over gradient | 0.0311424 (max 0.478431) | No — stop |
+
+The PNGs differ across the gradient interior, most visibly through the lower half where the GL output
+is more yellow/orange than the DOM output. The plate and text align geometrically, but the diff is
+not confined to their antialiased edges or boundary. This is a whole-gradient hue/trajectory mismatch,
+which meets M6's color-space mismatch stop condition; alpha parity cannot be accepted without
+investigating the color space and gradient rendering path.
 
 ## Projection
 
