@@ -21,12 +21,15 @@ const listing = (): string[] => {
 // kino-* dirs. Owning the dir puts it under the registry's synchronous exit cleanup.
 describe("chrome profile dir", () => {
   it("uses a registered scratch dir instead of puppeteer's default temp profile", async () => {
+    // Snapshot first: sibling tests may launch raw puppeteer into the shared tmpdir.
+    const before = new Set(listing().filter((n) => n.startsWith("puppeteer_dev_chrome_profile-")));
     const browser = await launchBrowser();
     try {
       const mine = liveScratchDirs().filter((d) => d.includes("kino-chrome-profile-"));
       expect(mine.length).toBeGreaterThan(0);
       expect(existsSync(mine[0])).toBe(true);
-      expect(listing().filter((n) => n.startsWith("puppeteer_dev_chrome_profile-"))).toEqual([]);
+      const after = listing().filter((n) => n.startsWith("puppeteer_dev_chrome_profile-"));
+      expect(after.filter((n) => !before.has(n))).toEqual([]);
     } finally {
       await browser.close();
     }
