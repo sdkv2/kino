@@ -23,7 +23,8 @@ import type { BgParamValue, RegionShaderMask, RegionShaderProps, Theme } from ".
 import { assembleRegionShaderSource, MAX_REGION_MASKS, resolveUniforms, extraParamNames } from "../../shaderSource.js";
 import { paramsAt } from "../../bgparams.js";
 import { buildMotionVars } from "../../motionVars.js";
-import { useFrameImageUrl } from "./media";
+import { useFrameImageUrl, useSdfImageUrl } from "./media";
+import { SDF_MAX_PX } from "../../sdf.js";
 import { buildTemplate, rasterAt, scrubCss, TEX_ROOT, type HtmlTemplate } from "./bgTextures";
 import { motionScrubCss, KINO_FILTERS } from "./motionCss";
 
@@ -105,6 +106,7 @@ interface GLState {
   masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
   texes: TexChannel[]; // uTex2..uTex3; entries past region.textures.length are transparent placeholders
   backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
+  sdfs: Slot[]; // per mask: its precomputed distance field, or a placeholder where none was written
 }
 
 // uTex0 is the beat's own asset and uTex1 belongs to the cutout backdrop, so authored channels
@@ -266,6 +268,7 @@ function disposeGL(st: GLState | null): void {
   st.gl.deleteTexture(st.asset.handle);
   for (const m of st.masks) st.gl.deleteTexture(m.handle);
   for (const c of st.texes) st.gl.deleteTexture(c.handle);
+  for (const f of st.sdfs) st.gl.deleteTexture(f.handle);
   if (st.backdrop) st.gl.deleteTexture(st.backdrop.handle);
 }
 
@@ -276,6 +279,7 @@ async function initGL(
   canvas: HTMLCanvasElement,
   assetSrc: Src,
   maskSrcs: Src[],
+  sdfSrcs: (Src | null)[],
   region: RegionShaderProps,
   theme: Theme,
   width: number,
@@ -331,7 +335,12 @@ async function initGL(
     const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0", "uTex1", "uTexSize1",
                    "iMouse", "uPulse", "uColorA", "uColorB", "uColorC", "uIntensity",
                    "uParam0", "uParam1", "uParam2", "uParam3"];
-    for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
+    // uMaskTexN, not uMaskN: uMaskN is a #define'd integer selector for kinoMaskDist, so
+    // getUniformLocation("uMask0") returns null and every mask sampler would silently keep its
+    // default of texture unit 0 — i.e. sample the beat asset instead of the mask.
+    for (let i = 0; i < MAX_REGION_MASKS; i++) {
+      names.push(`uMaskTex${i}`, `uChannel${i}`, `uMaskSdf${i}`, `uMaskSdfMax${i}`);
+    }
     for (let i = 0; i < MAX_REGION_TEXTURES; i++) names.push(`uTex${i + 2}`);
     for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
@@ -340,7 +349,7 @@ async function initGL(
     for (let i = 0; i < MAX_REGION_MASKS; i++) {
       const unit = i + 1; // unit 0 is the asset
       masks.push(
-        i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMask${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMask${i}`]),
+        i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMaskTex${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMaskTex${i}`]),
       );
     }
     // The cutout's backdrop, on the unit past the masks (0 = asset, 1..MAX_REGION_MASKS = masks).
@@ -356,7 +365,20 @@ async function initGL(
     // Authored channels sit on the units above the backdrop's, whether or not this beat has one —
     // a spec-dependent unit would make the same textures[0] land on a different sampler per beat.
     const texes = await makeTexChannels(gl, region, loc, theme, width, height);
-    return { gl, prog, loc, asset: assetSlot, masks, texes, backdrop };
+    // Distance fields sit ABOVE the authored channels: 0 = asset, 1..MAX_REGION_MASKS = masks,
+    // +1 = backdrop, +2..+MAX_REGION_TEXTURES = authored channels. Colliding with any of those
+    // would point a mask's field at someone else's texture.
+    //
+    // Whether a field is AVAILABLE is decided per frame in drawFrame, not here: on the first render
+    // pass every /vframes URL is still null (they resolve on the next pass), so anything latched at
+    // init would latch "no field" permanently. The mask slots have always worked this way.
+    const sdfs: Slot[] = [];
+    for (let i = 0; i < MAX_REGION_MASKS; i++) {
+      const unit = MAX_REGION_MASKS + 2 + MAX_REGION_TEXTURES + i;
+      const src = sdfSrcs[i];
+      sdfs.push(src ? await makeSlot(gl, unit, src, loc[`uMaskSdf${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMaskSdf${i}`]));
+    }
+    return { gl, prog, loc, asset: assetSlot, masks, texes, backdrop, sdfs };
   } catch (err) {
     console.error(String(err));
     return null;
@@ -370,6 +392,7 @@ async function drawFrame(
   initRef: React.MutableRefObject<Promise<GLState | null> | null>,
   assetSrc: Src,
   maskSrcs: Src[],
+  sdfSrcs: (Src | null)[],
   region: RegionShaderProps,
   frame: number,
   width: number,
@@ -380,12 +403,13 @@ async function drawFrame(
   backdropSrc: Src | null,
 ): Promise<void> {
   try {
-    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region, theme, width, height, backdropSrc);
+    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, sdfSrcs, region, theme, width, height, backdropSrc);
     const st = await initRef.current;
     if (!st) return;
     const { gl, prog, loc } = st;
     await updateFrameSlot(gl, st.asset, assetSrc.frameUrl);
     await Promise.all(maskSrcs.map((src, i) => updateFrameSlot(gl, st.masks[i], src.frameUrl)));
+    await Promise.all(sdfSrcs.map((src, i) => (src ? updateFrameSlot(gl, st.sdfs[i], src.frameUrl) : Promise.resolve())));
     if (st.backdrop && backdropSrc) await updateFrameSlot(gl, st.backdrop, backdropSrc.frameUrl);
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
@@ -438,6 +462,10 @@ async function drawFrame(
       const m = region.masks[i];
       const ch = m ? CHANNEL_VEC[m.channel] ?? CHANNEL_VEC.gray : ZERO_VEC;
       gl.uniform4f(loc[`uChannel${i}`], ch[0], ch[1], ch[2], ch[3]);
+      // 0 = no distance field for this mask THIS FRAME, which is kinoMaskDist's signal to run its
+      // in-shader search instead. Anything else is the encode half-range the field was written
+      // with. Evaluated per frame because the URL is null on the first pass (see initGL).
+      gl.uniform1f(loc[`uMaskSdfMax${i}`], sdfSrcs[i]?.frameUrl ? SDF_MAX_PX : 0);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish();
@@ -470,11 +498,23 @@ export const RegionShader: React.FC<{
   const mUrl2 = useFrameImageUrl(maskMediaKeys?.[2]);
   const mUrl3 = useFrameImageUrl(maskMediaKeys?.[3]);
   const maskFrameUrls: (string | null)[] = [mUrl0, mUrl1, mUrl2, mUrl3];
+  // The matching distance-field frames, same fixed hook count for the same reason.
+  const sUrl0 = useSdfImageUrl(maskMediaKeys?.[0]);
+  const sUrl1 = useSdfImageUrl(maskMediaKeys?.[1]);
+  const sUrl2 = useSdfImageUrl(maskMediaKeys?.[2]);
+  const sUrl3 = useSdfImageUrl(maskMediaKeys?.[3]);
+  const sdfFrameUrls: (string | null)[] = [sUrl0, sUrl1, sUrl2, sUrl3];
   const maskSrcs: Src[] = region.masks.map((m, i) => ({
     frameVideo: m.maskKind === "video",
     staticUrl: staticFile(m.maskSrc),
     frameUrl: maskFrameUrls[i],
   }));
+  // One per mask entry, null only where a field can never exist (an image mask). A video mask always
+  // gets a slot; frameUrl being null just means "not this frame", which drives uMaskSdfMaxN.
+  const sdfSrcs: (Src | null)[] = region.masks.map((m, i) =>
+    m.maskKind === "video" ? { frameVideo: true, staticUrl: "", frameUrl: sdfFrameUrls[i] } : null,
+  );
+
   // The cutout's second source. The hook runs unconditionally (rules of hooks); the Src is null when
   // this beat has no backdrop, which is what keeps the program byte-identical for everyone else.
   const backdropFrameUrl = useFrameImageUrl(backdropMediaKey);
@@ -496,6 +536,9 @@ export const RegionShader: React.FC<{
     regionExtras(region).join(","),
     `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
     ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
+    // Which SDF slots initGL builds — NOT whether a field resolved this frame, which changes between
+    // the first and second render pass and would rebuild the program mid-still.
+    ...region.masks.map((m) => (m.maskKind === "video" ? "sdf" : "-")),
     // Texture channels are built into slots by initGL too (an html channel measures + serializes
     // its template there), so a spec differing only in its textures must not reuse cached state.
     ...(region.textures ?? []).map((tex) => `${tex.kind}|${tex.src ?? tex.html?.length}`),
@@ -517,7 +560,7 @@ export const RegionShader: React.FC<{
       initRef.current = null;
       if (stale) void stale.then(disposeGL, () => {});
     }
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps, t, durationFrames, backdropSrc));
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, sdfSrcs, region, frame, width, height, fps, t, durationFrames, backdropSrc));
   });
 
   return (

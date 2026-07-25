@@ -10,8 +10,14 @@ describe("assembleRegionShaderSource", () => {
     expect(src.startsWith("#version 300 es")).toBe(true);
     expect(src).toContain("regionSubject");
     expect(src).toContain("regionBg");
-    expect(src).toContain("uniform sampler2D uMask0;");
-    expect(src).toContain("uniform sampler2D uMask3;"); // MAX_REGION_MASKS = 4
+    // uMaskN is a #define'd integer selector for kinoMaskDist; the sampler is uMaskTexN.
+    expect(src).toContain("uniform sampler2D uMaskTex0;");
+    expect(src).toContain("uniform sampler2D uMaskTex3;"); // MAX_REGION_MASKS = 4
+    expect(src).toContain("#define uMask0 0");
+    expect(src).toContain("#define uMask3 3");
+    // ...and each mask's precomputed distance field, with 0 meaning "none bound".
+    expect(src).toContain("uniform sampler2D uMaskSdf0;");
+    expect(src).toContain("uniform float uMaskSdfMax0;");
     expect(src).toContain("mix(");
     // exactly one entry point
     expect((src.match(/void main\(\)/g) ?? []).length).toBe(1);
@@ -31,7 +37,12 @@ describe("assembleRegionShaderSource", () => {
 
   it("injects kinoMaskDist so region bodies can read distance to the mask edge", () => {
     const src = assembleRegionShaderSource(SUBJ, null, []);
-    expect(src).toContain("float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius)");
+    // The region dispatcher takes the mask INDEX (uMaskN expands to it) and resolves the
+    // sampler/field pair, because GLSL cannot ask a sampler which uniform it came from and
+    // ANGLE's preprocessor has no ## token pasting.
+    expect(src).toContain("float kinoMaskDist(int idx, vec4 channel, vec2 fragCoord, float radius)");
+    expect(src).toContain("kinoMaskDistAt(uMaskTex0, uMaskSdf0, uMaskSdfMax0, channel, fragCoord, radius)");
+    expect(src).toContain("kinoMaskDistAt(uMaskTex3, uMaskSdf3, uMaskSdfMax3, channel, fragCoord, radius)");
   });
 });
 
@@ -44,7 +55,7 @@ describe("assembleRegionShaderSource per-object regions", () => {
   it("emits the union source unchanged when no mask carries its own body", () => {
     expect(assembleRegionShaderSource(SUBJ, BG, [], [])).toBe(assembleRegionShaderSource(SUBJ, BG, []));
     expect(assembleRegionShaderSource(SUBJ, BG, [], [null, null])).toBe(assembleRegionShaderSource(SUBJ, BG, []));
-    expect(assembleRegionShaderSource(SUBJ, BG, [])).toContain("m = max(m, dot(texture(uMask0, muv), uChannel0));");
+    expect(assembleRegionShaderSource(SUBJ, BG, [])).toContain("m = max(m, dot(texture(uMaskTex0, muv), uChannel0));");
   });
 
   it("gives each mask its own function and composites in array order", () => {
@@ -54,8 +65,8 @@ describe("assembleRegionShaderSource per-object regions", () => {
     expect(src).toContain(A);
     expect(src).toContain(B2);
     // Painter's order: mask 0 composited first, so mask 1 paints OVER it where they overlap.
-    const i0 = src.indexOf("c = mix(c, s0, smoothstep(0.4, 0.6, dot(texture(uMask0, muv), uChannel0)));");
-    const i1 = src.indexOf("c = mix(c, s1, smoothstep(0.4, 0.6, dot(texture(uMask1, muv), uChannel1)));");
+    const i0 = src.indexOf("c = mix(c, s0, smoothstep(0.4, 0.6, dot(texture(uMaskTex0, muv), uChannel0)));");
+    const i1 = src.indexOf("c = mix(c, s1, smoothstep(0.4, 0.6, dot(texture(uMaskTex1, muv), uChannel1)));");
     expect(i0).toBeGreaterThan(-1);
     expect(i1).toBeGreaterThan(i0);
     expect(src).not.toContain("m = max(m,"); // the union reduce is gone on this path
@@ -79,8 +90,8 @@ describe("assembleRegionShaderSource per-object regions", () => {
     const mixed = assembleRegionShaderSource(SUBJ, BG, [], [A, null, null]);
     expect(mixed).toContain("#define mainImage regionSubjectShared");
     expect((mixed.match(/regionSubjectShared\(/g) ?? []).length).toBe(1); // called once, used twice
-    expect(mixed).toContain("c = mix(c, sShared, smoothstep(0.4, 0.6, dot(texture(uMask1, muv), uChannel1)));");
-    expect(mixed).toContain("c = mix(c, sShared, smoothstep(0.4, 0.6, dot(texture(uMask2, muv), uChannel2)));");
+    expect(mixed).toContain("c = mix(c, sShared, smoothstep(0.4, 0.6, dot(texture(uMaskTex1, muv), uChannel1)));");
+    expect(mixed).toContain("c = mix(c, sShared, smoothstep(0.4, 0.6, dot(texture(uMaskTex2, muv), uChannel2)));");
   });
 
   it("ignores mask slots beyond MAX_REGION_MASKS", () => {

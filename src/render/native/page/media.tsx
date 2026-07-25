@@ -9,6 +9,10 @@ export interface MediaEntry {
   dir: string; // subdir under /vframes
   byFrame: Record<number, string>; // effective local frame → image name (dense for video renders, sparse for stills)
   maxFrame: number; // largest populated index; overruns (EOF / freeze) clamp here = hold last frame
+  // Mask usages only: the matching signed-distance-field image per index (videoFrames.ts writes it
+  // beside the mask frames). Absent for footage and for masks whose transform failed — kinoMaskDist
+  // then falls back to its in-shader search.
+  sdfByFrame?: Record<number, string>;
 }
 
 export type MediaMap = Record<string, MediaEntry>;
@@ -28,6 +32,17 @@ export function useFrameImageUrl(mediaKey: string | undefined): string | null {
   if (!media) return null;
   const idx = Math.min(Math.max(0, frame), media.maxFrame);
   const file = media.byFrame[idx];
+  return file ? `/vframes/${media.dir}/${file}` : null;
+}
+
+/** The signed-distance-field frame matching useFrameImageUrl's mask frame, when one was written.
+ *  Null means no field for this mask — kinoMaskDist then falls back to its in-shader search. */
+export function useSdfImageUrl(mediaKey: string | undefined): string | null {
+  const frame = useCurrentFrame();
+  const media = React.useContext(MediaCtx)[mediaKey ?? ""];
+  if (!media?.sdfByFrame) return null;
+  const idx = Math.min(Math.max(0, frame), media.maxFrame);
+  const file = media.sdfByFrame[idx];
   return file ? `/vframes/${media.dir}/${file}` : null;
 }
 
