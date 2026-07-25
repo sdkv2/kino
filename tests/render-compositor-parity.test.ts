@@ -30,6 +30,15 @@ const motion = {
   html: `<style>.c{position:absolute;left:10%;right:10%;top:35%;bottom:35%;border-radius:48px;background:#80e2b4}</style><div class="c"></div>`,
   params: {}, keyframes: [], triggers: [],
 };
+const blackBg = {
+  ...canvasBg,
+  customCode: "ctx.fillStyle='#000000';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);",
+};
+const fullMotion = {
+  // Fullscreen white remains the mask fixture; the hard internal edge makes blur observable.
+  html: `<style>.h{position:absolute;inset:0;background:#fff}.e{position:absolute;inset:25% 45%;background:#000}</style><div class="h"></div><div class="e"></div>`,
+  params: {}, keyframes: [], triggers: [],
+};
 
 // One entry per provider the compositor must cover.
 const MATRIX: Array<{ name: string; props: KinoProps; frame: number }> = [
@@ -97,5 +106,34 @@ describe("compositor self-determinism", () => {
     } finally {
       delete process.env.KINO_COMPOSITOR;
     }
+  }, 300000);
+});
+
+describe("compositor mask and effect determinism", () => {
+  const baseSegment: KinoSegment = {
+    kind: "motion", caption: "", startSec: 0, endSec: 2, motion: fullMotion,
+  };
+  const baseProps = mk([baseSegment], { background: blackBg });
+
+  async function expectDeterministicAndNonTrivial(props: KinoProps) {
+    const first = await renderOne(props, 10, true);
+    const second = await renderOne(props, 10, true);
+    const plain = await renderOne(baseProps, 10, true);
+    expect(meanDiff(first, second)).toBe(0);
+    expect(meanDiff(first, plain)).toBeGreaterThan(0);
+  }
+
+  it("renders a shape mask deterministically and non-trivially", async () => {
+    await expectDeterministicAndNonTrivial(mk([{
+      ...baseSegment,
+      mask: { source: { kind: "shape", shape: { kind: "rect", x: 0, y: 0, w: 540, h: 1920 } } },
+    }], { background: blackBg }));
+  }, 300000);
+
+  it("renders blur deterministically and non-trivially", async () => {
+    await expectDeterministicAndNonTrivial(mk([{
+      ...baseSegment,
+      effects: [{ kind: "blur", params: { radius: 8 } }],
+    }], { background: blackBg }));
   }, 300000);
 });
