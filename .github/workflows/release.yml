@@ -1,0 +1,39 @@
+name: Auto release on version bump
+
+# Watches the CI workflow for a green run on main, then checks whether
+# package.json's version has already been tagged. If not, cuts a tag +
+# GitHub Release, which in turn triggers publish.yml (release: published)
+# to build and publish to npm.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check version and tag if new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+
+          if git rev-parse "$tag" >/dev/null 2>&1 || gh api "repos/${{ github.repository }}/git/refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists, skipping release."
+            exit 0
+          fi
+
+          git tag "$tag"
+          git push origin "$tag"
+          gh release create "$tag" --title "$tag" --generate-notes --target "${{ github.event.workflow_run.head_sha || github.sha }}"
