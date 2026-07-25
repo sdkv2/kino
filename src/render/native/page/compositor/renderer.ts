@@ -5,6 +5,7 @@
 // Everything here runs in the SYNCHRONOUS draw phase. No awaits, no decodes, no layout:
 // sources have already been prepared by the time draw() is called.
 import type { BlendMode, LayerDraw, TextureSource } from "./graph.js";
+import { TargetPool, type RenderTarget } from "./targets.js";
 
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
@@ -150,7 +151,35 @@ export class StageRenderer {
     gl.finish();
   }
 
+  private pool = new TargetPool();
+
+  /** Draw a single layer into an offscreen target, unblended, at frame scale. The caller
+   *  owns the target and must release it. */
+  drawToTarget(layer: LayerDraw, source: TextureSource, frame: number): RenderTarget | null {
+    const gl = this.gl;
+    const tex = source.texture(gl, frame, layer.source.key);
+    if (!tex) return null;
+    const target = this.pool.acquire(gl, this.width, this.height);
+    this.pool.clear(gl, target);
+    gl.useProgram(this.prog);
+    gl.uniform2f(this.uRes, this.width, this.height);
+    gl.uniform1i(this.uTex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniformMatrix3fv(this.uModel, false, modelMatrix(layer));
+    gl.uniform1f(this.uOpacity, 1); // opacity applies at composite time, not here
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    return target;
+  }
+
+  releaseTarget(target: RenderTarget): void {
+    this.pool.release(target);
+  }
+
   dispose(): void {
+    this.pool.dispose(this.gl);
     this.gl.deleteProgram(this.prog);
   }
 }
