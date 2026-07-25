@@ -20,8 +20,14 @@ import React, { useLayoutEffect, useRef } from "react";
 import { reportFatal } from "./fatal";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
-import { assembleRegionShaderSource, MAX_REGION_MASKS } from "../../shaderSource.js";
+import { assembleRegionShaderSource, MAX_REGION_MASKS, resolveUniforms, extraParamNames } from "../../shaderSource.js";
+import { paramsAt } from "../../bgparams.js";
 import { useFrameImageUrl } from "./media";
+
+// The alias set baked into the compiled program: `#define u_<name> uParamI`. Derived from the base
+// params PLUS every keyframe so it is stable across frames — a per-frame resolved dict would drop
+// keys and silently shift a slot out from under the baked-in aliases. One bank serves every body.
+const regionExtras = (region: RegionShaderProps): string[] => extraParamNames(region.params ?? {}, region.keyframes ?? []);
 
 const VERT = `#version 300 es
 void main() {
@@ -176,7 +182,7 @@ async function initGL(
     const fragSrc = assembleRegionShaderSource(
       region.subjectCode,
       region.backgroundCode,
-      [],
+      regionExtras(region),
       region.masks.map((m) => m.subjectCode ?? null),
     );
     const mk = (type: number, s: string): WebGLShader | null => {
@@ -208,7 +214,12 @@ async function initGL(
     gl.deleteShader(vs);
     gl.deleteShader(fs);
     const loc: Record<string, WebGLUniformLocation | null> = {};
-    const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0"];
+    // The colour/intensity/pulse uniforms are declared in the region header but were never uploaded,
+    // so they all read 0 — which would make `params: { colorA: "#ff0000" }` silently render black.
+    // Region shaders now carry the same param surface backgrounds do, so bind the same set.
+    const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0",
+                   "iMouse", "uPulse", "uColorA", "uColorB", "uColorC", "uIntensity",
+                   "uParam0", "uParam1", "uParam2", "uParam3"];
     for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
     for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
@@ -252,12 +263,36 @@ async function drawFrame(
     }
     gl.viewport(0, 0, width, height);
     gl.useProgram(prog);
-    gl.uniform3f(loc.iResolution, width, height, 1);
     // ponytail: iTime/iTimeDelta stay on the 30fps convention (all kino comps are 30fps); the video
     // SOURCE frame above is picked node-side with the real fps, which is what must be exact.
-    gl.uniform1f(loc.iTime, frame / 30);
-    gl.uniform1i(loc.iFrame, frame);
-    gl.uniform1f(loc.iTimeDelta, 1 / 30);
+    //
+    // BEAT-RELATIVE clock: KinoVideo mounts this inside <Sequence from={beat start}>, and Sequence
+    // rebases the frame context to 0 there — so `frame` (hence iTime and every keyframe lookup) is
+    // already seconds-from-beat-start. Same idiom as zoomKeyframes/captionKeyframes: the track rides
+    // real VO timing instead of breaking when a beat shifts, and the params share one clock with
+    // iTime. See docs/superpowers/specs/2026-07-25-region-params-design.md.
+    const u = resolveUniforms(
+      paramsAt(region.params ?? {}, region.keyframes ?? [], frame / 30),
+      { frame, fps: 30, width, height, pulse: 0 },
+      regionExtras(region),
+    );
+    gl.uniform3f(loc.iResolution, width, height, 1);
+    gl.uniform1f(loc.iTime, u.iTime);
+    gl.uniform1i(loc.iFrame, u.iFrame);
+    gl.uniform1f(loc.iTimeDelta, u.iTimeDelta);
+    gl.uniform4f(loc.iMouse, 0, 0, 0, 0);
+    // uPulse is declared in the region header but has no trigger surface this phase (YAGNI — nothing
+    // needs a one-shot yet). Uploaded explicitly as 0 so a body referencing it reads a defined value;
+    // when a one-shot appears, pulseAt(triggers, frame/30) drops in right here.
+    gl.uniform1f(loc.uPulse, u.uPulse);
+    gl.uniform3fv(loc.uColorA, u.uColorA);
+    gl.uniform3fv(loc.uColorB, u.uColorB);
+    gl.uniform3fv(loc.uColorC, u.uColorC);
+    gl.uniform1f(loc.uIntensity, u.uIntensity);
+    gl.uniform1f(loc.uParam0, u.uParams[0]);
+    gl.uniform1f(loc.uParam1, u.uParams[1]);
+    gl.uniform1f(loc.uParam2, u.uParams[2]);
+    gl.uniform1f(loc.uParam3, u.uParams[3]);
     for (let i = 0; i < MAX_REGION_MASKS; i++) {
       const m = region.masks[i];
       const ch = m ? CHANNEL_VEC[m.channel] ?? CHANNEL_VEC.gray : ZERO_VEC;
@@ -306,6 +341,9 @@ export const RegionShader: React.FC<{
     // Per-mask bodies are baked into the program too — two specs differing ONLY in a masks[].subject
     // would otherwise reuse the first one's compiled shader (see render-region-reuse.test.ts).
     ...region.masks.map((m) => m.subjectCode ?? ""),
+    // Param NAMES are baked in as `#define u_<name> uParamI`, so two specs differing only in their
+    // param names must not share a compiled program (same trap as the per-mask bodies above).
+    regionExtras(region).join(","),
     `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
     ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
   ].join(" ");
