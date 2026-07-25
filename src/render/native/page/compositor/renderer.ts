@@ -5,6 +5,7 @@
 // Everything here runs in the SYNCHRONOUS draw phase. No awaits, no decodes, no layout:
 // sources have already been prepared by the time draw() is called.
 import { IDENTITY_TRANSFORM, type BlendMode, type LayerDraw, type TextureSource } from "./graph.js";
+import { BASE_GROUP, groupRuns } from "./groups.js";
 import { TargetPool, type RenderTarget } from "./targets.js";
 import { applyMask, type MaskBinding } from "./masks.js";
 import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
@@ -155,71 +156,8 @@ export class StageRenderer {
     const accum = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, accum);
 
-    for (const layer of layers) {
-      const source = sources.get(layer.source.providerId);
-      if (!source) continue;
-
-      registerBackdropTexture(accum.tex, this.width, this.height);
-
-      const chain = layer.effects
-        .map((e) => ({ pass: getPass(e.kind), params: e.params }))
-        .filter((e): e is { pass: EffectPass; params: Record<string, number | string> } => Boolean(e.pass));
-
-      if (layer.mask || chain.length) {
-        const rendered = this.drawToTarget(layer, source, frame);
-        if (!rendered) continue;
-
-        let current = rendered;
-        if (layer.mask) {
-          const maskObj: LayerMask = "source" in layer.mask
-            ? (layer.mask as unknown as LayerMask)
-            : { source: { kind: "file", src: (layer.mask as any).providerId, channel: (layer.mask as any).channel ?? "a" }, feather: (layer.mask as any).feather, invert: (layer.mask as any).invert };
-          const resolved = resolveMaskDefaults(maskObj);
-          let binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
-          if (resolved.source.kind === "layer") {
-            const mt = maskTargets.get(resolved.source.layerId);
-            binding = { mask: mt ? mt.tex : null, sdf: null, sdfMax: 0 };
-          }
-          const masked = applyMask(gl, this.pool, rendered, resolved, binding);
-          this.pool.release(rendered);
-          current = masked;
-        }
-
-        const finalTarget = chain.length ? runChain(gl, this.pool, current, chain, frame) : current;
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, accum.fbo);
-        gl.viewport(0, 0, this.width, this.height);
-        gl.useProgram(this.prog);
-        gl.uniform1f(this.uFlipY, 0);
-        applyBlend(gl, layer.blend);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, finalTarget.tex);
-        gl.uniformMatrix3fv(
-          this.uModel,
-          false,
-          modelMatrix({ ...layer, rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM }),
-        );
-        gl.uniform1f(this.uOpacity, layer.opacity);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        if (finalTarget !== current) this.pool.release(finalTarget);
-        this.pool.release(current);
-        continue;
-      }
-
-      const tex = source.texture(gl, frame, layer.source.key);
-      if (!tex) continue;
-      // A provider may have bound its own program/framebuffer while producing its texture.
-      gl.bindFramebuffer(gl.FRAMEBUFFER, accum.fbo);
-      gl.viewport(0, 0, this.width, this.height);
-      gl.useProgram(this.prog);
-      gl.uniform1f(this.uFlipY, 0);
-      applyBlend(gl, layer.blend);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.uniformMatrix3fv(this.uModel, false, modelMatrix(layer));
-      gl.uniform1f(this.uOpacity, layer.opacity);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    for (const run of groupRuns(layers)) {
+      this.compositeRun(accum, run, sources, frame, maskTargets);
     }
     for (const t of maskTargets.values()) this.pool.release(t);
 
@@ -244,6 +182,131 @@ export class StageRenderer {
   }
 
   private pool = new TargetPool();
+
+  /** Walk a consecutive same-group run. Beat groups with multiple layers render to a temp target first. */
+  private compositeRun(
+    accum: RenderTarget,
+    run: LayerDraw[],
+    sources: Map<string, TextureSource>,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): void {
+    const isBeatGroup = (run[0].group ?? BASE_GROUP) !== BASE_GROUP;
+    const needsGroupTarget = isBeatGroup && run.length > 1;
+    if (!needsGroupTarget) {
+      for (const layer of run) this.compositeLayer(accum, layer, sources, frame, maskTargets);
+      return;
+    }
+    const gl = this.gl;
+    const group = this.pool.acquire(gl, this.width, this.height);
+    this.pool.clear(gl, group);
+    for (const layer of run) this.compositeLayer(group, layer, sources, frame, maskTargets);
+    this.blitTarget(accum, group, 1, "normal");
+    this.pool.release(group);
+  }
+
+  private blitTarget(dest: RenderTarget, src: RenderTarget, opacity: number, blend: BlendMode): void {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
+    gl.viewport(0, 0, this.width, this.height);
+    gl.useProgram(this.prog);
+    gl.uniform1f(this.uFlipY, 0);
+    applyBlend(gl, blend);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src.tex);
+    gl.uniformMatrix3fv(
+      this.uModel,
+      false,
+      modelMatrix({
+        id: "_blit",
+        rect: { x: 0, y: 0, w: this.width, h: this.height },
+        transform: IDENTITY_TRANSFORM,
+        source: { providerId: "" },
+        opacity: 1,
+        blend: "normal",
+        effects: [],
+      }),
+    );
+    gl.uniform1f(this.uOpacity, opacity);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  private compositeLayer(
+    dest: RenderTarget,
+    layer: LayerDraw,
+    sources: Map<string, TextureSource>,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): void {
+    const gl = this.gl;
+    const source = sources.get(layer.source.providerId);
+    if (!source) return;
+
+    registerBackdropTexture(dest.tex, this.width, this.height);
+
+    const chain = layer.effects
+      .map((e) => ({ pass: getPass(e.kind), params: e.params }))
+      .filter((e): e is { pass: EffectPass; params: Record<string, number | string> } => Boolean(e.pass));
+
+    if (layer.mask || chain.length) {
+      const rendered = this.drawToTarget(layer, source, frame);
+      if (!rendered) return;
+
+      let current = rendered;
+      if (layer.mask) {
+        const maskObj: LayerMask = "source" in layer.mask
+          ? (layer.mask as unknown as LayerMask)
+          : {
+              source: { kind: "file", src: (layer.mask as any).providerId, channel: (layer.mask as any).channel ?? "a" },
+              feather: (layer.mask as any).feather,
+              invert: (layer.mask as any).invert,
+            };
+        const resolved = resolveMaskDefaults(maskObj);
+        let binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
+        if (resolved.source.kind === "layer") {
+          const mt = maskTargets.get(resolved.source.layerId);
+          binding = { mask: mt ? mt.tex : null, sdf: null, sdfMax: 0 };
+        }
+        const masked = applyMask(gl, this.pool, rendered, resolved, binding);
+        this.pool.release(rendered);
+        current = masked;
+      }
+
+      const finalTarget = chain.length ? runChain(gl, this.pool, current, chain, frame) : current;
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
+      gl.viewport(0, 0, this.width, this.height);
+      gl.useProgram(this.prog);
+      gl.uniform1f(this.uFlipY, 0);
+      applyBlend(gl, layer.blend);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, finalTarget.tex);
+      gl.uniformMatrix3fv(
+        this.uModel,
+        false,
+        modelMatrix({ ...layer, rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM }),
+      );
+      gl.uniform1f(this.uOpacity, layer.opacity);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      if (finalTarget !== current) this.pool.release(finalTarget);
+      this.pool.release(current);
+      return;
+    }
+
+    const tex = source.texture(gl, frame, layer.source.key);
+    if (!tex) return;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
+    gl.viewport(0, 0, this.width, this.height);
+    gl.useProgram(this.prog);
+    gl.uniform1f(this.uFlipY, 0);
+    applyBlend(gl, layer.blend);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniformMatrix3fv(this.uModel, false, modelMatrix(layer));
+    gl.uniform1f(this.uOpacity, layer.opacity);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
 
   /** Draw a single layer into an offscreen target, unblended, at frame scale. The caller
    *  owns the target and must release it. */

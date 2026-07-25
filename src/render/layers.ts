@@ -79,9 +79,10 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       : full;
 
     const footageProvider = s.regionShader ? `region${i}` : `seg${i}`;
-    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity, mask: (s as any).mask, effects: s.effects });
-    if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity });
-    if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity });
+    const beat = `beat${i}`;
+    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity, mask: (s as any).mask, effects: s.effects, group: beat });
+    if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity, group: beat });
+    if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity, group: beat });
   });
 
   // 5. Full-screen motion beats. A motion beat that follows another dissolves in over the
@@ -96,6 +97,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const opacity = fadeIn
       ? interpolate(local, [0, MOTION_XFADE_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
       : 1;
+    const beat = `beat${i}`;
     out.push({
       id: `motion${i}`,
       source: { providerId: `motion${i}`, key: String(local) },
@@ -103,6 +105,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       opacity,
       mask: (s as any).mask,
       effects: s.effects,
+      group: beat,
     });
   });
 
@@ -113,12 +116,14 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const dur = f(s.endSec) - from;
     const local = frame - from;
     if (local < 0 || local >= dur) return;
+    const beat = `beat${i}`;
     out.push({
       id: `overlay${i}`,
       source: { providerId: `overlay${i}`, key: String(local) },
       rect: full,
       mask: (s as any).mask,
       effects: s.effects,
+      group: beat,
     });
   });
 
@@ -128,7 +133,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       const from = f(t.fromSec);
       const to = "durSec" in t ? f(t.fromSec + (t as any).durSec) : f((t as any).toSec);
       if (frame < from || frame >= to) return;
-      out.push({ id: `text${i}_${j}`, source: { providerId: `text${i}_${j}` }, rect: full });
+      out.push({ id: `text${i}_${j}`, source: { providerId: `text${i}_${j}` }, rect: full, group: `beat${i}` });
     });
   });
 
@@ -159,7 +164,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       for (let w = 0; w < s.words.length; w++) if (tAbs >= s.words[w].start) idx = w;
       key = `w${idx}`;
     }
-    out.push({ id: `caption${i}`, source: { providerId: `caption${i}`, key }, rect: full, mask: (s as any).mask, effects: s.effects });
+    out.push({ id: `caption${i}`, source: { providerId: `caption${i}`, key }, rect: full, mask: (s as any).mask, effects: s.effects, group: `beat${i}` });
   });
 
   // 10. AI disclosure.

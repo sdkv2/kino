@@ -38,6 +38,8 @@ export interface LayerDraw {
   blend: BlendMode;
   effects: EffectRef[];
   mask?: MaskRef;
+  /** Beat this layer belongs to, for transitions. Absent = the base group. */
+  group?: string;
 }
 
 /** What `layersAt` may omit; `normalizeLayer` fills the rest. */
@@ -63,6 +65,7 @@ export function normalizeLayer(spec: LayerSpec): LayerDraw {
     blend: spec.blend ?? "normal",
     effects: spec.effects ?? [],
     mask: spec.mask,
+    group: spec.group,
   };
 }
 
