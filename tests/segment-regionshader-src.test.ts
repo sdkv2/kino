@@ -117,3 +117,62 @@ describe("region shader extra params", () => {
     expect(src).toContain("#define mainImage regionSubject1");
   });
 });
+
+// --- Phase 4: a subject body can call the background body at any coordinate --------------------
+describe("kinoBackground (cross-region sampling)", () => {
+  const USER = "void mainImage(out vec4 c, in vec2 f){ kinoBackground(c, f + vec2(0.0, 8.0)); }";
+  const DECL = "void regionBg(out vec4 fragColor, in vec2 fragCoord);";
+
+  // The backward-compat bar phases 2 and 3 both held: a spec that does not use the feature gets
+  // the SAME BYTES it got before the feature existed, not merely an equivalent program.
+  it("emits byte-identical source when no body mentions kinoBackground", () => {
+    const src = assembleRegionShaderSource(SUBJ, BG);
+    expect(src).not.toContain("kinoBackground");
+    expect(src).not.toContain(DECL);
+  });
+
+  // GLSL wants a declaration before use, and subject bodies are emitted BEFORE the background body
+  // in the one translation unit they share — hence the forward declaration ahead of them.
+  it("forward-declares regionBg and aliases it inside a subject body that uses it", () => {
+    const src = assembleRegionShaderSource(USER, BG);
+    expect(src).toContain(DECL);
+    expect(src).toContain("#define kinoBackground regionBg");
+    expect(src).toContain("#undef kinoBackground");
+    expect(src.indexOf(DECL)).toBeLessThan(src.indexOf("#define mainImage regionSubject"));
+  });
+
+  // Using it in the BACKGROUND body is recursion (illegal in GLSL) and has no meaning. Leaving it
+  // undefined there turns the mistake into a loud compile error against line-numbered source.
+  it("does not define kinoBackground for the background body", () => {
+    const src = assembleRegionShaderSource(USER, BG);
+    const undefAt = src.indexOf("#undef kinoBackground");
+    expect(undefAt).toBeGreaterThan(-1); // else the ordering check below passes vacuously
+    expect(src.indexOf("#define mainImage regionBg")).toBeGreaterThan(undefAt);
+  });
+
+  it("is not switched on by the background body alone", () => {
+    const src = assembleRegionShaderSource(SUBJ, "void mainImage(out vec4 c, in vec2 f){ kinoBackground(c, f); }");
+    expect(src).not.toContain("#define kinoBackground regionBg");
+  });
+
+  // Per-object tail: a per-entry body gets the same access, alongside uMaskSelf.
+  it("aliases kinoBackground inside a per-entry subject body", () => {
+    const src = assembleRegionShaderSource(null, BG, [], [USER]);
+    expect(src).toContain(DECL);
+    expect(src).toContain("#define kinoBackground regionBg");
+    expect(src.indexOf(DECL)).toBeLessThan(src.indexOf("#define mainImage regionSubject0"));
+  });
+
+  // ...and the shared fallback body is a subject body too.
+  it("aliases kinoBackground inside the shared fallback body", () => {
+    const src = assembleRegionShaderSource(USER, BG, [], [A, null]);
+    expect(src).toContain(DECL);
+    expect(src.indexOf("#define kinoBackground regionBg")).toBeLessThan(
+      src.indexOf("#define mainImage regionSubjectShared"),
+    );
+  });
+
+  it("leaves the per-object tail untouched when no body mentions it", () => {
+    expect(assembleRegionShaderSource(null, BG, [], [A, B2])).not.toContain("kinoBackground");
+  });
+});

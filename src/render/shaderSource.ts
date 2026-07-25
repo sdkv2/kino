@@ -231,14 +231,47 @@ export function assembleRegionShaderSource(
 // Every mask unions into ONE subject region. This is the shape kino shipped before per-object
 // regions and is emitted byte-for-byte unchanged whenever no mask carries its own body — a spec
 // that doesn't use the feature must not pay for it, or change output at all.
+// Cross-region sampling. The background body is emitted as a PURE function of fragCoord, so
+// evaluating it at fragCoord+offset IS an offset sample of the shaded background — exact,
+// full-resolution, no framebuffer, no second pass, no feedback hazard. The only thing blocking it is
+// ORDER: subject bodies are emitted BEFORE the background body in the one translation unit they
+// share, and GLSL wants a declaration first. Hence this forward declaration, plus a `kinoBackground`
+// alias scoped to subject bodies the way uMaskSelf/uChannelSelf already are.
+//
+// Deliberately NOT defined for the background body: that would be recursion (illegal in GLSL) and
+// has no meaning, so leaving it undefined makes the mistake a loud compile error against
+// line-numbered source rather than a silent one. A subject cannot sample ANOTHER subject either —
+// under painter's order a subject's output is discarded outside its own mask, so the question has no
+// answer exactly where you'd want to ask it.
+//
+// Emitted ONLY when a subject-side body actually names it, so a spec that doesn't use the feature
+// gets byte-identical GLSL — the bar phases 2 and 3 held.
+// ponytail: substring test, not a GLSL parse. A body naming it in a comment gets an unused
+// declaration and an unused macro (harmless); one that builds the name through its own macro doesn't
+// match and gets the compile error above. Parse the source if that ever costs anyone anything.
+//
+// Cost is one evaluation of the background body per call — measured +0.019 s/frame for a light body
+// and +0.112 for one 10x heavier (1080x1920, 12 stills, SwiftShader). That is ~5% of what the three
+// kinoMaskDist calls in a typical bevel already cost, which is why this is a body call and not an
+// FBO. Cost is taps x body weight and nothing else, so the one shape that gets dear is a WIDE kernel
+// over an EXPENSIVE background (8 taps heavy = +0.47 s/frame). That is where a real two-pass
+// framebuffer becomes the right answer; this signature does not change when it lands.
+// See docs/superpowers/specs/2026-07-25-cross-region-design.md.
+const BG_FORWARD_DECL = "void regionBg(out vec4 fragColor, in vec2 fragCoord);\n";
+const usesBackground = (bodies: (string | null)[]): boolean => bodies.some((b) => b?.includes("kinoBackground"));
+
 function unionTail(subj: string, bg: string): string {
+  const xr = usesBackground([subj]);
   return (
+    (xr ? BG_FORWARD_DECL : "") +
     // Preprocessor-namespace each body's mainImage → two collision-free functions. Bodies are the
     // normal shader convention, reused unchanged.
     "// ---- subject region body ----\n" +
+    (xr ? "#define kinoBackground regionBg\n" : "") +
     "#define mainImage regionSubject\n" +
     subj +
     "\n#undef mainImage\n" +
+    (xr ? "#undef kinoBackground\n" : "") +
     "// ---- background region body ----\n" +
     "#define mainImage regionBg\n" +
     bg +
@@ -275,9 +308,12 @@ function unionTail(subj: string, bg: string): string {
 // discard/stencil split the union tail wants.
 function perObjectTail(per: (string | null)[], subj: string, bg: string): string {
   const needShared = per.some((b) => !b);
+  // Every subject-side body, and never the background — see BG_FORWARD_DECL.
+  const xr = usesBackground([...per, ...(needShared ? [subj] : [])]);
   // Which local holds each mask's shaded colour: its own body's output, or the shared one's.
   const varOf = (b: string | null, i: number) => (b ? `s${i}` : "sShared");
   return (
+    (xr ? BG_FORWARD_DECL : "") +
     per
       .map((b, i) =>
         b
@@ -285,21 +321,28 @@ function perObjectTail(per: (string | null)[], subj: string, bg: string): string
             // (kinoMaskDist(uMaskSelf, uChannelSelf, ...)) without hardcoding an array index.
             // Deliberately absent from the shared and background bodies — those span several masks
             // / the whole frame, so there is no single "self" and using it there is a loud compile
-            // error instead of a silently wrong edge.
+            // error instead of a silently wrong edge. kinoBackground is scoped differently: EVERY
+            // subject-side body gets it (there is exactly one background); only the background
+            // body does not.
             `// ---- subject region body for mask ${i} ----\n` +
             `#define uMaskSelf uMask${i}\n` +
             `#define uChannelSelf uChannel${i}\n` +
+            (xr ? "#define kinoBackground regionBg\n" : "") +
             `#define mainImage regionSubject${i}\n` +
             b +
-            "\n#undef mainImage\n#undef uChannelSelf\n#undef uMaskSelf\n"
+            "\n#undef mainImage\n" +
+            (xr ? "#undef kinoBackground\n" : "") +
+            "#undef uChannelSelf\n#undef uMaskSelf\n"
           : "",
       )
       .join("") +
     (needShared
       ? "// ---- shared subject region body (masks without their own) ----\n" +
+        (xr ? "#define kinoBackground regionBg\n" : "") +
         "#define mainImage regionSubjectShared\n" +
         subj +
-        "\n#undef mainImage\n"
+        "\n#undef mainImage\n" +
+        (xr ? "#undef kinoBackground\n" : "")
       : "") +
     "// ---- background region body ----\n" +
     "#define mainImage regionBg\n" +

@@ -1,0 +1,24 @@
+{
+  "title": "cross-region-glass",
+  "format": ["9:16"],
+  "provider": "none",
+  "segments": [
+    {
+      "kind": "video",
+      "source": "segdemo/subject.png",
+      "text": "glass that refracts its own background",
+      "dur": 2,
+      "regionShader": {
+        "mask": "masks/segdemo-mask",
+        "object": 0,
+        "subject": "backgrounds/region-glass.frag",
+        "background": "backgrounds/region-tint.frag",
+        "params": { "bend": 55, "radius": 70 },
+        "keyframes": [
+          { "at": 0, "params": { "bend": 0 } },
+          { "at": 1.2, "params": { "bend": 55 }, "ease": "easeInOut" }
+        ]
+      }
+    }
+  ]
+}
