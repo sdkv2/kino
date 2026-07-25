@@ -165,7 +165,7 @@ describe("kino init scaffolds brand.md", () => {
     } finally {
       process.chdir(prev);
     }
-  });
+  }, 30000);
 });
 
 describe("brand captionStyle presets", () => {

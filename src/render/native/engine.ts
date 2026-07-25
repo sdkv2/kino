@@ -135,7 +135,7 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
       page.on("requestfailed", (r) => console.error(`[native reqfail] ${r.url()} ${r.failure()?.errorText}`));
     }
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
-    await page.goto(`${url}/index.html`, { waitUntil: "load" });
+    await page.goto(`${url}/index.html`, { waitUntil: "load", timeout: 60000 });
     await awaitBoot(page);
     pageCache.set(slot, page);
   }
