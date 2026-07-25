@@ -1,0 +1,53 @@
+name: CLA
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  signed:
+    name: signatures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # The signatures table lives in the PR head, so a PR that adds its own row passes on
+      # the same push that adds it — no second run, no bot round-trip.
+      - name: Check every author has signed the CLA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # Authors of record: whoever opened the PR, plus every commit author and committer
+          # with a GitHub account. Skip bots — they bump versions rather than write
+          # copyrightable work, and Copilot is type Bot despite a login with no [bot] suffix.
+          # web-flow is GitHub's own committer on edits made through the web UI.
+          authors=$(
+            {
+              echo "$PR_AUTHOR"
+              gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits" --paginate \
+                --jq '.[] | (.author, .committer) | select(. != null and .type != "Bot") | .login'
+            } | grep -vE '\[bot\]$|^web-flow$' | sort -fu
+          )
+
+          missing=
+          for author in $authors; do
+            # A signature row carries the handle's profile URL and a real date. The closing
+            # paren keeps `bob` from matching `bobby`; the date rules out the blank template
+            # row above the table, which is spelled YYYY-MM-DD.
+            grep -qiE "github\.com/$author\).*[0-9]{4}-[0-9]{2}-[0-9]{2}" .github/CLA.md \
+              || missing="$missing $author"
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::No CLA signature for:$missing"
+            echo "Add a row to the Signatures table in .github/CLA.md as part of this PR:" >&2
+            echo "  | [@handle](https://github.com/handle) | Your Name | YYYY-MM-DD |" >&2
+            echo "See CONTRIBUTING.md#sign-off-and-the-cla." >&2
+            exit 1
+          fi
+
+          echo "Signed:$(printf ' %s' $authors)"
