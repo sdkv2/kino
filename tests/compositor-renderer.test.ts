@@ -62,7 +62,10 @@ describe("StageRenderer", () => {
           id, source: { providerId: id }, rect: { x: 0, y: 0, w: 200, h: 200 },
           transform: { scale: 1, rotate: 0, translate: [0, 0] }, opacity, blend: "normal", effects: [],
         });
-        r.draw([layer("a", 1), layer("b", 0.5)], sources, 0, { theme: { font: "Arial", night: "#000", mint: "#0f0", green: "#0f0", gold: "#fc0", white: "#fff", captionFontSize: 74, captionStroke: 9, film: 0 } });
+        r.draw([layer("a", 1), layer("b", 0.5)], sources, 0, {
+          theme: { font: "Arial", night: "#000", mint: "#0f0", green: "#0f0", gold: "#fc0", white: "#fff", captionFontSize: 74, captionStroke: 9, film: 0 },
+          props: { theme: { font: "Arial", night: "#000", mint: "#0f0", green: "#0f0", gold: "#fc0", white: "#fff", captionFontSize: 74, captionStroke: 9, film: 0 }, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: { kind: "custom", image: null, shaderCode: null, customCode: "", params: {}, keyframes: [], triggers: [] }, disclosure: "", segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }] },
+        });
 
         const read = document.createElement("canvas");
         read.width = 200; read.height = 200;

@@ -5,7 +5,7 @@
 // Everything here runs in the SYNCHRONOUS draw phase. No awaits, no decodes, no layout:
 // sources have already been prepared by the time draw() is called.
 import { IDENTITY_TRANSFORM, type BlendMode, type LayerDraw, type TextureSource } from "./graph.js";
-import { BASE_GROUP, groupRuns } from "./groups.js";
+import { BASE_GROUP, groupRuns, groupsOf } from "./groups.js";
 import { TargetPool, type RenderTarget } from "./targets.js";
 import { applyMask, type MaskBinding } from "./masks.js";
 import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
@@ -14,6 +14,13 @@ import { resolvePostChain, runPost } from "./post.js";
 import type { PostFx } from "../../../postSpec.js";
 import type { Theme } from "../../../props.js";
 import { registerBackdropTexture, clearBackdropTexture } from "../liquidGlass.js";
+import { mixGroups } from "./transitions/index.js";
+import {
+  groupSpans,
+  transitionKindForWindow,
+  transitionProgress,
+} from "../../../transitionSpec.js";
+import type { KinoProps } from "../../../props.js";
 
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
@@ -130,7 +137,7 @@ export class StageRenderer {
     layers: LayerDraw[],
     sources: Map<string, TextureSource>,
     frame: number,
-    opts: { theme: Theme; postFx?: PostFx },
+    opts: { theme: Theme; postFx?: PostFx; props: KinoProps },
   ): void {
     const gl = this.gl;
     // Full state reset every frame — a leaked flag from a provider's own program would make
@@ -164,8 +171,29 @@ export class StageRenderer {
     const accum = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, accum);
 
+    const transition = transitionProgress({ groups: groupSpans(opts.props), frame });
+    const skipGroups = transition ? new Set([transition.from, transition.to]) : null;
+
     for (const run of groupRuns(layers)) {
+      const gid = run[0].group ?? BASE_GROUP;
+      if (skipGroups?.has(gid)) continue;
       this.compositeRun(accum, run, sources, frame, maskTargets);
+    }
+
+    if (transition) {
+      const byGroup = groupsOf(layers);
+      const fromLayers = (byGroup.get(transition.from) ?? []).map((l) => ({ ...l, opacity: 1 }));
+      const toLayers = (byGroup.get(transition.to) ?? []).map((l) => ({ ...l, opacity: 1 }));
+      const fromTarget = this.compositeLayersToTarget(fromLayers, sources, frame, maskTargets);
+      const toTarget = this.compositeLayersToTarget(toLayers, sources, frame, maskTargets);
+      if (fromTarget && toTarget) {
+        const kind = transitionKindForWindow(opts.props, transition);
+        const mixed = mixGroups(gl, this.pool, fromTarget, toTarget, kind, transition.p);
+        this.blitTarget(accum, mixed, 1, "normal");
+        this.pool.release(fromTarget);
+        this.pool.release(toTarget);
+        this.pool.release(mixed);
+      }
     }
     for (const t of maskTargets.values()) this.pool.release(t);
 
@@ -198,7 +226,20 @@ export class StageRenderer {
 
   private pool = new TargetPool();
 
-  /** Walk a consecutive same-group run. Beat groups with multiple layers render to a temp target first. */
+  private compositeLayersToTarget(
+    layers: LayerDraw[],
+    sources: Map<string, TextureSource>,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): RenderTarget | null {
+    if (!layers.length) return null;
+    const gl = this.gl;
+    const group = this.pool.acquire(gl, this.width, this.height);
+    this.pool.clear(gl, group);
+    for (const layer of layers) this.compositeLayer(group, layer, sources, frame, maskTargets);
+    return group;
+  }
+
   private compositeRun(
     accum: RenderTarget,
     run: LayerDraw[],

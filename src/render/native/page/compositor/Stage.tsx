@@ -37,7 +37,7 @@ export function createStage(
         layers.map((l) => sources.get(l.source.providerId)?.prepare(frame, l.source.key) ?? Promise.resolve()),
       );
       // Phase B — synchronous.
-      renderer.draw(layers, sources, frame, { theme: props.theme, postFx: (props as KinoProps & { postFx?: PostFx }).postFx });
+      renderer.draw(layers, sources, frame, { theme: props.theme, postFx: (props as KinoProps & { postFx?: PostFx }).postFx, props });
     },
     dispose(): void {
       for (const s of sources.values()) s.dispose?.();
