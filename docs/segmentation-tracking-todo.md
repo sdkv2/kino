@@ -78,6 +78,16 @@ REMAINING: the generic `backgroundTextures` `{kind:"video"}` channel
 trivially routable through per-beat /vframes). Apply the same /vframes routing
 there. Lower priority — region shaders are the primary video-mask surface.
 
+### UPDATE 2026-07-25: cutout compositing did NOT fix that channel
+
+`regionShader.backdrop` (a second, animating source behind a segmented subject —
+see `docs/segmentation.md`) went in as a **per-beat** `/vframes` job (`rsbd<i>`),
+beside the mask jobs, precisely because it has a beat whose sequence window and
+clock it can borrow. `backgroundTextures` is page-global and has neither, which
+is the actual reason it was never "trivially routable". So it is still frozen at
+frame 0 and still worth fixing — the fix wants a page-level frame-media entry
+with its own clock, not a copy of the region-shader wiring.
+
 ## CUDA backend — GPU verification pending (2026-07-24)
 
 CUDA backend shipped (native PyTorch SAM3.1, real tracking by design). Image path

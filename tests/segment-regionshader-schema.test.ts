@@ -162,6 +162,39 @@ describe("SpecSchema video beat regionShader", () => {
     expect(s.segments[0].kind === "video").toBe(true);
   });
 
+  // Cutout compositing: `backdrop` is a SECOND source for the background region, and it is a
+  // complete spec on its own — mask + backdrop with no .frag anywhere IS the virtual greenscreen,
+  // so the "needs a body" refine has to count it.
+  it("parses a backdrop as the only thing besides the mask", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [{ ...valid.segments[0], regionShader: { mask: "masks/x", backdrop: "pexels/beach.mp4" } }],
+    });
+    const seg = s.segments[0];
+    expect(seg.kind === "video" && seg.regionShader?.backdrop).toBe("pexels/beach.mp4");
+  });
+
+  it("accepts a backdrop alongside shader bodies", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [
+        { ...valid.segments[0], regionShader: { mask: "masks/x", subject: "a.frag", background: "b.frag", backdrop: "b.mp4" } },
+      ],
+    });
+    expect(s.segments[0].kind === "video").toBe(true);
+  });
+
+  // The object stays strict — a typo'd key must not be silently stripped into a beat that renders
+  // the beat's own plate behind the subject and looks merely disappointing.
+  it("rejects a misspelled backdrop key", () => {
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [{ ...valid.segments[0], regionShader: { mask: "masks/x", backdropp: "pexels/beach.mp4" } }],
+      }),
+    ).toThrow();
+  });
+
   // No trigger surface this phase (YAGNI) — a spec reaching for one should fail loudly, not have
   // the key silently stripped and render an unexplained still frame.
   it("rejects triggers on a regionShader", () => {

@@ -1,0 +1,22 @@
+{
+  "brand": "kino",
+  "title": "cutout",
+  "format": ["16:9"],
+  "provider": "none",
+  "fps": 25,
+  "segments": [
+    {
+      "kind": "video",
+      "source": "frag/zebras.mp4",
+      "text": "two tracked subjects lifted off their own plate and dropped onto another clip",
+      "dur": 2,
+      "regionShader": {
+        "masks": [
+          { "mask": "masks/zebco", "object": 0 },
+          { "mask": "masks/zebco", "object": 1 }
+        ],
+        "backdrop": "pexels/rain-glass.mp4"
+      }
+    }
+  ]
+}

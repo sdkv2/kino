@@ -56,6 +56,7 @@ function resolveRegionShader(
     masks?: { mask: string; object: number; subject?: string }[];
     subject?: string;
     background?: string;
+    backdrop?: string;
     object: number;
     // Shared by every body in the beat's one program; `keyframes[].at` is beat-relative seconds.
     // The 4-slot ceiling is enforced in the schema (see slotParamNames), so no re-check here.
@@ -83,10 +84,14 @@ function resolveRegionShader(
     stageAsset(maskRel);
     return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel, subjectCode: loadBody(subject) };
   });
+  // The backdrop clip is staged like the mask/asset — the page fetches it from publicDir by this
+  // same relative path, and videoFrames.ts extracts it there when it's a video.
+  if (rs.backdrop) stageAsset(rs.backdrop);
   return {
     masks,
     subjectCode: loadBody(rs.subject),
     backgroundCode: loadBody(rs.background),
+    backdrop: rs.backdrop,
     params: rs.params,
     keyframes: rs.keyframes,
   };
