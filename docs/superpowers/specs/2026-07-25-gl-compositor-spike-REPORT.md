@@ -61,6 +61,8 @@ Zero specs in any corpus carry external references inside motion HTML, so `inlin
 
 | Method | p50 ms | p95 ms | bytes/frame |
 |---|---|---|---|
+| cdp-screenshot | 52.3 | 56.0 | 13002 |
+| canvas-toDataURL | 10.9 | 12.2 | 13002 |
 
 ## M6 — Color and alpha parity
 
