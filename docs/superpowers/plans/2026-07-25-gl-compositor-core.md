@@ -2650,7 +2650,13 @@ export const Stage: React.FC<{
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
       />
       {/* Staging DOM: laid out for real (so CSS, vw units and fonts resolve) but never
-          composited into the frame. */}
+          composited into the frame.
+
+          NOTE the offset. engine.ts's collectMeasurements() reads getBoundingClientRect() off
+          [data-measure] nodes, and everything staged here sits 99999px left of where it appears
+          in the frame — so measureSink would report silently WRONG geometry rather than none.
+          Phase 4 replaces that collector with one driven by layersAt. Until then, measureSink
+          and KINO_COMPOSITOR=1 must not be used together. */}
       <div
         ref={stagingRef}
         id="kino-staging"
