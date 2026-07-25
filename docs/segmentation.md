@@ -9,11 +9,13 @@
 kino segment path/to/clip.mp4 --prompt "the person"
 
 # 2. use it: split a beat's frame by the mask, different shader per region
-#    (spec app beat)
+#    (spec `video` beat)
 "regionShader": {
   "mask": "masks/clip",
-  "subject": "backgrounds/glow.frag",       // where the person is
-  "background": "backgrounds/plasma.frag"    // everywhere else
+  "subject": "backgrounds/glow.frag",        // where the person is
+  "background": "backgrounds/plasma.frag",   // everywhere else
+  "params":    { "rim": 2.0 },               // read as u_rim in either body
+  "keyframes": [{ "at": 1.2, "params": { "rim": 14.0 } }]   // beat-relative seconds
 }
 ```
 
@@ -204,9 +206,60 @@ The marginal cost of one extra body is ~0.04 s/frame for the light shader and ~0
 
 Inside a region shader you can sample:
 - `uTex0` — the beat's own asset (the thing being segmented).
-- the shader's own params/uniforms (`u_*` aliases, `iTime`, etc.) as any shader.
+- the shader's own params/uniforms (`u_*` aliases, `iTime`, etc.) as any shader — see
+  [Params and keyframes](#params-and-keyframes) below.
 
 **Worked example:** `examples/segmentation/` — a blue disc image, a mock mask, a solid-red subject shader and solid-green background shader. Its `README.md` has the exact commands (make a fixture asset, `kino segment --backend mock`, `kino still`). You get a red ellipse (subject) on green (background) — the mask boundary is the seam.
+
+#### Params and keyframes
+
+`regionShader` takes the same `params` / `keyframes` surface a shader `background` has, so an effect
+can **vary over the beat** instead of being a hardcoded constant — a rim that thickens, a film that
+shifts hue, contour lines that drift.
+
+```jsonc
+"regionShader": {
+  "mask": "masks/segdemo-mask",
+  "subject": "backgrounds/rim.frag",
+  "background": "backgrounds/wash.frag",
+  "params": { "rim": 2.0, "colorA": "#80e2b4" },
+  "keyframes": [
+    { "at": 0,   "params": { "rim": 2.0 } },
+    { "at": 1.2, "params": { "rim": 14.0 }, "ease": "easeInOut" }
+  ]
+}
+```
+
+The body reads each numeric param by name:
+
+```glsl
+float d = kinoMaskDist(uMaskSelf, uChannelSelf, fragCoord, u_rim);
+c.rgb = mix(c.rgb, uColorA, 1.0 - smoothstep(0.0, u_rim, -d));
+```
+
+**`at` is beat-relative seconds** — 0 is *this beat's* start, like `zoomKeyframes` and
+`captionKeyframes`, **not** absolute like `backgroundKeyframes`. A `regionShader` belongs to one
+beat, so its track rides real VO timing and does not need retuning when an earlier beat shifts.
+`iTime` inside a region body is on the same beat-local clock, so the two always agree.
+
+**One shared param set.** `params`/`keyframes` live on `regionShader` itself, never on a `masks[]`
+entry. Every body in the beat — the top-level `subject`, the `background`, and each per-entry
+`subject` — compiles into one program with **one** `uParam0..3` bank, so they all see the same
+`u_<name>` values. Per-entry sets would need per-entry banks and would exhaust the slots on the
+first two-mask spec.
+
+**Four numeric params, beat-wide.** Numeric names are packed into `uParam0..3` in alphabetical order
+and aliased as `u_<name>`. The cap is on the *union* of numeric names across `params` and every
+keyframe, for the whole beat — not per body. `colorA` / `colorB` / `colorC` (hex strings) and
+`intensity` drive `uColorA`/`uColorB`/`uColorC`/`uIntensity` instead and cost no slot, so you get
+four named numbers plus three colours and an intensity. Exceeding four is a **build error** naming
+the params, not a silent drop.
+
+**No triggers yet.** Region shaders have no `triggers` surface (unlike `backgroundTriggers`), so
+`uPulse` is declared but always reads `0`. `triggers` is a rejected key rather than an ignored one.
+
+`tests/render-region-params.test.ts` renders one beat at three times and pins the tween, the
+beat-relative clock, and determinism.
 
 #### Distance to the mask edge
 

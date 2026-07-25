@@ -6,6 +6,7 @@
 import { z } from "zod";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS } from "../render/textStyles.js";
 import { EASE_NAMES } from "../render/bgparams.js";
+import { EXTRA_PARAM_SLOTS } from "../render/shaderSource.js";
 
 const EaseEnum = z.enum(EASE_NAMES);
 
@@ -34,6 +35,20 @@ const BgKeyframe = z.object({
   ease: EaseEnum.optional(),
 });
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
+// Numeric author-param names that consume a uParam slot — the union across a base dict and every
+// keyframe, since a slot is allocated for any name that appears anywhere (extraParamNames derives
+// the same set). colorA/colorB/colorC/intensity drive their own uniforms and cost nothing.
+const RESERVED_SHADER_PARAMS = new Set(["colorA", "colorB", "colorC", "intensity"]);
+function slotParamNames(
+  base: Record<string, number | string> | undefined,
+  keyframes: { params: Record<string, number | string> }[] | undefined,
+): string[] {
+  const names = new Set<string>();
+  for (const src of [base ?? {}, ...(keyframes ?? []).map((k) => k.params)]) {
+    for (const [k, v] of Object.entries(src)) if (!RESERVED_SHADER_PARAMS.has(k) && typeof v === "number") names.add(k);
+  }
+  return [...names].sort();
+}
 // Motion tracks may anchor to a spoken word instead of hand-copied seconds: atWord "match" (first
 // case/punctuation-insensitive occurrence) or a word index. Resolved against the beat's VO word
 // timings at build, so the anchor rides real TTS timing — no mock→real retune. Exactly one of
@@ -197,11 +212,33 @@ const SegmentUnion = z.discriminatedUnion("kind", [
           .optional(),
         subject: z.string().min(1).optional(), // .frag/.glsl body; masks without their own
         background: z.string().min(1).optional(), // .frag/.glsl body; region where none are
+        // Author params shared by EVERY body in this beat's program — there is ONE uParam0..3 bank
+        // in the single program the subject, background and per-mask bodies share. Numeric
+        // non-reserved names alias to `u_<name>`; colorA/colorB/colorC (hex) and intensity drive
+        // uColorA/B/C + uIntensity instead and cost no slot. Max 4 numeric names across params +
+        // keyframes — build throws above that rather than silently dropping the extras.
+        params: z.record(z.union([z.number(), z.string()])).optional(),
+        // Beat-relative track — `at` is seconds from THIS segment's start (like zoomKeyframes), so
+        // it rides the beat when VO timing shifts. RegionShader's clock is already beat-local, and
+        // this shares it with iTime. NOT absolute like backgroundKeyframes.
+        keyframes: z.array(BgKeyframe).optional(),
       })
+      // Strict so a mistyped or not-yet-supported key (e.g. `triggers` — no one-shot surface this
+      // phase) fails loudly instead of being stripped into an unexplained still frame.
+      .strict()
       .refine((v) => v.mask || v.masks, { message: "regionShader needs mask or masks" })
       .refine((v) => v.subject || v.background || v.masks?.some((m) => m.subject), {
         message: "regionShader needs at least one of subject/background (top-level or per-mask)",
       })
+      // Every body in the beat shares ONE uParam0..3 bank, so the cap is on the union of numeric
+      // names across params + keyframes. extraParamNames would silently slice the extras away and
+      // leave up to six bodies reading a param that never arrives — a build error is cheaper.
+      .refine((v) => slotParamNames(v.params, v.keyframes).length <= EXTRA_PARAM_SLOTS, (v) => ({
+        message:
+          `regionShader has ${slotParamNames(v.params, v.keyframes).length} numeric params ` +
+          `(${slotParamNames(v.params, v.keyframes).join(", ")}) but only ${EXTRA_PARAM_SLOTS} uParam slots exist — ` +
+          `every region body shares one bank. colorA/colorB/colorC/intensity are free.`,
+      }))
       .optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),

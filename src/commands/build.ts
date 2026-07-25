@@ -27,7 +27,7 @@ import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { BgTexture, KinoProps, RegionShaderProps, WordTiming } from "../render/props.js";
+import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, WordTiming } from "../render/props.js";
 import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
@@ -57,6 +57,10 @@ function resolveRegionShader(
     subject?: string;
     background?: string;
     object: number;
+    // Shared by every body in the beat's one program; `keyframes[].at` is beat-relative seconds.
+    // The 4-slot ceiling is enforced in the schema (see slotParamNames), so no re-check here.
+    params?: Record<string, BgParamValue>;
+    keyframes?: BgKeyframe[];
   },
   project: Project,
   stageAsset: (rel: string) => void,
@@ -83,6 +87,8 @@ function resolveRegionShader(
     masks,
     subjectCode: loadBody(rs.subject),
     backgroundCode: loadBody(rs.background),
+    params: rs.params,
+    keyframes: rs.keyframes,
   };
 }
 

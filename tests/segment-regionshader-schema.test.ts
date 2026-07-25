@@ -100,4 +100,78 @@ describe("SpecSchema video beat regionShader", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts params + beat-relative keyframes", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [
+        {
+          ...valid.segments[0],
+          regionShader: {
+            mask: "masks/x",
+            subject: "a.frag",
+            params: { rim: 2, colorA: "#80e2b4" },
+            keyframes: [{ at: 0, params: { rim: 2 } }, { at: 1.2, params: { rim: 14 }, ease: "easeInOut" }],
+          },
+        },
+      ],
+    });
+    const seg = s.segments[0];
+    expect(seg.kind === "video" && seg.regionShader?.params).toEqual({ rim: 2, colorA: "#80e2b4" });
+    expect(seg.kind === "video" && seg.regionShader?.keyframes?.[1].at).toBe(1.2);
+    expect(seg.kind === "video" && seg.regionShader?.keyframes?.[1].ease).toBe("easeInOut");
+  });
+
+  // The ceiling is on the UNION across params + every keyframe, because all bodies share ONE
+  // uParam0..3 bank. extraParamNames silently slices past 4, which on a shared bank means a fifth
+  // param quietly does nothing in up to six bodies at once — fail loudly instead.
+  it("rejects more than 4 numeric params across params + keyframes", () => {
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [
+          {
+            ...valid.segments[0],
+            regionShader: {
+              mask: "masks/x",
+              subject: "a.frag",
+              params: { a: 1, b: 2, c: 3 },
+              keyframes: [{ at: 1, params: { d: 4, e: 5 } }],
+            },
+          },
+        ],
+      }),
+    ).toThrow(/uParam slots/);
+  });
+
+  it("does not count colorA/B/C or intensity against the 4 slots", () => {
+    const s = SpecSchema.parse({
+      ...valid,
+      segments: [
+        {
+          ...valid.segments[0],
+          regionShader: {
+            mask: "masks/x",
+            subject: "a.frag",
+            // 4 numeric names + all 4 reserved ones — reserved drive their own uniforms, cost 0 slots.
+            params: { a: 1, b: 2, c: 3, d: 4, colorA: "#fff", colorB: "#000", colorC: "#123456", intensity: 0.5 },
+          },
+        },
+      ],
+    });
+    expect(s.segments[0].kind === "video").toBe(true);
+  });
+
+  // No trigger surface this phase (YAGNI) — a spec reaching for one should fail loudly, not have
+  // the key silently stripped and render an unexplained still frame.
+  it("rejects triggers on a regionShader", () => {
+    expect(() =>
+      SpecSchema.parse({
+        ...valid,
+        segments: [
+          { ...valid.segments[0], regionShader: { mask: "masks/x", subject: "a.frag", triggers: [{ at: 0, action: "pulse" }] } },
+        ],
+      }),
+    ).toThrow();
+  });
 });

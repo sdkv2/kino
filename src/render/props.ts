@@ -50,6 +50,15 @@ export interface RegionShaderProps {
   masks: RegionShaderMask[];
   subjectCode: string | null; // GLSL mainImage body for masks without their own, or null = passthrough asset pixels
   backgroundCode: string | null; // GLSL mainImage body elsewhere, or null = passthrough
+  // Author params + tweens shared by EVERY body in this beat's program (subjectCode, backgroundCode
+  // and each masks[].subjectCode) — there is ONE uParam0..3 bank in the one program they share, so
+  // per-entry sets would need per-entry banks and blow the 4-slot ceiling immediately. Numeric
+  // non-reserved names pack into uParam slots as `u_<name>`; colorA/B/C + intensity drive their own
+  // uniforms. `keyframes[].at` is BEAT-RELATIVE seconds (0 = beat start) — RegionShader sits inside
+  // the beat's Sequence, so its clock is already beat-local and iTime agrees with it. See
+  // docs/superpowers/specs/2026-07-25-region-params-design.md.
+  params?: Record<string, BgParamValue>;
+  keyframes?: BgKeyframe[];
 }
 
 export interface KinoSegment {
