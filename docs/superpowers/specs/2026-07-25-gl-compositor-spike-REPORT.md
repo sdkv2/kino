@@ -60,7 +60,7 @@ Log: `/tmp/kino-m1-typical.log` (typical), `/tmp/kino-m1-worst.log` (worst case)
 | projects | 6 | 0 | 0 |
 | assets-lib | 0 | 0 | 0 |
 
-Zero specs in any corpus carry external references inside motion HTML, so `inline.ts` stays a scoped footnote in phase 1 rather than a first-class deliverable and the core plan's Task 12 estimate does not need to rise.
+Zero specs in any corpus carry external references inside motion HTML, so `inline.ts` stays a scoped footnote in phase 1 rather than a first-class deliverable and the core plan's Task 9 estimate does not need to rise.
 
 ## M5 — Capture path
 
