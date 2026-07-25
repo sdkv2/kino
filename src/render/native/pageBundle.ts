@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 
 let cached: Promise<string> | null = null;
+let cachedHash: Promise<string> | null = null;
 
 export function getPageBundle(): Promise<string> {
   cached ??= buildPageBundle();
@@ -21,7 +22,8 @@ export function getPageBundle(): Promise<string> {
 
 /** Content hash of the page bundle — component changes must invalidate the frame cache. */
 export function getPageBundleHash(): Promise<string> {
-  return getPageBundle().then((js) => createHash("sha1").update(js).digest("hex"));
+  cachedHash ??= getPageBundle().then((js) => createHash("sha1").update(js).digest("hex"));
+  return cachedHash;
 }
 
 async function buildPageBundle(): Promise<string> {

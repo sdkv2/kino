@@ -178,11 +178,16 @@ export function loadBrand(brandDir: string): Brand {
   return loadBrandDoc(brandDir).brand;
 }
 
+const brandCache = new Map<string, { brand: Brand; body: string }>();
+
 // Like loadBrand, but also returns the markdown guidelines body (for `kino brand`).
 export function loadBrandDoc(brandDir: string): { brand: Brand; body: string } {
+  if (brandCache.has(brandDir)) return brandCache.get(brandDir)!;
   const mdPath = join(brandDir, "brand.md");
   if (!existsSync(mdPath)) throw new Error(`Brand not found: ${mdPath} — create brands/<name>/brand.md`);
   const { frontmatter, body } = parseBrandMd(readFileSync(mdPath, "utf8"));
   const fm = BrandFrontmatterSchema.parse(frontmatter);
-  return { brand: mergeBrand(DEFAULT_BRAND, fm), body };
+  const res = { brand: mergeBrand(DEFAULT_BRAND, fm), body };
+  brandCache.set(brandDir, res);
+  return res;
 }
