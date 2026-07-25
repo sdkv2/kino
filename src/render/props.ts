@@ -2,6 +2,7 @@
 // CLI (render.ts, build.ts) and the render page .tsx (bundled by esbuild) can import it.
 import type { CaptionStyle, CaptionAnimation, CaptionReveal, ResolvedText } from "./textStyles.js";
 import type { Ease } from "./bgparams.js";
+import type { LayerEffect, LayerMask } from "./maskSpec.js";
 
 export interface Theme {
   font: string;
@@ -83,6 +84,8 @@ export interface RegionShaderProps {
 export interface KinoSegment {
   kind: "scene" | "video" | "motion";
   source?: string; // video beats: the asset path this beat composites
+  mask?: LayerMask;          // clip this beat's layers to a shape, file or other layer
+  effects?: LayerEffect[];   // per-layer effect chain, applied before compositing
   caption: string; // "" = no caption for this beat (spec caption is optional; build coalesces)
   startSec: number;
   endSec: number;

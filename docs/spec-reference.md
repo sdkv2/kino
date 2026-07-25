@@ -8,6 +8,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Segments](#segments) — [scene](#scene-segment) · [video](#video-segment) · [motion](#motion-segment)
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
+- [Masks and effects](#masks-and-effects)
 - [Keyframes & triggers](#keyframes--triggers)
 - [Backgrounds](#backgrounds), [logo & overlays](#logo--overlay-tweening)
 - [Sound effects & music](#sound-effects--music)
@@ -131,6 +132,72 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 
 > **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS. `atWord` anchoring works in all motion slots (full-screen beats and overlays); other keyframe tracks (`backgroundKeyframes`, `zoomKeyframes`, `captionKeyframes`, …) remain seconds-only and keep their one-keyframe-holds idiom.
+
+## Masks and effects
+
+Every segment kind accepts `mask` and `effects`. A mask clips the beat's rendered layers before
+compositing; effects run in array order before the masked result is composited.
+
+`mask.source` supports three sources:
+
+**Analytic shape** — `rect`, `circle`, or `ellipse`, positioned in frame pixels. Rectangles may
+set a corner `radius`; every shape may set `rotate` in degrees.
+
+```json
+"mask": {
+  "source": {
+    "kind": "shape",
+    "shape": { "kind": "rect", "x": 120, "y": 360, "w": 840, "h": 720, "radius": 48 }
+  },
+  "feather": 12
+}
+```
+
+**File** — an image or video mask under `/public`; `channel` is `r`, `g`, `b`, `a`, or `luma`.
+File masks use node-generated SDF frames so feather and expansion remain distance-based.
+
+```json
+"mask": {
+  "source": { "kind": "file", "src": "masks/subject/mask.mp4", "channel": "r" },
+  "expand": 4
+}
+```
+
+**Layer** — another compositor layer's alpha or luma. For example, `seg0` targets segment 0's
+main layer.
+
+```json
+"mask": {
+  "source": { "kind": "layer", "layerId": "seg0", "channel": "a" },
+  "invert": true
+}
+```
+
+Mask controls:
+
+- `feather` softens the edge by that many true frame pixels. Values above **128px** are rejected
+  because they exceed the SDF encode range.
+- `expand` grows a positive distance or shrinks a negative distance, also in true frame pixels
+  (range `-128..128`).
+- `invert` swaps the kept and cut regions.
+
+A `layer` mask whose target is off-screen has no coverage and hides the masked layer entirely.
+This includes targets outside their active beat window.
+
+`effects` is an ordered array. Built-in kinds and parameters:
+
+| Kind | Params | Defaults |
+|---|---|---|
+| `blur` | `radius` (px) | `radius: 0` |
+| `glow` | `radius` (px), `intensity`, `threshold` | `radius: 8`, `intensity: 1`, `threshold: 0.6` |
+| `grade` | `brightness`, `contrast`, `saturation` | all `1` |
+
+```json
+"effects": [
+  { "kind": "blur", "params": { "radius": 8 } },
+  { "kind": "grade", "params": { "contrast": 1.1, "saturation": 0.9 } }
+]
+```
 
 ### Enums
 

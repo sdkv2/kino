@@ -102,6 +102,8 @@ Pair `kino-glass` with a **structured** shader field (not a flat night), not fro
 ## Overlay elements
 
 Run `kino elements` for the live contract. All overlays tween on the shared keyframe model (`{ at, params, ease? }`), with `x/y` as a **percent-of-frame offset** and `scale`/`opacity` as multipliers.
+Segments can also clip their rendered layers and run an ordered effect chain before compositing;
+see [Spec reference → Masks and effects](spec-reference.md#masks-and-effects).
 
 ### Logo
 

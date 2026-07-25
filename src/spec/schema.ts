@@ -135,6 +135,13 @@ const normalizeSegment = (raw: unknown): unknown => {
   return seg;
 };
 
+// Kept permissive here so the shared CLI validator can report mask/effect errors in its
+// actionable beat-indexed form instead of Zod rejecting or stripping the authored values.
+const segmentFxFields = {
+  mask: z.unknown().optional(),
+  effects: z.unknown().optional(),
+};
+
 const SegmentUnion = z.discriminatedUnion("kind", [
   z.object({
     // A beat over the background: voiceover, captions, overlays. The default — omit `kind`.
@@ -156,6 +163,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    ...segmentFxFields,
   })
   .strict(),
   z.object({
@@ -268,6 +276,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    ...segmentFxFields,
   })
   .strict(),
   z.object({
@@ -286,6 +295,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    ...segmentFxFields,
   })
   .strict(),
 ]);

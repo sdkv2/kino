@@ -62,6 +62,43 @@ export function validateMask(m: unknown): string[] {
   return errs;
 }
 
+/** Effect kinds the compositor can run. Kept as a literal list rather than read from the pass
+ *  registry: validation runs node-side in the CLI, where the page's registry is not loaded. */
+export const EFFECT_KINDS = ["blur", "glow", "grade"] as const;
+export type EffectKind = (typeof EFFECT_KINDS)[number];
+
+export interface LayerEffect {
+  kind: EffectKind;
+  params: Record<string, number | string>;
+}
+
+/** Validate the mask and effects on one beat. `index` is the beat's position, so a message
+ *  points at the thing the author has to edit. */
+export function validateSegmentFx(seg: unknown, index: number): string[] {
+  const s = (seg ?? {}) as { mask?: unknown; effects?: unknown };
+  const errs: string[] = [];
+  const at = (msg: string) => `beat ${index}: ${msg}`;
+
+  if (s.mask !== undefined) errs.push(...validateMask(s.mask).map(at));
+
+  if (s.effects !== undefined) {
+    if (!Array.isArray(s.effects)) {
+      errs.push(at("effects must be an array"));
+    } else {
+      s.effects.forEach((e, j) => {
+        const eff = (e ?? {}) as Partial<LayerEffect>;
+        if (!eff.kind || !(EFFECT_KINDS as readonly string[]).includes(eff.kind)) {
+          errs.push(at(`effects[${j}].kind "${String(eff.kind)}" is not an effect — expected one of ${EFFECT_KINDS.join(", ")}`));
+        }
+        if (eff.params !== undefined && (typeof eff.params !== "object" || eff.params === null)) {
+          errs.push(at(`effects[${j}].params must be an object`));
+        }
+      });
+    }
+  }
+  return errs;
+}
+
 export interface ResolvedMask {
   source: MaskSource;
   feather: number;

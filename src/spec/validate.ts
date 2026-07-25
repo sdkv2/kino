@@ -8,6 +8,7 @@ import { resolveAudioSource } from "../media/sfx.js";
 import { resolveMotionSource } from "../media/motionLib.js";
 import { log } from "../log.js";
 import { KINO_VERSION } from "../version.js";
+import { validateSegmentFx } from "../render/maskSpec.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -242,6 +243,8 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   if (hits.length) {
     throw new Error("Compliance: banned phrases found — " + hits.map((h) => `"${h.phrase}" @ ${h.where}`).join("; "));
   }
+  const fxErrors = spec.segments.flatMap((seg, i) => validateSegmentFx(seg, i));
+  if (fxErrors.length) throw new Error(fxErrors.join("\n"));
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
   assertAudioSources(spec, project);
