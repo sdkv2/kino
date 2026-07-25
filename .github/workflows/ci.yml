@@ -90,6 +90,15 @@ jobs:
           }
       # prepare script runs tsc + page bundle during npm ci, so dist/ is built here
       - run: npm ci
+      # One Chrome per render call, not cpus-1. vitest runs test files in parallel and each render
+      # call otherwise claims its own pool of browsers — on a 4-core runner that is a dozen Chromes
+      # at once, every one of them rasterising WebGL in software (SwiftShader, since shaders need a
+      # real GL context). That is what exhausts a Windows runner: the browser dies mid-capture and
+      # surfaces as "TargetCloseError: Target closed", on whichever render test happened to be
+      # holding it. The suite renders few frames per test, so per-render parallelism buys almost
+      # nothing here — file-level parallelism is already doing that work.
       - run: npm test
+        env:
+          KINO_CONCURRENCY: 1
       # CLI smoke test: verifies compiled dist/ actually boots on this OS/node
       - run: node bin/kino.mjs --version
