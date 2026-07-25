@@ -79,7 +79,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       : full;
 
     const footageProvider = s.regionShader ? `region${i}` : `seg${i}`;
-    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity, mask: (s as any).mask });
+    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity, mask: (s as any).mask, effects: s.effects });
     if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity });
     if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity });
   });
@@ -102,6 +102,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       rect: full,
       opacity,
       mask: (s as any).mask,
+      effects: s.effects,
     });
   });
 
@@ -117,6 +118,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       source: { providerId: `overlay${i}`, key: String(local) },
       rect: full,
       mask: (s as any).mask,
+      effects: s.effects,
     });
   });
 
@@ -157,7 +159,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       for (let w = 0; w < s.words.length; w++) if (tAbs >= s.words[w].start) idx = w;
       key = `w${idx}`;
     }
-    out.push({ id: `caption${i}`, source: { providerId: `caption${i}`, key }, rect: full, mask: (s as any).mask });
+    out.push({ id: `caption${i}`, source: { providerId: `caption${i}`, key }, rect: full, mask: (s as any).mask, effects: s.effects });
   });
 
   // 10. AI disclosure.
