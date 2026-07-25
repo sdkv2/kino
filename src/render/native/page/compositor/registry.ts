@@ -126,12 +126,18 @@ export function buildRegistry(
       sources.set(
         `caption${i}`,
         createHtmlSource({
-          html: captionMarkup({
-            text: s.caption ?? "",
-            theme: props.theme,
-            hero: isHeroCaption(s, Boolean(props.avatar)),
-            activeWord: null,
-          }),
+          html: (frame: number, key?: string) => {
+            const activeWord = key && key.startsWith("w") ? parseInt(key.slice(1), 10) : null;
+            const tAbs = s.startSec + frame / props.fps;
+            return captionMarkup({
+              text: s.caption ?? "",
+              words: s.words,
+              tAbs,
+              theme: props.theme,
+              hero: isHeroCaption(s, Boolean(props.avatar)),
+              activeWord: Number.isNaN(activeWord) ? null : activeWord,
+            });
+          },
           theme: props.theme,
           size: { w: dims.width, h: dims.height },
           fps: props.fps,

@@ -16,32 +16,70 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+import { CAPTION_BOTTOM } from "../../../captionLayout.js";
+
 export function captionMarkup(opts: {
   text: string;
+  words?: Array<{ word: string; start: number; end: number }>;
+  tAbs?: number;
   theme: Theme;
   hero: boolean;
-  /** Word index to highlight in words mode, or null for a whole-phrase caption. */
   activeWord: number | null;
 }): string {
-  const { text, theme, hero, activeWord } = opts;
-  const size = hero ? Math.round(theme.captionFontSize * 1.25) : theme.captionFontSize;
-  const body =
-    activeWord === null
-      ? escapeHtml(text)
-      : text
-          .split(/\s+/)
-          .map((w, i) =>
-            `<span class="kino-word${i === activeWord ? " kino-word-active" : ""}">${escapeHtml(w)}</span>`,
-          )
-          .join(" ");
+  const { text, words, tAbs, theme, hero, activeWord } = opts;
+  const size = hero ? Math.round(theme.captionFontSize * 1.42) : theme.captionFontSize;
+
+  let body: string;
+  if (words && words.length && tAbs !== undefined) {
+    body = words
+      .map((w, i) => {
+        const spoken = tAbs >= w.start;
+        const opacity = spoken ? 1 : 0;
+        const activeClass = i === activeWord ? " kino-word-active" : "";
+        return `<span class="kino-word${activeClass}" style="opacity:${opacity}">${escapeHtml(w.word)}</span>`;
+      })
+      .join(" ");
+  } else if (activeWord !== null) {
+    body = text
+      .split(/\s+/)
+      .map((w, i) => `<span class="kino-word${i === activeWord ? " kino-word-active" : ""}">${escapeHtml(w)}</span>`)
+      .join(" ");
+  } else {
+    body = escapeHtml(text);
+  }
+
+  if (hero) {
+    const heroWords = (words ? words.map(w => w.word) : text.split(/\s+/))
+      .map((w, i) => {
+        const spoken = words && tAbs !== undefined ? tAbs >= words[i].start : true;
+        const opacity = spoken ? 1 : 0;
+        const activeClass = i === activeWord ? " kino-word-active" : "";
+        return `<span class="kino-word${activeClass}" style="display:inline-block;opacity:${opacity}">${escapeHtml(w)}</span>`;
+      })
+      .join("");
+
+    const colGap = words ? 34 : 22;
+    const rowGap = words ? 8 : 6;
+    return (
+      `<style>` +
+      `.kino-cap-wrap{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;padding:0 80px}` +
+      `.kino-cap-row{display:flex;flex-wrap:wrap;justify-content:center;column-gap:${colGap}px;row-gap:${rowGap}px}` +
+      `.kino-word{font-family:'${theme.font}',sans-serif;font-weight:900;font-size:${size}px;line-height:1.04;letter-spacing:-0.015em;` +
+      `color:${theme.white};text-align:center;` +
+      `-webkit-text-stroke:${theme.captionStroke}px #000;paint-order:stroke fill;text-shadow:0 8px 28px rgba(0,0,0,.5)}` +
+      `.kino-word-active{color:${theme.mint}}` +
+      `</style><div class="kino-cap-wrap"><div class="kino-cap-row">${heroWords}</div></div>`
+    );
+  }
+
   return (
     `<style>` +
-    `.kino-cap{position:absolute;left:6%;right:6%;${hero ? "top:0;bottom:0;display:grid;place-items:center;" : "bottom:12%;"}` +
-    `font-family:'${theme.font}',sans-serif;font-weight:800;font-size:${size}px;line-height:1.15;` +
+    `.kino-cap-wrap{position:absolute;left:48px;right:48px;bottom:${CAPTION_BOTTOM}px;display:flex;justify-content:center}` +
+    `.kino-cap{font-family:'${theme.font}',sans-serif;font-weight:900;font-size:${size}px;line-height:1.03;letter-spacing:-0.01em;` +
     `color:${theme.white};text-align:center;` +
-    `-webkit-text-stroke:${theme.captionStroke}px ${theme.night};paint-order:stroke fill}` +
+    `-webkit-text-stroke:${theme.captionStroke}px #000;paint-order:stroke fill;text-shadow:0 6px 20px rgba(0,0,0,.45)}` +
     `.kino-word-active{color:${theme.mint}}` +
-    `</style><div class="kino-cap">${body}</div>`
+    `</style><div class="kino-cap-wrap"><span class="kino-cap">${body}</span></div>`
   );
 }
 

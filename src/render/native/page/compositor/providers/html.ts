@@ -19,31 +19,34 @@ export function cacheKeyFor(cadence: RasterCadence, frame: number, key: string |
 }
 
 export function createHtmlSource(opts: {
-  html: string;
+  html: string | ((frame: number, key?: string) => string);
   theme: Theme;
   size: { w: number; h: number };
   fps: number;
   hasTier2: boolean;
   scale: number;
 }): TextureSource {
-  const cadence = classifyRaster(opts.html, { hasTier2: opts.hasTier2 });
+  const sampleHtml = typeof opts.html === "function" ? opts.html(0) : opts.html;
+  const cadence = classifyRaster(sampleHtml, { hasTier2: opts.hasTier2 });
   const cache = new Map<string, HTMLCanvasElement>();
-  let template: HtmlTemplate | null = null;
+  const templates = new Map<string, HtmlTemplate>();
   let tex: WebGLTexture | null = null;
   let uploaded: string | null = null;
   let current: string | null = null;
 
   return {
     async prepare(frame: number, key?: string): Promise<void> {
-      if (!template) {
-        // Inline once, at template-build time: the markup's external references do not
-        // change per frame, and re-fetching them every frame would dominate the cost.
-        const inlined = await inlineExternalRefs(opts.html, fetchAsDataUrl);
-        template = await buildTemplate(inlined, opts.theme, { size: opts.size, scale: opts.scale });
-      }
       const cacheKey = cacheKeyFor(cadence, frame, key);
       current = cacheKey;
       if (cache.has(cacheKey)) return;
+
+      let template = templates.get(cacheKey);
+      if (!template) {
+        const rawHtml = typeof opts.html === "function" ? opts.html(frame, key) : opts.html;
+        const inlined = await inlineExternalRefs(rawHtml, fetchAsDataUrl);
+        template = await buildTemplate(inlined, opts.theme, { size: opts.size, scale: opts.scale });
+        templates.set(cacheKey, template);
+      }
 
       // Static and keyed rasters hold no time; dynamic ones scrub to this frame.
       const css = cadence === "dynamic" ? scrubCss(frame / opts.fps) : "";
@@ -63,7 +66,8 @@ export function createHtmlSource(opts: {
       return tex;
     },
     size(): { w: number; h: number } | null {
-      return template ? { w: template.w, h: template.h } : null;
+      const tpl = templates.values().next().value;
+      return tpl ? { w: tpl.w, h: tpl.h } : null;
     },
     dispose(): void {
       cache.clear();
