@@ -50,16 +50,34 @@ interface Backdrop {
   height: number;
 }
 
+export interface BackdropTexture {
+  tex: WebGLTexture;
+  width: number;
+  height: number;
+}
+
 let backdrop: Backdrop | null = null;
+let backdropTexture: BackdropTexture | null = null;
 
 /** Called by background layers each frame after they draw. Idempotent. */
 export function registerBackdrop(source: CanvasImageSource, width: number, height: number): void {
   backdrop = { source, width, height };
 }
 
+/** Compositor entry point: the true composite beneath this layer, already on the GPU. */
+export function registerBackdropTexture(tex: WebGLTexture, width: number, height: number): void {
+  backdropTexture = { tex, width, height };
+}
+
+export function clearBackdropTexture(): void {
+  backdropTexture = null;
+}
+
 const FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uBg;
+uniform vec4 uBgRect;      // xy = bottom-left UV, zw = size UV for full bg; (0,0,1,1) for cropped
+uniform float uIsFullBg;   // 1.0 if using full-frame backdrop texture, 0.0 for cropped stage
 uniform vec2 uSize;        // element size in css px
 uniform float uRadius;     // border radius px (round-rect corner)
 uniform float uBand;       // rim band width px
@@ -133,6 +151,11 @@ float shapeSd(vec2 p) {
 }
 
 vec3 sampleBg(vec2 px) {
+  if (uIsFullBg > 0.5) {
+    vec2 localUv = vec2(px.x / uSize.x, 1.0 - px.y / uSize.y);
+    vec2 uv = uBgRect.xy + localUv * uBgRect.zw;
+    return texture(uBg, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
+  }
   vec2 uv = px / uSize;
   return texture(uBg, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
 }
@@ -277,6 +300,8 @@ function makeState(): GlassState | null {
   }
   const names = [
     "uBg",
+    "uBgRect",
+    "uIsFullBg",
     "uSize",
     "uRadius",
     "uBand",
@@ -367,7 +392,7 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
   if (!root) return;
   const els = root.querySelectorAll<HTMLElement>(".kino-glass");
   if (els.length === 0) return;
-  if (!backdrop) return; // no canvas-backed background (e.g. overlay on avatar/app) — skip gracefully
+  if (!backdrop && !backdropTexture) return; // skip gracefully
 
   let pool = pools.get(root);
   if (!pool) {
@@ -376,8 +401,8 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
   }
   const pageW = window.innerWidth;
   const pageH = window.innerHeight;
-  const scaleX = backdrop.width / pageW;
-  const scaleY = backdrop.height / pageH;
+  const scaleX = backdropTexture ? backdropTexture.width / pageW : (backdrop ? backdrop.width / pageW : 1);
+  const scaleY = backdropTexture ? backdropTexture.height / pageH : (backdrop ? backdrop.height / pageH : 1);
 
   els.forEach((el, i) => {
     const state = pool!.get(i) ?? makeState();
@@ -410,11 +435,13 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
       canvas.height = h * SS;
     }
 
-    // Snapshot the background region behind the element (source backing px → element px).
-    const sctx = stage.getContext("2d");
-    if (!sctx) return;
-    sctx.clearRect(0, 0, w, h);
-    sctx.drawImage(backdrop!.source, rect.left * scaleX, rect.top * scaleY, w * scaleX, h * scaleY, 0, 0, w, h);
+    if (!backdropTexture && backdrop) {
+      // Snapshot the background region behind the element (source backing px → element px).
+      const sctx = stage.getContext("2d");
+      if (!sctx) return;
+      sctx.clearRect(0, 0, w, h);
+      sctx.drawImage(backdrop.source, rect.left * scaleX, rect.top * scaleY, w * scaleX, h * scaleY, 0, 0, w, h);
+    }
 
     const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, Math.min(w, h) / 2);
     const strength = cssVarPx(el, "--glass-strength", 26);
@@ -432,9 +459,6 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     const tiltDeg = cssVar(cs, "--glass-tilt", 0);
     const tilt = (tiltDeg * Math.PI) / 180;
 
-    // Adaptive fit → uFit. A plain card fills (1.0) so its lens matches the element edge (no doubled
-    // rect vs CSS chrome); once the author drives --glass-tilt/--glass-morph → worst-case 0.70 (no
-    // size pulse between a rect-hold and its spin). `--glass-fit` overrides. See resolveGlassFit.
     const usesTiltMorph =
       cs.getPropertyValue("--glass-tilt").trim() !== "" || cs.getPropertyValue("--glass-morph").trim() !== "";
     const fit = resolveGlassFit(usesTiltMorph, cssVar(cs, "--glass-fit", -1));
@@ -446,8 +470,22 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(prog);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage);
+    if (backdropTexture) {
+      gl.bindTexture(gl.TEXTURE_2D, backdropTexture.tex);
+      gl.uniform1f(loc.uIsFullBg, 1.0);
+      gl.uniform4f(
+        loc.uBgRect,
+        rect.left / pageW,
+        (pageH - rect.top - rect.height) / pageH,
+        rect.width / pageW,
+        rect.height / pageH,
+      );
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage);
+      gl.uniform1f(loc.uIsFullBg, 0.0);
+      gl.uniform4f(loc.uBgRect, 0, 0, 1, 1);
+    }
     gl.uniform1i(loc.uBg, 0);
     gl.uniform2f(loc.uSize, w, h);
     gl.uniform1f(loc.uRadius, radius);

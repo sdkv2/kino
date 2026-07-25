@@ -9,16 +9,18 @@ import { TargetPool, type RenderTarget } from "./targets.js";
 import { applyMask, type MaskBinding } from "./masks.js";
 import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
 import { getPass, runChain, type EffectPass } from "./effects/index.js";
+import { registerBackdropTexture, clearBackdropTexture } from "../liquidGlass.js";
 
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
 uniform mat3 uModel;
 uniform vec2 uRes;
+uniform float uFlipY;
 out vec2 vUv;
 void main() {
   vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2) * 0.5;  // 0,0 / 1,0 / 0,1
   vec2 quad = vec2(corner.x > 0.5 ? 1.0 : 0.0, corner.y > 0.5 ? 1.0 : 0.0);
-  vUv = quad;
+  vUv = vec2(quad.x, uFlipY > 0.5 ? 1.0 - quad.y : quad.y);
   vec3 p = uModel * vec3(quad, 1.0);
   vec2 clip = (p.xy / uRes) * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);  // y-down pixel space → clip space
@@ -87,6 +89,7 @@ export class StageRenderer {
   private uRes: WebGLUniformLocation;
   private uOpacity: WebGLUniformLocation;
   private uTex: WebGLUniformLocation;
+  private uFlipY: WebGLUniformLocation;
   readonly width: number;
   readonly height: number;
 
@@ -116,6 +119,7 @@ export class StageRenderer {
     this.uRes = gl.getUniformLocation(prog, "uRes")!;
     this.uOpacity = gl.getUniformLocation(prog, "uOpacity")!;
     this.uTex = gl.getUniformLocation(prog, "uTex")!;
+    this.uFlipY = gl.getUniformLocation(prog, "uFlipY")!;
   }
 
   draw(layers: LayerDraw[], sources: Map<string, TextureSource>, frame: number): void {
@@ -148,9 +152,14 @@ export class StageRenderer {
       if (t) maskTargets.set(ref.layerId, t);
     }
 
+    const accum = this.pool.acquire(gl, this.width, this.height);
+    this.pool.clear(gl, accum);
+
     for (const layer of layers) {
       const source = sources.get(layer.source.providerId);
       if (!source) continue;
+
+      registerBackdropTexture(accum.tex, this.width, this.height);
 
       const chain = layer.effects
         .map((e) => ({ pass: getPass(e.kind), params: e.params }))
@@ -178,9 +187,10 @@ export class StageRenderer {
 
         const finalTarget = chain.length ? runChain(gl, this.pool, current, chain, frame) : current;
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, accum.fbo);
         gl.viewport(0, 0, this.width, this.height);
         gl.useProgram(this.prog);
+        gl.uniform1f(this.uFlipY, 0);
         applyBlend(gl, layer.blend);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, finalTarget.tex);
@@ -200,9 +210,10 @@ export class StageRenderer {
       const tex = source.texture(gl, frame, layer.source.key);
       if (!tex) continue;
       // A provider may have bound its own program/framebuffer while producing its texture.
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, accum.fbo);
       gl.viewport(0, 0, this.width, this.height);
       gl.useProgram(this.prog);
+      gl.uniform1f(this.uFlipY, 0);
       applyBlend(gl, layer.blend);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -211,6 +222,24 @@ export class StageRenderer {
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
     for (const t of maskTargets.values()) this.pool.release(t);
+
+    // Blit accumulated composite to default screen framebuffer (FBO texture memory has t=1 at top, t=0 at bottom)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.width, this.height);
+    gl.useProgram(this.prog);
+    gl.uniform1f(this.uFlipY, 1.0);
+    gl.disable(gl.BLEND);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, accum.tex);
+    gl.uniformMatrix3fv(
+      this.uModel,
+      false,
+      modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", effects: [] }),
+    );
+    gl.uniform1f(this.uOpacity, 1.0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    this.pool.release(accum);
+    clearBackdropTexture();
     gl.finish();
   }
 
@@ -225,6 +254,7 @@ export class StageRenderer {
     const target = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, target);
     gl.useProgram(this.prog);
+    gl.uniform1f(this.uFlipY, 0);
     gl.uniform2f(this.uRes, this.width, this.height);
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
