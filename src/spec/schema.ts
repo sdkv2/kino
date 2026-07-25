@@ -212,6 +212,13 @@ const SegmentUnion = z.discriminatedUnion("kind", [
           .optional(),
         subject: z.string().min(1).optional(), // .frag/.glsl body; masks without their own
         background: z.string().min(1).optional(), // .frag/.glsl body; region where none are
+        // A SECOND source for the BACKGROUND region: the subject stays the beat's own asset, the
+        // background shows this clip instead — a segmented subject cut onto footage that isn't the
+        // beat's. Project-relative image or video; video routes through the per-beat /vframes
+        // pipeline (a <video> seek never advances under headless capture, which is exactly why the
+        // page-global backgroundTextures video channel is still frozen — see
+        // docs/segmentation-tracking-todo.md). One per beat: there is one background region.
+        backdrop: z.string().min(1).optional(),
         // Author params shared by EVERY body in this beat's program — there is ONE uParam0..3 bank
         // in the single program the subject, background and per-mask bodies share. Numeric
         // non-reserved names alias to `u_<name>`; colorA/colorB/colorC (hex) and intensity drive
@@ -233,8 +240,9 @@ const SegmentUnion = z.discriminatedUnion("kind", [
       // phase) fails loudly instead of being stripped into an unexplained still frame.
       .strict()
       .refine((v) => v.mask || v.masks, { message: "regionShader needs mask or masks" })
-      .refine((v) => v.subject || v.background || v.masks?.some((m) => m.subject), {
-        message: "regionShader needs at least one of subject/background (top-level or per-mask)",
+      // A backdrop counts: `mask` + `backdrop` with no .frag anywhere is the whole cutout spec.
+      .refine((v) => v.subject || v.background || v.backdrop || v.masks?.some((m) => m.subject), {
+        message: "regionShader needs at least one of subject/background/backdrop (top-level or per-mask)",
       })
       // Every body in the beat shares ONE uParam0..3 bank, so the cap is on the union of numeric
       // names across params + keyframes. extraParamNames would silently slice the extras away and

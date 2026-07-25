@@ -215,12 +215,82 @@ The marginal cost of one extra body is ~0.04 s/frame for the light shader and ~0
 
 Inside a region shader you can sample:
 - `uTex0` — the beat's own asset (the thing being segmented).
+- `uBackdrop` / `uBackdropSize` — a SECOND clip, when the beat sets `regionShader.backdrop`. See
+  [Cutout compositing](#cutout-compositing--a-different-clip-behind-the-subject).
 - the shader's own params/uniforms (`u_*` aliases, `iTime`, etc.) as any shader — see
   [Params and keyframes](#params-and-keyframes) below.
 - **from a subject body only** — `kinoBackground(out vec4, in vec2 fragCoord)`, the *shaded*
   background region, at any coordinate. See [Cross-region sampling](#cross-region-sampling).
 
 **Worked example:** `examples/segmentation/` — a blue disc image, a mock mask, a solid-red subject shader and solid-green background shader. Its `README.md` has the exact commands (make a fixture asset, `kino segment --backend mock`, `kino still`). You get a red ellipse (subject) on green (background) — the mask boundary is the seam.
+
+#### Cutout compositing — a different clip behind the subject
+
+Everything above reshapes the beat's **one** plate. `backdrop` adds a **second source**, so the
+segmented subject can sit on footage that isn't its own — virtual greenscreen, no green screen:
+
+```jsonc
+"regionShader": {
+  "mask": "masks/presenter",
+  "backdrop": "pexels/beach.mp4"      // project-relative, image or video
+}
+```
+
+That is the whole spec. No `.frag` anywhere: **the subject region shows the beat's asset, the
+background region shows the backdrop.** `mask` + `backdrop` now satisfies the "needs a shader body"
+check on its own.
+
+What a **passthrough** means, precisely:
+
+| | subject region (mask > 0.5) | background region |
+| --- | --- | --- |
+| no `backdrop` | `subject` body, else the beat asset stretched | `background` body, else the beat asset stretched |
+| **with `backdrop`** | unchanged | `background` body, else **the backdrop, cover-fit** |
+
+The subject side deliberately stays the beat's asset — the subject *is* the thing being cut out.
+
+**Both bodies can sample it** as `uBackdrop` / `uBackdropSize` (aliases for the otherwise-unused
+`uTex1` / `uTexSize1` slot), e.g. `kinoBackdrop(uBackdrop, uBackdropSize, fragCoord)`. And
+[`kinoBackground`](#cross-region-sampling) now means something better: with a backdrop and no
+`background` body, a glass subject refracts **the backdrop** rather than a hole punched to its own
+plate.
+
+**Fit is cover-fit.** A backdrop's aspect will not match the beat's; the backdrop fills the frame and
+crops on the long axis rather than squashing. (This is the first `uTexSize` kino uploads in a region
+shader. `uTexSize0` is still left at `(0,0)` on purpose — uploading it would silently switch every
+existing spec that calls `kinoBackdrop(uTex0, uTexSize0, …)` from stretch to cover-fit.)
+
+**Timing: the backdrop starts at the beat's start, one backdrop frame per composition frame.**
+Precisely, composition-local frame `n` shows the backdrop frame whose timestamp is nearest `n / fps`
+seconds; if the beat outlasts the clip the last frame holds. The beat's `clipFrom` / `speed` /
+`pauseAt` do **not** apply — they describe the beat's own source, and seeking an unrelated file to the
+same second is arbitrary. Trim the backdrop clip if you want a different window. There is no
+`backdropFrom` / `backdropSpeed`.
+
+Video backdrops **animate**: like video masks they route through the per-beat `/vframes` frame
+pipeline (job `rsbd<i>`), not the `<video>`-seek that leaves the generic `backgroundTextures` channel
+frozen at frame 0. `tests/render-region-backdrop.test.ts` renders at two times and reads both
+sources' frame index straight off the pixels.
+
+**Edges: expect a fringe, and look at it.** The composite mixes with a fixed
+`smoothstep(0.4, 0.6, m)`, and real footage bleeds its *original* background into the silhouette —
+a mask cut from grass carries an olive rim, which is invisible over the grass and obvious over a
+night-city backdrop. Measured on `projects/segtest`'s zebras over a rain-glass clip: green excess in
+the 2px band just inside the edge ran **+0.018** against **−0.006** deep inside the subject.
+
+The remedy is author-side, in a per-mask `subject` body — hand the outer band back to the backdrop:
+
+```glsl
+vec4 s = texture(uTex0, fragCoord / iResolution.xy);
+vec4 b; kinoBackground(b, fragCoord);
+float d = kinoMaskDist(uMaskSelf, uChannelSelf, fragCoord, 6.0);   // negative inside
+fragColor = mix(s, b, smoothstep(-3.0, -1.0, d));                  // ~2px erode
+```
+
+That cut the localized green excess to **+0.011** and visibly cleared the rim, at the cost of ~2px of
+mane detail. The compositing default is deliberately **unchanged** — every existing spec shares it.
+
+**Worked example:** `examples/segmentation/cutout.json`.
 
 #### Params and keyframes
 
