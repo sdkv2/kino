@@ -4,14 +4,18 @@ import type { EffectPass } from "./pass.js";
 import { blurPass } from "./blur.js";
 import { gradePass } from "./grade.js";
 import { glowPass } from "./glow.js";
+import { bloomPass } from "./bloom.js";
+import { lensPass } from "./lens.js";
 
 registerPass(blurPass);
 registerPass(gradePass);
 registerPass(glowPass);
+registerPass(bloomPass);
+registerPass(lensPass);
 
 export { registerPass, runChain, getPass };
 export type { EffectPass };
-export { blurPass, gradePass, glowPass };
+export { blurPass, gradePass, glowPass, bloomPass, lensPass };
 
 /** Test hook. Renders a half-white / half-transparent source with a soft-edged coloured band,
  *  runs one effect, and reads back four numbers:
@@ -59,7 +63,7 @@ export function probeEffect(
     return px;
   };
   const edge = read(canvas.width / 2 + 1, canvas.height / 2)[0];
-  const colour = read(8, canvas.height - 8);
+  const colour = read(8, 8);
   const softTop = read(2, canvas.height - 12)[0];
   const softMid = read(2, canvas.height - 6)[0];
   return [edge, colour[1], colour[2], Math.max(0, softTop - softMid * 2)];

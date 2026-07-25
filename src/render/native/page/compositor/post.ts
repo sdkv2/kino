@@ -9,7 +9,17 @@ import type { TargetPool, RenderTarget } from "./targets.js";
 
 export interface ResolvedPass {
   pass: EffectPass;
-  params: Record<string, number | string>;
+  params: Record<string, number | string | WebGLTexture>;
+}
+
+function copyTarget(gl: WebGL2RenderingContext, pool: TargetPool, src: RenderTarget): RenderTarget {
+  const dst = pool.acquire(gl, src.w, src.h);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src.fbo);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, dst.fbo);
+  gl.blitFramebuffer(0, 0, src.w, src.h, 0, 0, dst.w, dst.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+  return dst;
 }
 
 /**
@@ -25,6 +35,15 @@ export function resolvePostChain(post: PostFx | undefined, theme: Theme): Resolv
       if (intensity > 0) {
         const pass = getPass("film");
         if (pass) out.push({ pass, params: { intensity, night: theme.night } });
+      }
+      continue;
+    }
+    if (stage === "bloom" && params) {
+      const pass = getPass("bloom");
+      if (pass) {
+        out.push({ pass, params: { ...params, axis: "x" } });
+        out.push({ pass, params: { ...params, axis: "y" } });
+        out.push({ pass, params: { ...params, axis: "composite" } });
       }
       continue;
     }
@@ -44,5 +63,32 @@ export function runPost(
   frame: number,
 ): RenderTarget {
   if (!chain.length) return composite;
-  return runChain(gl, pool, composite, chain, frame);
+  let read = composite;
+  let owned: RenderTarget | null = null;
+  let i = 0;
+  while (i < chain.length) {
+    if (chain[i].pass.name === "bloom") {
+      const bloomOriginal = copyTarget(gl, pool, read);
+      const bloomSlice: ResolvedPass[] = [];
+      while (i < chain.length && chain[i].pass.name === "bloom") {
+        const e = chain[i++];
+        const params = { ...e.params };
+        if (params.axis === "composite") params._originalTex = bloomOriginal.tex;
+        bloomSlice.push({ pass: e.pass, params });
+      }
+      const out = runChain(gl, pool, read, bloomSlice as Array<{ pass: EffectPass; params: Record<string, number | string> }>, frame);
+      pool.release(bloomOriginal);
+      if (owned) pool.release(owned);
+      owned = out === read ? null : out;
+      read = out;
+    } else {
+      const slice: ResolvedPass[] = [];
+      while (i < chain.length && chain[i].pass.name !== "bloom") slice.push(chain[i++]);
+      const out = runChain(gl, pool, read, slice as Array<{ pass: EffectPass; params: Record<string, number | string> }>, frame);
+      if (owned) pool.release(owned);
+      owned = out === read ? null : out;
+      read = out;
+    }
+  }
+  return read;
 }
