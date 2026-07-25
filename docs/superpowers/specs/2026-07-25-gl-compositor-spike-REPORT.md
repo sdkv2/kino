@@ -42,6 +42,9 @@ Log: `/tmp/kino-m1-typical.log` (typical), `/tmp/kino-m1-worst.log` (worst case)
 
 | Subject | meanDiff vs DOM | visual notes |
 |---|---|---|
+| caption-stroke | 0.00045016 | At conceptual 100% zoom, stroked caption is visually indistinguishable: no visible softening, thinning, or kerning shift in raster. |
+| small-label | 0.000059812 | Small mint label matches DOM; glyph edges and letter spacing remain visually unchanged. |
+| gradient-card | 0.000198724 | Gradient, rounded corners, and edge antialiasing visually match DOM. |
 
 ## M4 — External references in motion HTML
 
