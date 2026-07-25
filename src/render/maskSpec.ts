@@ -90,7 +90,7 @@ export function validateSegmentFx(seg: unknown, index: number): string[] {
         if (!eff.kind || !(EFFECT_KINDS as readonly string[]).includes(eff.kind)) {
           errs.push(at(`effects[${j}].kind "${String(eff.kind)}" is not an effect — expected one of ${EFFECT_KINDS.join(", ")}`));
         }
-        if (eff.params !== undefined && (typeof eff.params !== "object" || eff.params === null)) {
+        if (typeof eff.params !== "object" || eff.params === null) {
           errs.push(at(`effects[${j}].params must be an object`));
         }
       });

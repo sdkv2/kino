@@ -21,6 +21,12 @@ describe("validateSegmentFx", () => {
     expect(validateSegmentFx({ effects: [{ kind: "blur", params: { radius: 8 } }] }, 0)).toEqual([]);
   });
 
+  it("rejects an effect with missing params", () => {
+    expect(validateSegmentFx({ effects: [{ kind: "blur" }] }, 2)).toContain(
+      "beat 2: effects[0].params must be an object",
+    );
+  });
+
   it("rejects effects that is not an array", () => {
     expect(validateSegmentFx({ effects: { kind: "blur" } }, 0)[0]).toMatch(/array/i);
   });
