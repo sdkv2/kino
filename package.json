@@ -3,7 +3,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.21.2",
+  "version": "2.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sdkv2/kino.git"
@@ -36,7 +36,7 @@
     "assets-lib"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
