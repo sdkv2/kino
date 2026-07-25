@@ -3,7 +3,7 @@
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
 // variant-tagging on top.
-import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, isAbsolute } from "node:path";
 import { resolveProject, type Project } from "../config/project.js";
@@ -545,12 +545,53 @@ export async function build(
     font?: string;
     tag?: string;
     project?: string;
+    beat?: string; // 1-indexed — render only this segment as its own standalone clip
   },
 ): Promise<string[]> {
-  const { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
+  let { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
   // Only a draft is low-quality; a full render — even a silent (--no-tts) or presenter-less (--no-avatar)
   // one — keeps final quality and a clean, untagged filename.
   const draft = !!(opts.draft || opts.mock);
+
+  // --beat: reduce to a single-segment spec and re-run prepare() on it, so the isolated clip gets
+  // its own from-scratch VO/timing pass (segment starts at t=0). Only backgroundKeyframes/
+  // logoKeyframes need adjusting here — they're absolute on the FULL spec's timeline (unlike
+  // caption/kicker/zoom/regionShader keyframes, which are already beat-relative) — so they're
+  // filtered to the beat's original window and rebased to it. A 1-segment spec has no "next" for
+  // the renderer to crossfade with, so transitions already degrade to a hard cut with no extra work.
+  let beatTag: string | undefined;
+  if (opts.beat != null) {
+    if (!draft && opts.tts !== false) {
+      throw new Error("--beat needs --draft or --no-tts (isolating one beat isn't supported for a full real-VO build yet)");
+    }
+    const beatNum = Number(opts.beat);
+    if (!Number.isInteger(beatNum) || beatNum < 1) throw new Error(`--beat must be a positive integer (got ${opts.beat})`);
+    const idx = beatNum - 1;
+    const target = props.segments[idx];
+    if (!target) throw new Error(`--beat ${beatNum} out of range (spec has ${props.segments.length} beats, 1..${props.segments.length})`);
+
+    const rebase = (kfs: BgKeyframe[] | undefined) =>
+      (kfs ?? []).filter((k) => k.at >= target.startSec && k.at <= target.endSec).map((k) => ({ ...k, at: k.at - target.startSec }));
+
+    const reducedSpec: Spec = {
+      ...spec,
+      segments: [spec.segments[idx]],
+      seamlessLoop: false,
+      backgroundKeyframes: rebase(spec.backgroundKeyframes),
+      logoKeyframes: rebase(spec.logoKeyframes),
+    };
+
+    const tmpDir = mkdtempSync(join(tmpdir(), "kino-beat-"));
+    const tmpSpecPath = join(tmpDir, "beat.json");
+    writeFileSync(tmpSpecPath, JSON.stringify(reducedSpec));
+    try {
+      ({ props, publicDir, spec } = await prepare(tmpSpecPath, { ...opts, project: basename(project.projectRoot) }));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+    beatTag = `beat${beatNum}${draft ? "-draft" : ""}`;
+    log.info(`  · isolating beat ${beatNum} (${target.startSec.toFixed(1)}–${target.endSec.toFixed(1)}s of the full timeline)`);
+  }
   // Under-animation probe: sample each full-screen motion beat at a few progress points and warn
   // when the frames barely differ — a poster with a dissolve, not motion. Never fails the build.
   try {
@@ -582,6 +623,7 @@ export async function build(
   // preview or variant never overwrites the shipped default render.
   const autoTag =
     opts.tag ??
+    beatTag ??
     opts.background ??
     (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined) ??
     (draft ? "draft" : undefined);
