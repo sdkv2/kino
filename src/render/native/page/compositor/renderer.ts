@@ -4,8 +4,10 @@
 //
 // Everything here runs in the SYNCHRONOUS draw phase. No awaits, no decodes, no layout:
 // sources have already been prepared by the time draw() is called.
-import type { BlendMode, LayerDraw, TextureSource } from "./graph.js";
+import { IDENTITY_TRANSFORM, type BlendMode, type LayerDraw, type TextureSource } from "./graph.js";
 import { TargetPool, type RenderTarget } from "./targets.js";
+import { applyMask, type MaskBinding } from "./masks.js";
+import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
 
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
@@ -136,6 +138,34 @@ export class StageRenderer {
     for (const layer of layers) {
       const source = sources.get(layer.source.providerId);
       if (!source) continue;
+
+      if (layer.mask) {
+        const rendered = this.drawToTarget(layer, source, frame);
+        if (!rendered) continue;
+        const maskObj: LayerMask = "source" in layer.mask
+          ? (layer.mask as unknown as LayerMask)
+          : { source: { kind: "file", src: (layer.mask as any).providerId, channel: (layer.mask as any).channel ?? "a" }, feather: (layer.mask as any).feather, invert: (layer.mask as any).invert };
+        const resolved = resolveMaskDefaults(maskObj);
+        const binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
+        const masked = applyMask(gl, this.pool, rendered, resolved, binding);
+        this.pool.release(rendered);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, this.width, this.height);
+        gl.useProgram(this.prog);
+        applyBlend(gl, layer.blend);
+        gl.bindTexture(gl.TEXTURE_2D, masked.tex);
+        gl.uniformMatrix3fv(
+          this.uModel,
+          false,
+          modelMatrix({ ...layer, rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM }),
+        );
+        gl.uniform1f(this.uOpacity, layer.opacity);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        this.pool.release(masked);
+        continue;
+      }
+
       const tex = source.texture(gl, frame, layer.source.key);
       if (!tex) continue;
       // A provider may have bound its own program/framebuffer while producing its texture.
