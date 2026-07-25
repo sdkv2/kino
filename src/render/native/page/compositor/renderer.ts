@@ -10,6 +10,9 @@ import { TargetPool, type RenderTarget } from "./targets.js";
 import { applyMask, type MaskBinding } from "./masks.js";
 import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
 import { getPass, runChain, type EffectPass } from "./effects/index.js";
+import { resolvePostChain, runPost } from "./post.js";
+import type { PostFx } from "../../../postSpec.js";
+import type { Theme } from "../../../props.js";
 import { registerBackdropTexture, clearBackdropTexture } from "../liquidGlass.js";
 
 const VERT = `#version 300 es
@@ -123,7 +126,12 @@ export class StageRenderer {
     this.uFlipY = gl.getUniformLocation(prog, "uFlipY")!;
   }
 
-  draw(layers: LayerDraw[], sources: Map<string, TextureSource>, frame: number): void {
+  draw(
+    layers: LayerDraw[],
+    sources: Map<string, TextureSource>,
+    frame: number,
+    opts: { theme: Theme; postFx?: PostFx },
+  ): void {
     const gl = this.gl;
     // Full state reset every frame — a leaked flag from a provider's own program would make
     // output depend on draw history, which breaks determinism.
@@ -161,6 +169,13 @@ export class StageRenderer {
     }
     for (const t of maskTargets.values()) this.pool.release(t);
 
+    let composite = accum;
+    const posted = runPost(gl, this.pool, accum, resolvePostChain(opts.postFx, opts.theme), frame);
+    if (posted !== accum) {
+      this.pool.release(accum);
+      composite = posted;
+    }
+
     // Blit accumulated composite to default screen framebuffer (FBO texture memory has t=1 at top, t=0 at bottom)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.width, this.height);
@@ -168,7 +183,7 @@ export class StageRenderer {
     gl.uniform1f(this.uFlipY, 1.0);
     gl.disable(gl.BLEND);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, accum.tex);
+    gl.bindTexture(gl.TEXTURE_2D, composite.tex);
     gl.uniformMatrix3fv(
       this.uModel,
       false,
@@ -176,7 +191,7 @@ export class StageRenderer {
     );
     gl.uniform1f(this.uOpacity, 1.0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    this.pool.release(accum);
+    this.pool.release(composite);
     clearBackdropTexture();
     gl.finish();
   }

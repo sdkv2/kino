@@ -7,6 +7,7 @@
 // determinism guarantee comes from.
 import React, { useLayoutEffect, useRef } from "react";
 import type { KinoProps } from "../../../props.js";
+import type { PostFx } from "../../../postSpec.js";
 import type { MediaMap } from "../media.js";
 import { layersAt } from "../../../layers.js";
 import { StageRenderer } from "./renderer.js";
@@ -36,7 +37,7 @@ export function createStage(
         layers.map((l) => sources.get(l.source.providerId)?.prepare(frame, l.source.key) ?? Promise.resolve()),
       );
       // Phase B — synchronous.
-      renderer.draw(layers, sources, frame);
+      renderer.draw(layers, sources, frame, { theme: props.theme, postFx: (props as KinoProps & { postFx?: PostFx }).postFx });
     },
     dispose(): void {
       for (const s of sources.values()) s.dispose?.();
