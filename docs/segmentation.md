@@ -462,41 +462,63 @@ float eaten = step(-4.0, d);                    // erode the subject by 4px
 Pass the same `uMaskN`/`uChannelN` pair the split itself uses (`uMask0`/`uChannel0` for a single
 mask). It works from the subject body, the background body, or both.
 
-It runs in two regimes. Inside the mask's own transition band it reads **sub-pixel** distance from
-screen-space derivatives, costing no extra texture taps. Beyond that band the coverage saturates
-and it falls back to a 24-tap spiral, which is coarse: its error grows with `radius` and varies with
-edge orientation, and a feature thinner than the sample spacing (~0.36·`radius`) can be missed
-entirely. So **pass the smallest radius that covers your effect**: a 3px rim wants radius 4, not 32.
-The value saturates at `±radius`.
+**It is exact, at any radius, for one texture tap.** Every mask gets a precomputed **signed
+distance field** written beside its frames at render time (`src/render/sdf.ts` — an exact Euclidean
+distance transform; `src/render/native/sdfFrames.ts` does the raster I/O through ffmpeg). The field
+is a pure function of the mask, so computing it once offline beats re-deriving it per pixel per
+frame, and `kinoMaskDist` becomes a single lookup instead of a 24-tap search.
 
-The switch between the regimes is a threshold on the coverage gradient, and it is set by the codec
-chain rather than by the geometry. Masks reach the shader through H.264 (crf 16) and then JPEG
-re-extraction (`-q:v 2`), and DCT ringing leaves a spurious gradient in regions that should be
-perfectly flat. Measured through that exact chain, flat-region gradient runs a median of 0 with a
-**maximum of 0.044**, while a genuine edge reads **0.40–1.41**; the threshold sits between them at
-0.05. Two consequences worth knowing:
+Two consequences worth knowing:
 
-- The margin above the noise is only ~1.13x and it depends on the `-q:v 2` extraction quality. At
-  `-q:v 5` flat-region noise reaches 0.105 and the threshold stops separating the two.
-- **R/G/B-packed multi-object masks work too, but only if the mask was generated after 2026-07-24.**
-  Masks used to be encoded `yuv420p crf 16`, which subsamples chroma and put two of the three
-  objects at half resolution — one object's boundary rang into another object's channel, flat-region
-  gradient reached **0.85**, and the noise overlapped the real-edge population outright. Masks are
-  now encoded **lossless 4:4:4** (`-pix_fmt yuv444p -qp 0`) and mask frames re-extract to **PNG**
-  rather than JPEG, which puts flat-region gradient at **0.0055** — clear of the 0.05 gate by 9x on
-  every channel. Both changes were needed: 4:2:0 still reads 0.69 even coded losslessly, and lossy
-  4:4:4 still reads 0.62.
+- **Distance saturates at ±128px.** The field is packed one object per RGBA channel, 8 bits each,
+  over a fixed ±`SDF_MAX_PX` range — so ~1px steps out to 128px, and everything past that reads the
+  same. `radius` clamps the result anyway, and radii that deep were never usable before.
+- **Stored at half resolution**, with values still in full-res pixels. A distance field is smooth
+  and band-limited, so halving it costs about one source pixel — inside the quantisation above —
+  while being 4x cheaper to compute and much smaller on disk. That matters more than it sounds: a
+  smooth gradient does not PNG like a binary silhouette, and a full-res field measured **127 KB per
+  frame against the mask's 13 KB**. Half res puts it at ~48 KB. The shader samples by normalised
+  uv, so the stored resolution is invisible to authored bodies.
+- **Pass whatever radius your effect actually wants.** The old advice ("a 3px rim wants radius 4,
+  not 32") was a workaround for the fallback below, not a property of the maths. A 70px membrane or
+  a 100px inward glow is now correct and costs the same single tap.
 
-  Masks generated before that change still render, but still carry the old noise. **Re-run
-  `kino segment` on them if a beat needs edge distance on object 1 or 2.**
+**Fallback.** When no field is available — an **image** mask, or a transform that failed — the
+original in-shader search runs and behaves exactly as it always did, so nothing already on disk
+changes. That path has two regimes: inside the mask's own transition band it reads **sub-pixel**
+distance from screen-space derivatives, costing no extra taps; beyond that band the coverage
+saturates and it falls back to a 24-tap golden-angle spiral that **breaks at the first crossing**.
+That spiral is quantised in radius *and* sparse in angle, so its answer depends on which way the
+boundary happens to lie — the field comes out as hard faceted plateaus, visible as banding in any
+effect with real reach. No tap budget fixes it: finding the true nearest boundary within radius R by
+point sampling is O(R²). On that path only, the old advice still holds — keep the radius small.
+
+The gate between the two fallback regimes is a threshold on the coverage gradient, set by the codec
+chain rather than the geometry. Masks reach the shader through H.264 and re-extraction, and DCT
+ringing leaves a spurious gradient in regions that should be flat. Measured through that chain,
+flat-region gradient runs a median of 0 with a **maximum of 0.044**, while a genuine edge reads
+**0.40–1.41**; the threshold sits between them at 0.05.
+
+- **R/G/B-packed multi-object masks need to be generated after 2026-07-24.** Masks used to be encoded
+  `yuv420p crf 16`, which subsampled chroma and put two of three objects at half resolution — one
+  object's boundary rang into another's channel and the noise overlapped the real-edge population
+  outright. Masks are now encoded **lossless 4:4:4** (`-pix_fmt yuv444p -qp 0`) and mask frames
+  re-extract to **PNG**. Both changes were needed. Older masks still render, but **re-run
+  `kino segment`** if a beat needs edge distance on object 1 or 2.
 
 `tests/render-maskdist-video.test.ts` renders a genuinely compressed single-object mask and
 `tests/render-maskdist-multiobject.test.ts` a packed three-object one; both pin this.
 
 **Call it unconditionally and branch on the result** — never guard the call itself
-(`if (nearEdge) { d = kinoMaskDist(...); }`). The derivative regime needs uniform control flow, and
-screen-space derivatives are undefined inside a branch. That compiles clean, so the failure is
-silent.
+(`if (nearEdge) { d = kinoMaskDist(...); }`). The fallback's derivative regime needs uniform control
+flow, and screen-space derivatives are undefined inside a branch. That compiles clean, so the
+failure is silent.
+
+**`uMaskN` is an integer selector, not a sampler.** `kinoMaskDist(uMask0, ...)` and
+`kinoMaskDist(uMaskSelf, ...)` are unchanged, but the underlying texture is `uMaskTexN` — the helper
+needs the index to find the matching field, GLSL cannot ask a sampler which uniform it came from,
+and ANGLE's GLSL ES preprocessor has no `##` token pasting. Sampling `uMaskN` directly (never a
+documented move — the split is kino's job) is now a loud compile error.
 
 Which mask to pass depends on which body you are in:
 

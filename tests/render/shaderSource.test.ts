@@ -16,9 +16,13 @@ describe("assembleShaderSource", () => {
     expect(src).toContain("void main()");
     expect(src).toContain("mainImage(kino_fragColor, gl_FragCoord.xy)");
   });
-  it("injects kinoMaskDist into plain shader source, where there are no mask uniforms", () => {
-    expect(assembleShaderSource("void mainImage(out vec4 c, in vec2 f){ c = vec4(1.0); }", []))
-      .toContain("float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius)");
+  it("injects the parameterised kinoMaskDistAt into plain shader source, but not the region dispatcher", () => {
+    const src = assembleShaderSource("void mainImage(out vec4 c, in vec2 f){ c = vec4(1.0); }", []);
+    // kinoMaskDistAt names no uniforms, so it compiles anywhere. The kinoMaskDist dispatcher names
+    // uMaskTexN/uMaskSdfN and belongs only to region programs, which are the only ones that have them.
+    expect(src).toContain("float kinoMaskDistAt(sampler2D mask, sampler2D sdf, float sdfMax, vec4 channel, vec2 fragCoord, float radius)");
+    expect(src).not.toContain("float kinoMaskDist(int idx");
+    expect(src).not.toContain("uMaskTex0");
   });
 });
 

@@ -105,8 +105,17 @@ vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset
 // 0.05 leaves ~10px of analytic reach (the branch resolves 0.5/g px), which covers the transition
 // band any real effect reads.
 // Reads only the texture, the coordinate and derivatives, so determinism holds.
+// EXACT PATH FIRST. When a precomputed signed distance field is bound (src/render/sdf.ts) this is
+// one texture tap, correct at ANY radius, and ~24x cheaper than the search below — the whole reason
+// the field exists. sdfMax == 0.0 means no field for this mask, and the in-shader search runs.
+// This function takes the field explicitly and touches no uniforms, so it stays compilable in plain
+// shader backgrounds too; region programs get the uMask0..3 dispatcher (REGION_DISPATCH).
 #define KINO_MASK_TAPS 24
-float kinoMaskDist(sampler2D mask, vec4 channel, vec2 fragCoord, float radius){
+float kinoMaskDistAt(sampler2D mask, sampler2D sdf, float sdfMax, vec4 channel, vec2 fragCoord, float radius){
+  if (sdfMax > 0.0) {
+    float e = dot(texture(sdf, fragCoord / iResolution.xy), channel);
+    return clamp((e * 2.0 - 1.0) * sdfMax, -radius, radius);
+  }
   vec2 res = iResolution.xy;
   vec2 uv = fragCoord / res;
   vec2 texel = 1.0 / res;
@@ -181,13 +190,40 @@ export const MAX_REGION_MASKS = 4;
 // time (r/g/b/a/gray→r); an unbound slot's uChannelN is left at (0,0,0,0) so it never contributes to
 // the union regardless of what's in its (placeholder) texture — same "unbound reads as nothing"
 // convention as uTex0..3.
+// uMaskSdfN / uMaskSdfMaxN carry the PRECOMPUTED signed distance field for that mask
+// (src/render/sdf.ts). uMaskSdfMaxN is 0 when no field is bound, which is the signal to fall back
+// to the in-shader search — so masks generated before fields existed keep rendering unchanged.
+//
+// uMaskN is an INTEGER SELECTOR, not a sampler: the real texture is uMaskTexN. GLSL cannot ask a
+// sampler which uniform it came from, and ANGLE's GLSL ES preprocessor has no ## token pasting
+// (verified: "'#' : invalid character"), so the helper cannot derive the matching field from a
+// sampler argument. Passing an index instead keeps every authored call site byte-identical —
+// kinoMaskDist(uMask0, ...) and kinoMaskDist(uMaskSelf, ...) both still work — while letting the
+// dispatcher pick the right sampler/field pair. A body that sampled uMaskN directly (undocumented;
+// the split itself is kino's job) now fails to compile loudly against line-numbered source.
 const REGION_HEADER =
   UNIFORM_HEADER +
   "\n" +
   Array.from(
     { length: MAX_REGION_MASKS },
-    (_, i) => `uniform sampler2D uMask${i};\nuniform vec4 uChannel${i};`,
+    (_, i) =>
+      `uniform sampler2D uMaskTex${i};\nuniform vec4 uChannel${i};\n` +
+      `uniform sampler2D uMaskSdf${i};\nuniform float uMaskSdfMax${i};\n` +
+      `#define uMask${i} ${i}`,
   ).join("\n");
+
+// Region-only: resolves an index to its sampler/field pair. Emitted after GLSL_HELPERS (it calls
+// kinoMaskDistAt) and only into region programs, which are the only ones with uMaskTexN to name.
+// An if-chain rather than a sampler array because GLSL ES 3.00 forbids indexing a sampler array
+// with anything but a constant expression, and the index arrives as a function parameter.
+const REGION_DISPATCH =
+  "\nfloat kinoMaskDist(int idx, vec4 channel, vec2 fragCoord, float radius){\n" +
+  Array.from(
+    { length: MAX_REGION_MASKS - 1 },
+    (_, i) =>
+      `  if (idx == ${i}) return kinoMaskDistAt(uMaskTex${i}, uMaskSdf${i}, uMaskSdfMax${i}, channel, fragCoord, radius);\n`,
+  ).join("") +
+  `  return kinoMaskDistAt(uMaskTex${MAX_REGION_MASKS - 1}, uMaskSdf${MAX_REGION_MASKS - 1}, uMaskSdfMax${MAX_REGION_MASKS - 1}, channel, fragCoord, radius);\n}\n`;
 
 // Null-side body: sample the beat asset (uTex0) unchanged. fragCoord/iResolution.xy is the 0..1 uv
 // (textures upload UNPACK_FLIP_Y'd, so v=0 is the bottom row — matches gl_FragCoord orientation).
@@ -242,6 +278,7 @@ export function assembleRegionShaderSource(
     "\n" +
     (hasBackdrop ? BACKDROP_ALIASES : "") +
     GLSL_HELPERS +
+    REGION_DISPATCH +
     "\nout vec4 kino_fragColor;\n\n";
   // A slot past MAX_REGION_MASKS has no uMaskN uniform to name — drop it rather than emit GLSL
   // that cannot compile. (The schema caps masks[] at 4; this is belt-and-braces.)
@@ -308,7 +345,7 @@ function unionTail(subj: string, bg: string): string {
     "  float m = 0.0;\n" +
     Array.from(
       { length: MAX_REGION_MASKS },
-      (_, i) => `  m = max(m, dot(texture(uMask${i}, muv), uChannel${i}));\n`,
+      (_, i) => `  m = max(m, dot(texture(uMaskTex${i}, muv), uChannel${i}));\n`,
     ).join("") +
     // Tight smoothstep for a clean ~1px AA edge (the bulk of the fringe fix is upstream —
     // sam_runner.py erodes the mask before its 1008→native upscale, see _erode1008).
@@ -380,7 +417,7 @@ function perObjectTail(per: (string | null)[], subj: string, bg: string): string
     per
       .map(
         (b, i) =>
-          `  c = mix(c, ${varOf(b, i)}, smoothstep(0.4, 0.6, dot(texture(uMask${i}, muv), uChannel${i})));\n`,
+          `  c = mix(c, ${varOf(b, i)}, smoothstep(0.4, 0.6, dot(texture(uMaskTex${i}, muv), uChannel${i})));\n`,
       )
       .join("") +
     "  kino_fragColor = c;\n" +

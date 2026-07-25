@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../../media/binPaths.js";
 import { appFreezeFrame, appTrimFrames } from "../appMedia.js";
 import type { KinoProps } from "../props.js";
+import { writeSdfSequence } from "./sdfFrames.js";
 
 export interface MediaJob {
   key: string; // "av<i>" | "seg<i>"
@@ -25,12 +26,19 @@ export interface MediaJob {
   stepSec: number; // source-time advance per live local frame
   effFrame: (localFrame: number) => number; // local frame → effective (freeze-pinned) frame
   maxEffFrame: number; // largest effective frame any local frame maps to
+  // Mask jobs only: which RGBA channels this beat actually reads, so the SDF transform computes one
+  // field per used object instead of four.
+  maskChannels?: string[];
 }
 
 export interface MediaEntryNode {
   dir: string;
   byFrame: Record<number, string>; // effective local frame → image file name
   maxFrame: number; // largest populated index (page clamps EOF/freeze overruns to this)
+  // Mask jobs only: the matching signed-distance-field frame per index, written beside the mask
+  // frames by writeSdfSequence. Absent for footage, and absent for masks whose transform failed —
+  // in which case kinoMaskDist falls back to its in-shader search and nothing else changes.
+  sdfByFrame?: Record<number, string>;
 }
 
 const f = (s: number, fps: number) => Math.round(s * fps);
@@ -78,7 +86,7 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
       rs.masks.forEach((m, j) => {
         if (m.maskKind !== "video") return;
         const job = appMediaJob(props.segments, i, fps, `rsmask${i}_${j}`, m.maskSrc);
-        if (job) jobs.push(job);
+        if (job) jobs.push({ ...job, maskChannels: [m.channel] });
       });
       // Region-shader BACKDROP (uTex1): a second, unrelated clip behind the cutout subject. Its own
       // clock ON PURPOSE, which is why this is not an appMediaJob — the beat's clipFrom/speed/pauseAt
@@ -275,7 +283,38 @@ async function extractIndices(
       maxFrame = Math.max(maxFrame, eff);
     }
   });
-  return { dir: job.key, byFrame, maxFrame };
+  if (!isMask) return { dir: job.key, byFrame, maxFrame };
+
+  // Masks additionally get an exact signed distance field, so kinoMaskDist is one tap at any radius
+  // instead of a 24-tap search that facets past ~10px. Best-effort: a failure here leaves
+  // sdfByFrame undefined and the shader keeps its old behaviour.
+  const sdfByFrame: Record<number, string> = {};
+  try {
+    const { width, height } = await probeSize(assetAbs);
+    const ok = await writeSdfSequence({
+      srcPattern: join(dir, `x%06d.${ext}`),
+      outDir: dir,
+      outPattern: join(dir, "s%06d.png"),
+      width,
+      height,
+      channels: job.maskChannels ?? ["gray"],
+    });
+    if (ok) for (const [k, v] of Object.entries(byFrame)) sdfByFrame[Number(k)] = v.replace(/^x/, "s");
+  } catch {
+    // Best effort: no field means kinoMaskDist keeps its in-shader search, which is exactly the
+    // behaviour every mask had before fields existed. Never fail a render over an optimisation.
+  }
+  return { dir: job.key, byFrame, maxFrame, sdfByFrame: Object.keys(sdfByFrame).length ? sdfByFrame : undefined };
+}
+
+/** Pixel dimensions of a decoded asset — the SDF transform needs them to frame the raw stream. */
+async function probeSize(assetAbs: string): Promise<{ width: number; height: number }> {
+  const { stdout } = await execa(FFPROBE_PATH, [
+    "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+    "-of", "csv=p=0:s=x", assetAbs,
+  ]);
+  const [w, h] = stdout.trim().split("x").map(Number);
+  return { width: w, height: h };
 }
 
 // Dense extraction (video renders): every local frame of the usage.

@@ -61,15 +61,26 @@ So the second build after a small edit is fast and cheap — only the changed be
 
 Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Env levers:
 
+The GL backend is **auto-detected per machine**: hardware ANGLE (Metal) on macOS, software
+SwiftShader everywhere else. The detection is a platform rule rather than a runtime probe on
+purpose — macOS always ships Metal, while a Linux/Windows box may equally be a workstation with a
+discrete card or a CI runner with no usable GL, and a wrong guess there fails *silently* (a dead
+GL context renders a flat wash, not an error). Every render prints which backend it used.
+
+**gpu and sw frames are not bit-identical**, so two machines on auto can legitimately differ. The
+frame cache keys the two apart so they never cross-serve. Pin `KINO_GPU=0` wherever output must
+match byte-for-byte across machines — golden frames, cross-platform CI comparisons.
+
 | Env | Effect |
 |---|---|
-| `KINO_GPU=1` | Hardware ANGLE (Metal on macOS) instead of SwiftShader CPU GL. Faster; not bit-identical across machines. Frame cache keys `gpu` vs `sw` separately. |
+| `KINO_GPU=1` | Force hardware ANGLE (Metal on macOS, bare ANGLE elsewhere). Faster on raymarch/SSAA. |
+| `KINO_GPU=0` | Force SwiftShader CPU GL — the bit-stable canonical path. |
 | `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
 | `KINO_SHADER_FXAA=0` | Disable the default FXAA edge post-pass on shader backgrounds. |
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
 | `KINO_CONCURRENCY=N` | Chrome worker count (default cap 8 short / 12 long). |
 
-Example: `KINO_GPU=1 kino build specs/foo.json --mock`
+Example: `KINO_GPU=0 kino build specs/foo.json --mock` (force the deterministic software path)
 
 ## Variants & batch
 
