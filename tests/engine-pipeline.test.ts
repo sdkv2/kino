@@ -199,9 +199,19 @@ describe("extractDense chunking", () => {
     const mask = await extractDense(job("rsmask0_0"), video, framesRoot);
     const footage = await extractDense(job("seg0"), video, framesRoot);
 
-    expect(readdirSync(join(framesRoot, "rsmask0_0")).every((f) => f.endsWith(".png"))).toBe(true);
+    const maskFiles = readdirSync(join(framesRoot, "rsmask0_0"));
+    expect(maskFiles.every((f) => f.endsWith(".png"))).toBe(true);
     expect(Object.keys(mask.byFrame).length).toBe(total);
     expect(mask.byFrame[0]).toBe("x000001.png");
+
+    // Mask jobs also get a precomputed signed distance field per frame, written alongside as s*.png
+    // and indexed by sdfByFrame — that is what makes kinoMaskDist one exact tap instead of a
+    // 24-tap search that facets past ~10px.
+    expect(maskFiles.filter((f) => f.startsWith("s")).length).toBe(total);
+    expect(mask.sdfByFrame?.[0]).toBe("s000001.png");
+    expect(Object.keys(mask.sdfByFrame ?? {}).length).toBe(total);
+    // Footage must NOT pay for a field it never reads.
+    expect(footage.sdfByFrame).toBeUndefined();
 
     expect(readdirSync(join(framesRoot, "seg0")).every((f) => f.endsWith(".jpg"))).toBe(true);
     expect(footage.byFrame[0]).toBe("x000001.jpg");

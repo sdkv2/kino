@@ -21,8 +21,10 @@ import { reportFatal } from "./fatal";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
 import { assembleRegionShaderSource, MAX_REGION_MASKS, resolveUniforms, extraParamNames } from "../../shaderSource.js";
+import { SDF_MAX_PX } from "../../sdf.js";
 import { paramsAt } from "../../bgparams.js";
-import { useFrameImageUrl } from "./media";
+import { useFrameImageUrl, useSdfImageUrl } from "./media";
+
 
 // The alias set baked into the compiled program: `#define u_<name> uParamI`. Derived from the base
 // params PLUS every keyframe so it is stable across frames — a per-frame resolved dict would drop
@@ -88,6 +90,7 @@ interface GLState {
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
   masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
+  sdfs: Slot[]; // parallel to masks; a placeholder where no distance field was written
 }
 
 function uploadTex(gl: WebGL2RenderingContext, unit: number, handle: WebGLTexture, src: TexImageSource): void {
@@ -161,6 +164,7 @@ function disposeGL(st: GLState | null): void {
   st.gl.deleteProgram(st.prog);
   st.gl.deleteTexture(st.asset.handle);
   for (const m of st.masks) st.gl.deleteTexture(m.handle);
+  for (const s of st.sdfs) st.gl.deleteTexture(s.handle);
 }
 
 // Compile the program + build the asset slot and every mask slot (real sources first, inert
@@ -170,6 +174,7 @@ async function initGL(
   canvas: HTMLCanvasElement,
   assetSrc: Src,
   maskSrcs: Src[],
+  sdfSrcs: (Src | null)[],
   region: RegionShaderProps,
 ): Promise<GLState | null> {
   try {
@@ -220,7 +225,12 @@ async function initGL(
     const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0",
                    "iMouse", "uPulse", "uColorA", "uColorB", "uColorC", "uIntensity",
                    "uParam0", "uParam1", "uParam2", "uParam3"];
-    for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
+    // uMaskTexN, not uMaskN: uMaskN is now a #define'd integer selector for kinoMaskDist, so
+    // getUniformLocation("uMask0") returns null and every mask sampler would silently keep its
+    // default of texture unit 0 — i.e. sample the beat asset instead of the mask.
+    for (let i = 0; i < MAX_REGION_MASKS; i++) {
+      names.push(`uMaskTex${i}`, `uChannel${i}`, `uMaskSdf${i}`, `uMaskSdfMax${i}`);
+    }
     for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     const assetSlot = await makeSlot(gl, 0, assetSrc, loc.uTex0);
@@ -228,10 +238,21 @@ async function initGL(
     for (let i = 0; i < MAX_REGION_MASKS; i++) {
       const unit = i + 1; // unit 0 is the asset
       masks.push(
-        i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMask${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMask${i}`]),
+        i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMaskTex${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMaskTex${i}`]),
       );
     }
-    return { gl, prog, loc, asset: assetSlot, masks };
+    // Distance fields live on the units above the masks. Whether a field is actually AVAILABLE is
+    // decided per frame in drawFrame, not here: on the first render pass every /vframes URL is
+    // still null (they resolve on the next pass), so anything latched at init would latch "no
+    // field" permanently. The mask slots have always worked this way — the slot is created now and
+    // its content arrives per frame — and the SDF slots have to follow the same lifecycle.
+    const sdfs: Slot[] = [];
+    for (let i = 0; i < MAX_REGION_MASKS; i++) {
+      const unit = MAX_REGION_MASKS + 1 + i;
+      const src = sdfSrcs[i];
+      sdfs.push(src ? await makeSlot(gl, unit, src, loc[`uMaskSdf${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMaskSdf${i}`]));
+    }
+    return { gl, prog, loc, asset: assetSlot, masks, sdfs };
   } catch (err) {
     console.error(String(err));
     return null;
@@ -245,6 +266,7 @@ async function drawFrame(
   initRef: React.MutableRefObject<Promise<GLState | null> | null>,
   assetSrc: Src,
   maskSrcs: Src[],
+  sdfSrcs: (Src | null)[],
   region: RegionShaderProps,
   frame: number,
   width: number,
@@ -252,12 +274,13 @@ async function drawFrame(
   fps: number,
 ): Promise<void> {
   try {
-    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region);
+    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, sdfSrcs, region);
     const st = await initRef.current;
     if (!st) return;
     const { gl, prog, loc } = st;
     await updateFrameSlot(gl, st.asset, assetSrc.frameUrl);
     await Promise.all(maskSrcs.map((src, i) => updateFrameSlot(gl, st.masks[i], src.frameUrl)));
+    await Promise.all(sdfSrcs.map((src, i) => (src ? updateFrameSlot(gl, st.sdfs[i], src.frameUrl) : Promise.resolve())));
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
@@ -300,6 +323,10 @@ async function drawFrame(
       const m = region.masks[i];
       const ch = m ? CHANNEL_VEC[m.channel] ?? CHANNEL_VEC.gray : ZERO_VEC;
       gl.uniform4f(loc[`uChannel${i}`], ch[0], ch[1], ch[2], ch[3]);
+      // 0 = no distance field for this mask THIS FRAME, which is kinoMaskDist's signal to run its
+      // in-shader search instead. Anything else is the encode half-range the field was written
+      // with. Evaluated per frame because the URL is null on the first pass (see initGL).
+      gl.uniform1f(loc[`uMaskSdfMax${i}`], sdfSrcs[i]?.frameUrl ? SDF_MAX_PX : 0);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish();
@@ -328,12 +355,19 @@ export const RegionShader: React.FC<{
   /* eslint-disable react-hooks/rules-of-hooks */
   const maskFrameUrls: (string | null)[] = [];
   for (let i = 0; i < MAX_REGION_MASKS; i++) maskFrameUrls.push(useFrameImageUrl(maskMediaKeys?.[i]));
+  const sdfFrameUrls: (string | null)[] = [];
+  for (let i = 0; i < MAX_REGION_MASKS; i++) sdfFrameUrls.push(useSdfImageUrl(maskMediaKeys?.[i]));
   /* eslint-enable react-hooks/rules-of-hooks */
   const maskSrcs: Src[] = region.masks.map((m, i) => ({
     frameVideo: m.maskKind === "video",
     staticUrl: staticFile(m.maskSrc),
     frameUrl: maskFrameUrls[i],
   }));
+  // One per mask entry, null only where a field can never exist (an image mask). A video mask
+  // always gets a slot; frameUrl being null just means "not this frame", which drives uMaskSdfMaxN.
+  const sdfSrcs: (Src | null)[] = region.masks.map((m, i) =>
+    m.maskKind === "video" ? { frameVideo: true, staticUrl: "", frameUrl: sdfFrameUrls[i] } : null,
+  );
 
   // Everything initGL bakes in: every GLSL body (the assembled program) and the texture sources
   // (built once into slots). Per-frame /vframes URLs are deliberately NOT here — those re-upload
@@ -364,7 +398,7 @@ export const RegionShader: React.FC<{
       initRef.current = null;
       if (stale) void stale.then(disposeGL, () => {});
     }
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps));
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, sdfSrcs, region, frame, width, height, fps));
   });
 
   return (
