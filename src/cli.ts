@@ -24,6 +24,7 @@ program
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
+  .option("--beat <n>", "render only beat n (1-indexed) as its own standalone clip — needs --draft or --no-tts")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
   });

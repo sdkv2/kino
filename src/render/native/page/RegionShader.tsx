@@ -21,10 +21,10 @@ import { reportFatal } from "./fatal";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
 import type { BgParamValue, RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
 import { assembleRegionShaderSource, MAX_REGION_MASKS, resolveUniforms, extraParamNames } from "../../shaderSource.js";
+import { SDF_MAX_PX } from "../../sdf.js";
 import { paramsAt } from "../../bgparams.js";
 import { buildMotionVars } from "../../motionVars.js";
 import { useFrameImageUrl, useSdfImageUrl } from "./media";
-import { SDF_MAX_PX } from "../../sdf.js";
 import { buildTemplate, rasterAt, scrubCss, TEX_ROOT, type HtmlTemplate } from "./bgTextures";
 import { motionScrubCss, KINO_FILTERS } from "./motionCss";
 
