@@ -29,6 +29,9 @@ export function resolveBackgroundDraw(bg: BackgroundProps): DrawFn | undefined {
   return getPreset(bg.kind);
 }
 
+import { captionMarkup, kickerMarkup, textMarkup, disclosureMarkup, filmMarkup } from "./textMarkup.js";
+import { hasCaptionContent, isHeroCaption } from "../../../captionLayout.js";
+
 export function buildRegistry(
   props: KinoProps,
   dims: Dims,
@@ -93,6 +96,50 @@ export function buildRegistry(
       if (entry) sources.set(`seg${i}`, createFramesSource(entry, f(s.startSec)));
       if (s.frame) sources.set(`frame${i}`, createImageSource("/public/" + s.frame.src));
     }
+    if (s.kicker) {
+      sources.set(
+        `kicker${i}`,
+        createHtmlSource({
+          html: kickerMarkup({ text: s.kicker.text, color: s.kicker.color, fg: s.kicker.fg, theme: props.theme }),
+          theme: props.theme,
+          size: { w: dims.width, h: dims.height },
+          fps: props.fps,
+          hasTier2: false,
+          scale,
+        }),
+      );
+    }
+    s.texts?.forEach((t, j) => {
+      sources.set(
+        `text${i}_${j}`,
+        createHtmlSource({
+          html: textMarkup({ overlay: t, theme: props.theme }),
+          theme: props.theme,
+          size: { w: dims.width, h: dims.height },
+          fps: props.fps,
+          hasTier2: false,
+          scale,
+        }),
+      );
+    });
+    if (hasCaptionContent(s)) {
+      sources.set(
+        `caption${i}`,
+        createHtmlSource({
+          html: captionMarkup({
+            text: s.caption ?? "",
+            theme: props.theme,
+            hero: isHeroCaption(s, Boolean(props.avatar)),
+            activeWord: null,
+          }),
+          theme: props.theme,
+          size: { w: dims.width, h: dims.height },
+          fps: props.fps,
+          hasTier2: false,
+          scale,
+        }),
+      );
+    }
     const html = (kind: "motion" | "overlay", markup: string) =>
       createHtmlSource({
         html: markup,
@@ -107,6 +154,34 @@ export function buildRegistry(
   });
 
   if (props.logo) sources.set("logo", createImageSource("/public/" + props.logo.src));
+
+  if (props.disclosure) {
+    sources.set(
+      "disclosure",
+      createHtmlSource({
+        html: disclosureMarkup({ text: props.disclosure, theme: props.theme }),
+        theme: props.theme,
+        size: { w: dims.width, h: dims.height },
+        fps: props.fps,
+        hasTier2: false,
+        scale,
+      }),
+    );
+  }
+
+  if ((props.theme.film ?? 1) > 0) {
+    sources.set(
+      "film",
+      createHtmlSource({
+        html: filmMarkup({ theme: props.theme, frame: 0 }),
+        theme: props.theme,
+        size: { w: dims.width, h: dims.height },
+        fps: props.fps,
+        hasTier2: false,
+        scale,
+      }),
+    );
+  }
 
   return sources;
 }
