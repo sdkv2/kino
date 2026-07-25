@@ -66,7 +66,8 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       ? { x: (inset.x * width) / 100, y: (inset.y * height) / 100, w: (inset.w * width) / 100, h: (inset.h * height) / 100 }
       : full;
 
-    out.push({ id: `seg${i}`, source: { providerId: `seg${i}` }, rect, opacity });
+    const footageProvider = s.regionShader ? `region${i}` : `seg${i}`;
+    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity });
     if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity });
     if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity });
   });
@@ -109,7 +110,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   props.segments.forEach((s, i) => {
     s.texts?.forEach((t, j) => {
       const from = f(t.fromSec);
-      const to = f(t.toSec);
+      const to = "durSec" in t ? f(t.fromSec + (t as any).durSec) : f((t as any).toSec);
       if (frame < from || frame >= to) return;
       out.push({ id: `text${i}_${j}`, source: { providerId: `text${i}_${j}` }, rect: full });
     });
@@ -120,7 +121,8 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const onCamera = props.avatar
       ? props.avatarWindows.some((w) => frame >= f(w.fromSec) && frame < f(w.toSec))
       : false;
-    if (!onCamera && frame >= f(props.logo.fromSec)) {
+    const logoFromSec = (props.logo as any).fromSec ?? 0;
+    if (!onCamera && frame >= f(logoFromSec)) {
       out.push({ id: "logo", source: { providerId: "logo" }, rect: full });
     }
   }
