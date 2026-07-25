@@ -159,7 +159,7 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
 // Stream ordered JPEG frames (q95 — Chrome's PNG encoder is ~10× slower per frame; the legacy
 // engine's own frame format was JPEG) into a single libx264 encode (image2pipe on stdin) and mux
 // the mixed audio track in the same pass. bt709 tags + matrix match players' expectations.
-function startEncoder(opts: { fps: number; out: string; audio: string | null; preset: EncodePreset }): { stdin: NodeJS.WritableStream; done: Promise<void> } {
+function startEncoder(opts: { fps: number; out: string; audio: string | null; preset: EncodePreset }): { stdin: NodeJS.WritableStream; done: Promise<void>; kill: () => void } {
   const args = [
     "-y", "-loglevel", "error",
     "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(opts.fps), "-i", "-",
@@ -175,12 +175,16 @@ function startEncoder(opts: { fps: number; out: string; audio: string | null; pr
   ];
   const proc = spawn(FFMPEG_PATH, args, { stdio: ["pipe", "ignore", "pipe"] });
   let stderr = "";
-  proc.stderr.on("data", (d) => (stderr += d));
   const done = new Promise<void>((resolve, reject) => {
     proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg encode failed (${code}): ${stderr}`))));
     proc.on("error", reject);
   });
-  return { stdin: proc.stdin, done };
+  const kill = () => {
+    try {
+      proc.kill("SIGKILL");
+    } catch {}
+  };
+  return { stdin: proc.stdin, done, kill };
 }
 
 const writeFrame = (stdin: NodeJS.WritableStream, buf: Buffer) =>
@@ -373,10 +377,15 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset });
-        await renderFrameRange(handles, total, enc.stdin, cache);
-        lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
-        enc.stdin.end();
-        await enc.done;
+        try {
+          await renderFrameRange(handles, total, enc.stdin, cache);
+          lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
+          enc.stdin.end();
+          await enc.done;
+        } catch (err) {
+          enc.kill();
+          throw err;
+        }
         cache.commit();
         lap(`encode-flush ${fmt}`);
         const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);

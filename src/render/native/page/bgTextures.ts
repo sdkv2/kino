@@ -106,7 +106,7 @@ export function seekVideo(vid: HTMLVideoElement, t: number): Promise<void> {
 
 async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   const faces: string[] = [];
-  const inline = async (family: string, rel: string | null) => {
+  const inline = async (family: string, rel: string | null | undefined) => {
     if (!rel) return;
     try {
       const buf = await (await fetch("/public/" + rel)).arrayBuffer();

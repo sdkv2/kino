@@ -39,8 +39,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc && node scripts/build-page.mjs",
-    "prepare": "tsc && node scripts/build-page.mjs",
+    "build": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
+    "prepare": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest"

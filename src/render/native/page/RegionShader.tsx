@@ -103,8 +103,8 @@ interface GLState {
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
   masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
-<<<<<<< HEAD
   texes: TexChannel[]; // uTex1..uTex3; entries past region.textures.length are transparent placeholders
+  backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
 }
 
 // uTex0 is always the beat's own asset, so authored channels start at uTex1.
@@ -130,9 +130,6 @@ function motionRasterCss(theme: Theme, params: Record<string, BgParamValue>, dyn
     .map(([k, v]) => `${k}:${v}`)
     .join(";");
   return `${scrubCss(dyn.progress)} ${motionScrubCss(`.${TEX_ROOT}`)} .${TEX_ROOT}{${decls}}`;
-=======
-  backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
->>>>>>> origin/main
 }
 
 function uploadTex(gl: WebGL2RenderingContext, unit: number, handle: WebGLTexture, src: TexImageSource): void {
@@ -267,11 +264,8 @@ function disposeGL(st: GLState | null): void {
   st.gl.deleteProgram(st.prog);
   st.gl.deleteTexture(st.asset.handle);
   for (const m of st.masks) st.gl.deleteTexture(m.handle);
-<<<<<<< HEAD
   for (const c of st.texes) st.gl.deleteTexture(c.handle);
-=======
   if (st.backdrop) st.gl.deleteTexture(st.backdrop.handle);
->>>>>>> origin/main
 }
 
 // Compile the program + build the asset slot and every mask slot (real sources first, inert
@@ -282,13 +276,10 @@ async function initGL(
   assetSrc: Src,
   maskSrcs: Src[],
   region: RegionShaderProps,
-<<<<<<< HEAD
   theme: Theme,
   width: number,
   height: number,
-=======
   backdropSrc: Src | null,
->>>>>>> origin/main
 ): Promise<GLState | null> {
   try {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false });
@@ -351,10 +342,7 @@ async function initGL(
         i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMask${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMask${i}`]),
       );
     }
-<<<<<<< HEAD
     const texes = await makeTexChannels(gl, region, loc, theme, width, height);
-    return { gl, prog, loc, asset: assetSlot, masks, texes };
-=======
     // The cutout's backdrop, on the unit past the masks (0 = asset, 1..MAX_REGION_MASKS = masks).
     // uTexSize1 is the FIRST uTexSize this component has ever uploaded: kinoCoverUV/kinoBackdrop
     // read it and treat (0,0) as "no reframe", which would stretch an unrelated clip to the beat's
@@ -365,8 +353,7 @@ async function initGL(
       backdrop = await makeSlot(gl, MAX_REGION_MASKS + 1, backdropSrc, loc.uTex1);
       gl.uniform2f(loc.uTexSize1, backdrop.size[0], backdrop.size[1]);
     }
-    return { gl, prog, loc, asset: assetSlot, masks, backdrop };
->>>>>>> origin/main
+    return { gl, prog, loc, asset: assetSlot, masks, texes, backdrop };
   } catch (err) {
     console.error(String(err));
     return null;
@@ -385,18 +372,12 @@ async function drawFrame(
   width: number,
   height: number,
   fps: number,
-<<<<<<< HEAD
   theme: Theme,
   durationFrames: number,
-): Promise<void> {
-  try {
-    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region, theme, width, height);
-=======
   backdropSrc: Src | null,
 ): Promise<void> {
   try {
-    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region, backdropSrc);
->>>>>>> origin/main
+    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region, theme, width, height, backdropSrc);
     const st = await initRef.current;
     if (!st) return;
     const { gl, prog, loc } = st;
@@ -468,13 +449,9 @@ export const RegionShader: React.FC<{
   t: Theme;
   assetMediaKey?: string; // /vframes key when the beat asset is a video (else the asset is a static image)
   maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
-<<<<<<< HEAD
-  durationFrames: number; // beat length — maps a motion-HTML texture channel's --progress 0→1, as MotionGraphic does
-}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, durationFrames }) => {
-=======
+  durationFrames?: number; // beat length — maps a motion-HTML texture channel's --progress 0→1, as MotionGraphic does
   backdropMediaKey?: string; // /vframes key when region.backdrop is a video (else it's a static image)
-}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, backdropMediaKey }) => {
->>>>>>> origin/main
+}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, durationFrames = 0, backdropMediaKey }) => {
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -515,17 +492,13 @@ export const RegionShader: React.FC<{
     regionExtras(region).join(","),
     `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
     ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
-<<<<<<< HEAD
     // Texture channels are built into slots by initGL too (an html channel measures + serializes
     // its template there), so a spec differing only in its textures must not reuse cached state.
     ...(region.textures ?? []).map((tex) => `${tex.kind}|${tex.src ?? tex.html?.length}`),
-  ].join(" ");
-=======
     // Whether a backdrop exists is baked into the program (the uBackdrop aliases and the background
     // passthrough), and its slot is built once at init - so it belongs in the key like the bodies.
     `${backdropSrc?.frameVideo}|${backdropSrc?.staticUrl}`,
-  ].join(" ");
->>>>>>> origin/main
+  ].join(" ");
 
   useLayoutEffect(() => {
     const canvas = ref.current;
@@ -540,11 +513,7 @@ export const RegionShader: React.FC<{
       initRef.current = null;
       if (stale) void stale.then(disposeGL, () => {});
     }
-<<<<<<< HEAD
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps, t, durationFrames));
-=======
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps, backdropSrc));
->>>>>>> origin/main
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps, t, durationFrames, backdropSrc));
   });
 
   return (
