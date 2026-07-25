@@ -5,10 +5,10 @@
 //   1. content.length === N → use those in order (exact step list)
 //   2. else if existing triggers cluster in the first half of the spoken span → first N
 //   3. else → last N (pipeline: "… Voiceover, motion, render, mp4.")
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { prepare } from "./build.js";
-import { parseSpec, type Spec } from "../spec/schema.js";
+import { loadSpec, type Spec } from "../spec/schema.js";
 import type { WordTiming } from "../render/props.js";
 import { log } from "../log.js";
 
@@ -107,7 +107,7 @@ export async function retune(
   opts: { dryRun?: boolean; project?: string } = {},
 ): Promise<void> {
   const absPath = resolve(specPath);
-  const working = parseSpec(JSON.parse(readFileSync(absPath, "utf8"))) as Spec;
+  const working = loadSpec(absPath);
 
   log.step("retune (real VO)");
   const { props, words: segWords } = await prepare(absPath, { mock: false, project: opts.project });

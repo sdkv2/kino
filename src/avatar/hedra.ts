@@ -14,9 +14,22 @@ function apiKey(): string {
   return k;
 }
 
+interface HedraAssetResponse {
+  id: string;
+}
+
+interface HedraModelResponse {
+  id: string;
+}
+
+interface HedraStatusResponse {
+  status: "queued" | "processing" | "complete" | "error";
+  url?: string;
+  error_message?: string;
+}
+
 // Authenticated JSON fetch against the Hedra API (throws on non-2xx).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function hedraFetch(path: string, init: RequestInit & { json?: unknown } = {}): Promise<any> {
+async function hedraFetch<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, headers, ...rest } = init;
   const res = await fetch(`${BASE}${path}`, {
     ...rest,
@@ -28,11 +41,11 @@ async function hedraFetch(path: string, init: RequestInit & { json?: unknown } =
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
   if (!res.ok) throw new Error(`Hedra ${path} → ${res.status}: ${await res.text()}`);
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 async function createAndUpload(file: string, type: "image" | "audio"): Promise<string> {
-  const asset = await hedraFetch("/assets", { method: "POST", json: { name: fileName(file), type } });
+  const asset = await hedraFetch<HedraAssetResponse>("/assets", { method: "POST", json: { name: fileName(file), type } });
   const fd = new FormData();
   fd.append("file", await filePart(file), fileName(file));
   const res = await fetch(`${BASE}/assets/${asset.id}/upload`, {
@@ -41,14 +54,14 @@ async function createAndUpload(file: string, type: "image" | "audio"): Promise<s
     body: fd,
   });
   if (!res.ok) throw new Error(`Hedra upload ${type} → ${res.status}: ${await res.text()}`);
-  return asset.id as string;
+  return asset.id;
 }
 
 async function pickModelId(): Promise<string> {
-  const models = await hedraFetch("/models", { method: "GET" });
+  const models = await hedraFetch<HedraModelResponse[] | { data: HedraModelResponse[] }>("/models", { method: "GET" });
   const list = Array.isArray(models) ? models : (models.data ?? []);
   if (!list.length) throw new Error("Hedra: no models on this account");
-  return list[0].id as string;
+  return list[0].id;
 }
 
 export interface HedraOpts {
@@ -61,7 +74,7 @@ export async function hedraGenerate(audioPath: string, imagePath: string, opts: 
   const modelId = opts.modelId ?? (await pickModelId());
   const imageId = await createAndUpload(imagePath, "image");
   const audioId = await createAndUpload(audioPath, "audio");
-  const gen = await hedraFetch("/generations", {
+  const gen = await hedraFetch<{ id: string }>("/generations", {
     method: "POST",
     json: {
       type: "video",
@@ -75,17 +88,17 @@ export async function hedraGenerate(audioPath: string, imagePath: string, opts: 
       },
     },
   });
-  const url = await pollHedra(gen.id as string);
+  const url = await pollHedra(gen.id);
   await download(url, out);
 }
 
 async function pollHedra(genId: string, timeoutSec = 900): Promise<string> {
   const deadline = Date.now() + timeoutSec * 1000;
   while (Date.now() < deadline) {
-    const d = await hedraFetch(`/generations/${genId}/status`, { method: "GET" });
+    const d = await hedraFetch<HedraStatusResponse>(`/generations/${genId}/status`, { method: "GET" });
     if (d.status === "complete") {
       if (!d.url) throw new Error("Hedra reported complete but returned no url");
-      return d.url as string;
+      return d.url;
     }
     if (d.status === "error") throw new Error(`Hedra generation failed: ${d.error_message ?? "unknown"}`);
     await new Promise((r) => setTimeout(r, 8000));

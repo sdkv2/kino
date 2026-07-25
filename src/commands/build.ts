@@ -10,7 +10,7 @@ import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
-import { parseSpec, type Spec } from "../spec/schema.js";
+import { loadSpec, parseSpec, type Spec } from "../spec/schema.js";
 import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
@@ -198,7 +198,7 @@ export async function prepare(
   const project = resolveProject({ specPath, project: opts.project });
   specPath = resolveSpecPathIn(specPath, project);
   loadEnv(project.workspaceRoot);
-  const spec = parseSpec(JSON.parse(readFileSync(specPath, "utf8")));
+  const spec = loadSpec(specPath);
 
   // A project.json assigns a brand + optional default overrides (layered under spec/CLI).
   const pc = loadProjectConfig(project.projectConfigPath);

@@ -199,7 +199,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
 export function splitWordsBySegment(texts: string[], allWords: WordTiming[]): WordTiming[][] {
   let off = 0;
   const out = texts.map((t) => {
-    const n = t.trim().split(/\s+/).length;
+    const n = t.trim().split(/\s+/).filter(Boolean).length;
     const slice = allWords.slice(off, off + n);
     off += n;
     return slice;

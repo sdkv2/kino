@@ -462,10 +462,11 @@ export const RegionShader: React.FC<{
   // sparse-still frames). Same lookup FrameVideo uses, so the GL texture tracks the identical frame.
   // Fixed MAX_REGION_MASKS hook calls (rules of hooks) regardless of how many masks this beat has.
   const assetSrc: Src = { frameVideo: !!assetMediaKey, staticUrl: staticFile(asset), frameUrl: useFrameImageUrl(assetMediaKey) };
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const maskFrameUrls: (string | null)[] = [];
-  for (let i = 0; i < MAX_REGION_MASKS; i++) maskFrameUrls.push(useFrameImageUrl(maskMediaKeys?.[i]));
-  /* eslint-enable react-hooks/rules-of-hooks */
+  const mUrl0 = useFrameImageUrl(maskMediaKeys?.[0]);
+  const mUrl1 = useFrameImageUrl(maskMediaKeys?.[1]);
+  const mUrl2 = useFrameImageUrl(maskMediaKeys?.[2]);
+  const mUrl3 = useFrameImageUrl(maskMediaKeys?.[3]);
+  const maskFrameUrls: (string | null)[] = [mUrl0, mUrl1, mUrl2, mUrl3];
   const maskSrcs: Src[] = region.masks.map((m, i) => ({
     frameVideo: m.maskKind === "video",
     staticUrl: staticFile(m.maskSrc),
