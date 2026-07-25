@@ -3,6 +3,8 @@ import { genSilence } from "../media/ffmpeg.js";
 import { charsToWords } from "../render/captions.js";
 import type { WordTiming } from "../render/props.js";
 
+import { fetchWithRetry } from "../media/net.js";
+
 const BASE = "https://api.elevenlabs.io/v1";
 
 export interface VoiceSettings {
@@ -32,7 +34,7 @@ export const modelSupportsContext = (model: string) => !model.startsWith("eleven
 export async function listVoices(
   apiKey: string,
 ): Promise<Array<{ id: string; name: string; gender?: string; accent?: string; age?: string }>> {
-  const r = await fetch(`${BASE}/voices`, { headers: { "xi-api-key": apiKey } });
+  const r = await fetchWithRetry(`${BASE}/voices`, { headers: { "xi-api-key": apiKey } });
   if (!r.ok) throw new Error(`ElevenLabs voices ${r.status}`);
   const d = (await r.json()) as { voices: Array<{ voice_id: string; name: string; labels?: Record<string, string> }> };
   return d.voices.map((v) => ({
@@ -58,7 +60,7 @@ export async function ttsWithTimestamps(
   // don't reset pitch/pacing at every seam. Dropped for models that reject them (v3);
   // JSON.stringify drops the fields when undefined.
   const ctx = modelSupportsContext(model) ? context : undefined;
-  const r = await fetch(`${BASE}/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, {
+  const r = await fetchWithRetry(`${BASE}/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`, {
     method: "POST",
     headers: { "xi-api-key": apiKey, "content-type": "application/json" },
     body: JSON.stringify({

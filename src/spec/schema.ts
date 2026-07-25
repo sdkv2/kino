@@ -3,6 +3,7 @@
 // single source of truth for what an agent may author; keep it and docs/spec-reference.md in sync.
 // Exports the Spec type used throughout the pipeline. Note: keyframe/trigger `at` is in seconds
 // (resolved against frame/fps in the render layer).
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS } from "../render/textStyles.js";
 import { EASE_NAMES } from "../render/bgparams.js";
@@ -453,10 +454,20 @@ export function formatSpecError(err: z.ZodError): string {
     })
     .join("\n");
 }
-
 /** Parse a spec with helpful footgun messages (logoPosition on CTA, transition on motion, …). */
 export function parseSpec(input: unknown): Spec {
   const r = SpecSchema.safeParse(input);
   if (r.success) return r.data;
   throw new Error(formatSpecError(r.error));
+}
+
+/** Load and parse a spec JSON file from disk. */
+export function loadSpec(path: string): Spec {
+  const raw = readFileSync(path, "utf8");
+  try {
+    return parseSpec(JSON.parse(raw));
+  } catch (e) {
+    if (e instanceof SyntaxError) throw new Error(`Invalid JSON in spec file (${path}): ${e.message}`);
+    throw e;
+  }
 }

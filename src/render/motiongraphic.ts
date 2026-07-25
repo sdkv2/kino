@@ -46,7 +46,7 @@ const BANNED_JS: { re: RegExp; msg: string }[] = [
   { re: /\brequire\s*\(/, msg: "require() isn't allowed — render(env) must be self-contained" },
   { re: /\bimport\b\s*[('"\w{*]/, msg: "import isn't allowed — render(env) must be self-contained" },
   { re: /\bprocess\s*[.\[]/, msg: "process isn't available — render(env) runs in the browser, not Node" },
-  { re: /\b(globalThis|window|document)\s*[.\[]/, msg: "globalThis/window/document aren't allowed — return an HTML string, don't touch the DOM" },
+  { re: /\b(globalThis|window|document|this)\b/, msg: "globalThis/window/document/this aren't allowed — return an HTML string, don't touch the DOM" },
   { re: /\son\w+\s*=/i, msg: "inline event handlers (on*=) aren't allowed in generated markup" },
   // Dynamic code execution + obfuscation. Best-effort hardening against bracket-notation / runtime
   // string-building used to dodge the dotted Date.now/Math.random rules above (a denylist can't be

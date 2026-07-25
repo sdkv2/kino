@@ -17,15 +17,20 @@ export function pickPhotoLooks(looks: Look[]): Look[] {
   return looks.filter((l) => l.preferred_orientation === "portrait" && isAvatarIV(l));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function hey(args: string[]): Promise<any> {
+interface HeyGenResponse<T = Record<string, unknown>> {
+  error?: { message: string };
+  data?: T;
+}
+
+async function hey<T = Record<string, unknown>>(args: string[]): Promise<HeyGenResponse<T>> {
   const { stdout } = await execa("heygen", args, { env: process.env });
-  return JSON.parse(stdout);
+  return JSON.parse(stdout) as HeyGenResponse<T>;
 }
 
 export async function uploadAsset(file: string): Promise<string> {
-  const d = await hey(["asset", "create", "--file", file]);
-  return d.data.asset_id as string;
+  const d = await hey<{ asset_id: string }>(["asset", "create", "--file", file]);
+  if (!d.data?.asset_id) throw new Error("HeyGen asset upload failed: missing asset_id");
+  return d.data.asset_id;
 }
 
 export async function generate(lookId: string, audioAssetId: string): Promise<string> {
@@ -39,15 +44,16 @@ export async function generate(lookId: string, audioAssetId: string): Promise<st
     caption: { file_format: "srt" },
     title: "kino",
   });
-  const d = await hey(["video", "create", "-d", body]);
+  const d = await hey<{ video_id: string }>(["video", "create", "-d", body]);
   if (d.error) throw new Error(`HeyGen generate: ${d.error.message}`);
-  return d.data.video_id as string;
+  if (!d.data?.video_id) throw new Error("HeyGen generate failed: missing video_id");
+  return d.data.video_id;
 }
 
 export async function pollDownload(videoId: string, out: string, timeoutSec = 600): Promise<void> {
   const deadline = Date.now() + timeoutSec * 1000;
   while (Date.now() < deadline) {
-    const d = await hey(["video", "get", videoId]);
+    const d = await hey<{ status?: string; error?: unknown }>(["video", "get", videoId]);
     const st = d.data?.status;
     if (st === "completed") {
       await execa("heygen", ["video", "download", videoId, "--output-path", out]);

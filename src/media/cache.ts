@@ -2,7 +2,7 @@
 // The key is a content hash (see hash.ts); files are stored as `${key}.${ext}` under one dir
 // (typically .kino-cache/). This lets edits that don't change inputs reuse paid API output for
 // free. NOTE: the cache is append-only and never evicted — it grows unbounded; clear it by hand.
-import { existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, copyFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 export class Cache {
@@ -20,7 +20,15 @@ export class Cache {
   // Copies srcPath into the cache under (key, ext) and returns the cached path.
   put(key: string, ext: string, srcPath: string): string {
     const f = this.file(key, ext);
-    copyFileSync(srcPath, f);
+    if (existsSync(f)) return f;
+    const tmp = `${f}.tmp.${Math.random().toString(36).slice(2)}`;
+    try {
+      copyFileSync(srcPath, tmp);
+      renameSync(tmp, f);
+    } catch (e) {
+      if (existsSync(tmp)) rmSync(tmp, { force: true });
+      throw e;
+    }
     return f;
   }
 }

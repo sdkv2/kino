@@ -51,7 +51,7 @@ No LLM inside the CLI: every step is deterministic, so the same spec renders the
 ```bash
 cd <your-project>
 npx @sdkv2/kino init acme                                     # scaffold .env, brand.md, dirs + a sample spec
-npx @sdkv2/kino build projects/acme/specs/sample.json --mock  # free structural preview, no API spend
+npx @sdkv2/kino build projects/acme/specs/sample.json --draft  # free structural preview, no API spend
 npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → projects/acme/out/sample/
 ```
 `init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with

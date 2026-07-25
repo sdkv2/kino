@@ -66,9 +66,10 @@ async function syncFonts(props: KinoProps): Promise<void> {
   const desired = new Map<string, string>();
   if (props.theme.fontUrl) desired.set("KinoBrandFont", "/public/" + props.theme.fontUrl);
   if (props.theme.labelFontUrl) desired.set("KinoLabelFont", "/public/" + props.theme.labelFontUrl);
+  const fontSet = document.fonts as unknown as { delete: (f: FontFace) => void; add: (f: FontFace) => void };
   for (const [family, ff] of loadedFonts) {
     if (!desired.has(family)) {
-      document.fonts.delete(ff);
+      fontSet.delete(ff);
       loadedFonts.delete(family);
     }
   }
@@ -76,13 +77,13 @@ async function syncFonts(props: KinoProps): Promise<void> {
     const existing = loadedFonts.get(family);
     if (existing && (existing as FontFace & { __url?: string }).__url === url) continue;
     if (existing) {
-      document.fonts.delete(existing);
+      fontSet.delete(existing);
       loadedFonts.delete(family);
     }
     const ff = new FontFace(family, `url(${url})`);
     (ff as FontFace & { __url?: string }).__url = url;
     await ff.load();
-    document.fonts.add(ff);
+    fontSet.add(ff);
     loadedFonts.set(family, ff);
   }
   await document.fonts.ready;

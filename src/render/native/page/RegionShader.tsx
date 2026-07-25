@@ -452,9 +452,9 @@ export const RegionShader: React.FC<{
   t: Theme;
   assetMediaKey?: string; // /vframes key when the beat asset is a video (else the asset is a static image)
   maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
-  durationFrames: number; // beat length — maps a motion-HTML texture channel's --progress 0→1, as MotionGraphic does
+  durationFrames?: number; // beat length — maps a motion-HTML texture channel's --progress 0→1, as MotionGraphic does
   backdropMediaKey?: string; // /vframes key when region.backdrop is a video (else it's a static image)
-}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, durationFrames, backdropMediaKey }) => {
+}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, durationFrames = 0, backdropMediaKey }) => {
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -465,10 +465,11 @@ export const RegionShader: React.FC<{
   // sparse-still frames). Same lookup FrameVideo uses, so the GL texture tracks the identical frame.
   // Fixed MAX_REGION_MASKS hook calls (rules of hooks) regardless of how many masks this beat has.
   const assetSrc: Src = { frameVideo: !!assetMediaKey, staticUrl: staticFile(asset), frameUrl: useFrameImageUrl(assetMediaKey) };
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const maskFrameUrls: (string | null)[] = [];
-  for (let i = 0; i < MAX_REGION_MASKS; i++) maskFrameUrls.push(useFrameImageUrl(maskMediaKeys?.[i]));
-  /* eslint-enable react-hooks/rules-of-hooks */
+  const mUrl0 = useFrameImageUrl(maskMediaKeys?.[0]);
+  const mUrl1 = useFrameImageUrl(maskMediaKeys?.[1]);
+  const mUrl2 = useFrameImageUrl(maskMediaKeys?.[2]);
+  const mUrl3 = useFrameImageUrl(maskMediaKeys?.[3]);
+  const maskFrameUrls: (string | null)[] = [mUrl0, mUrl1, mUrl2, mUrl3];
   const maskSrcs: Src[] = region.masks.map((m, i) => ({
     frameVideo: m.maskKind === "video",
     staticUrl: staticFile(m.maskSrc),

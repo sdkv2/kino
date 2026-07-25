@@ -197,7 +197,7 @@ async function main() {
   console.log(`    cd ${PROJECT_DIR}`);
   console.log(`    kino doctor                        ${DIM}# verify the environment${RST}`);
   console.log(`    kino init <brand>                  ${DIM}# scaffold a brand + first project${RST}`);
-  console.log(`    kino build specs/<spec>.json --mock  ${DIM}# free structural preview${RST}`);
+  console.log(`    kino build specs/<spec>.json --draft  ${DIM}# free structural preview${RST}`);
   console.log("");
 }
 

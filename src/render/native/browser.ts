@@ -45,6 +45,9 @@ export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
     "--disable-background-timer-throttling",
     "--disable-renderer-backgrounding",
     "--disable-backgrounding-occluded-windows",
+    "--disable-gpu-vsync",
+    "--enable-surface-synchronization",
+    "--disable-dev-shm-usage",
   ];
   // KINO_GPU=1 → hardware ANGLE (Metal on darwin). Trades cross-machine bit-determinism for
   // speed on raymarch/SSAA. Software SwiftShader stays the default canonical path.
