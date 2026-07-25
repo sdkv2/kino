@@ -1,7 +1,8 @@
 // Headless-Chrome lifecycle for the native engine. puppeteer manages its own Chrome-for-Testing
 // install; KINO_CHROME (or a system Chrome) overrides for environments where that download is
-// unavailable. Flags pin the deterministic surface: sRGB color, fixed scale; GL backend is
-// SwiftShader by default (bit-stable across machines) or hardware ANGLE when KINO_GPU=1.
+// unavailable. Flags pin the deterministic surface: sRGB color, fixed scale; the GL backend is
+// resolved per machine by resolveGL — hardware ANGLE on macOS, SwiftShader elsewhere, either one
+// forced with KINO_GPU=1/0.
 import puppeteer, { type Browser } from "puppeteer";
 import { existsSync } from "node:fs";
 
@@ -30,6 +31,28 @@ export async function resolveExecutable(): Promise<string | undefined> {
   return SYSTEM_CHROME.find((p) => existsSync(p));
 }
 
+/** Which GL backend this machine renders with. Explicit `KINO_GPU=1` / `KINO_GPU=0` always wins;
+ *  with neither set the backend is auto-detected.
+ *
+ *  The detection is a platform rule, not a runtime probe, and that is deliberate. macOS ships
+ *  Metal, so hardware ANGLE is always there. A Linux or Windows box is a coin flip — the same code
+ *  runs on a workstation with a discrete card and on a CI runner or a Pi with no usable GL at all —
+ *  and a probe that guessed wrong would fail SILENTLY: a dead GL context renders a flat wash, not
+ *  an error. So only the known-good platform auto-enables, and everywhere else opts in explicitly.
+ *
+ *  Consequence worth knowing: two machines can now choose different backends, and gpu/sw frames are
+ *  not bit-identical. `frameCacheKeys` keys the two apart so they never cross-serve, and the
+ *  resolved backend is printed on every render. Pin `KINO_GPU=0` wherever output must match
+ *  byte-for-byte across machines (CI comparisons, golden frames). */
+export function resolveGL(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): "gpu" | "sw" {
+  if (env.KINO_GPU === "1") return "gpu";
+  if (env.KINO_GPU === "0") return "sw";
+  return platform === "darwin" ? "gpu" : "sw";
+}
+
 /** GL + determinism launch flags. Pure of env/platform so tests can assert without launching. */
 export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string[] {
   const shared = [
@@ -46,9 +69,9 @@ export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
     "--disable-renderer-backgrounding",
     "--disable-backgrounding-occluded-windows",
   ];
-  // KINO_GPU=1 → hardware ANGLE (Metal on darwin). Trades cross-machine bit-determinism for
-  // speed on raymarch/SSAA. Software SwiftShader stays the default canonical path.
-  if (env.KINO_GPU === "1") {
+  // Hardware ANGLE (Metal on darwin) — auto on macOS, opt-in elsewhere via KINO_GPU=1. Trades
+  // cross-machine bit-determinism for speed on raymarch/SSAA. See resolveGL.
+  if (resolveGL(env, platform) === "gpu") {
     return [
       ...shared,
       "--use-gl=angle",
@@ -65,8 +88,11 @@ export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
 }
 
 /** Cache / signature tag for the active GL backend. */
-export function glMode(env: NodeJS.ProcessEnv = process.env): "gpu" | "sw" {
-  return env.KINO_GPU === "1" ? "gpu" : "sw";
+export function glMode(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): "gpu" | "sw" {
+  return resolveGL(env, platform);
 }
 
 // Browser pool with an idle grace period. One browser per render WORKER, not per render: CDP
