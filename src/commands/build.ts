@@ -85,7 +85,10 @@ function resolveRegionShader(
     stageAsset(maskRel);
     return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel, subjectCode: loadBody(subject) };
   });
-  // Extra sampler channels (uTex1..uTex3). A motion .html resolves and lints exactly like a
+  // The backdrop clip is staged like the mask/asset — the page fetches it from publicDir by this
+  // same relative path, and videoFrames.ts extracts it there when it's a video.
+  if (rs.backdrop) stageAsset(rs.backdrop);
+  // Extra sampler channels (uTex2..uTex3). A motion .html resolves and lints exactly like a
   // motionOverlay source — same library ids, same determinism lint, same sanitizer — but its markup
   // is rasterized into a texture the region bodies sample, instead of compositing above them.
   // Tier-2 (.js) and Tier-3 (.json) stay overlay-only: their markup is produced per frame by the
@@ -106,12 +109,6 @@ function resolveRegionShader(
     }
     return { kind: "html" as const, src: null, html: graphic.html };
   });
-  // The backdrop clip is staged like the mask/asset — the page fetches it from publicDir by this
-  // same relative path, and videoFrames.ts extracts it there when it's a video.
-  if (rs.backdrop) stageAsset(rs.backdrop);
-  if (rs.backdrop && textures.length) {
-    throw new Error("regionShader cannot combine backdrop with textures (uTex1 is reserved for backdrop).");
-  }
   return {
     masks,
     subjectCode: loadBody(rs.subject),
