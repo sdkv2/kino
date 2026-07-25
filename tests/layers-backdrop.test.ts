@@ -50,8 +50,8 @@ describe("layersAt — avatar windows", () => {
     expect(at(89).transform.scale).toBeCloseTo(1.08, 2);
   });
 
-  it("sits directly above the backdrop", () => {
+  it("sits above the backdrop and scrim", () => {
     const layers = layersAt(withAvatar, 45, DIMS);
-    expect(layers.map((l) => l.id).slice(0, 2)).toEqual(["backdrop", "av0"]);
+    expect(layers.map((l) => l.id).slice(0, 3)).toEqual(["backdrop", "scrim", "av0"]);
   });
 });

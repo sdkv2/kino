@@ -9,6 +9,8 @@ import { normalizeLayer, type Dims, type LayerDraw, type LayerSpec } from "./nat
 import { MOTION_XFADE_FRAMES } from "./motion.js";
 import { hasCaptionContent } from "./captionLayout.js";
 
+import { kenBurnsScale } from "./backgrounds/glow.js";
+
 export type { Dims };
 
 /** The avatar clip's gentle push-in over its window (KinoVideo.tsx AvatarClip). */
@@ -25,7 +27,17 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
 
   // 1–2. Night fill and brand backdrop are one source: the background provider paints the
   // night colour before it draws, exactly as CanvasBackground does today.
-  out.push({ id: "backdrop", source: { providerId: "backdrop" }, rect: full });
+  const bgScale = props.background.kind === "image" ? kenBurnsScale(frame) : 1;
+  out.push({
+    id: "backdrop",
+    source: { providerId: "backdrop" },
+    rect: full,
+    transform: bgScale !== 1 ? { scale: bgScale, rotate: 0, translate: [0, 0] } : undefined,
+  });
+
+  // The scrim rides above canvas and image backdrops, never above a shader one.
+  const shaderBg = props.background.kind === "custom" && Boolean(props.background.shaderCode);
+  if (!shaderBg) out.push({ id: "scrim", source: { providerId: "scrim" }, rect: full });
 
   // 3. Avatar windows.
   if (props.avatar) {
