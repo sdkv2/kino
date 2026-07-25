@@ -21,3 +21,18 @@ kino still specs/region-smoke.json --at 1
 Expected: a red ellipse (subject region) on green (background region). Swap the
 two `.frag` bodies for any ShaderToy-style `mainImage` shaders. See
 `docs/segmentation.md`.
+
+## Cross-region glass
+
+`cross-region-glass.json` + `region-glass.frag` (subject) + `region-tint.frag` (background):
+tracked liquid glass that refracts **its own background region** rather than the raw plate. The
+background here is a real treatment (crushed to cold blue), which is exactly the case where
+refracting `uTex0` would show the untreated footage through the glass — a hole punched to a
+different image. Same commands as above with the spec name swapped:
+
+```bash
+kino still specs/cross-region-glass.json --at 1.2
+```
+
+Expected: the subject reads as glass — invisible except for the bands bending through it and a
+bevel highlight riding the silhouette. See `docs/segmentation.md` § Cross-region sampling.
