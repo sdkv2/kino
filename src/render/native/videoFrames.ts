@@ -115,6 +115,32 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
   return jobs;
 }
 
+/** Media jobs for layer masks that are files. Shape and layer masks need no extraction.
+ *  Keyed `lmask<segmentIndex>` so it cannot collide with the region-shader `rsmask<i>_<j>`
+ *  namespace. SDF frames are written beside the mask frames by the same path region-shader
+ *  masks already use. */
+export function planMaskJobs(props: KinoProps, fps: number): MediaJob[] {
+  const jobs: MediaJob[] = [];
+  props.segments.forEach((s, i) => {
+    const mask = (s as { mask?: { source?: { kind?: string; src?: string; channel?: string } } }).mask;
+    if (mask?.source?.kind !== "file" || !mask.source.src) return;
+    const seqDur = Math.max(1, f(s.endSec, fps) - f(s.startSec, fps));
+    const ch = mask.source.channel ?? "a";
+    jobs.push({
+      key: `lmask${i}`,
+      assetRel: mask.source.src,
+      fromFrame: f(s.startSec, fps),
+      seqDurFrames: seqDur,
+      startSec: 0,
+      stepSec: 1 / fps,
+      effFrame: (lf: number) => lf,
+      maxEffFrame: seqDur - 1,
+      maskChannels: [ch],
+    });
+  });
+  return jobs;
+}
+
 /** MediaJob for app segment i's clip (asset or mask): shares the beat's trim/speed/freeze clock. */
 function appMediaJob(segments: KinoProps["segments"], i: number, fps: number, key: string, assetRel: string): MediaJob | null {
   const s = segments[i];

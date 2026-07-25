@@ -15,7 +15,7 @@ import { acquireBrowser, glMode, releaseBrowser } from "./browser.js";
 import { frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer } from "./server.js";
-import { extractDense, extractSparse, planMediaJobs, type MediaEntryNode } from "./videoFrames.js";
+import { extractDense, extractSparse, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
 
 /** 1–4 supersample. Default 2. Mock/draft → 1 unless KINO_SHADER_SSAA overrides. */
 function resolveShaderSS(env: NodeJS.ProcessEnv = process.env, opts?: { mock?: boolean }): number {
@@ -270,7 +270,7 @@ interface PreparedMedia {
 async function prepareDenseMedia(props: KinoProps, publicDir: string, scratch: string): Promise<PreparedMedia> {
   const framesDir = join(scratch, "vframes");
   mkdirSync(framesDir, { recursive: true });
-  const jobs = planMediaJobs(props, props.fps);
+  const jobs = [...planMediaJobs(props, props.fps), ...planMaskJobs(props, props.fps)];
   const media: Record<string, MediaEntryNode> = {};
   // Extraction is decode-bound; a small parallel pool keeps it off the critical path.
   const pool = 3;
@@ -483,7 +483,7 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
     const [browser] = await Promise.all([
       acquireBrowser(0),
       (async () => {
-        for (const job of planMediaJobs(props, props.fps)) {
+        for (const job of [...planMediaJobs(props, props.fps), ...planMaskJobs(props, props.fps)]) {
           const locals = wanted
             .map(({ frame }) => frame - job.fromFrame)
             .filter((local) => local >= 0 && local < job.seqDurFrames);
