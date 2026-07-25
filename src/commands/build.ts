@@ -3,8 +3,7 @@
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
 // variant-tagging on top.
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from "node:fs";
 import { basename, dirname, extname, join, isAbsolute } from "node:path";
 import { releaseScratch, scratchDir } from "../scratch.js";
 import { resolveProject, type Project } from "../config/project.js";
@@ -615,13 +614,13 @@ export async function build(
       logoKeyframes: rebase(spec.logoKeyframes),
     };
 
-    const tmpDir = mkdtempSync(join(tmpdir(), "kino-beat-"));
+    const tmpDir = scratchDir("kino-beat-");
     const tmpSpecPath = join(tmpDir, "beat.json");
     writeFileSync(tmpSpecPath, JSON.stringify(reducedSpec));
     try {
       ({ props, publicDir, spec } = await prepare(tmpSpecPath, { ...opts, project: basename(project.projectRoot) }));
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
+      releaseScratch(tmpDir);
     }
     beatTag = `beat${beatNum}${draft ? "-draft" : ""}`;
     log.info(`  · isolating beat ${beatNum} (${target.startSec.toFixed(1)}–${target.endSec.toFixed(1)}s of the full timeline)`);
