@@ -209,8 +209,27 @@ nothing about the 4069px rimmed tail, which is the conspicuous case and is also 
 
 Fragmentation tracks scene clutter and camouflage. On the footage where masks are easy it is
 already ~zero, so a default-on filter would spend its risk budget on clips that do not need it.
-It also confirms §4's read that this is a property of hard real data, not of the code — and it is
-consistent with the CoreML backend showing nothing, since that was exercised on easy footage.
+It also confirms §4's read that this is a property of hard real data, not of the code.
+
+### 5a. The backend is not the variable — footage is (measured 2026-07-25)
+
+An earlier claim that fragmentation was "specific to the CUDA multiplex video predictor" was wrong,
+and worth recording because it was believed for a while. It came from a confounded comparison: the
+CoreML backend had only ever been run on easy inputs (two stills and a 15-frame clip of a person on
+a clean background, all ~zero strays), while the fragmenting case was CUDA on the zebras.
+
+Re-running the SAME clip through CoreML settles it — Pexels 37425597, same 0–2s window, same
+`zebra` prompt, same `--objects 2`, same 2% rule, 50 frames:
+
+| backend | object 0 | object 1 |
+|---|---|---|
+| cuda | 75 strays, largest 1118 px | 202 strays, largest 1824 px |
+| coreml | 78 strays, largest 866 px | 44 strays, largest 956 px |
+
+Object 0 is effectively identical across backends. Both fragment substantially on hard footage, so
+the backend does not explain the artifact and choosing one over the other will not avoid it. (The
+object-1 gap is real but is a tracking-quality difference on one object, not a difference in kind;
+it was not investigated further.)
 
 ## 6. Bonus: painter's-order overlap, still unexercised
 
