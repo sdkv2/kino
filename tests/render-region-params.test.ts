@@ -104,4 +104,31 @@ describe("region shader params", () => {
     // Two seeks to the same frame index are byte-identical — no wall clock in the tween.
     expect(meanDiff(out[2], out[3])).toBe(0);
   }, 240000);
+
+  // The clock must come from the COMPOSITION's fps, not a hardcoded 30. RegionShader carried
+  // `frame / 30` behind a comment asserting "all kino comps are 30fps" — true until the spec gained
+  // an `fps` field (1-120). At 60fps that doubles the clock, so every keyframe lands at half its
+  // authored second and iTime runs at twice real time. The 30fps case above cannot see it: 30/30 is
+  // 1 either way.
+  it("reads the tween clock from the composition fps, not a hardcoded 30", async () => {
+    const FPS = 60;
+    const publicDir = mkdtempSync(join(tmpdir(), "kino-rparams60-"));
+    magick(["-size", `${W}x${H}`, "xc:black", "-fill", "white",
+            "-draw", `rectangle ${MX0},${MY0} ${MX1},${MY1}`, join(publicDir, "mask0.png")]);
+    magick(["-size", `${W}x${H}`, "xc:#333333", join(publicDir, "asset.png")]);
+
+    const out = await renderStills({
+      props: { ...props, fps: FPS }, publicDir, format: "9:16",
+      // Beat t = 0.5s. On a 60fps comp that is composition frame 150; the beat starts at frame 120,
+      // so the beat-local frame is 30 — which a hardcoded /30 misreads as t=1.0, the tween's END.
+      frames: [{ frame: Math.round((START + 0.5) * FPS), name: "t05" }],
+      outDir: mkdtempSync(join(tmpdir(), "kino-rparams60-out-")),
+    });
+
+    const s05 = cropRgb(out[0], 300, 300, 200, 700);
+    console.log(`region params @${FPS}fps subject t0.5=${s05}`);
+    // Correct clock -> the midpoint. Hardcoded 30 -> 1.0 (white), tripping this bound.
+    expect(s05[0]).toBeGreaterThan(0.45);
+    expect(s05[0]).toBeLessThan(0.55);
+  }, 240000);
 });

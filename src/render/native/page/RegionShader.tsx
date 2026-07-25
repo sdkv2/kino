@@ -249,6 +249,7 @@ async function drawFrame(
   frame: number,
   width: number,
   height: number,
+  fps: number,
 ): Promise<void> {
   try {
     initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region);
@@ -263,8 +264,10 @@ async function drawFrame(
     }
     gl.viewport(0, 0, width, height);
     gl.useProgram(prog);
-    // ponytail: iTime/iTimeDelta stay on the 30fps convention (all kino comps are 30fps); the video
-    // SOURCE frame above is picked node-side with the real fps, which is what must be exact.
+    // iTime/iTimeDelta and every keyframe lookup run on the COMPOSITION's fps, read from
+    // useVideoConfig — not a hardcoded 30. "All kino comps are 30fps" stopped being true when the
+    // spec gained an `fps` field (1-120): on a 60fps comp a hardcoded 30 makes iTime advance at
+    // twice real time, and since phase 3 it would land every keyframe at half its authored second.
     //
     // BEAT-RELATIVE clock: KinoVideo mounts this inside <Sequence from={beat start}>, and Sequence
     // rebases the frame context to 0 there — so `frame` (hence iTime and every keyframe lookup) is
@@ -272,8 +275,8 @@ async function drawFrame(
     // real VO timing instead of breaking when a beat shifts, and the params share one clock with
     // iTime. See docs/superpowers/specs/2026-07-25-region-params-design.md.
     const u = resolveUniforms(
-      paramsAt(region.params ?? {}, region.keyframes ?? [], frame / 30),
-      { frame, fps: 30, width, height, pulse: 0 },
+      paramsAt(region.params ?? {}, region.keyframes ?? [], fps > 0 ? frame / fps : 0),
+      { frame, fps, width, height, pulse: 0 },
       regionExtras(region),
     );
     gl.uniform3f(loc.iResolution, width, height, 1);
@@ -313,7 +316,7 @@ export const RegionShader: React.FC<{
   maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
 }> = ({ asset, region, t, assetMediaKey, maskMediaKeys }) => {
   const frame = useCurrentFrame();
-  const { width, height } = useVideoConfig();
+  const { width, height, fps } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
   const initRef = useRef<Promise<GLState | null> | null>(null);
   const keyRef = useRef<string | null>(null);
@@ -361,7 +364,7 @@ export const RegionShader: React.FC<{
       initRef.current = null;
       if (stale) void stale.then(disposeGL, () => {});
     }
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height));
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps));
   });
 
   return (
