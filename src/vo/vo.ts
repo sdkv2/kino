@@ -2,9 +2,9 @@
 // Each segment is TTS'd (or mocked) and content-hash cached (mp3 + json), then the clips are
 // concatenated with a fixed inter-segment GAP into one continuous track. Pure orchestration —
 // no avatar/render concerns. Public API: buildVO() → VOResult.
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import type { Spec } from "../spec/schema.js";
 import type { SegmentTiming, VOResult } from "../types.js";
 import type { WordTiming } from "../render/props.js";
@@ -86,7 +86,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
   if (!mock && !needClips && !hasVoFiles && !modelSupportsContext(resolvedModel)) {
     return buildVOSingle(spec, voiceId, cache, apiKey!, resolvedModel);
   }
-  const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
+  const dir = scratchDir("kino-vo-");
   try {
     const clips: string[] = [];
     const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
@@ -187,7 +187,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
     }
     return { trackPath: track, clips, timings, words, totalSec: timings.at(-1)!.endSec };
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    releaseScratch(dir);
   }
 }
 
@@ -224,7 +224,7 @@ async function buildVOSingle(spec: Spec, voiceId: string, cache: Cache, apiKey: 
   let track = cache.get(key, "mp3");
   let metaFile = cache.get(key, "json");
   if (!track || !metaFile) {
-    const dir = mkdtempSync(join(tmpdir(), "kino-vo-"));
+    const dir = scratchDir("kino-vo-");
     try {
       const tmp = join(dir, "track.mp3");
       const allWords = await ttsWithTimestamps(apiKey, voiceId, texts.join("\n\n"), tmp, DEFAULT_SETTINGS, model);
@@ -240,7 +240,7 @@ async function buildVOSingle(spec: Spec, voiceId: string, cache: Cache, apiKey: 
       track = cache.put(key, "mp3", tmp);
       metaFile = cache.put(key, "json", tmpJson);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      releaseScratch(dir);
     }
   }
   const meta = JSON.parse(readFileSync(metaFile, "utf8")) as { timings: SegmentTiming[]; words: WordTiming[][] };

@@ -1,7 +1,7 @@
 import { execa } from "execa";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "./binPaths.js";
 
 export async function probeDuration(file: string): Promise<number> {
@@ -55,7 +55,7 @@ export async function trimAudio(src: string, endSec: number, out: string): Promi
 
 // Keep 44100/128k MP3 in sync with elevenlabs.ts mp3_44100_128 (shared format + cache key).
 export async function stitchAudio(clips: string[], gapSec: number, out: string): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), "kino-stitch-"));
+  const dir = scratchDir("kino-stitch-");
   try {
     // Silence gap + faded clips are lossless WAV so the concat re-encode below is the ONLY mp3
     // generation (no double-encode). 44100/mono matches the clips (see elevenlabs.ts mp3_44100_128).
@@ -84,7 +84,7 @@ export async function stitchAudio(clips: string[], gapSec: number, out: string):
       "-i", list, "-c:a", "libmp3lame", "-b:a", "128k", out,
     ]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    releaseScratch(dir);
   }
 }
 

@@ -1,6 +1,6 @@
-import { mkdtempSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { statSync } from "node:fs";
 import { join } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import type { Cache } from "../media/cache.js";
 import type { Brand } from "../config/brand.js";
 import { contentHash } from "../media/hash.js";
@@ -35,20 +35,25 @@ export async function buildAvatar({ provider, audioPath, source, brand, cache, m
   const cached = cache.get(key, "mp4");
   if (cached) return cached;
 
-  const dir = mkdtempSync(join(tmpdir(), "kino-av-"));
-  const tmp = join(dir, "avatar.mp4");
-  if (mock) {
-    await generateMock(tmp);
-  } else if (provider === "heygen") {
-    const assetId = await uploadAsset(audioPath);
-    const videoId = await generate(source, assetId);
-    await pollDownload(videoId, tmp);
-  } else if (provider === "hedra") {
-    await hedraGenerate(audioPath, source, { modelId: brand.hedraModelId }, tmp);
-  } else if (provider === "replicate") {
-    await replicateGenerate(audioPath, source, replicateCfg(brand), tmp);
-  } else {
-    throw new Error(`Unknown avatar provider: ${provider}`);
+  const dir = scratchDir("kino-av-");
+  try {
+    const tmp = join(dir, "avatar.mp4");
+    if (mock) {
+      await generateMock(tmp);
+    } else if (provider === "heygen") {
+      const assetId = await uploadAsset(audioPath);
+      const videoId = await generate(source, assetId);
+      await pollDownload(videoId, tmp);
+    } else if (provider === "hedra") {
+      await hedraGenerate(audioPath, source, { modelId: brand.hedraModelId }, tmp);
+    } else if (provider === "replicate") {
+      await replicateGenerate(audioPath, source, replicateCfg(brand), tmp);
+    } else {
+      throw new Error(`Unknown avatar provider: ${provider}`);
+    }
+    // cache.put copies the mp4 into the cache dir, so dropping the scratch copy is safe.
+    return cache.put(key, "mp4", tmp);
+  } finally {
+    releaseScratch(dir);
   }
-  return cache.put(key, "mp4", tmp);
 }

@@ -3,9 +3,9 @@
 // the preview commands (still/storyboard/inspect) reuse it so they resolve through the exact same
 // code path as a real build (note: they default to mock VO). build() adds only the render +
 // variant-tagging on top.
-import { readFileSync, mkdirSync, mkdtempSync, copyFileSync, existsSync, rmSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from "node:fs";
 import { basename, dirname, extname, join, isAbsolute } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
@@ -161,9 +161,14 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
   const key = contentHash({ avClips, GAP, kind: "avtrack" });
   const cached = cache.get(key, "mp3");
   if (cached) return cached;
-  const tmp = join(mkdtempSync(join(tmpdir(), "kino-avtrk-")), "avtrack.mp3");
-  await stitchAudio(avClips, GAP, tmp);
-  return cache.put(key, "mp3", tmp);
+  const dir = scratchDir("kino-avtrk-");
+  try {
+    const tmp = join(dir, "avtrack.mp3");
+    await stitchAudio(avClips, GAP, tmp);
+    return cache.put(key, "mp3", tmp);
+  } finally {
+    releaseScratch(dir);
+  }
 }
 
 export interface PrepareResult {
@@ -584,23 +589,28 @@ export async function build(
   try {
     const picks = probeFramePicks(props.segments, props.fps);
     if (picks.length) {
-      const dir = mkdtempSync(join(tmpdir(), "kino-probe-"));
-      const frames = picks.flatMap((p) => p.frames.map((f, j) => ({ frame: f, name: `probe-${p.segment}-${j}` })));
-      const outs = await renderStills({ props, publicDir, format: formats[0], frames, outDir: dir });
-      let k = 0;
-      for (const p of picks) {
-        const mine = outs.slice(k, k + p.frames.length);
-        k += p.frames.length;
-        const diffs: number[] = [];
-        for (let j = 1; j < mine.length; j++) diffs.push(await imageMeanDiff(mine[j - 1], mine[j]));
-        if (isUnderAnimated(diffs)) {
-          log.warn(
-            `segment[${p.segment}] motion graphic barely animates across the beat (probe Δ ` +
-              `${diffs.map((d) => d.toFixed(2)).join(" / ")}) — add entrance/life/speech layers (skills/motion-design)`,
-          );
+      const dir = scratchDir("kino-probe-");
+      // finally, not a trailing call: the enclosing catch deliberately swallows probe failures
+      // ("never fails the build"), so a throw here would silently orphan the whole probe dir.
+      try {
+        const frames = picks.flatMap((p) => p.frames.map((f, j) => ({ frame: f, name: `probe-${p.segment}-${j}` })));
+        const outs = await renderStills({ props, publicDir, format: formats[0], frames, outDir: dir });
+        let k = 0;
+        for (const p of picks) {
+          const mine = outs.slice(k, k + p.frames.length);
+          k += p.frames.length;
+          const diffs: number[] = [];
+          for (let j = 1; j < mine.length; j++) diffs.push(await imageMeanDiff(mine[j - 1], mine[j]));
+          if (isUnderAnimated(diffs)) {
+            log.warn(
+              `segment[${p.segment}] motion graphic barely animates across the beat (probe Δ ` +
+                `${diffs.map((d) => d.toFixed(2)).join(" / ")}) — add entrance/life/speech layers (skills/motion-design)`,
+            );
+          }
         }
+      } finally {
+        releaseScratch(dir);
       }
-      rmSync(dir, { recursive: true, force: true });
     }
   } catch (e) {
     log.warn(`motion probe skipped: ${(e as Error).message}`);

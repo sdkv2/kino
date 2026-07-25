@@ -159,10 +159,15 @@ class MlxBackboneWorker:
     """Long-lived MLX encode subprocess (LOAD on first WARM/ENCODE)."""
 
     def __init__(self, python: str):
+        import atexit
         import subprocess
         import tempfile
 
         self._tmpdir = tempfile.mkdtemp(prefix="kino-sam-mlx-")
+        # No caller closes the worker (it lives for the whole run), so registering here is what
+        # actually removes the tmpdir — relying on an explicit close() leaked it on every run.
+        # Covers normal exit and ^C (KeyboardInterrupt unwinds); close() stays idempotent.
+        atexit.register(self.close)
         self._proc = subprocess.Popen(
             [python, os.path.abspath(__file__), "--worker"],
             stdin=subprocess.PIPE,
@@ -212,6 +217,10 @@ class MlxBackboneWorker:
         return vis72, hires0, hires1, dt
 
     def close(self):
+        # Idempotent: runs from atexit, and safely again if a caller closes explicitly.
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
         try:
             if self._proc.poll() is None:
                 self._ask("QUIT")

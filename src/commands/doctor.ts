@@ -1,7 +1,8 @@
 import { execa } from "execa";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { describeStaleScratch, scanStaleScratch } from "../scratch.js";
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
@@ -64,6 +65,12 @@ export async function doctor(): Promise<void> {
     const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
     log.warn(`headless Chrome failed to launch — renders will fail. Point KINO_CHROME at a working Chrome/Chromium. (${msg})`);
   }
+
+  // Abandoned render scratch. A slow leak here is invisible until a build dies with ENOSPC, so it
+  // gets its own row rather than waiting for the disk to fill.
+  const scratchRoot = tmpdir();
+  const stale = describeStaleScratch(scanStaleScratch(scratchRoot), scratchRoot);
+  stale.level === "ok" ? log.ok(stale.message) : log.warn(stale.message);
 
   const sfx = listSfxIds();
   const music = listMusicIds();

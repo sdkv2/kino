@@ -2,9 +2,10 @@
 // its index (the page re-renders synchronously per seek; videos are pre-extracted stills; audio is
 // mixed node-side), so the output is deterministic run-to-run. Public API mirrors render.ts.
 import { spawn } from "node:child_process";
-import { cpus, tmpdir } from "node:os";
-import { copyFileSync, mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
+import { cpus } from "node:os";
+import { copyFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { releaseScratch, scratchDir } from "../../scratch.js";
 import type { Browser, Page } from "puppeteer";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
@@ -327,7 +328,7 @@ export function renderVideoNative(opts: NativeRenderOpts): Promise<string[]> {
 
 async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium" }: NativeRenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
-  const scratch = mkdtempSync(join(tmpdir(), "kino-native-"));
+  const scratch = scratchDir("kino-native-");
   const t0 = Date.now();
   const lap = (m: string) => {
     if (process.env.KINO_NATIVE_DEBUG) console.error(`[native timing] ${m} +${Date.now() - t0}ms`);
@@ -395,7 +396,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     }
     return outputs;
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    releaseScratch(scratch);
   }
 }
 
@@ -459,7 +460,7 @@ export function renderStillsNative(opts: NativeStillsOpts): Promise<string[]> {
 
 async function renderStillsLocked({ props, publicDir, format, frames, outDir, measureSink }: NativeStillsOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
-  const scratch = mkdtempSync(join(tmpdir(), "kino-native-still-"));
+  const scratch = scratchDir("kino-native-still-");
   try {
     const total = durationInFrames(props);
     const maxFrame = total - 1;
@@ -526,6 +527,6 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
       await releaseBrowser(0);
     }
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    releaseScratch(scratch);
   }
 }

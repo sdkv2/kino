@@ -4,6 +4,7 @@
 // SwiftShader by default (bit-stable across machines) or hardware ANGLE when KINO_GPU=1.
 import puppeteer, { type Browser } from "puppeteer";
 import { existsSync } from "node:fs";
+import { onBeforeSweep, releaseScratch, scratchDir } from "../../scratch.js";
 
 const SYSTEM_CHROME = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -115,12 +116,74 @@ export async function releaseBrowser(slot = 0): Promise<void> {
   s.closeTimer.unref();
 }
 
+// Browsers this process launched, tracked so the pre-sweep hook can reach them synchronously (the
+// pool holds Promises, which a signal handler cannot await).
+const liveBrowsers = new Set<Browser>();
+let killHookInstalled = false;
+
+/** SIGKILL every Chrome we launched, so nothing is writing into a profile dir during the sweep. */
+function installKillHook(): void {
+  if (killHookInstalled) return;
+  killHookInstalled = true;
+  onBeforeSweep(() => {
+    for (const b of liveBrowsers) {
+      try {
+        // SIGKILL, not close(): close() is async and cannot complete inside an exit handler, and
+        // SIGKILL gives Chrome no chance to rewrite the profile files we are about to delete.
+        b.process()?.kill("SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+    liveBrowsers.clear();
+  });
+}
+
 export async function launchBrowser(): Promise<Browser> {
   const executablePath = await resolveExecutable();
-  return puppeteer.launch({
-    headless: true,
-    executablePath,
-    protocolTimeout: 120000,
-    args: launchArgs(),
-  });
+  installKillHook();
+  // Own Chrome's profile dir rather than letting puppeteer pick its own temp one. puppeteer deletes
+  // its default profile *asynchronously* from browser.close(), so it survives both a ^C and any exit
+  // that beats releaseBrowser's unref'd close timer — that leaked GBs of
+  // puppeteer_dev_chrome_profile-* dirs alongside kino's own scratch. Registered here, it is removed
+  // synchronously on exit like every other scratch dir.
+  const userDataDir = scratchDir("kino-chrome-profile-");
+  try {
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      protocolTimeout: 120000,
+      args: launchArgs(),
+      userDataDir,
+      // Own signal handling instead of puppeteer's. Its handlers call process.exit(), which both
+      // pre-empts the re-raise that keeps kino's exit status signal-derived, and races the scratch
+      // sweep with an async profile cleanup — leaving a residual profile dir on every ^C.
+      // killChildBrowsers() below replaces them, synchronously, before the sweep runs.
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
+    });
+    liveBrowsers.add(browser);
+    browser.once("disconnected", () => liveBrowsers.delete(browser));
+    // Release on the Chrome PROCESS exiting, not on "disconnected": disconnect fires when the CDP
+    // connection drops, which precedes process exit, so Chrome is often still flushing its profile
+    // and the removal loses the race (ENOTEMPTY). Waiting for exit means nothing can be writing.
+    // Guarded: this runs off an event, where a throw would be an uncaught exception that takes down
+    // the render. If it still fails, the dir stays registered and the exit sweep gets it.
+    const release = (): void => {
+      try {
+        releaseScratch(userDataDir);
+      } catch {
+        // keep it registered for the exit sweep
+      }
+    };
+    const proc = browser.process();
+    if (proc) proc.once("exit", release);
+    else browser.once("disconnected", release); // browser we connected to, not spawned
+
+    return browser;
+  } catch (e) {
+    releaseScratch(userDataDir);
+    throw e;
+  }
 }

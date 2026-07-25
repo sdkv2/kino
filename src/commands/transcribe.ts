@@ -1,6 +1,6 @@
-import { mkdtempSync, writeFileSync, readFileSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { releaseScratch, scratchDir } from "../scratch.js";
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { Cache } from "../media/cache.js";
@@ -27,25 +27,31 @@ async function realTranscribe(video: string): Promise<Transcript> {
   const ws = resolveWorkspace();
   loadEnv(ws.workspaceRoot);
   const apiKey = requireKey("ELEVENLABS_API_KEY");
-  const dir = mkdtempSync(join(tmpdir(), "kino-stt-"));
-  const wav = join(dir, "audio.wav");
-  log.step("extract audio");
-  await extractAudio(video, wav);
-  const durationSec = await probeDuration(wav);
-  if (!durationSec || durationSec < 0.05) throw new Error(`${video} has no audible audio track`);
-  const cache = new Cache(ws.cache);
-  const key = contentHash({ kind: "scribe", model: "scribe_v1", size: statSync(wav).size });
-  const cached = cache.get(key, "json");
-  if (cached) return JSON.parse(readFileSync(cached, "utf8")) as Transcript;
-  log.step("transcribe (Scribe)");
-  const raw = await transcribeAudio(apiKey, wav);
-  const words = scribeToWords(raw);
-  if (!words.length) throw new Error(`${video} produced no speech (no audible words)`);
-  const t = buildTranscript(words, { durationSec, language: raw.language_code, fullText: raw.text });
-  const tmpJson = join(dir, "t.json");
-  writeFileSync(tmpJson, JSON.stringify(t));
-  cache.put(key, "json", tmpJson);
-  return t;
+  // Holds a full extracted WAV, and every early return below (cache hit, no-audio throw,
+  // no-speech throw) used to skip cleanup entirely.
+  const dir = scratchDir("kino-stt-");
+  try {
+    const wav = join(dir, "audio.wav");
+    log.step("extract audio");
+    await extractAudio(video, wav);
+    const durationSec = await probeDuration(wav);
+    if (!durationSec || durationSec < 0.05) throw new Error(`${video} has no audible audio track`);
+    const cache = new Cache(ws.cache);
+    const key = contentHash({ kind: "scribe", model: "scribe_v1", size: statSync(wav).size });
+    const cached = cache.get(key, "json");
+    if (cached) return JSON.parse(readFileSync(cached, "utf8")) as Transcript;
+    log.step("transcribe (Scribe)");
+    const raw = await transcribeAudio(apiKey, wav);
+    const words = scribeToWords(raw);
+    if (!words.length) throw new Error(`${video} produced no speech (no audible words)`);
+    const t = buildTranscript(words, { durationSec, language: raw.language_code, fullText: raw.text });
+    const tmpJson = join(dir, "t.json");
+    writeFileSync(tmpJson, JSON.stringify(t));
+    cache.put(key, "json", tmpJson);
+    return t;
+  } finally {
+    releaseScratch(dir);
+  }
 }
 
 function emit(t: Transcript, opts: { format?: string; out?: string }): void {
