@@ -182,12 +182,12 @@ export async function buildTemplate(
   const scale = opts.scale ?? RASTER_SCALE;
   const defs = opts.defs ?? "";
   const makeSvg = (css: string) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}">` +
     // Palette vars live in a <style> block, NOT a style attribute: font families contain double
     // quotes, which would terminate the XML attribute and invalidate the whole SVG.
-    `<style>${fonts} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
+    `<style>html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
     `<foreignObject width="${w}" height="${h}">` +
-    `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px">${xhtml}</div>` +
+    `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px;background:transparent">${xhtml}</div>` +
     `</foreignObject></svg>`;
   return { w, h, makeSvg };
 }

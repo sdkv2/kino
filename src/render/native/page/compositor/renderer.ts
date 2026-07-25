@@ -135,6 +135,18 @@ export class StageRenderer {
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
 
+    // Layers referenced as masks are rendered first, into their own targets.
+    const maskTargets = new Map<string, RenderTarget>();
+    for (const layer of layers) {
+      const ref = (layer.mask as any)?.source;
+      if (ref?.kind !== "layer" || maskTargets.has(ref.layerId)) continue;
+      const maskLayer = layers.find((l) => l.id === ref.layerId);
+      const maskSource = maskLayer && sources.get(maskLayer.source.providerId);
+      if (!maskLayer || !maskSource) continue;
+      const t = this.drawToTarget(maskLayer, maskSource, frame);
+      if (t) maskTargets.set(ref.layerId, t);
+    }
+
     for (const layer of layers) {
       const source = sources.get(layer.source.providerId);
       if (!source) continue;
@@ -146,7 +158,11 @@ export class StageRenderer {
           ? (layer.mask as unknown as LayerMask)
           : { source: { kind: "file", src: (layer.mask as any).providerId, channel: (layer.mask as any).channel ?? "a" }, feather: (layer.mask as any).feather, invert: (layer.mask as any).invert };
         const resolved = resolveMaskDefaults(maskObj);
-        const binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
+        let binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
+        if (resolved.source.kind === "layer") {
+          const mt = maskTargets.get(resolved.source.layerId);
+          binding = { mask: mt ? mt.tex : null, sdf: null, sdfMax: 0 };
+        }
         const masked = applyMask(gl, this.pool, rendered, resolved, binding);
         this.pool.release(rendered);
 
@@ -154,6 +170,7 @@ export class StageRenderer {
         gl.viewport(0, 0, this.width, this.height);
         gl.useProgram(this.prog);
         applyBlend(gl, layer.blend);
+        gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, masked.tex);
         gl.uniformMatrix3fv(
           this.uModel,
@@ -178,6 +195,7 @@ export class StageRenderer {
       gl.uniform1f(this.uOpacity, layer.opacity);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
+    for (const t of maskTargets.values()) this.pool.release(t);
     gl.finish();
   }
 

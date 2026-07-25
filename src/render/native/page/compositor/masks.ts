@@ -183,6 +183,7 @@ export function applyMask(
   }
 
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.activeTexture(gl.TEXTURE0);
   return out;
 }
 
