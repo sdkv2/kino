@@ -469,7 +469,11 @@ export const RegionShader: React.FC<{
   const mUrl1 = useFrameImageUrl(maskMediaKeys?.[1]);
   const mUrl2 = useFrameImageUrl(maskMediaKeys?.[2]);
   const mUrl3 = useFrameImageUrl(maskMediaKeys?.[3]);
-  const maskFrameUrls: (string | null)[] = [mUrl0, mUrl1, mUrl2, mUrl3];
+  const mUrl4 = useFrameImageUrl(maskMediaKeys?.[4]);
+  const mUrl5 = useFrameImageUrl(maskMediaKeys?.[5]);
+  const mUrl6 = useFrameImageUrl(maskMediaKeys?.[6]);
+  const mUrl7 = useFrameImageUrl(maskMediaKeys?.[7]);
+  const maskFrameUrls: (string | null)[] = [mUrl0, mUrl1, mUrl2, mUrl3, mUrl4, mUrl5, mUrl6, mUrl7];
   const maskSrcs: Src[] = region.masks.map((m, i) => ({
     frameVideo: m.maskKind === "video",
     staticUrl: staticFile(m.maskSrc),

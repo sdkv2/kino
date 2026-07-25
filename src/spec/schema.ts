@@ -299,12 +299,9 @@ export const SpecSchema = z
     brand: z.string().optional(), // falls back to the project's project.json brand
     title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
     kinoVersion: z.string().optional(), // kino version this spec was authored/built against — mismatch warns, doesn't fail
-    format: z.array(z.enum(["9:16", "3:4", "16:9"])).default(["9:16"]),
-    // Composition frame rate. 30 suits talking-head and motion work and keeps render cost down,
-    // but it resamples higher-rate source: 60fps footage (and a 60fps segmentation mask tracking
-    // it) lands on every other frame. Raise it to carry that cadence through — cost scales with
-    // it, since every frame is a real browser paint.
-    fps: z.number().int().min(1).max(120).optional(),
+    format: z.array(z.string().regex(/^\d+:\d+$/, "format must be W:H (e.g. 9:16, 3:4, 16:9, 1:1)")).default(["9:16"]),
+    // Composition frame rate. 30 suits talking-head and motion work and keeps render cost down.
+    fps: z.number().int().positive().optional(),
     voice: z.string().optional(),
     // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
     // eleven_multilingual_v2 for metronome-critical / timing-stable reads.
@@ -370,8 +367,8 @@ export const SpecSchema = z
     // Kept off the video object so discriminatedUnion stays a plain ZodObject (ZodEffects breaks it).
     spec.segments.forEach((seg, i) => {
       if (seg.kind !== "video") return;
-      if (seg.clipTo != null && seg.clipFrom != null && !(seg.clipTo > seg.clipFrom)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "clipTo must be > clipFrom", path: ["segments", i, "clipTo"] });
+      if (seg.clipTo != null && seg.clipFrom != null && seg.clipTo < seg.clipFrom) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "clipTo must be >= clipFrom", path: ["segments", i, "clipTo"] });
       }
       if (seg.clipTo != null && seg.clipFrom == null && seg.clipTo <= 0) {
         ctx.addIssue({

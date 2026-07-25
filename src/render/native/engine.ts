@@ -68,11 +68,9 @@ function durationInFrames(props: KinoProps): number {
 function concurrency(totalFrames: number): number {
   const env = Number(process.env.KINO_CONCURRENCY);
   if (Number.isFinite(env) && env >= 1) return Math.round(env);
-  // Capture parallelism scales per browser process (see browser.ts), but each worker costs a
-  // Chrome launch + page boot — only long renders amortize a big pool. Short clips keep 8;
-  // 20s+ videos take up to 12. Leave one core for encode/extract.
-  const cap = totalFrames > 600 ? 12 : 8;
-  return Math.min(cap, Math.max(1, cpus().length - 1));
+  // Scale worker pool up to CPU core count - 1 (min 1, max 24) to utilize available hardware.
+  const logicalCores = Math.max(1, cpus().length - 1);
+  return Math.min(24, Math.max(1, logicalCores));
 }
 
 // The render server and its config are process-wide singletons the pages re-read via kinoLoad();

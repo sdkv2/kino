@@ -1,7 +1,7 @@
 // Pure helpers for the WebGL shader background (rung 1). GL-free so they unit-test in Node.
 // Determinism: iTime/iFrame come only from the frame index — no wall clock.
 
-export const EXTRA_PARAM_SLOTS = 4;
+export const EXTRA_PARAM_SLOTS = 16;
 
 // Params owned by the fixed uniform header; everything else numeric spills into uParam0..N.
 const RESERVED = new Set(["colorA", "colorB", "colorC", "intensity"]);
@@ -174,7 +174,7 @@ export function assembleShaderSource(body: string, extraNames: string[] = []): s
 }
 
 // Up to this many mask sources union into one subject region (see RegionShaderProps.masks).
-export const MAX_REGION_MASKS = 4;
+export const MAX_REGION_MASKS = 8;
 
 // Region-shader extra uniforms: up to MAX_REGION_MASKS segmentation mask samplers, each with a
 // dot-swizzle channel selector. uChannelN picks maskN's manifest object's coverage channel at bind
