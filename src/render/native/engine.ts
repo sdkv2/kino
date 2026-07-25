@@ -231,8 +231,15 @@ export async function renderFrameRange(
         if (cached) {
           ready.set(frame, cached);
         } else {
+          const timing = process.env.KINO_TIMING === "1";
+          const t0 = timing ? performance.now() : 0;
           await h.seek(frame);
+          const t1 = timing ? performance.now() : 0;
           const buf = await h.shot();
+          if (timing) {
+            const t2 = performance.now();
+            process.stderr.write(`KINO_TIMING frame=${frame} resolve=${(t1 - t0).toFixed(2)} capture=${(t2 - t1).toFixed(2)}\n`);
+          }
           ready.set(frame, buf);
           if (cache) await cache.put(frame, buf);
         }

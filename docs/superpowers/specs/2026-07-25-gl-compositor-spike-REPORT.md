@@ -10,8 +10,18 @@
 
 ## M1 — DOM-path baseline per-frame wall time
 
+Typical candidate: `examples/segmentation/per-object-zebras.json` (shader background, word
+caption, and one video cut-in). It cannot be built from this worktree: `kino build` only accepts
+project-local specs, while this fixture also requires missing `pexels/zebras2s.mp4` and
+`masks/zebras` assets. No timing values are reported for it.
+
+Worst case: `examples/motion-flex/render-flex.ts`, rendered with `FLEX_VIDEO=1` through the same
+native render path. The three motion beats cover the 14.7-second timeline.
+
 | Spec | Frames | resolve p50 | resolve p95 | capture p50 | capture p95 | total p50 |
 |---|---|---|---|---|---|---|
+| `examples/segmentation/per-object-zebras.json` (typical candidate) | N/A | N/A | N/A | N/A | N/A | N/A |
+| `examples/motion-flex/render-flex.ts` (worst case) | 441 | 0.6 ms | 0.9 ms | 49.1 ms | 66.7 ms | 49.6 ms |
 
 ## M2 — `html` raster cost
 
