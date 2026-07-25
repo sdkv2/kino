@@ -315,7 +315,7 @@ kino segment <input> --prompt <text> [options]
 | `--backend <name>` | `coreml\|cuda\|mock` | Default: `coreml` on macOS, `cuda` elsewhere. `mock` = synthetic ellipse, any platform. |
 | `--format <fmt>` | `json` | Machine-readable manifest on stdout (auto when non-TTY). |
 
-**Capability note:** CoreML video is per-frame (`tracked:false` — flicker possible). CUDA runs the full SAM3.1 tracker (`tracked:true`). Prefer CUDA for coherent video masks; use CoreML for images / Mac authoring.
+**Capability note:** both real backends track video by default (`tracked:true`) — CoreML seeds a stateful CoreML tracker from the frame-0 text→mask, CUDA runs the full SAM3.1 multiplex predictor. `--no-track` selects CoreML's fast per-frame path (`tracked:false`), where fast motion can flicker. Pick by machine, not by capability: CoreML on Apple Silicon (~2.9s/frame), CUDA on NVIDIA (and the only path that handles long clips comfortably — see [Segmentation](segmentation.md) for VRAM budgets).
 
 ```bash
 kino segment assets/clip.mp4 --prompt "the person"
