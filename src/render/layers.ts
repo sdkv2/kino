@@ -12,6 +12,9 @@ export type { Dims };
 /** The avatar clip's gentle push-in over its window (KinoVideo.tsx AvatarClip). */
 const AVATAR_PUSH_IN = 1.08;
 
+/** Chained-cutaway hold: a held clip extends this many frames into its successor. */
+const CHAIN_HOLD_FRAMES = 12;
+
 export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw[] {
   const { width, height } = dims;
   const full = { x: 0, y: 0, w: width, h: height };
@@ -38,6 +41,33 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       });
     });
   }
+
+  // 4. Video beats: footage, optional chrome frame, optional kicker.
+  props.segments.forEach((s, i) => {
+    if (s.kind !== "video") return;
+    const from = f(s.startSec);
+    const next = props.segments[i + 1];
+    const chained = next?.kind === "video";
+    const seqDur = chained ? f(next.startSec) - from + CHAIN_HOLD_FRAMES : f(s.endSec) - from;
+    const local = frame - from;
+    if (local < 0 || local >= seqDur) return;
+
+    // A chained successor fades in over the overlap its predecessor is held through.
+    const prev = props.segments[i - 1];
+    const fadesIn = prev?.kind === "video";
+    const opacity = fadesIn
+      ? interpolate(local, [0, CHAIN_HOLD_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+      : 1;
+
+    const inset = s.frame?.inset;
+    const rect = inset
+      ? { x: (inset.x * width) / 100, y: (inset.y * height) / 100, w: (inset.w * width) / 100, h: (inset.h * height) / 100 }
+      : full;
+
+    out.push({ id: `seg${i}`, source: { providerId: `seg${i}` }, rect, opacity });
+    if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity });
+    if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity });
+  });
 
   return out.map(normalizeLayer);
 }
