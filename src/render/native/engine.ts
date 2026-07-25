@@ -381,6 +381,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           mode,
           shaderSS: ss,
           shaderFXAA: fx,
+          compositor: process.env.KINO_COMPOSITOR === "1",
         });
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
