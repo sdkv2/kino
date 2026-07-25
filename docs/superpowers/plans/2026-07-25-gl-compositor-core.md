@@ -1458,6 +1458,10 @@ git commit -s -m "feat(compositor): raster cadence classifier"
 
 `findExternalRefs` graduates from the spike's `scripts/spike/scan-external-refs.mjs` — copy the regexes and the data:/fragment exclusions verbatim so the spike's M4 numbers still describe this code. **Size this task against the spike's M4 finding before starting.**
 
+**Sizing note (M4):** the spike found zero inline external references across the scanned corpus, so
+`inline.ts` remains a scoped footnote for this task rather than a sizing driver. Minor: source-file
+motion HTML was not measured.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `tests/compositor-inline.test.ts`:
@@ -2237,10 +2241,6 @@ git commit -s -m "feat(compositor): canvas ports of glow, scrim and Ken-Burns ba
 - Produces: `findNestedCanvases(root: ParentNode): Array<{ canvas: HTMLCanvasElement; rect: DOMRect }>` and `createNestedCanvasSource(canvas: HTMLCanvasElement): TextureSource`.
 
 This is spec trap 1. `XMLSerializer` emits a `<canvas>` element but not its pixels, so a Lottie layer inside rasterized markup would silently render empty. Nested canvases are lifted into their own layers instead.
-
-**Sizing note (M4):** the spike found zero inline external references across the scanned corpus, so
-`inline.ts` remains a scoped footnote for this task rather than a sizing driver. Minor: source-file
-motion HTML was not measured.
 
 - [ ] **Step 1: Write the failing test**
 
