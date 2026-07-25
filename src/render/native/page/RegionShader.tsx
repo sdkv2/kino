@@ -72,6 +72,9 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 interface Slot {
   handle: WebGLTexture;
   unit: number;
+  // Source pixel size, (0,0) until a real image lands. Only the backdrop slot's is uploaded (as
+  // uTexSize1) - kinoCoverUV/kinoBackdrop read it and treat (0,0) as "no reframe", i.e. stretch.
+  size: [number, number];
   frameVideo?: { lastUrl: string };
 }
 
@@ -88,6 +91,7 @@ interface GLState {
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
   masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
+  backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
 }
 
 function uploadTex(gl: WebGL2RenderingContext, unit: number, handle: WebGLTexture, src: TexImageSource): void {
@@ -117,14 +121,17 @@ async function makeSlot(
   let slot: Slot;
   if (src.frameVideo) {
     if (src.frameUrl) {
-      uploadTex(gl, unit, handle, await loadImage(src.frameUrl));
+      const img = await loadImage(src.frameUrl);
+      uploadTex(gl, unit, handle, img);
+      slot = { handle, unit, size: [img.naturalWidth, img.naturalHeight], frameVideo: { lastUrl: src.frameUrl } };
     } else {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+      slot = { handle, unit, size: [0, 0], frameVideo: { lastUrl: "" } };
     }
-    slot = { handle, unit, frameVideo: { lastUrl: src.frameUrl ?? "" } };
   } else {
-    uploadTex(gl, unit, handle, await loadImage(src.staticUrl));
-    slot = { handle, unit };
+    const img = await loadImage(src.staticUrl);
+    uploadTex(gl, unit, handle, img);
+    slot = { handle, unit, size: [img.naturalWidth, img.naturalHeight] };
   }
   if (samplerLoc) gl.uniform1i(samplerLoc, unit);
   return slot;
@@ -141,14 +148,16 @@ function makePlaceholderSlot(gl: WebGL2RenderingContext, unit: number, samplerLo
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
   if (samplerLoc) gl.uniform1i(samplerLoc, unit);
-  return { handle, unit };
+  return { handle, unit, size: [0, 0] };
 }
 
 // Upload this frame's extracted <img> into a frame-video slot when the /vframes URL changed. No-op
 // for static image slots and for repeat/absent URLs.
 async function updateFrameSlot(gl: WebGL2RenderingContext, slot: Slot, url: string | null): Promise<void> {
   if (!slot.frameVideo || !url || url === slot.frameVideo.lastUrl) return;
-  uploadTex(gl, slot.unit, slot.handle, await loadImage(url));
+  const img = await loadImage(url);
+  uploadTex(gl, slot.unit, slot.handle, img);
+  slot.size = [img.naturalWidth, img.naturalHeight];
   slot.frameVideo.lastUrl = url;
 }
 
@@ -161,6 +170,7 @@ function disposeGL(st: GLState | null): void {
   st.gl.deleteProgram(st.prog);
   st.gl.deleteTexture(st.asset.handle);
   for (const m of st.masks) st.gl.deleteTexture(m.handle);
+  if (st.backdrop) st.gl.deleteTexture(st.backdrop.handle);
 }
 
 // Compile the program + build the asset slot and every mask slot (real sources first, inert
@@ -171,6 +181,7 @@ async function initGL(
   assetSrc: Src,
   maskSrcs: Src[],
   region: RegionShaderProps,
+  backdropSrc: Src | null,
 ): Promise<GLState | null> {
   try {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false });
@@ -184,6 +195,7 @@ async function initGL(
       region.backgroundCode,
       regionExtras(region),
       region.masks.map((m) => m.subjectCode ?? null),
+      !!backdropSrc,
     );
     const mk = (type: number, s: string): WebGLShader | null => {
       const sh = gl.createShader(type)!;
@@ -217,7 +229,7 @@ async function initGL(
     // The colour/intensity/pulse uniforms are declared in the region header but were never uploaded,
     // so they all read 0 — which would make `params: { colorA: "#ff0000" }` silently render black.
     // Region shaders now carry the same param surface backgrounds do, so bind the same set.
-    const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0",
+    const names = ["iResolution", "iTime", "iFrame", "iTimeDelta", "uTex0", "uTex1", "uTexSize1",
                    "iMouse", "uPulse", "uColorA", "uColorB", "uColorC", "uIntensity",
                    "uParam0", "uParam1", "uParam2", "uParam3"];
     for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
@@ -231,7 +243,17 @@ async function initGL(
         i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMask${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMask${i}`]),
       );
     }
-    return { gl, prog, loc, asset: assetSlot, masks };
+    // The cutout's backdrop, on the unit past the masks (0 = asset, 1..MAX_REGION_MASKS = masks).
+    // uTexSize1 is the FIRST uTexSize this component has ever uploaded: kinoCoverUV/kinoBackdrop
+    // read it and treat (0,0) as "no reframe", which would stretch an unrelated clip to the beat's
+    // aspect. uTexSize0 is deliberately still not uploaded - doing so would silently switch every
+    // existing spec that calls kinoBackdrop(uTex0, uTexSize0, ...) from stretch to cover-fit.
+    let backdrop: Slot | null = null;
+    if (backdropSrc) {
+      backdrop = await makeSlot(gl, MAX_REGION_MASKS + 1, backdropSrc, loc.uTex1);
+      gl.uniform2f(loc.uTexSize1, backdrop.size[0], backdrop.size[1]);
+    }
+    return { gl, prog, loc, asset: assetSlot, masks, backdrop };
   } catch (err) {
     console.error(String(err));
     return null;
@@ -250,14 +272,16 @@ async function drawFrame(
   width: number,
   height: number,
   fps: number,
+  backdropSrc: Src | null,
 ): Promise<void> {
   try {
-    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region);
+    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region, backdropSrc);
     const st = await initRef.current;
     if (!st) return;
     const { gl, prog, loc } = st;
     await updateFrameSlot(gl, st.asset, assetSrc.frameUrl);
     await Promise.all(maskSrcs.map((src, i) => updateFrameSlot(gl, st.masks[i], src.frameUrl)));
+    if (st.backdrop && backdropSrc) await updateFrameSlot(gl, st.backdrop, backdropSrc.frameUrl);
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
@@ -296,6 +320,9 @@ async function drawFrame(
     gl.uniform1f(loc.uParam1, u.uParams[1]);
     gl.uniform1f(loc.uParam2, u.uParams[2]);
     gl.uniform1f(loc.uParam3, u.uParams[3]);
+    // Refreshed every frame, not just at init: a sparse still can build the backdrop slot before
+    // its /vframes image exists, so the size only becomes known on the first real upload above.
+    if (st.backdrop) gl.uniform2f(loc.uTexSize1, st.backdrop.size[0], st.backdrop.size[1]);
     for (let i = 0; i < MAX_REGION_MASKS; i++) {
       const m = region.masks[i];
       const ch = m ? CHANNEL_VEC[m.channel] ?? CHANNEL_VEC.gray : ZERO_VEC;
@@ -314,7 +341,8 @@ export const RegionShader: React.FC<{
   t: Theme;
   assetMediaKey?: string; // /vframes key when the beat asset is a video (else the asset is a static image)
   maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
-}> = ({ asset, region, t, assetMediaKey, maskMediaKeys }) => {
+  backdropMediaKey?: string; // /vframes key when region.backdrop is a video (else it's a static image)
+}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, backdropMediaKey }) => {
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -334,6 +362,12 @@ export const RegionShader: React.FC<{
     staticUrl: staticFile(m.maskSrc),
     frameUrl: maskFrameUrls[i],
   }));
+  // The cutout's second source. The hook runs unconditionally (rules of hooks); the Src is null when
+  // this beat has no backdrop, which is what keeps the program byte-identical for everyone else.
+  const backdropFrameUrl = useFrameImageUrl(backdropMediaKey);
+  const backdropSrc: Src | null = region.backdrop
+    ? { frameVideo: !!backdropMediaKey, staticUrl: staticFile(region.backdrop), frameUrl: backdropFrameUrl }
+    : null;
 
   // Everything initGL bakes in: every GLSL body (the assembled program) and the texture sources
   // (built once into slots). Per-frame /vframes URLs are deliberately NOT here — those re-upload
@@ -349,6 +383,9 @@ export const RegionShader: React.FC<{
     regionExtras(region).join(","),
     `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
     ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
+    // Whether a backdrop exists is baked into the program (the uBackdrop aliases and the background
+    // passthrough), and its slot is built once at init - so it belongs in the key like the bodies.
+    `${backdropSrc?.frameVideo}|${backdropSrc?.staticUrl}`,
   ].join(" ");
 
   useLayoutEffect(() => {
@@ -364,7 +401,7 @@ export const RegionShader: React.FC<{
       initRef.current = null;
       if (stale) void stale.then(disposeGL, () => {});
     }
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps));
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps, backdropSrc));
   });
 
   return (
