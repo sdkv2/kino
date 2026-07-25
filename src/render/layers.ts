@@ -173,9 +173,6 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   }
 
   // 11. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
-  if ((props.theme.film ?? 1) > 0) {
-    out.push({ id: "film", source: { providerId: "film" }, rect: full, blend: "normal" });
-  }
-
+  // Under the compositor the post stage owns film; the DOM path still uses the html layer.
   return out.map(normalizeLayer);
 }

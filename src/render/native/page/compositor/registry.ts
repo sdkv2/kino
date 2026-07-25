@@ -29,7 +29,7 @@ export function resolveBackgroundDraw(bg: BackgroundProps): DrawFn | undefined {
   return getPreset(bg.kind);
 }
 
-import { captionMarkup, kickerMarkup, textMarkup, disclosureMarkup, filmMarkup } from "./textMarkup.js";
+import { captionMarkup, kickerMarkup, textMarkup, disclosureMarkup } from "./textMarkup.js";
 import { hasCaptionContent, isHeroCaption } from "../../../captionLayout.js";
 
 export function buildRegistry(
@@ -175,19 +175,7 @@ export function buildRegistry(
     );
   }
 
-  if ((props.theme.film ?? 1) > 0) {
-    sources.set(
-      "film",
-      createHtmlSource({
-        html: filmMarkup({ theme: props.theme, frame: 0 }),
-        theme: props.theme,
-        size: { w: dims.width, h: dims.height },
-        fps: props.fps,
-        hasTier2: false,
-        scale,
-      }),
-    );
-  }
+  // Film finish is a GL post pass under the compositor — see post.ts / filmPass.
 
   return sources;
 }
