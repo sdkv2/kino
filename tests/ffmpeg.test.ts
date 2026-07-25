@@ -6,6 +6,12 @@ import { mkdtempSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// Every test here shells out to ffmpeg (several spawns each: synthesize, concat, probe), so they
+// need an integration-sized timeout rather than vitest's 5s default. The work is tens of
+// milliseconds locally; the budget is headroom for a loaded or IO-starved CI runner, where
+// process spawns stall far longer than the work itself takes.
+const FFMPEG_TIMEOUT = 30000;
+
 // Build a mono 44.1k mp3 from a sequence of parts: {tone: sec} = 440 Hz sine, {sil: sec} = silence.
 // aformat forces a uniform stream so concat doesn't choke on channel-layout mismatches.
 async function makeClip(parts: Array<{ tone?: number; sil?: number }>, out: string) {
@@ -28,7 +34,7 @@ describe("ffmpeg helpers", () => {
     const a = join(dir, "a.mp3");
     await genSilence(1.0, a);
     expect(await probeDuration(a)).toBeCloseTo(1.0, 1);
-  });
+  }, FFMPEG_TIMEOUT);
   it("stitches clips with gaps and the total length adds up", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-ff2-"));
     const a = join(dir, "a.mp3");
@@ -38,7 +44,7 @@ describe("ffmpeg helpers", () => {
     await genSilence(2.0, b);
     await stitchAudio([a, b], 0.5, out);
     expect(await probeDuration(out)).toBeCloseTo(3.5, 1);
-  });
+  }, FFMPEG_TIMEOUT);
 
   it("extracts a mono wav from a video with audio", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-xa-"));
@@ -51,7 +57,7 @@ describe("ffmpeg helpers", () => {
       "-pix_fmt", "yuv420p", "-shortest", v]);
     await extractAudio(v, wav);
     expect(await probeDuration(wav)).toBeCloseTo(2.0, 1);
-  });
+  }, FFMPEG_TIMEOUT);
 
   it("trims a clip to a given end second", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-trim-"));
@@ -60,7 +66,7 @@ describe("ffmpeg helpers", () => {
     await makeClip([{ tone: 1.0 }], src);
     await trimAudio(src, 0.4, out);
     expect(await probeDuration(out)).toBeCloseTo(0.4, 1);
-  });
+  }, FFMPEG_TIMEOUT);
 
   describe("trailingArtifactCut", () => {
     it("cuts at the last silence gap when a short burst trails it (the ElevenLabs artifact)", async () => {
@@ -71,21 +77,21 @@ describe("ffmpeg helpers", () => {
       expect(cut).not.toBeNull();
       expect(cut!).toBeCloseTo(0.5, 1); // cut at the gap start, dropping the burst
       expect(cut!).toBeLessThan(await probeDuration(clip));
-    });
+    }, FFMPEG_TIMEOUT);
 
     it("returns null when the clip already ends in silence", async () => {
       const dir = mkdtempSync(join(tmpdir(), "kino-tac2-"));
       const clip = join(dir, "c.mp3"); // speech | 200ms trailing silence
       await makeClip([{ tone: 0.5 }, { sil: 0.2 }], clip);
       expect(await trailingArtifactCut(clip)).toBeNull();
-    });
+    }, FFMPEG_TIMEOUT);
 
     it("protects a real final word (long trailing audio after a pause is not trimmed)", async () => {
       const dir = mkdtempSync(join(tmpdir(), "kino-tac3-"));
       const clip = join(dir, "c.mp3"); // speech | 100ms pause | 500ms final word (> 250ms guard)
       await makeClip([{ tone: 0.3 }, { sil: 0.1 }, { tone: 0.5 }], clip);
       expect(await trailingArtifactCut(clip)).toBeNull();
-    });
+    }, FFMPEG_TIMEOUT);
   });
 
   it("extracts a single frame at a timestamp", async () => {
@@ -96,5 +102,5 @@ describe("ffmpeg helpers", () => {
       "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=30", "-pix_fmt", "yuv420p", v]);
     await extractFrame(v, 1.0, png);
     expect(existsSync(png)).toBe(true);
-  });
+  }, FFMPEG_TIMEOUT);
 });
