@@ -13,6 +13,7 @@ import { loadBgTextures, prepareBgTextures } from "./bgTextures";
 import { awaitRegionShaders } from "./RegionShader";
 import { KinoVideo } from "./KinoVideo";
 import type { KinoProps } from "../../props.js";
+import { Stage, type StageHandle } from "./compositor/Stage.js";
 
 interface RenderConfig {
   props: KinoProps;
@@ -22,6 +23,7 @@ interface RenderConfig {
   media: MediaMap;
   shaderSS?: number;
   shaderFXAA?: boolean;
+  compositor?: boolean;
 }
 
 declare global {
@@ -91,6 +93,7 @@ async function syncFonts(props: KinoProps): Promise<void> {
 
 let root: Root | null = null;
 let current: RenderConfig | null = null;
+let stageHandle: StageHandle | null = null;
 
 const App: React.FC<{ cfg: RenderConfig; frame: number }> = ({ cfg, frame }) => {
   const config: VideoConfig = { fps: cfg.props.fps, width: cfg.width, height: cfg.height, durationInFrames: cfg.durationInFrames };
@@ -105,7 +108,14 @@ const App: React.FC<{ cfg: RenderConfig; frame: number }> = ({ cfg, frame }) => 
 
 async function kinoSeek(frame: number): Promise<void> {
   const cfg = current;
-  if (!cfg || !root) throw new Error("kinoSeek before kinoLoad");
+  if (!cfg) throw new Error("kinoSeek before kinoLoad");
+
+  if (cfg.compositor && stageHandle) {
+    await stageHandle.seek(frame);
+    return;
+  }
+
+  if (!root) throw new Error("kinoSeek before kinoLoad");
   // Live-scrub DOM textures rasterize for THIS frame before the commit, so the shader's upload
   // inside the flushSync sees the fresh pixels (per-frame smooth, no flipbook stepping).
   await prepareBgTextures(cfg.props, frame, cfg.props.fps);
@@ -138,8 +148,30 @@ async function kinoLoad(): Promise<void> {
   window.__kinoShaderSS = cfg.shaderSS ?? 2;
   // FXAA edge post-pass on shader backgrounds. Default on (KINO_SHADER_FXAA=0 disables).
   window.__kinoShaderFXAA = cfg.shaderFXAA ?? true;
-  root ??= createRoot(container);
+
   current = cfg;
+
+  if (cfg.compositor) {
+    root ??= createRoot(container);
+    await new Promise<void>((resolve) => {
+      root!.render(
+        <Stage
+          props={cfg.props}
+          dims={{ width: cfg.width, height: cfg.height }}
+          media={cfg.media}
+          scale={cfg.shaderSS ?? 2}
+          onReady={(h) => {
+            stageHandle = h;
+            resolve();
+          }}
+        />,
+      );
+    });
+    await kinoSeek(0);
+    return;
+  }
+
+  root ??= createRoot(container);
   await kinoSeek(0);
 }
 
@@ -153,3 +185,4 @@ kinoLoad()
   .catch((err) => {
     window.__kinoError = err instanceof Error ? (err.stack ?? err.message) : String(err);
   });
+

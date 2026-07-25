@@ -310,6 +310,7 @@ async function pointServerAt(opts: {
       media: opts.media,
       shaderSS: opts.shaderSS,
       shaderFXAA: opts.shaderFXAA,
+      compositor: process.env.KINO_COMPOSITOR === "1",
     }),
   });
 }

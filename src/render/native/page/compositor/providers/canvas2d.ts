@@ -17,6 +17,7 @@ export function createCanvas2dSource(opts: {
   width: number;
   height: number;
   fps: number;
+  clearNight?: boolean;
 }): TextureSource & { canvasForTest(): HTMLCanvasElement } {
   const canvas = document.createElement("canvas");
   canvas.width = opts.width;
@@ -32,8 +33,10 @@ export function createCanvas2dSource(opts: {
       ctx.globalAlpha = 1;
       ctx.filter = "none";
       ctx.clearRect(0, 0, opts.width, opts.height);
-      ctx.fillStyle = opts.theme.night;
-      ctx.fillRect(0, 0, opts.width, opts.height);
+      if (opts.clearNight ?? true) {
+        ctx.fillStyle = opts.theme.night;
+        ctx.fillRect(0, 0, opts.width, opts.height);
+      }
       const t = frame / opts.fps;
       opts.draw(ctx, {
         frame, fps: opts.fps, width: opts.width, height: opts.height,
