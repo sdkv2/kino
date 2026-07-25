@@ -19,10 +19,13 @@
 import React, { useLayoutEffect, useRef } from "react";
 import { reportFatal } from "./fatal";
 import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
-import type { RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
+import type { BgParamValue, RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
 import { assembleRegionShaderSource, MAX_REGION_MASKS, resolveUniforms, extraParamNames } from "../../shaderSource.js";
 import { paramsAt } from "../../bgparams.js";
+import { buildMotionVars } from "../../motionVars.js";
 import { useFrameImageUrl } from "./media";
+import { buildTemplate, rasterAt, scrubCss, TEX_ROOT, type HtmlTemplate } from "./bgTextures";
+import { motionScrubCss, KINO_FILTERS } from "./motionCss";
 
 // The alias set baked into the compiled program: `#define u_<name> uParamI`. Derived from the base
 // params PLUS every keyframe so it is stable across frames — a per-frame resolved dict would drop
@@ -85,13 +88,51 @@ interface Src {
   frameUrl: string | null; // this-frame /vframes URL when frameVideo (may be null at init in sparse stills)
 }
 
+// An extra sampler channel (uTex1..uTex3). `tpl` present ⇒ a motion .html that re-rasterizes every
+// frame at the beat's progress; `lastCss` is the raster identity (same CSS ⇒ same pixels ⇒ no work).
+interface TexChannel {
+  handle: WebGLTexture;
+  unit: number;
+  tpl?: HtmlTemplate;
+  lastCss?: string;
+}
+
 interface GLState {
   gl: WebGL2RenderingContext;
   prog: WebGLProgram;
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
   masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
+<<<<<<< HEAD
+  texes: TexChannel[]; // uTex1..uTex3; entries past region.textures.length are transparent placeholders
+}
+
+// uTex0 is always the beat's own asset, so authored channels start at uTex1.
+export const MAX_REGION_TEXTURES = 3;
+
+// CSS for one frame of a motion-HTML channel. Everything the shadow-root surface gives a motion
+// graphic, minus what only a live DOM layer can have (Lottie, per-frame procedural markup, triggers):
+// the scrub stylesheet with its host block rebound to the raster's wrapper class, the frame-driven
+// custom properties (--progress, the eased curves, the palette, each region param as --<name>), and
+// the generic 1s-convention scrub for author @keyframes outside the kino classes.
+function motionRasterCss(theme: Theme, params: Record<string, BgParamValue>, dyn: { frame: number; fps: number; progress: number; width: number; height: number }): string {
+  const vars = buildMotionVars(theme, {
+    frame: dyn.frame,
+    t: dyn.fps > 0 ? dyn.frame / dyn.fps : 0,
+    progress: dyn.progress,
+    pulse: 0,
+    params,
+    fps: dyn.fps,
+    width: dyn.width,
+    height: dyn.height,
+  });
+  const decls = Object.entries(vars)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(";");
+  return `${scrubCss(dyn.progress)} ${motionScrubCss(`.${TEX_ROOT}`)} .${TEX_ROOT}{${decls}}`;
+=======
   backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
+>>>>>>> origin/main
 }
 
 function uploadTex(gl: WebGL2RenderingContext, unit: number, handle: WebGLTexture, src: TexImageSource): void {
@@ -161,6 +202,62 @@ async function updateFrameSlot(gl: WebGL2RenderingContext, slot: Slot, url: stri
   slot.frameVideo.lastUrl = url;
 }
 
+// Build the uTex1..uTex3 channels. An image uploads once, like any static source. A motion .html
+// gets a template measured at COMPOSITION size (a full-frame graphic positions its children with
+// inset:0 and would shrink-wrap to nothing under fit-content) at 1× (it is already authored at the
+// size it renders), plus the kino SVG filter library so filter:url(#kino-grain) resolves inside the
+// isolated SVG document. Channels the spec doesn't declare get a transparent 1×1 so every declared
+// sampler stays complete and reads (0,0,0,0) — "unbound channels sample transparent black".
+async function makeTexChannels(
+  gl: WebGL2RenderingContext,
+  region: RegionShaderProps,
+  loc: Record<string, WebGLUniformLocation | null>,
+  theme: Theme,
+  width: number,
+  height: number,
+): Promise<TexChannel[]> {
+  const defs = region.textures ?? [];
+  const out: TexChannel[] = [];
+  for (let i = 0; i < MAX_REGION_TEXTURES; i++) {
+    const unit = MAX_REGION_MASKS + 1 + i; // 0 = asset, 1..MAX_REGION_MASKS = masks
+    const samplerLoc = loc[`uTex${i + 1}`];
+    const def = defs[i];
+    if (def?.kind === "image" && def.src) {
+      const slot = await makeSlot(gl, unit, { frameVideo: false, staticUrl: staticFile(def.src), frameUrl: null }, samplerLoc);
+      out.push({ handle: slot.handle, unit: slot.unit });
+    } else if (def?.kind === "html" && def.html) {
+      const tpl = await buildTemplate(def.html, theme, { size: { w: width, h: height }, scale: 1, defs: KINO_FILTERS });
+      // LINEAR, not the placeholder's NEAREST: a body that warps or offsets its lookup (refraction,
+      // displacement) samples between texels and would otherwise get blocky edges.
+      const handle = gl.createTexture()!;
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, handle);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      // Transparent until the first raster lands (updateTexChannel, same frame, before drawArrays).
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+      if (samplerLoc) gl.uniform1i(samplerLoc, unit);
+      out.push({ handle, unit, tpl });
+    } else {
+      out.push(makePlaceholderSlot(gl, unit, samplerLoc));
+    }
+  }
+  return out;
+}
+
+// Re-rasterize a motion-HTML channel for this frame and upload it. Same CSS ⇒ same pixels, so a
+// static graphic (or a repeated frame) skips both the raster and the upload. No cache: the scrub
+// value moves every frame, so entries would only accumulate.
+async function updateTexChannel(gl: WebGL2RenderingContext, ch: TexChannel, css: string): Promise<void> {
+  if (!ch.tpl || css === ch.lastCss) return;
+  const canvas = await rasterAt(ch.tpl, "", css, null);
+  if (!canvas) return;
+  uploadTex(gl, ch.unit, ch.handle, canvas);
+  ch.lastCss = css;
+}
+
 // Free a superseded program and its textures. The canvas keeps ONE WebGL2 context (getContext
 // returns the same object on every call), so a re-keyed component would otherwise leak a program
 // and MAX_REGION_MASKS+1 textures per spec. Deletion is by object name and the new init has
@@ -170,7 +267,11 @@ function disposeGL(st: GLState | null): void {
   st.gl.deleteProgram(st.prog);
   st.gl.deleteTexture(st.asset.handle);
   for (const m of st.masks) st.gl.deleteTexture(m.handle);
+<<<<<<< HEAD
+  for (const c of st.texes) st.gl.deleteTexture(c.handle);
+=======
   if (st.backdrop) st.gl.deleteTexture(st.backdrop.handle);
+>>>>>>> origin/main
 }
 
 // Compile the program + build the asset slot and every mask slot (real sources first, inert
@@ -181,7 +282,13 @@ async function initGL(
   assetSrc: Src,
   maskSrcs: Src[],
   region: RegionShaderProps,
+<<<<<<< HEAD
+  theme: Theme,
+  width: number,
+  height: number,
+=======
   backdropSrc: Src | null,
+>>>>>>> origin/main
 ): Promise<GLState | null> {
   try {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false });
@@ -233,6 +340,7 @@ async function initGL(
                    "iMouse", "uPulse", "uColorA", "uColorB", "uColorC", "uIntensity",
                    "uParam0", "uParam1", "uParam2", "uParam3"];
     for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
+    for (let i = 1; i <= MAX_REGION_TEXTURES; i++) names.push(`uTex${i}`);
     for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     const assetSlot = await makeSlot(gl, 0, assetSrc, loc.uTex0);
@@ -243,6 +351,10 @@ async function initGL(
         i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMask${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMask${i}`]),
       );
     }
+<<<<<<< HEAD
+    const texes = await makeTexChannels(gl, region, loc, theme, width, height);
+    return { gl, prog, loc, asset: assetSlot, masks, texes };
+=======
     // The cutout's backdrop, on the unit past the masks (0 = asset, 1..MAX_REGION_MASKS = masks).
     // uTexSize1 is the FIRST uTexSize this component has ever uploaded: kinoCoverUV/kinoBackdrop
     // read it and treat (0,0) as "no reframe", which would stretch an unrelated clip to the beat's
@@ -254,6 +366,7 @@ async function initGL(
       gl.uniform2f(loc.uTexSize1, backdrop.size[0], backdrop.size[1]);
     }
     return { gl, prog, loc, asset: assetSlot, masks, backdrop };
+>>>>>>> origin/main
   } catch (err) {
     console.error(String(err));
     return null;
@@ -272,10 +385,18 @@ async function drawFrame(
   width: number,
   height: number,
   fps: number,
+<<<<<<< HEAD
+  theme: Theme,
+  durationFrames: number,
+): Promise<void> {
+  try {
+    initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region, theme, width, height);
+=======
   backdropSrc: Src | null,
 ): Promise<void> {
   try {
     initRef.current ??= initGL(canvas, assetSrc, maskSrcs, region, backdropSrc);
+>>>>>>> origin/main
     const st = await initRef.current;
     if (!st) return;
     const { gl, prog, loc } = st;
@@ -298,11 +419,17 @@ async function drawFrame(
     // already seconds-from-beat-start. Same idiom as zoomKeyframes/captionKeyframes: the track rides
     // real VO timing instead of breaking when a beat shifts, and the params share one clock with
     // iTime. See docs/superpowers/specs/2026-07-25-region-params-design.md.
-    const u = resolveUniforms(
-      paramsAt(region.params ?? {}, region.keyframes ?? [], fps > 0 ? frame / fps : 0),
-      { frame, fps, width, height, pulse: 0 },
-      regionExtras(region),
-    );
+    const resolved = paramsAt(region.params ?? {}, region.keyframes ?? [], fps > 0 ? frame / fps : 0);
+    const u = resolveUniforms(resolved, { frame, fps, width, height, pulse: 0 }, regionExtras(region));
+    // Motion-HTML channels re-raster on the beat's OWN progress, the same 0→1 a motionOverlay of the
+    // identical markup would animate on — so the graphic reads the same whether it composites above
+    // the beat or gets sampled inside it. The region params double as its --<name> CSS vars, so one
+    // keyframe track drives the shader and the graphic together.
+    if (st.texes.some((c) => c.tpl)) {
+      const progress = durationFrames > 0 ? Math.min(1, Math.max(0, frame / durationFrames)) : 0;
+      const css = motionRasterCss(theme, resolved, { frame, fps, progress, width, height });
+      await Promise.all(st.texes.map((ch) => updateTexChannel(gl, ch, css)));
+    }
     gl.uniform3f(loc.iResolution, width, height, 1);
     gl.uniform1f(loc.iTime, u.iTime);
     gl.uniform1i(loc.iFrame, u.iFrame);
@@ -341,8 +468,13 @@ export const RegionShader: React.FC<{
   t: Theme;
   assetMediaKey?: string; // /vframes key when the beat asset is a video (else the asset is a static image)
   maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
+<<<<<<< HEAD
+  durationFrames: number; // beat length — maps a motion-HTML texture channel's --progress 0→1, as MotionGraphic does
+}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, durationFrames }) => {
+=======
   backdropMediaKey?: string; // /vframes key when region.backdrop is a video (else it's a static image)
 }> = ({ asset, region, t, assetMediaKey, maskMediaKeys, backdropMediaKey }) => {
+>>>>>>> origin/main
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -383,10 +515,17 @@ export const RegionShader: React.FC<{
     regionExtras(region).join(","),
     `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
     ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
+<<<<<<< HEAD
+    // Texture channels are built into slots by initGL too (an html channel measures + serializes
+    // its template there), so a spec differing only in its textures must not reuse cached state.
+    ...(region.textures ?? []).map((tex) => `${tex.kind}|${tex.src ?? tex.html?.length}`),
+  ].join(" ");
+=======
     // Whether a backdrop exists is baked into the program (the uBackdrop aliases and the background
     // passthrough), and its slot is built once at init - so it belongs in the key like the bodies.
     `${backdropSrc?.frameVideo}|${backdropSrc?.staticUrl}`,
   ].join(" ");
+>>>>>>> origin/main
 
   useLayoutEffect(() => {
     const canvas = ref.current;
@@ -401,7 +540,11 @@ export const RegionShader: React.FC<{
       initRef.current = null;
       if (stale) void stale.then(disposeGL, () => {});
     }
+<<<<<<< HEAD
+    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps, t, durationFrames));
+=======
     track(drawFrame(canvas, initRef, assetSrc, maskSrcs, region, frame, width, height, fps, backdropSrc));
+>>>>>>> origin/main
   });
 
   return (

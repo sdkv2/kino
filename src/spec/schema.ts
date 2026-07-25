@@ -229,6 +229,12 @@ const SegmentUnion = z.discriminatedUnion("kind", [
         // it rides the beat when VO timing shifts. RegionShader's clock is already beat-local, and
         // this shares it with iTime. NOT absolute like backgroundKeyframes.
         keyframes: z.array(BgKeyframe).optional(),
+        // Extra sampler channels shared by every body in the beat: textures[i] → uTex{i+1} (uTex0 is
+        // the beat's own asset). An image uploads once; a motion .html rasterizes at composition size
+        // every frame, scrubbed by the beat's progress — a motion graphic the shader can SAMPLE
+        // rather than one composited above it (that is `motionOverlay`, which still works alongside).
+        // Max 3: uTex1..uTex3 are the channels the region program declares.
+        textures: z.array(z.string().min(1)).max(3).optional(),
       })
       // Strict so a mistyped or not-yet-supported key (e.g. `triggers` — no one-shot surface this
       // phase) fails loudly instead of being stripped into an unexplained still frame.
