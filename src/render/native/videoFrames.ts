@@ -80,6 +80,28 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
         const job = appMediaJob(props.segments, i, fps, `rsmask${i}_${j}`, m.maskSrc);
         if (job) jobs.push(job);
       });
+      // Region-shader BACKDROP (uTex1): a second, unrelated clip behind the cutout subject. Its own
+      // clock ON PURPOSE, which is why this is not an appMediaJob — the beat's clipFrom/speed/pauseAt
+      // describe the beat's OWN source, and seeking a different file to the same second is arbitrary
+      // rather than useful. So: the backdrop's frame 0 at the beat's start, one backdrop frame per
+      // composition frame; extractIndices holds the last frame if the beat outlasts the clip. Routed
+      // through /vframes rather than a <video> seek for the same reason the masks are — <video>
+      // never advances under deterministic headless capture.
+      if (rs.backdrop && /\.(mp4|mov)$/i.test(rs.backdrop)) {
+        const seqDur = appSeqDurFrames(props.segments, i, fps);
+        if (seqDur > 0) {
+          jobs.push({
+            key: `rsbd${i}`,
+            assetRel: rs.backdrop,
+            fromFrame: f(s.startSec, fps),
+            seqDurFrames: seqDur,
+            startSec: 0,
+            stepSec: 1 / fps,
+            effFrame: (n) => n,
+            maxEffFrame: seqDur - 1,
+          });
+        }
+      }
     }
   });
   return jobs;
