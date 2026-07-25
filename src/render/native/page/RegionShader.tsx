@@ -88,7 +88,7 @@ interface Src {
   frameUrl: string | null; // this-frame /vframes URL when frameVideo (may be null at init in sparse stills)
 }
 
-// An extra sampler channel (uTex1..uTex3). `tpl` present ⇒ a motion .html that re-rasterizes every
+// An extra sampler channel (uTex2..uTex3). `tpl` present ⇒ a motion .html that re-rasterizes every
 // frame at the beat's progress; `lastCss` is the raster identity (same CSS ⇒ same pixels ⇒ no work).
 interface TexChannel {
   handle: WebGLTexture;
@@ -103,12 +103,13 @@ interface GLState {
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
   masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
-  texes: TexChannel[]; // uTex1..uTex3; entries past region.textures.length are transparent placeholders
+  texes: TexChannel[]; // uTex2..uTex3; entries past region.textures.length are transparent placeholders
   backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
 }
 
-// uTex0 is always the beat's own asset, so authored channels start at uTex1.
-export const MAX_REGION_TEXTURES = 3;
+// uTex0 is the beat's own asset and uTex1 belongs to the cutout backdrop, so authored channels
+// start at uTex2 — two of them, the rest of what the region header declares.
+export const MAX_REGION_TEXTURES = 2;
 
 // CSS for one frame of a motion-HTML channel. Everything the shadow-root surface gives a motion
 // graphic, minus what only a live DOM layer can have (Lottie, per-frame procedural markup, triggers):
@@ -199,7 +200,7 @@ async function updateFrameSlot(gl: WebGL2RenderingContext, slot: Slot, url: stri
   slot.frameVideo.lastUrl = url;
 }
 
-// Build the uTex1..uTex3 channels. An image uploads once, like any static source. A motion .html
+// Build the uTex2..uTex3 channels (uTex0 is the beat asset, uTex1 the cutout backdrop). An image uploads once, like any static source. A motion .html
 // gets a template measured at COMPOSITION size (a full-frame graphic positions its children with
 // inset:0 and would shrink-wrap to nothing under fit-content) at 1× (it is already authored at the
 // size it renders), plus the kino SVG filter library so filter:url(#kino-grain) resolves inside the
@@ -216,8 +217,8 @@ async function makeTexChannels(
   const defs = region.textures ?? [];
   const out: TexChannel[] = [];
   for (let i = 0; i < MAX_REGION_TEXTURES; i++) {
-    const unit = MAX_REGION_MASKS + 1 + i; // 0 = asset, 1..MAX_REGION_MASKS = masks
-    const samplerLoc = loc[`uTex${i + 1}`];
+    const unit = MAX_REGION_MASKS + 2 + i; // 0 = asset, 1..MAX_REGION_MASKS = masks, +1 = backdrop
+    const samplerLoc = loc[`uTex${i + 2}`];
     const def = defs[i];
     if (def?.kind === "image" && def.src) {
       const slot = await makeSlot(gl, unit, { frameVideo: false, staticUrl: staticFile(def.src), frameUrl: null }, samplerLoc);
@@ -331,7 +332,7 @@ async function initGL(
                    "iMouse", "uPulse", "uColorA", "uColorB", "uColorC", "uIntensity",
                    "uParam0", "uParam1", "uParam2", "uParam3"];
     for (let i = 0; i < MAX_REGION_MASKS; i++) names.push(`uMask${i}`, `uChannel${i}`);
-    for (let i = 1; i <= MAX_REGION_TEXTURES; i++) names.push(`uTex${i}`);
+    for (let i = 0; i < MAX_REGION_TEXTURES; i++) names.push(`uTex${i + 2}`);
     for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     const assetSlot = await makeSlot(gl, 0, assetSrc, loc.uTex0);
@@ -342,7 +343,6 @@ async function initGL(
         i < maskSrcs.length ? await makeSlot(gl, unit, maskSrcs[i], loc[`uMask${i}`]) : makePlaceholderSlot(gl, unit, loc[`uMask${i}`]),
       );
     }
-    const texes = await makeTexChannels(gl, region, loc, theme, width, height);
     // The cutout's backdrop, on the unit past the masks (0 = asset, 1..MAX_REGION_MASKS = masks).
     // uTexSize1 is the FIRST uTexSize this component has ever uploaded: kinoCoverUV/kinoBackdrop
     // read it and treat (0,0) as "no reframe", which would stretch an unrelated clip to the beat's
@@ -353,6 +353,9 @@ async function initGL(
       backdrop = await makeSlot(gl, MAX_REGION_MASKS + 1, backdropSrc, loc.uTex1);
       gl.uniform2f(loc.uTexSize1, backdrop.size[0], backdrop.size[1]);
     }
+    // Authored channels sit on the units above the backdrop's, whether or not this beat has one —
+    // a spec-dependent unit would make the same textures[0] land on a different sampler per beat.
+    const texes = await makeTexChannels(gl, region, loc, theme, width, height);
     return { gl, prog, loc, asset: assetSlot, masks, texes, backdrop };
   } catch (err) {
     console.error(String(err));

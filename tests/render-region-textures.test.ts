@@ -1,5 +1,5 @@
 // Motion graphic INSIDE a region shader: `regionShader.textures` rasterizes a Tier-1 .html at
-// composition size every frame and binds it to uTex1, so a region body can sample it. Two things
+// composition size every frame and binds it to uTex2, so a region body can sample it. Two things
 // only a real render can prove, and both are the point of the feature:
 //   1. the markup reaches GL at all (a broken raster/upload is a transparent channel — invisible),
 //   2. it animates on the BEAT's progress via the injected kino scrub stylesheet, which the raster
@@ -36,7 +36,7 @@ const MOTION_HTML =
 
 // Subject writes the channel's ALPHA to greyscale: 0 at beat start, 1 at beat end. Background is a
 // constant blue control — it samples nothing, so any movement there means something else changed.
-const SUBJ = "void mainImage(out vec4 c, in vec2 f){ vec4 g = texture(uTex1, f / iResolution.xy); c = vec4(vec3(g.a), 1.0); }";
+const SUBJ = "void mainImage(out vec4 c, in vec2 f){ vec4 g = texture(uTex2, f / iResolution.xy); c = vec4(vec3(g.a), 1.0); }";
 const BG = "void mainImage(out vec4 c, in vec2 f){ c = vec4(0.0, 0.0, 1.0, 1.0); }";
 
 const START = 2;
@@ -60,7 +60,7 @@ const meanDiff = (a: string, b: string) =>
   parseFloat(magick([a, b, "-compose", "difference", "-composite", "-format", "%[fx:mean]", "info:"]).trim());
 
 describe("region shader texture channels", () => {
-  it("samples a motion .html on uTex1, scrubbed by the beat's progress", async () => {
+  it("samples a motion .html on uTex2, scrubbed by the beat's progress", async () => {
     const publicDir = mkdtempSync(join(tmpdir(), "kino-rtex-"));
     magick(["-size", `${W}x${H}`, "xc:black", "-fill", "white",
             "-draw", `rectangle ${MX0},${MY0} ${MX1},${MY1}`, join(publicDir, "mask0.png")]);

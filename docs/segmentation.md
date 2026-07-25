@@ -404,21 +404,22 @@ straight off the pixels.
 
 #### Motion graphics as texture channels
 
-`textures` binds up to three extra samplers — `uTex1`, `uTex2`, `uTex3` — that **every** body in the
-beat can read (`uTex0` is always the beat's own asset). An image uploads once; a motion `.html`
+`textures` binds up to two extra samplers — `uTex2` and `uTex3` — that **every** body in the beat
+can read. (`uTex0` is always the beat's own asset and `uTex1` belongs to the cutout `backdrop`, so
+those two are what is left.) An image uploads once; a motion `.html`
 rasterizes at composition size **every frame**, scrubbed by the beat's own progress:
 
 ```jsonc
 "regionShader": {
   "mask": "masks/clip",
-  "subject": "backgrounds/glass.frag",     // refracts the badge (uTex1) behind the subject
+  "subject": "backgrounds/glass.frag",     // refracts the badge (uTex2) behind the subject
   "background": "backgrounds/plasma.frag",
-  "textures": ["motion/badge.html", "logo.png"]   // → uTex1, uTex2
+  "textures": ["motion/badge.html", "logo.png"]   // → uTex2, uTex3
 }
 ```
 
 ```glsl
-vec4 g = texture(uTex1, fragCoord / iResolution.xy);   // full-frame, aligned 1:1 with the beat
+vec4 g = texture(uTex2, fragCoord / iResolution.xy);   // full-frame, aligned 1:1 with the beat
 c.rgb = mix(c.rgb, g.rgb, g.a);                        // straight alpha, not premultiplied
 ```
 
@@ -437,7 +438,7 @@ a shadow root above the GL canvas, in a later commit than the shader's draw.
   by the React layer, which a raster cannot reach — build rejects them here and points at
   `motionOverlay`. Video sources are not channels either (use `masks`, which routes through
   `/vframes`).
-- **Unbound channels sample transparent black**, so a body may reference `uTex1` whether or not the
+- **Unbound channels sample transparent black**, so a body may reference `uTex2` whether or not the
   spec declares one.
 - **Cost**: one foreignObject rasterization per frame per animated channel, on top of the region
   bodies. A static graphic (unchanged scrub CSS) re-uploads nothing.
