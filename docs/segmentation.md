@@ -195,6 +195,15 @@ They are defined **only** inside a per-entry body. The top-level `subject` spans
 
 **The same `.frag` on two entries is a duplicate definition** if it declares anything at file scope — all bodies land in one translation unit, exactly as with `subject` vs `background` below. If two masks want the same treatment, that is what the top-level `subject` fallback is for: it compiles and runs **once** however many entries share it.
 
+**Two _different_ bodies collide the same way** if they happen to pick the same name. Only
+`mainImage` is renamed for you; every other file-scope `const`, `struct` and helper is shared
+across the whole program. Two independently-written frags that each open with a tuning constant —
+`const float SHOULDER = 26.0;` is a realistic collision, so is `float lum(vec3)` — fail to compile
+with `ERROR: 'SHOULDER' : redefinition`, naming a line in assembled source rather than in either
+file you wrote. Prefix file-scope names per body (`GLASS_SHOULDER`, `METAL_SHOULDER`) or keep them
+inside `mainImage`. See [How region shaders assemble](#how-region-shaders-assemble-for-the-curious)
+for the mechanism.
+
 **Cost.** Every region body runs for every pixel, so N distinct subject bodies plus the background is N+1 bodies per pixel, on the default SwiftShader (software) renderer. Nothing changes for specs that don't use per-entry subjects — with no per-entry `subject` anywhere, kino emits the union program byte-for-byte unchanged. Measured on an Apple M4, 1080×1920, 12 stills, SwiftShader:
 
 | bodies/px | shader ≈120 ALU ops/px | shader ≈750 ALU ops/px |
