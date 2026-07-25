@@ -50,6 +50,11 @@ export interface RegionShaderProps {
   masks: RegionShaderMask[];
   subjectCode: string | null; // GLSL mainImage body for masks without their own, or null = passthrough asset pixels
   backgroundCode: string | null; // GLSL mainImage body elsewhere, or null = passthrough
+  // publicDir-relative SECOND source for the background region (image or video), bound to
+  // uTex1/uTexSize1 and aliased uBackdrop/uBackdropSize. With backgroundCode null it becomes the
+  // background passthrough, cover-fit — the cutout. Video backdrops animate through the per-beat
+  // /vframes job `rsbd<i>`. See docs/superpowers/specs/2026-07-25-cutout-compositing-design.md.
+  backdrop?: string;
   // Author params + tweens shared by EVERY body in this beat's program (subjectCode, backgroundCode
   // and each masks[].subjectCode) — there is ONE uParam0..3 bank in the one program they share, so
   // per-entry sets would need per-entry banks and blow the 4-slot ceiling immediately. Numeric
