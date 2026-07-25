@@ -6,6 +6,7 @@
 import type { KinoProps } from "./props.js";
 import { interpolate } from "./interpolate.js";
 import { normalizeLayer, type Dims, type LayerDraw, type LayerSpec } from "./native/page/compositor/graph.js";
+import { MOTION_XFADE_FRAMES } from "./motion.js";
 
 export type { Dims };
 
@@ -67,6 +68,40 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     out.push({ id: `seg${i}`, source: { providerId: `seg${i}` }, rect, opacity });
     if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity });
     if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity });
+  });
+
+  // 5. Full-screen motion beats. A motion beat that follows another dissolves in over the
+  // overlap; the first one stays opaque so a looping open has no seam.
+  props.segments.forEach((s, i) => {
+    if (s.kind !== "motion" || !s.motion) return;
+    const from = f(s.startSec);
+    const dur = f(s.endSec) - from;
+    const local = frame - from;
+    if (local < 0 || local >= dur) return;
+    const fadeIn = props.segments[i - 1]?.kind === "motion";
+    const opacity = fadeIn
+      ? interpolate(local, [0, MOTION_XFADE_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+      : 1;
+    out.push({
+      id: `motion${i}`,
+      source: { providerId: `motion${i}`, key: String(local) },
+      rect: full,
+      opacity,
+    });
+  });
+
+  // 6. Motion overlays: layered above whatever their beat drew.
+  props.segments.forEach((s, i) => {
+    if (!s.motionOverlay) return;
+    const from = f(s.startSec);
+    const dur = f(s.endSec) - from;
+    const local = frame - from;
+    if (local < 0 || local >= dur) return;
+    out.push({
+      id: `overlay${i}`,
+      source: { providerId: `overlay${i}`, key: String(local) },
+      rect: full,
+    });
   });
 
   return out.map(normalizeLayer);
