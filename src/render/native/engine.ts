@@ -7,6 +7,7 @@ import { copyFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { releaseScratch, scratchDir } from "../../scratch.js";
 import type { Browser, Page } from "puppeteer";
+import { log } from "../../log.js";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
@@ -342,6 +343,13 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   const ss = resolveShaderSS(process.env, { mock: preset === "veryfast" });
   const fx = resolveShaderFXAA(process.env);
   const mode = glMode();
+  // The backend is auto-detected per machine (resolveGL), so say which one this render used —
+  // gpu and sw frames are not bit-identical, and a silent choice makes that impossible to spot.
+  log.step(
+    mode === "gpu"
+      ? "gl: hardware ANGLE (KINO_GPU=0 for bit-stable SwiftShader)"
+      : "gl: SwiftShader (software; KINO_GPU=1 for hardware ANGLE)",
+  );
   try {
     const endSec = total / props.fps;
     // Browser launches overlap frame extraction + the audio mix — none depend on each other.
