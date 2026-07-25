@@ -9,6 +9,7 @@
 | `speech-synced-ui` | On-screen UI text that must type/reveal in lockstep with VO (terminal prompts, chat inputs, spoof AI windows, code editors); caption-free montages; seamless-loop typed surfaces. |
 | `motion-design` | Visual craft for motion graphics (Tier-1 HTML, Tier-2 JS, motionOverlay) — composition, color, type, camera/choreography, spoof-UI craft, anti-generic checks. |
 | `shader-backgrounds` | WebGL `.frag` / `.glsl` custom backgrounds (ShaderToy `mainImage`, texture channels, `kino-glass` pairing) — raymarch / plasma stages, not Canvas2D wash or Blender. |
+| `segmentation` | `kino segment` masks + `regionShader` — cutting a subject out of its footage: per-region shader bodies, per-object materials, cutout compositing onto another clip, rim/erode via mask distance. |
 
 ## Install for local agents
 

@@ -108,4 +108,4 @@ Renders land at `projects/<name>/out/<title>/<title>[-<tag>]-<format>.mp4` (e.g.
 - **[Backgrounds & overlays](backgrounds-and-overlays.md)** — backgrounds, logo, captions, kickers, shaders.
 - **[Segmentation](segmentation.md)** — `kino segment` masks + `regionShader`.
 - Agent skills (canonical): [`skills/`](../skills/). `kino skills --install` (also `kino init`) creates local (gitignored) symlinks under `.agents` / `.cursor` / `.claude` / `.codex`.
-- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`, `shader-backgrounds`. Also: `npx skills add sdkv2/kino`.
+- Playbooks: `video-production`, `ad-voice`, `adversarial-critique`, `importing-footage`, `speech-synced-ui`, `motion-design`, `shader-backgrounds`, `segmentation`. Also: `npx skills add sdkv2/kino`.
