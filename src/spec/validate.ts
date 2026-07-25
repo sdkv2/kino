@@ -96,6 +96,12 @@ export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: strin
     if (seg.kind === "motion") refs.push({ source: seg.source, where: `segment[${i}]` });
     const ov = (seg as { motionOverlay?: { source?: string } }).motionOverlay;
     if (ov?.source) refs.push({ source: ov.source, where: `segment[${i}].motionOverlay` });
+    // regionShader texture channels take the same motion sources (a .html rasterized into uTexN),
+    // so they get the same resolve + lint here rather than only at build time. Image channels are
+    // plain assets and are checked where every other beat asset is.
+    (seg as { regionShader?: { textures?: string[] } }).regionShader?.textures?.forEach((source, j) => {
+      if (!/\.(png|jpe?g|webp)$/i.test(source)) refs.push({ source, where: `segment[${i}].regionShader.textures[${j}]` });
+    });
   });
   for (const { source, where } of refs) {
     let abs: string;

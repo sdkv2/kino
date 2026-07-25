@@ -332,6 +332,49 @@ straight off the pixels.
 **Worked example:** `examples/segmentation/cross-region-glass.json` with `region-glass.frag`
 (subject) and `region-tint.frag` (background treatment).
 
+#### Motion graphics as texture channels
+
+`textures` binds up to three extra samplers — `uTex1`, `uTex2`, `uTex3` — that **every** body in the
+beat can read (`uTex0` is always the beat's own asset). An image uploads once; a motion `.html`
+rasterizes at composition size **every frame**, scrubbed by the beat's own progress:
+
+```jsonc
+"regionShader": {
+  "mask": "masks/clip",
+  "subject": "backgrounds/glass.frag",     // refracts the badge (uTex1) behind the subject
+  "background": "backgrounds/plasma.frag",
+  "textures": ["motion/badge.html", "logo.png"]   // → uTex1, uTex2
+}
+```
+
+```glsl
+vec4 g = texture(uTex1, fragCoord / iResolution.xy);   // full-frame, aligned 1:1 with the beat
+c.rgb = mix(c.rgb, g.rgb, g.a);                        // straight alpha, not premultiplied
+```
+
+This is the difference between a graphic the shader can **see** and one merely stacked on top:
+`motionOverlay` composites above the region shader's output (and still works alongside `textures` —
+they are independent), so the shader cannot refract, displace, mask or light it. A texture channel
+can be all of those. Sampling the live overlay layer is not possible and never will be — it lives in
+a shadow root above the GL canvas, in a later commit than the shader's draw.
+
+- **Same file, same look.** `motion/badge.html` renders through the same scrub stylesheet, the same
+  `--progress`/`--kino-*` custom properties, the same brand palette and fonts, and the same
+  `filter:url(#kino-grain)` library it gets as a `motionOverlay`. `--progress` runs 0→1 across the
+  beat, exactly as an overlay's does, and the `regionShader` params double as `--<name>` CSS
+  variables — one keyframe track drives the shader and the graphic together.
+- **Tier-1 `.html` only.** A `.js` (Tier 2) or `.json` Lottie (Tier 3) graphic is produced per frame
+  by the React layer, which a raster cannot reach — build rejects them here and points at
+  `motionOverlay`. Video sources are not channels either (use `masks`, which routes through
+  `/vframes`).
+- **Unbound channels sample transparent black**, so a body may reference `uTex1` whether or not the
+  spec declares one.
+- **Cost**: one foreignObject rasterization per frame per animated channel, on top of the region
+  bodies. A static graphic (unchanged scrub CSS) re-uploads nothing.
+
+`tests/render-region-textures.test.ts` renders a channel whose opacity rides `.kino-anim` and reads
+the beat progress straight off the pixels.
+
 #### Distance to the mask edge
 
 A region body sees a binary in/out by default. `kinoMaskDist` gives it the **signed distance to the

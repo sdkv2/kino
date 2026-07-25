@@ -31,7 +31,7 @@ let loaded: (LoadedTex | null)[] = [];
 interface AnimTex {
   index: number; // channel slot in `loaded`
   param: string;
-  makeSvg: (scrubCss: string) => string;
+  tpl: HtmlTemplate;
   cache: Map<string, HTMLCanvasElement>; // scrub value (fixed precision) → raster
 }
 const animTexes: AnimTex[] = [];
@@ -133,68 +133,100 @@ function paletteVars(theme: KinoProps["theme"]): string {
   );
 }
 
-interface HtmlTemplate {
+export interface HtmlTemplate {
   w: number;
   h: number;
-  makeSvg: (scrubCss: string) => string;
+  makeSvg: (css: string) => string; // css lands in the raster's <style>, after the fonts + palette
 }
 
-// Measure + serialize ONCE per texture; per-scrub rasters only vary the injected scrub CSS.
-async function buildTemplate(html: string, theme: KinoProps["theme"]): Promise<HtmlTemplate> {
+/** The wrapper class every rasterized markup sits inside — the raster's stand-in for `:host`. */
+export const TEX_ROOT = "kino-tex-root";
+
+/**
+ * Measure + serialize ONCE per texture; per-scrub rasters only vary the injected CSS.
+ * `size` skips the fit-content measure and forces a fixed box (a full-frame motion layer measures
+ * ~0 wide, since its children are absolutely positioned). `scale` overrides the 2× supersample —
+ * markup already authored at composition size gains nothing from it. `defs` is SVG markup injected
+ * alongside the foreignObject (the kino filter library, for filter:url(#kino-…) references).
+ */
+export async function buildTemplate(
+  html: string,
+  theme: KinoProps["theme"],
+  opts: { size?: { w: number; h: number }; scale?: number; defs?: string } = {},
+): Promise<HtmlTemplate> {
   // Measure in a hidden live container so CSS (including vw units) resolves for real.
   // Inner wrapper keeps <style> blocks (and any sibling markup) in the serialization while giving
   // one element to measure — firstElementChild alone would grab a leading <style> tag.
   const probe = document.createElement("div");
   probe.setAttribute("style", `position:absolute;left:-99999px;top:0;visibility:hidden;${paletteVars(theme)}`);
   const inner = document.createElement("div");
-  inner.style.width = "fit-content";
+  if (opts.size) {
+    // Fixed box: lay the markup out at exactly the size it will be rasterized at, so `inset:0`
+    // children and % / vw units resolve against the real target rather than a shrink-wrapped box.
+    inner.style.position = "relative";
+    inner.style.width = `${opts.size.w}px`;
+    inner.style.height = `${opts.size.h}px`;
+  } else {
+    inner.style.width = "fit-content";
+  }
   inner.innerHTML = html;
   probe.appendChild(inner);
   document.body.appendChild(probe);
   const rect = inner.getBoundingClientRect();
-  const w = Math.max(2, Math.ceil(rect.width));
-  const h = Math.max(2, Math.ceil(rect.height));
+  const w = opts.size?.w ?? Math.max(2, Math.ceil(rect.width));
+  const h = opts.size?.h ?? Math.max(2, Math.ceil(rect.height));
   // Serialize to XHTML for foreignObject (XML well-formedness).
   const xhtml = new XMLSerializer().serializeToString(inner);
   probe.remove();
   const fonts = await fontFaceCss(theme);
-  const makeSvg = (scrubCss: string) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w * RASTER_SCALE}" height="${h * RASTER_SCALE}" viewBox="0 0 ${w} ${h}">` +
+  const scale = opts.scale ?? RASTER_SCALE;
+  const defs = opts.defs ?? "";
+  const makeSvg = (css: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}">` +
     // Palette vars live in a <style> block, NOT a style attribute: font families contain double
     // quotes, which would terminate the XML attribute and invalidate the whole SVG.
-    `<style>${fonts} .kino-tex-root{${paletteVars(theme)}} ${scrubCss}</style>` +
+    `<style>${fonts} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
     `<foreignObject width="${w}" height="${h}">` +
-    `<div xmlns="http://www.w3.org/1999/xhtml" class="kino-tex-root" style="width:${w}px;height:${h}px">${xhtml}</div>` +
+    `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px">${xhtml}</div>` +
     `</foreignObject></svg>`;
   return { w, h, makeSvg };
 }
 
-// Scrub CSS: pause + negative delay against the 1s @keyframes convention.
-const scrubCss = (t: number) =>
-  `.kino-tex-root *{animation-duration:1s !important;animation-play-state:paused !important;` +
+/** Scrub CSS: pause + negative delay against the 1s @keyframes convention. */
+export const scrubCss = (t: number) =>
+  `.${TEX_ROOT} *{animation-duration:1s !important;animation-play-state:paused !important;` +
   `animation-delay:${-t}s !important;animation-fill-mode:both !important}`;
 
-async function rasterAt(tpl: HtmlTemplate, t: number, cache: Map<string, HTMLCanvasElement> | null): Promise<HTMLCanvasElement | null> {
-  const key = cache ? t.toFixed(4) : null;
-  const hit = key ? cache!.get(key) : undefined;
+/**
+ * Rasterize `tpl` with `css` injected. `cache` (keyed by `key`) is for scrub values that repeat;
+ * pass null when every frame is a distinct value and the entries would only accumulate.
+ */
+export async function rasterAt(
+  tpl: HtmlTemplate,
+  key: string,
+  css: string,
+  cache: Map<string, HTMLCanvasElement> | null,
+): Promise<HTMLCanvasElement | null> {
+  const hit = cache ? cache.get(key) : undefined;
   if (hit) {
     // LRU refresh
-    cache!.delete(key!);
-    cache!.set(key!, hit);
+    cache!.delete(key);
+    cache!.set(key, hit);
     return hit;
   }
   try {
     // data: URL, NOT a blob URL — Chromium taints canvases painted from blob-URL foreignObject
     // SVGs (texImage2D would then throw), while data-URL foreignObject SVGs stay clean.
-    const img = await loadImage("data:image/svg+xml;charset=utf-8," + encodeURIComponent(tpl.makeSvg(scrubCss(t))));
+    const svg = tpl.makeSvg(css);
+    const img = await loadImage("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
     const canvas = document.createElement("canvas");
-    canvas.width = tpl.w * RASTER_SCALE;
-    canvas.height = tpl.h * RASTER_SCALE;
+    canvas.width = img.naturalWidth || tpl.w;
+    canvas.height = img.naturalHeight || tpl.h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(img, 0, 0);
     if (cache) {
-      cache.set(key!, canvas);
+      cache.set(key, canvas);
       if (cache.size > ANIM_CACHE_MAX) cache.delete(cache.keys().next().value!);
     }
     return canvas;
@@ -243,13 +275,13 @@ export async function loadBgTextures(props: KinoProps): Promise<void> {
         // Animated channel: template once, first raster at t=0; per-frame rasters via
         // prepareBgTextures (awaited inside kinoSeek before the React commit).
         const cache = new Map<string, HTMLCanvasElement>();
-        const first = await rasterAt(tpl, 0, cache);
+        const first = await rasterAt(tpl, "0.0000", scrubCss(0), cache);
         if (first) {
           out[i] = { source: first, width: tpl.w, height: tpl.h, revision: 0 };
-          animTexes.push({ index: i, param: def.param, makeSvg: tpl.makeSvg, cache });
+          animTexes.push({ index: i, param: def.param, tpl, cache });
         }
       } else {
-        const raster = await rasterAt(tpl, 0, null);
+        const raster = await rasterAt(tpl, "", scrubCss(0), null);
         if (raster) out[i] = { source: raster, width: tpl.w, height: tpl.h, revision: 0 };
       }
     }
@@ -284,7 +316,7 @@ export async function prepareBgTextures(props: KinoProps, frame: number, fps: nu
     const t = Math.min(1, Math.max(0, typeof raw === "number" ? raw : 0));
     const tex = loaded[anim.index];
     if (!tex) continue;
-    const canvas = await rasterAt({ w: tex.width, h: tex.height, makeSvg: anim.makeSvg }, t, anim.cache);
+    const canvas = await rasterAt(anim.tpl, t.toFixed(4), scrubCss(t), anim.cache);
     if (canvas && canvas !== tex.source) {
       tex.source = canvas;
       tex.revision++;

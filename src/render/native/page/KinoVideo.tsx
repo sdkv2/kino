@@ -84,6 +84,7 @@ export const KinoVideo: React.FC<KinoProps> = ({ theme, fps, avatar, avatarWindo
                 t={theme}
                 assetMediaKey={/\.(mp4|mov)$/i.test(s.source!) ? `seg${i}` : undefined}
                 maskMediaKeys={s.regionShader.masks.map((m, j) => (m.maskKind === "video" ? `rsmask${i}_${j}` : undefined))}
+                durationFrames={beatDur}
               />
             ) : (
             <AppCutaway

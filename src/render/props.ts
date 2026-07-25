@@ -44,6 +44,17 @@ export interface RegionShaderMask {
   channel: "r" | "g" | "b" | "a" | "gray"; // manifest object's coverage channel
   subjectCode?: string | null; // GLSL body for THIS mask's region; null/absent = the shared subjectCode
 }
+// A region-shader texture channel (uTex1..uTex3 — uTex0 is always the beat's own asset).
+// kind="image": staged file under /public, uploaded once.
+// kind="html": sanitized motion markup rasterized (foreignObject) at COMPOSITION size every frame,
+// scrubbed by the beat's own progress — the same .html a `motionOverlay` would animate, except it
+// lands in the shader as pixels instead of compositing above it.
+export interface RegionTexture {
+  kind: "image" | "html";
+  src: string | null; // public-relative file, for kind="image"
+  html: string | null; // sanitized markup, for kind="html"
+}
+
 export interface RegionShaderProps {
   // 1..4 entries. Each shades its own region, falling back to subjectCode where it has no
   // subjectCode of its own; later entries paint OVER earlier ones where masks overlap.
@@ -59,6 +70,9 @@ export interface RegionShaderProps {
   // docs/superpowers/specs/2026-07-25-region-params-design.md.
   params?: Record<string, BgParamValue>;
   keyframes?: BgKeyframe[];
+  // Extra sampler channels for every body in this beat: textures[i] → uTex{i+1}, up to 3. Unbound
+  // channels sample transparent black, so a body can reference uTex1 whether or not one is declared.
+  textures?: RegionTexture[];
 }
 
 export interface KinoSegment {

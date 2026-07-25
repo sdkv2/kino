@@ -27,7 +27,7 @@ import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, WordTiming } from "../render/props.js";
+import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
 import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
@@ -61,6 +61,7 @@ function resolveRegionShader(
     // The 4-slot ceiling is enforced in the schema (see slotParamNames), so no re-check here.
     params?: Record<string, BgParamValue>;
     keyframes?: BgKeyframe[];
+    textures?: string[];
   },
   project: Project,
   stageAsset: (rel: string) => void,
@@ -83,12 +84,34 @@ function resolveRegionShader(
     stageAsset(maskRel);
     return { maskSrc: maskRel, maskKind: manifest.kind, channel: obj.channel, subjectCode: loadBody(subject) };
   });
+  // Extra sampler channels (uTex1..uTex3). A motion .html resolves and lints exactly like a
+  // motionOverlay source — same library ids, same determinism lint, same sanitizer — but its markup
+  // is rasterized into a texture the region bodies sample, instead of compositing above them.
+  // Tier-2 (.js) and Tier-3 (.json) stay overlay-only: their markup is produced per frame by the
+  // React layer, which the shader cannot reach (see docs/segmentation.md).
+  const textures: RegionTexture[] = (rs.textures ?? []).map((ref, i) => {
+    if (/\.(png|jpe?g|webp)$/i.test(ref)) {
+      const abs = project.assetPath(ref);
+      if (!existsSync(abs)) throw new Error(`regionShader.textures[${i}] not found: assets/${ref}`);
+      stageAsset(ref);
+      return { kind: "image" as const, src: ref, html: null };
+    }
+    const graphic = resolveMotionGraphic({ source: ref }, project);
+    if (!graphic.html) {
+      throw new Error(
+        `regionShader.textures[${i}] "${ref}": only Tier-1 .html rasterizes into a texture channel ` +
+          `(a .js/.json graphic renders per frame in the DOM layer — use motionOverlay for it).`,
+      );
+    }
+    return { kind: "html" as const, src: null, html: graphic.html };
+  });
   return {
     masks,
     subjectCode: loadBody(rs.subject),
     backgroundCode: loadBody(rs.background),
     params: rs.params,
     keyframes: rs.keyframes,
+    textures: textures.length ? textures : undefined,
   };
 }
 
