@@ -7,14 +7,6 @@ import { tmpdir } from "node:os";
 import { launchBrowser } from "../src/render/native/browser.js";
 import { liveScratchDirs } from "../src/scratch.js";
 
-const listing = (): string[] => {
-  try {
-    return readdirSync(tmpdir());
-  } catch {
-    return [];
-  }
-};
-
 // Chrome's profile dir is the same class of leak as kino's own scratch: puppeteer removes its
 // default temp profile asynchronously from browser.close(), so a ^C (or an exit before the pool's
 // unref'd close timer fires) leaves it behind. 338 of them / 4.1 GB had piled up next to the
