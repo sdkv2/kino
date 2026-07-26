@@ -1,7 +1,7 @@
 # Full-frame WebGL compositor — spike + core
 
 **Date:** 2026-07-25
-**Status:** phase 1 implemented — green parity harness, flag default-off for Phase 2 integration
+**Status:** implemented — phases 1–4 complete, DOM path removed
 **Scope:** sub-projects 0 (raster spike) and 1 (compositor core). Masks, effects, post FX and DOM
 retirement are named here but specified separately.
 

@@ -295,6 +295,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    motionOverlay: MotionGraphicRef.optional(),
     ...segmentFxFields,
   })
   .strict(),
@@ -361,6 +362,7 @@ export const SpecSchema = z
     // guidance + a post-build first/last-frame seam check (warn only). Not the same as segment
     // `loop` (Lottie playback).
     seamlessLoop: z.boolean().optional(),
+    postFx: z.unknown().optional(),
     segments: z.array(Segment).min(1),
   })
   .strict() // reject unknown top-level keys — a misplaced/misspelled key errors instead of silently no-op'ing
@@ -441,7 +443,7 @@ const SEGMENT_KIND_HINTS: Record<string, string> = {
   params: "params are motion-only (or motionOverlay)",
   loop: "loop is motion/Lottie-only",
   cta: "cta is scene/motion-only",
-  motionOverlay: "motionOverlay is avatar/app-only (motion segments use source)",
+  motionOverlay: "motionOverlay layers a second motion graphic on this beat (video/scene/motion)",
 };
 
 function formatUnrecognizedKey(key: string, path: (string | number)[]): string {

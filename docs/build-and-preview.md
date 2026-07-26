@@ -59,7 +59,7 @@ So the second build after a small edit is fast and cheap — only the changed be
 
 ## Render speed (shader / glass)
 
-Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Env levers:
+Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Every frame is composited on a single WebGL stage (layers are textures; motion HTML is rasterized per frame). Env levers:
 
 The GL backend is **auto-detected per machine**: hardware ANGLE (Metal) on macOS, software
 SwiftShader everywhere else. The detection is a platform rule rather than a runtime probe on
@@ -78,6 +78,7 @@ match byte-for-byte across machines — golden frames, cross-platform CI compari
 | `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
 | `KINO_SHADER_FXAA=0` | Disable the default FXAA edge post-pass on shader backgrounds. |
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
+| `KINO_CAPTURE=cdp` | Use Chromium CDP JPEG screenshot instead of the default canvas `toDataURL` capture. |
 | `KINO_CONCURRENCY=N` | Chrome worker count (default cap 8 short / 12 long). |
 
 Example: `KINO_GPU=0 kino build specs/foo.json --mock` (force the deterministic software path)

@@ -9,6 +9,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
 - [Masks and effects](#masks-and-effects)
+- [Post FX](#post-fx)
 - [Keyframes & triggers](#keyframes--triggers)
 - [Backgrounds](#backgrounds), [logo & overlays](#logo--overlay-tweening)
 - [Sound effects & music](#sound-effects--music)
@@ -45,6 +46,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `sfx` | [SfxEvent](#sound-effects--music)[] | — | Free-placed sound effects. See [Sound effects & music](#sound-effects--music). |
 | `music` | [Music](#sound-effects--music) | — | Music bed under the VO, auto-ducked while segments speak. See [Sound effects & music](#sound-effects--music). |
 | `seamlessLoop` | boolean | — | Loop-ad contract: last beat must be `kind:"motion"`; validate warns if `film` unset/`>0` or first/last motion sources aren't a ready-state pair; post-build compares first/last frame RGB (warn only). Prefer `"film": 0`. Not the same as segment `loop` (Lottie playback). |
+| `postFx` | [PostFx](#post-fx) | — | Full-frame post stage over the finished composite (compositor only). See [Post FX](#post-fx). |
 
 ## Segments
 
@@ -198,6 +200,45 @@ This includes targets outside their active beat window.
   { "kind": "grade", "params": { "contrast": 1.1, "saturation": 0.9 } }
 ]
 ```
+
+## Post FX
+
+`postFx` applies a fixed full-frame chain **after** every beat is composited.
+Stages always run in this order — it is not authorable:
+
+`grade` → `bloom` → `lens` → `film`
+
+| Stage | Params | Range | Meaning |
+|---|---|---|---|
+| `grade` | `brightness`, `contrast`, `saturation` | `0..4` each (default `1`) | Full-frame colour grade. |
+| `bloom` | `threshold`, `intensity`, `radius` | `threshold` `0..1`, `intensity` `0..4`, `radius` `0..128` px | Separable bright-pass bloom. |
+| `lens` | `distortion`, `chroma` | `distortion` `-1..1`, `chroma` `0..0.05` | Barrel/pincushion distortion plus chromatic aberration. |
+| `film` | `intensity` | `0..1` | Vignette + grain over the whole frame. |
+
+Omit a stage and it does not run — **except `film`**: when `postFx.film` is absent, intensity
+falls back to top-level `film` / `theme.film` (default `1`), so existing specs keep their
+cinematic finish without authoring `postFx`.
+
+```json
+{
+  "title": "graded-hook",
+  "film": 1,
+  "postFx": {
+    "grade": { "brightness": 1.05, "contrast": 1.1, "saturation": 0.92 },
+    "bloom": { "threshold": 0.75, "intensity": 0.35, "radius": 24 },
+    "lens": { "distortion": 0.04, "chroma": 0.003 }
+  },
+  "segments": [{ "text": "Ship it.", "caption": "Ship it." }]
+}
+```
+
+Three things authors trip on:
+
+1. **Order is fixed** — you cannot put grain before bloom or lens; the chain is baked in.
+2. **`film` defaults from `theme.film`** — omit `postFx.film` and the post stage still applies
+   vignette/grain at the same intensity as the legacy CSS film finish.
+3. **Whole-video, not per beat** — one `postFx` object grades the entire output. Per-beat grading
+   still belongs on segment `effects`.
 
 ### Enums
 

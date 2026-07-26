@@ -28,6 +28,7 @@ import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
 import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
+import type { PostFx } from "../render/postSpec.js";
 import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
@@ -530,6 +531,9 @@ export async function prepare(
         ),
         words: motionWords,
       },
+      motionOverlay: seg.motionOverlay
+        ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
+        : undefined,
     };
   });
 
@@ -560,6 +564,7 @@ export async function prepare(
     sfx,
     music,
     segments: renderSegments,
+    ...(spec.postFx ? { postFx: spec.postFx as PostFx } : {}),
   };
 
   return { props, publicDir, formats, project, spec, labelFont, words: vo.words };

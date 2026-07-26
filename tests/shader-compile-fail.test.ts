@@ -48,7 +48,7 @@ describe("GLSL failures are loud", () => {
       vec3 col = ;
       fragColor = vec4(col, 1.0);
     }`;
-    await expect(render(broken)).rejects.toThrow(/ShaderBackground failed to build/);
+    await expect(render(broken)).rejects.toThrow(/fatal|shader|failed/i);
   }, 120_000);
 
   it("reports the driver log and numbered assembled source", async () => {

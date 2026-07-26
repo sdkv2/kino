@@ -71,6 +71,7 @@ export function registerBackdropTexture(tex: WebGLTexture, width: number, height
 
 export function clearBackdropTexture(): void {
   backdropTexture = null;
+  backdrop = null;
 }
 
 const FRAG = `#version 300 es
@@ -399,8 +400,13 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     pool = new Map();
     pools.set(root, pool);
   }
-  const pageW = window.innerWidth;
-  const pageH = window.innerHeight;
+  // `pageW`/`pageH` are the LAYOUT box the glass elements were measured in, because uBgRect is
+  // built from getBoundingClientRect values. The backdrop texture may be larger (supersampled) —
+  // uBgRect is normalized, so its resolution is irrelevant here and using it as the divisor only
+  // ever worked while markup happened to lay out at texture size.
+  const hostBox = (root.host as HTMLElement | undefined)?.getBoundingClientRect();
+  const pageW = hostBox?.width || backdropTexture?.width || backdrop?.width || window.innerWidth;
+  const pageH = hostBox?.height || backdropTexture?.height || backdrop?.height || window.innerHeight;
   const scaleX = backdropTexture ? backdropTexture.width / pageW : (backdrop ? backdrop.width / pageW : 1);
   const scaleY = backdropTexture ? backdropTexture.height / pageH : (backdrop ? backdrop.height / pageH : 1);
 
@@ -463,6 +469,11 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
       cs.getPropertyValue("--glass-tilt").trim() !== "" || cs.getPropertyValue("--glass-morph").trim() !== "";
     const fit = resolveGlassFit(usesTiltMorph, cssVar(cs, "--glass-fit", -1));
 
+    const hostEl = el.getRootNode() instanceof ShadowRoot ? ((el.getRootNode() as ShadowRoot).host as HTMLElement) : null;
+    const hr = hostEl ? hostEl.getBoundingClientRect() : { left: 0, top: 0 };
+    const relLeft = rect.left - hr.left;
+    const relTop = rect.top - hr.top;
+
     gl.viewport(0, 0, w * SS, h * SS);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied
@@ -475,8 +486,8 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
       gl.uniform1f(loc.uIsFullBg, 1.0);
       gl.uniform4f(
         loc.uBgRect,
-        rect.left / pageW,
-        (pageH - rect.top - rect.height) / pageH,
+        relLeft / pageW,
+        (pageH - relTop - rect.height) / pageH,
         rect.width / pageW,
         rect.height / pageH,
       );

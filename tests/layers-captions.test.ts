@@ -50,15 +50,18 @@ describe("layersAt — captions", () => {
     expect(layersAt(pAvatar, 15, DIMS).some((l) => l.id === "logo")).toBe(false);
   });
 
-  it("puts the disclosure and film finish last, in that order", () => {
+  it("puts disclosure last — film finish is a post pass, not a layer", () => {
     const p = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], { disclosure: "AI generated" });
     const ids = layersAt(p, 15, DIMS).map((l) => l.id);
-    expect(ids.slice(-2)).toEqual(["disclosure", "film"]);
+    expect(ids.at(-1)).toBe("disclosure");
+    expect(ids).not.toContain("film");
   });
 
-  it("omits the film finish when theme.film is 0", () => {
+  it("never emits a film layer — vignette/grain run in the post stage", () => {
     const p = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], { theme: { ...theme, film: 0 } });
     expect(layersAt(p, 15, DIMS).some((l) => l.id === "film")).toBe(false);
+    const withFilm = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], { theme: { ...theme, film: 1 } });
+    expect(layersAt(withFilm, 15, DIMS).some((l) => l.id === "film")).toBe(false);
   });
 
   it("emits standalone text overlays keyed per beat and index", () => {

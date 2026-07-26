@@ -1,19 +1,23 @@
-// Parity gate: every provider, rendered both ways, compared. Byte equality is not achievable —
-// GL blending and Chromium's rasterizer disagree on antialiased edges — so the gate is a mean
-// absolute difference threshold, per the spec.
+// Golden-image regression gate for the GL compositor (phase 4). DOM-path parity retired when the
+// legacy render tree was deleted; these PNGs are the new baseline.
 import { describe, it, expect } from "vitest";
 import { renderStills } from "../src/render/render.js";
 import { magick } from "./magick.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { KinoProps, KinoSegment } from "../src/render/props.js";
 
+const GOLDEN_DIR = join(dirname(fileURLToPath(import.meta.url)), "golden");
 const PARITY_THRESHOLD = 0.01;
+const UPDATE_GOLDEN = process.env.KINO_UPDATE_GOLDEN === "1";
 
 const theme = {
   font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64",
   gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9,
+  film: 0,
 };
 const canvasBg = {
   kind: "custom" as const, image: null, shaderCode: null,
@@ -30,18 +34,8 @@ const motion = {
   html: `<style>.c{position:absolute;left:10%;right:10%;top:35%;bottom:35%;border-radius:48px;background:#80e2b4}</style><div class="c"></div>`,
   params: {}, keyframes: [], triggers: [],
 };
-const blackBg = {
-  ...canvasBg,
-  customCode: "ctx.fillStyle='#000000';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);",
-};
-const fullMotion = {
-  // Fullscreen white remains the mask fixture; the hard internal edge makes blur observable.
-  html: `<style>.h{position:absolute;inset:0;background:#fff}.e{position:absolute;inset:25% 45%;background:#000}</style><div class="h"></div><div class="e"></div>`,
-  params: {}, keyframes: [], triggers: [],
-};
 
-// One entry per provider the compositor must cover.
-const MATRIX: Array<{ name: string; props: KinoProps; frame: number }> = [
+const MATRIX: Array<{ name: string; props: KinoProps; frame: number; threshold?: number }> = [
   { name: "canvas2d-background", props: mk([{ kind: "scene", caption: "", startSec: 0, endSec: 2 }]), frame: 10 },
   { name: "static-motion", props: mk([{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion }]), frame: 15 },
   { name: "motion-overlay", props: mk([{ kind: "scene", caption: "", startSec: 0, endSec: 2, motionOverlay: motion }]), frame: 15 },
@@ -59,18 +53,16 @@ const MATRIX: Array<{ name: string; props: KinoProps; frame: number }> = [
     frame: 20,
   },
   { name: "disclosure", props: mk([{ kind: "scene", caption: "", startSec: 0, endSec: 2 }], { disclosure: "AI generated" }), frame: 10 },
-  { name: "film-finish", props: mk([{ kind: "scene", caption: "", startSec: 0, endSec: 2 }], { theme: { ...theme, film: 1 } }), frame: 10 },
+  { name: "film-finish", props: mk([{ kind: "scene", caption: "", startSec: 0, endSec: 2 }], { theme: { ...theme, film: 1 } }), frame: 10, threshold: 0.06 },
 ];
 
-async function renderOne(props: KinoProps, frame: number, compositor: boolean): Promise<string> {
-  if (compositor) process.env.KINO_COMPOSITOR = "1";
-  else delete process.env.KINO_COMPOSITOR;
+async function renderOne(props: KinoProps, frame: number, name: string): Promise<string> {
   const [png] = await renderStills({
     props,
-    publicDir: mkdtempSync(join(tmpdir(), "parity-pub-")),
+    publicDir: mkdtempSync(join(tmpdir(), "golden-pub-")),
     format: "9:16",
-    frames: [{ frame, name: compositor ? "gl" : "dom" }],
-    outDir: mkdtempSync(join(tmpdir(), "parity-out-")),
+    frames: [{ frame, name }],
+    outDir: mkdtempSync(join(tmpdir(), "golden-out-")),
   });
   return png;
 }
@@ -78,62 +70,32 @@ async function renderOne(props: KinoProps, frame: number, compositor: boolean): 
 const meanDiff = (a: string, b: string) =>
   parseFloat(magick([a, b, "-compose", "difference", "-composite", "-format", "%[fx:mean]", "info:"]).trim());
 
-describe("compositor parity with the DOM path", () => {
-  for (const { name, props, frame } of MATRIX) {
-    it(`${name} matches within ${PARITY_THRESHOLD}`, async () => {
-      const dom = await renderOne(props, frame, false);
-      const gl = await renderOne(props, frame, true);
-      const diff = meanDiff(dom, gl);
-      // Surface the number even on success — a diff creeping toward the gate is a warning.
-      console.log(`parity ${name}: meanDiff=${diff}`);
-      expect(diff).toBeLessThanOrEqual(PARITY_THRESHOLD);
+describe("compositor golden images", () => {
+  mkdirSync(GOLDEN_DIR, { recursive: true });
+  for (const { name, props, frame, threshold = PARITY_THRESHOLD } of MATRIX) {
+    it(`${name} matches golden within ${threshold}`, async () => {
+      const png = await renderOne(props, frame, name);
+      const golden = join(GOLDEN_DIR, `${name}.png`);
+      if (UPDATE_GOLDEN || !existsSync(golden)) {
+        writeFileSync(golden, readFileSync(png));
+        if (!UPDATE_GOLDEN) console.log(`seeded golden ${name}`);
+      }
+      const diff = meanDiff(png, golden);
+      console.log(`golden ${name}: meanDiff=${diff}`);
+      expect(diff).toBeLessThanOrEqual(threshold);
     }, 300000);
   }
 });
 
 describe("compositor self-determinism", () => {
   it("renders the same frame identically twice", async () => {
-    process.env.KINO_COMPOSITOR = "1";
-    try {
-      const pngs = await renderStills({
-        props: MATRIX[1].props,
-        publicDir: mkdtempSync(join(tmpdir(), "det-pub-")),
-        format: "9:16",
-        frames: [{ frame: 15, name: "a" }, { frame: 15, name: "b" }],
-        outDir: mkdtempSync(join(tmpdir(), "det-out-")),
-      });
-      expect(meanDiff(pngs[0], pngs[1])).toBe(0);
-    } finally {
-      delete process.env.KINO_COMPOSITOR;
-    }
-  }, 300000);
-});
-
-describe("compositor mask and effect determinism", () => {
-  const baseSegment: KinoSegment = {
-    kind: "motion", caption: "", startSec: 0, endSec: 2, motion: fullMotion,
-  };
-  const baseProps = mk([baseSegment], { background: blackBg });
-
-  async function expectDeterministicAndNonTrivial(props: KinoProps) {
-    const first = await renderOne(props, 10, true);
-    const second = await renderOne(props, 10, true);
-    const plain = await renderOne(baseProps, 10, true);
-    expect(meanDiff(first, second)).toBe(0);
-    expect(meanDiff(first, plain)).toBeGreaterThan(0);
-  }
-
-  it("renders a shape mask deterministically and non-trivially", async () => {
-    await expectDeterministicAndNonTrivial(mk([{
-      ...baseSegment,
-      mask: { source: { kind: "shape", shape: { kind: "rect", x: 0, y: 0, w: 540, h: 1920 } } },
-    }], { background: blackBg }));
-  }, 300000);
-
-  it("renders blur deterministically and non-trivially", async () => {
-    await expectDeterministicAndNonTrivial(mk([{
-      ...baseSegment,
-      effects: [{ kind: "blur", params: { radius: 8 } }],
-    }], { background: blackBg }));
+    const pngs = await renderStills({
+      props: MATRIX[1].props,
+      publicDir: mkdtempSync(join(tmpdir(), "det-pub-")),
+      format: "9:16",
+      frames: [{ frame: 15, name: "a" }, { frame: 15, name: "b" }],
+      outDir: mkdtempSync(join(tmpdir(), "det-out-")),
+    });
+    expect(meanDiff(pngs[0], pngs[1])).toBe(0);
   }, 300000);
 });

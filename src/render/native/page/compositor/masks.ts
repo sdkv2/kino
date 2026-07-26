@@ -50,6 +50,7 @@ uniform int uChannel;        // 0..3 = rgba, 4 = luma
 uniform float uFeather;
 uniform float uExpand;
 uniform float uInvert;
+uniform float uCoordScale;
 // shape params
 uniform int uShapeKind;
 uniform vec2 uShapeCenter;
@@ -84,9 +85,9 @@ void main() {
     coverage = uFeather > 0.0 ? 1.0 - smoothstep(-uFeather * 0.5, uFeather * 0.5, d)
                               : 1.0 - step(0.0, d);
   } else {
-    // No field — fall back to raw coverage. Feather degrades to a coverage ramp, which is
-    // softer than a true px band but never wrong-looking.
-    float c = channelOf(texture(uMask, uv));
+    // Layer masks are rasterized at composition resolution; sample in comp space when SS>1.
+    vec2 maskUv = (uSourceKind == 1 && uCoordScale > 1.0) ? gl_FragCoord.xy / (uRes / uCoordScale) : uv;
+    float c = channelOf(texture(uMask, maskUv));
     coverage = uFeather > 0.0 ? smoothstep(0.5 - uFeather / 255.0, 0.5 + uFeather / 255.0, c) : step(0.5, c);
   }
 
@@ -127,7 +128,7 @@ function ensureProgram(gl: WebGL2RenderingContext) {
     throw new Error(`mask program failed to link: ${gl.getProgramInfoLog(prog)}`);
   }
   const names = ["uSrc", "uMask", "uMaskSdf", "uMaskSdfMax", "uRes", "uSourceKind", "uChannel",
-    "uFeather", "uExpand", "uInvert", "uShapeKind", "uShapeCenter", "uShapeHalf", "uShapeRadius", "uShapeRot"];
+    "uFeather", "uExpand", "uInvert", "uCoordScale", "uShapeKind", "uShapeCenter", "uShapeHalf", "uShapeRadius", "uShapeRot"];
   const loc: Record<string, WebGLUniformLocation | null> = {};
   for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
   program = { gl, prog, loc };
@@ -143,6 +144,7 @@ export function applyMask(
   src: RenderTarget,
   mask: ResolvedMask,
   binding: MaskBinding,
+  coordScale = 1,
 ): RenderTarget {
   const { prog, loc } = ensureProgram(gl);
   const out = pool.acquire(gl, src.w, src.h);
@@ -153,9 +155,10 @@ export function applyMask(
   gl.disable(gl.BLEND);
   gl.useProgram(prog);
   gl.uniform2f(loc.uRes, out.w, out.h);
-  gl.uniform1f(loc.uFeather, mask.feather);
-  gl.uniform1f(loc.uExpand, mask.expand);
+  gl.uniform1f(loc.uFeather, mask.feather * coordScale);
+  gl.uniform1f(loc.uExpand, mask.expand * coordScale);
   gl.uniform1f(loc.uInvert, mask.invert ? 1 : 0);
+  gl.uniform1f(loc.uCoordScale, coordScale);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, src.tex);
@@ -163,11 +166,12 @@ export function applyMask(
 
   if (mask.source.kind === "shape") {
     const s: ShapeMask = mask.source.shape;
+    const k = coordScale;
     gl.uniform1i(loc.uSourceKind, 0);
     gl.uniform1i(loc.uShapeKind, SHAPE_KIND[s.kind] ?? 0);
-    gl.uniform2f(loc.uShapeCenter, s.x + s.w / 2, s.y + s.h / 2);
-    gl.uniform2f(loc.uShapeHalf, s.w / 2, s.h / 2);
-    gl.uniform1f(loc.uShapeRadius, s.radius ?? 0);
+    gl.uniform2f(loc.uShapeCenter, (s.x + s.w / 2) * k, (s.y + s.h / 2) * k);
+    gl.uniform2f(loc.uShapeHalf, (s.w / 2) * k, (s.h / 2) * k);
+    gl.uniform1f(loc.uShapeRadius, (s.radius ?? 0) * k);
     gl.uniform1f(loc.uShapeRot, s.rotate ?? 0);
     gl.uniform1f(loc.uMaskSdfMax, 0);
   } else {
