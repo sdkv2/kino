@@ -203,9 +203,8 @@ This includes targets outside their active beat window.
 
 ## Post FX
 
-`postFx` applies a fixed full-frame chain **after** every beat is composited. It is compositor-only
-(`KINO_COMPOSITOR=1`); the DOM path ignores it. Stages always run in this order — it is not
-authorable:
+`postFx` applies a fixed full-frame chain **after** every beat is composited.
+Stages always run in this order — it is not authorable:
 
 `grade` → `bloom` → `lens` → `film`
 
@@ -237,7 +236,7 @@ Three things authors trip on:
 
 1. **Order is fixed** — you cannot put grain before bloom or lens; the chain is baked in.
 2. **`film` defaults from `theme.film`** — omit `postFx.film` and the post stage still applies
-   vignette/grain at the same intensity as the CSS finish on the DOM path.
+   vignette/grain at the same intensity as the legacy CSS film finish.
 3. **Whole-video, not per beat** — one `postFx` object grades the entire output. Per-beat grading
    still belongs on segment `effects`.
 

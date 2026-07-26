@@ -20,12 +20,12 @@ Run `kino motion` for the same contract inline.
 
 ## Why it's shaped this way
 
-kino renders by seeking to frame *N* and screenshotting. There is no real timeline running — so anything that animates on the **wall clock** (raw CSS `transition`, unscrubbed `@keyframes`, `requestAnimationFrame`, `Date.now()`) renders to a frozen or non-deterministic frame. kino's contract makes motion a pure function of frame state:
+kino renders by seeking to frame *N* and capturing the composited stage. There is no real timeline running — so anything that animates on the **wall clock** (raw CSS `transition`, unscrubbed `@keyframes`, `requestAnimationFrame`, `Date.now()`) renders to a frozen or non-deterministic frame. kino's contract makes motion a pure function of frame state:
 
 - **JSON owns the clock** — `params`, `keyframes`, and `triggers` in the spec.
 - **HTML is a stateless canvas** — one markup file + one inline `<style>`, reading the variables kino sets every frame.
 
-At build time the file is **lint-checked** (determinism + safety) and **sanitized** (DOMPurify), then mounted in a **Shadow DOM** so its styles never leak into the composition.
+At build time the file is **lint-checked** (determinism + safety) and **sanitized** (DOMPurify), then **rasterized into a compositor layer** (SVG `foreignObject` for most markup; `kino-glass` runs an extra mirror pass) so its styles never leak into the composition.
 
 ## The CSS-variable contract
 
@@ -111,12 +111,12 @@ Overlays paint at full opacity from frame 0. If the host `app`/`frame` fades in 
 typed text can float over the blurred ground. Use `"transition": "cut"` on that beat, or fade the overlay
 with the same envelope.
 
-### Beat handoffs (compositor)
+### Beat handoffs
 
-When the GL compositor is enabled, consecutive motion beats hand off with **shader transitions**
-during the overlap window (`MOTION_XFADE_FRAMES`), not a CSS opacity crossfade. The `transition`
+Consecutive motion beats hand off with **shader transitions** during the overlap
+window (`MOTION_XFADE_FRAMES`), not a CSS opacity crossfade. The `transition`
 field on each beat still selects from the same vocabulary (`fade`, `dissolve`, `fly-left`,
-`fly-up`, `pop`, `cut`); only the renderer changes. Auto-vary (`pickTransition`) is unchanged.
+`fly-up`, `pop`, `cut`); only the renderer changed. Auto-vary (`pickTransition`) is unchanged.
 
 ## Driving it from the spec
 

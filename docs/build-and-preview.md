@@ -59,7 +59,7 @@ So the second build after a small edit is fast and cheap — only the changed be
 
 ## Render speed (shader / glass)
 
-Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Env levers:
+Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Every frame is composited on a single WebGL stage (layers are textures; motion HTML is rasterized per frame). Env levers:
 
 The GL backend is **auto-detected per machine**: hardware ANGLE (Metal) on macOS, software
 SwiftShader everywhere else. The detection is a platform rule rather than a runtime probe on

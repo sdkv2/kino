@@ -95,9 +95,11 @@ Details: [`skills/README.md`](skills/README.md).
 
 ## How kino drives motion graphics
 
-There is no running timeline. kino seeks headless Chrome to frame *N*, sets CSS custom properties
-on the graphic, and screenshots — every frame. The spec owns the clock; the graphic is a stateless
-canvas that reads the variables and paints that one frame, so the same spec renders the same pixels.
+There is no running timeline. kino seeks to frame *N*, resolves `params` /
+`keyframes` / `triggers` on a **beat-relative clock**, rasterizes the markup
+into a WebGL compositor layer, and captures the finished frame from the stage
+canvas. The spec owns the clock; the graphic is a stateless canvas that reads
+the variables and paints that one frame, so the same spec renders the same pixels.
 
 ```json
 { "kind": "motion", "source": "motion/stat.html", "text": "Eighty-six percent match.",
