@@ -11,7 +11,10 @@ import type { MediaMap } from "../media.js";
 import { layersAt } from "../../../layers.js";
 import { StageRenderer } from "./renderer.js";
 import { buildRegistry, type Dims } from "./registry.js";
-import type { TextureSource } from "./graph.js";
+import type { LayerDraw, TextureSource } from "./graph.js";
+import { nextFrameKeys } from "./prefetch.js";
+
+export { nextFrameKeys } from "./prefetch.js";
 
 export interface StageHandle {
   seek(frame: number): Promise<void>;
@@ -23,20 +26,36 @@ export function createStage(
   props: KinoProps,
   dims: Dims,
   media: MediaMap,
-  scale: number,
+  ss: number,
 ): StageHandle {
-  const renderer = new StageRenderer(canvas, { width: dims.width, height: dims.height, ss: scale });
-  const sources: Map<string, TextureSource> = buildRegistry(props, dims, media, scale);
+  const renderer = new StageRenderer(canvas, { width: dims.width, height: dims.height, ss });
+  const renderDims = { width: dims.width * ss, height: dims.height * ss };
+  const rasterScale = ss > 1 ? 1 : ss;
+  const sources: Map<string, TextureSource> = buildRegistry(props, renderDims, media, rasterScale);
+  let prefetch: Promise<void> = Promise.resolve();
+
+  const prepareKeys = (keys: Array<{ providerId: string; key?: string }>, frame: number) =>
+    Promise.all(
+      keys.map((k) => {
+        const src = sources.get(k.providerId);
+        return src?.prepare(frame, k.key) ?? Promise.resolve();
+      }),
+    ).then(() => {});
 
   return {
     async seek(frame: number): Promise<void> {
+      await prefetch;
       const layers = layersAt(props, frame, dims);
-      // Phase A — every source that this frame needs, prepared concurrently.
+      await sources.get("backdrop")?.prepare(frame);
+      await sources.get("scrim")?.prepare(frame);
       await Promise.all(
-        layers.map((l) => sources.get(l.source.providerId)?.prepare(frame, l.source.key) ?? Promise.resolve()),
+        layers
+          .filter((l) => l.source.providerId !== "backdrop" && l.source.providerId !== "scrim")
+          .map((l) => sources.get(l.source.providerId)?.prepare(frame, l.source.key) ?? Promise.resolve()),
       );
-      // Phase B — synchronous.
       renderer.draw(layers, sources, frame, { theme: props.theme, postFx: props.postFx, props });
+      const next = layersAt(props, frame + 1, dims);
+      prefetch = prepareKeys(nextFrameKeys(layers, next), frame + 1);
     },
     dispose(): void {
       for (const s of sources.values()) s.dispose?.();
@@ -72,8 +91,6 @@ export const Stage: React.FC<{
         height={dims.height}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
       />
-      {/* Staging DOM: laid out for real (so CSS, vw units and fonts resolve) but never
-          composited into the frame. */}
       <div
         ref={stagingRef}
         id="kino-staging"
