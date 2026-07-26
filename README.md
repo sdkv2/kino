@@ -5,7 +5,7 @@
 <p align="center"><em>the video engine · spec driven video development · /ˈkiːnoʊ/</em></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Source--Available-blue.svg" alt="License: Source-Available"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg" alt="Node ≥22">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/spec%20%E2%86%92%20MP4-black.svg" alt="spec → MP4">
@@ -144,7 +144,7 @@ Full guidelines: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © sdkv2 — the code.
+[Source-Available](LICENSE) © sdkv2 — free for individuals, non-profits, and teams ≤ 3. A company licence is required for for-profit teams of 4+ ([details](LICENSE)). The spec format schema remains open under the MIT licence.
 
-"kino", the wordmark, and the logo are trademarks of sdkv2 and are not covered by the MIT licence.
+"kino", the wordmark, and the logo are trademarks of sdkv2 and are not covered by the software licence.
 Fork freely; give your fork its own name. Questions: open an issue.
