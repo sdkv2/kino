@@ -10,7 +10,7 @@ import { TargetPool, type RenderTarget } from "./targets.js";
 import { applyMask, type MaskBinding } from "./masks.js";
 import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
 import { getPass, runChain, type EffectPass } from "./effects/index.js";
-import { resolvePostChain, runPost } from "./post.js";
+import { resolveFilmPass, resolveTailPostChain, runPost } from "./post.js";
 import type { PostFx } from "../../../postSpec.js";
 import type { Theme } from "../../../props.js";
 import { registerBackdropTexture, clearBackdropTexture } from "../liquidGlass.js";
@@ -93,6 +93,19 @@ function modelMatrix(layer: LayerDraw): Float32Array {
   const tx = cx - (a + c) / 2;
   const ty = cy - (b + d) / 2;
   return new Float32Array([a, b, 0, c, d, 0, tx, ty, 1]);
+}
+
+/** Motion, overlays, type, and logo sit above the cinematic finish — same stack as KinoVideo. */
+function isAboveFilmLayer(layer: LayerDraw): boolean {
+  const id = layer.id;
+  return (
+    id.startsWith("motion") ||
+    id.startsWith("overlay") ||
+    id.startsWith("text") ||
+    id.startsWith("caption") ||
+    id === "disclosure" ||
+    id === "logo"
+  );
 }
 
 export class StageRenderer {
@@ -178,25 +191,51 @@ export class StageRenderer {
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
 
-    // Layers referenced as masks are rendered first, into their own targets.
     const maskTargets = new Map<string, RenderTarget>();
-    for (const layer of layers) {
-      const ref = (layer.mask as any)?.source;
-      if (ref?.kind !== "layer" || maskTargets.has(ref.layerId)) continue;
-      const maskLayer = layers.find((l) => l.id === ref.layerId);
-      const maskSource = maskLayer && sources.get(maskLayer.source.providerId);
-      if (!maskLayer || !maskSource) continue;
-      const t = this.drawToTarget(this.scaled(maskLayer), maskSource, frame);
-      if (t) maskTargets.set(ref.layerId, t);
-    }
-
-    const accum = this.pool.acquire(gl, this.width, this.height);
+    let accum = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, accum);
 
     const transition = transitionProgress({ groups: groupSpans(opts.props), frame });
     const skipGroups = transition ? new Set([transition.from, transition.to]) : null;
 
-    for (const run of groupRuns(layers)) {
+    // Layer masks are built just before the layers that consume them — after photographic
+    // compositing, so pool reuse cannot scribble over a held mask source (SS=2 pressure).
+    const ensureLayerMaskTarget = (layerId: string): void => {
+      if (maskTargets.has(layerId)) return;
+      const maskLayer = layers.find((l) => l.id === layerId);
+      const maskSource = maskLayer && sources.get(maskLayer.source.providerId);
+      if (!maskLayer || !maskSource) return;
+      const t = this.drawMaskSource(maskLayer, maskSource, frame);
+      if (t) {
+        maskTargets.set(layerId, t);
+        this.pool.hold(t);
+      }
+    };
+
+    const belowFilm = layers.filter((l) => !isAboveFilmLayer(l));
+    const aboveFilm = layers.filter((l) => isAboveFilmLayer(l));
+
+    for (const run of groupRuns(belowFilm)) {
+      const gid = run[0].group ?? BASE_GROUP;
+      if (skipGroups?.has(gid)) continue;
+      this.compositeRun(accum, run, sources, frame, maskTargets);
+    }
+
+    const filmChain = resolveFilmPass(opts.postFx, opts.theme);
+    if (filmChain.length) {
+      const filmed = runPost(gl, this.pool, accum, filmChain, frame);
+      if (filmed !== accum) {
+        this.pool.release(accum);
+        accum = filmed;
+      }
+    }
+
+    for (const layer of aboveFilm) {
+      const ref = (layer.mask as { source?: { kind?: string; layerId?: string } })?.source;
+      if (ref?.kind === "layer" && ref.layerId) ensureLayerMaskTarget(ref.layerId);
+    }
+
+    for (const run of groupRuns(aboveFilm)) {
       const gid = run[0].group ?? BASE_GROUP;
       if (skipGroups?.has(gid)) continue;
       this.compositeRun(accum, run, sources, frame, maskTargets);
@@ -217,10 +256,10 @@ export class StageRenderer {
         this.pool.release(mixed);
       }
     }
-    for (const t of maskTargets.values()) this.pool.release(t);
+    for (const t of maskTargets.values()) this.pool.unhold(t);
 
     let composite = accum;
-    const posted = runPost(gl, this.pool, accum, resolvePostChain(opts.postFx, opts.theme), frame);
+    const posted = runPost(gl, this.pool, accum, resolveTailPostChain(opts.postFx, opts.theme), frame);
     if (posted !== accum) {
       this.pool.release(accum);
       composite = posted;
@@ -274,7 +313,8 @@ export class StageRenderer {
     maskTargets: Map<string, RenderTarget>,
   ): void {
     const isBeatGroup = (run[0].group ?? BASE_GROUP) !== BASE_GROUP;
-    const needsGroupTarget = isBeatGroup && run.length > 1;
+    const layerMask = (l: LayerDraw) => (l.mask as { source?: { kind?: string } } | undefined)?.source?.kind === "layer";
+    const needsGroupTarget = isBeatGroup && run.length > 1 && !run.some(layerMask);
     if (!needsGroupTarget) {
       for (const layer of run) this.compositeLayer(accum, layer, sources, frame, maskTargets);
       return;
@@ -347,11 +387,19 @@ export class StageRenderer {
         let binding: MaskBinding = { mask: null, sdf: null, sdfMax: 0 };
         if (resolved.source.kind === "layer") {
           const mt = maskTargets.get(resolved.source.layerId);
-          binding = { mask: mt ? mt.tex : null, sdf: null, sdfMax: 0 };
+          if (!mt?.tex) {
+            current = rendered;
+          } else {
+            binding = { mask: mt.tex, sdf: null, sdfMax: 0 };
+            const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.ss);
+            this.pool.release(rendered);
+            current = masked;
+          }
+        } else {
+          const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.ss);
+          this.pool.release(rendered);
+          current = masked;
         }
-        const masked = applyMask(gl, this.pool, rendered, resolved, binding);
-        this.pool.release(rendered);
-        current = masked;
       }
 
       const finalTarget = chain.length ? runChain(gl, this.pool, current, chain, frame) : current;
@@ -388,6 +436,31 @@ export class StageRenderer {
     gl.uniformMatrix3fv(this.uModel, false, modelMatrix(this.scaled(layer)));
     gl.uniform1f(this.uOpacity, layer.opacity);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  /** Layer-mask sources render at composition resolution (mask UV is comp-space when SS>1). */
+  private drawMaskSource(layer: LayerDraw, source: TextureSource, frame: number): RenderTarget | null {
+    const gl = this.gl;
+    const tex = source.texture(gl, frame, layer.source.key);
+    if (!tex) return null;
+    const w = this.ss > 1 ? this.outW : this.width;
+    const h = this.ss > 1 ? this.outH : this.height;
+    const target = this.pool.acquire(gl, w, h);
+    this.pool.clear(gl, target);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(this.prog);
+    gl.uniform1f(this.uFlipY, 0);
+    gl.uniform2f(this.uRes, w, h);
+    gl.uniform1i(this.uTex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniformMatrix3fv(this.uModel, false, modelMatrix(layer));
+    gl.uniform1f(this.uOpacity, 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    return target;
   }
 
   /** Draw a single layer into an offscreen target, unblended, at frame scale. The caller

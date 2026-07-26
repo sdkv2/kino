@@ -16,6 +16,8 @@ const key = (w: number, h: number) => `${w}x${h}`;
 export class TargetPool {
   private free = new Map<string, RenderTarget[]>();
   private all: RenderTarget[] = [];
+  /** Pinned targets stay out of the free list until unhold — mask sources must survive the frame. */
+  private held = new Set<RenderTarget>();
 
   acquire(gl: WebGL2RenderingContext, w: number, h: number): RenderTarget {
     const bucket = this.free.get(key(w, h));
@@ -44,11 +46,21 @@ export class TargetPool {
     return target;
   }
 
+  hold(target: RenderTarget): void {
+    this.held.add(target);
+  }
+
   release(target: RenderTarget): void {
+    if (this.held.has(target)) return;
     const k = key(target.w, target.h);
     const bucket = this.free.get(k) ?? [];
     bucket.push(target);
     this.free.set(k, bucket);
+  }
+
+  unhold(target: RenderTarget): void {
+    if (!this.held.delete(target)) return;
+    this.release(target);
   }
 
   /** Clear a target to fully transparent. Callers rely on this: a reused target still holds

@@ -19,6 +19,13 @@ const AVATAR_PUSH_IN = 1.08;
 /** Chained-cutaway hold: a held clip extends this many frames into its successor. */
 const CHAIN_HOLD_FRAMES = 12;
 
+/** Layer-as-mask clips overlays; the source motion layer stays unmasked (KinoVideo parity). */
+function motionMask(mask: unknown): LayerSpec["mask"] {
+  const m = mask as { source?: { kind?: string } } | undefined;
+  if (!m || m.source?.kind === "layer") return undefined;
+  return m as LayerSpec["mask"];
+}
+
 export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw[] {
   const { width, height } = dims;
   const full = { x: 0, y: 0, w: width, h: height };
@@ -103,7 +110,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       source: { providerId: `motion${i}`, key: String(local) },
       rect: full,
       opacity,
-      mask: (s as any).mask,
+      mask: motionMask((s as any).mask),
       effects: s.effects,
       group: beat,
     });

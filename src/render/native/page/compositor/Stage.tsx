@@ -31,7 +31,7 @@ export function createStage(
   const renderer = new StageRenderer(canvas, { width: dims.width, height: dims.height, ss });
   const renderDims = { width: dims.width * ss, height: dims.height * ss };
   const rasterScale = ss > 1 ? 1 : ss;
-  const sources: Map<string, TextureSource> = buildRegistry(props, renderDims, media, rasterScale);
+  const sources: Map<string, TextureSource> = buildRegistry(props, renderDims, dims, media, rasterScale);
   let prefetch: Promise<void> = Promise.resolve();
 
   const prepareKeys = (keys: Array<{ providerId: string; key?: string }>, frame: number) =>

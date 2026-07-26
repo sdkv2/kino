@@ -38,10 +38,12 @@ import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../../../ca
 
 export function buildRegistry(
   props: KinoProps,
-  dims: Dims,
+  renderDims: Dims,
+  compDims: Dims,
   media: MediaMap,
   scale: number,
 ): Map<string, TextureSource> {
+  const dims = renderDims;
   const sources = new Map<string, TextureSource>();
   const f = (sec: number) => Math.round(sec * props.fps);
 
@@ -125,8 +127,8 @@ export function buildRegistry(
           createRegionCompositorSource({
             region: s.regionShader,
             theme: props.theme,
-            width: dims.width,
-            height: dims.height,
+            width: compDims.width,
+            height: compDims.height,
             fps: props.fps,
             beatFrom: f(s.startSec),
             beatDur: f(s.endSec) - f(s.startSec),
@@ -200,6 +202,7 @@ export function buildRegistry(
           data,
           width: dims.width,
           height: dims.height,
+          fps: props.fps,
           beatFrom,
           beatDur,
         });

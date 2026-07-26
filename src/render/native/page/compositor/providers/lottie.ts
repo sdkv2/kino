@@ -6,10 +6,13 @@ import { lottieMeta } from "../../lottie.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
 
+type CanvasRenderer = { canvasContext?: { canvas: HTMLCanvasElement } };
+
 export function createLottieSource(opts: {
   data: MotionGraphicProps;
   width: number;
   height: number;
+  fps: number;
   beatFrom: number;
   beatDur: number;
 }): TextureSource {
@@ -19,36 +22,75 @@ export function createLottieSource(opts: {
 
   let anim: AnimationItem | null = null;
   let tex: WebGLTexture | null = null;
-  let canvas: HTMLCanvasElement | null = null;
   const meta = lottieMeta(opts.data.lottie as LottieData);
   const loop = opts.data.loop ?? false;
   const rate = lottiePlaybackRate(meta.durationInFrames, opts.beatDur, loop);
+  const burstFrames = Math.max(1, Math.round(meta.durationInSeconds * opts.fps));
+  const burstRate = lottiePlaybackRate(meta.durationInFrames, burstFrames, false);
 
-  const ensureAnim = () => {
-    if (anim) return;
-    anim = lottie.loadAnimation({
-      container,
-      renderer: "canvas",
-      loop: false,
-      autoplay: false,
-      animationData: opts.data.lottie,
-      rendererSettings: { preserveAspectRatio: "xMidYMid meet", clearCanvas: true },
+  const loadAnim = (): Promise<AnimationItem> =>
+    new Promise((resolve) => {
+      if (anim) {
+        resolve(anim);
+        return;
+      }
+      const a = lottie.loadAnimation({
+        container,
+        renderer: "canvas",
+        loop: false,
+        autoplay: false,
+        animationData: opts.data.lottie,
+        rendererSettings: { preserveAspectRatio: "xMidYMid meet", clearCanvas: true },
+      });
+      if (a.isLoaded) {
+        anim = a;
+        resolve(a);
+      } else {
+        a.addEventListener("DOMLoaded", () => {
+          anim = a;
+          resolve(a);
+        });
+      }
     });
-    canvas = container.querySelector("canvas");
-  };
+
+  const canvas = (): HTMLCanvasElement | null =>
+    (anim?.renderer as CanvasRenderer | undefined)?.canvasContext?.canvas ?? null;
 
   return {
     async prepare(frame: number): Promise<void> {
-      ensureAnim();
-      if (!anim || !canvas) return;
+      const a = await loadAnim();
       const local = frame - opts.beatFrom;
+
+      const triggers = opts.data.triggers?.filter((t) => t.action === "play") ?? [];
+      if (triggers.length > 0) {
+        let active = false;
+        let burstLocal = 0;
+        for (const tr of triggers) {
+          const from = Math.round(tr.at * opts.fps);
+          if (local >= from && local < from + burstFrames) {
+            active = true;
+            burstLocal = local - from;
+            break;
+          }
+        }
+        const c = canvas();
+        if (!active) {
+          if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+          return;
+        }
+        const idx = Math.min(burstLocal * burstRate, Math.max(0, meta.durationInFrames - 0.001));
+        a.goToAndStop(idx, true);
+        return;
+      }
+
       const raw = local * rate;
       const idx = loop ? raw % meta.durationInFrames : Math.min(raw, Math.max(0, meta.durationInFrames - 0.001));
-      anim.goToAndStop(idx, true);
+      a.goToAndStop(idx, true);
     },
     texture(gl: WebGL2RenderingContext): WebGLTexture | null {
-      if (!canvas) return null;
-      tex = uploadCanvasOrImage(gl, tex, canvas);
+      const c = canvas();
+      if (!c) return null;
+      tex = uploadCanvasOrImage(gl, tex, c);
       return tex;
     },
     size(): { w: number; h: number } {

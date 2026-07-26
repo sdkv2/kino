@@ -26,6 +26,20 @@ function copyTarget(gl: WebGL2RenderingContext, pool: TargetPool, src: RenderTar
  * Which passes run, in which order, with which params. A stage that is absent does not run —
  * except `film`, which falls back to theme.film so existing specs keep their finish.
  */
+/** Cinematic finish only — applied mid-stack (below motion/caption), matching KinoVideo's FilmFinish. */
+export function resolveFilmPass(post: PostFx | undefined, theme: Theme): ResolvedPass[] {
+  const params = post?.film as Record<string, number> | undefined;
+  const intensity = params?.intensity ?? theme.film ?? 1;
+  if (intensity <= 0) return [];
+  const pass = getPass("film");
+  return pass ? [{ pass, params: { intensity, night: theme.night } }] : [];
+}
+
+/** Grade / bloom / lens — run over the finished composite (film excluded; see resolveFilmPass). */
+export function resolveTailPostChain(post: PostFx | undefined, theme: Theme): ResolvedPass[] {
+  return resolvePostChain(post, theme).filter((p) => p.pass.name !== "film");
+}
+
 export function resolvePostChain(post: PostFx | undefined, theme: Theme): ResolvedPass[] {
   const out: ResolvedPass[] = [];
   for (const stage of postChainOrder) {

@@ -24,8 +24,13 @@ async function rasterMotion(
   height: number,
   scale: number,
 ): Promise<HTMLCanvasElement | null> {
-  const tpl = await buildTemplate(html, theme, { size: { w: width, h: height }, scale, defs: KINO_DEFS });
   const css = motionScrubCss(TEX_ROOT) + varsCss(vars);
+  const tpl = await buildTemplate(html, theme, {
+    size: { w: width, h: height },
+    scale,
+    defs: /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html) ? KINO_DEFS : undefined,
+    hostVars: vars,
+  });
   const base = await rasterAt(tpl, "x", css, null);
   if (!base || !GLASS_RE.test(html)) return base;
 
@@ -157,13 +162,15 @@ export function createMotionSource(opts: {
       cache.set(cacheKey, canvas);
       if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
     },
-    texture(gl: WebGL2RenderingContext): WebGLTexture | null {
-      if (!current) return null;
-      const canvas = cache.get(current);
+    texture(gl: WebGL2RenderingContext, frame?: number, key?: string): WebGLTexture | null {
+      const local = frame !== undefined ? frame - opts.beatFrom : undefined;
+      const cacheKey = key ?? current ?? (local !== undefined ? `f:${local}` : null);
+      if (!cacheKey) return null;
+      const canvas = cache.get(cacheKey);
       if (!canvas) return null;
-      if (uploaded !== current || !tex) {
+      if (uploaded !== cacheKey || !tex) {
         tex = uploadCanvasOrImage(gl, tex, canvas);
-        uploaded = current;
+        uploaded = cacheKey;
       }
       return tex;
     },
