@@ -16,6 +16,20 @@ import { frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer } from "./server.js";
 import { extractDense, extractSparse, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
+import { layersAt } from "../layers.js";
+import { measureLayers, type ElementMeasure } from "../measure.js";
+
+/** Compositor is the only render path. Kept for cache/tests that still pass the flag. */
+export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
+  return true;
+}
+
+function captureMode(env: NodeJS.ProcessEnv = process.env): "canvas" | "cdp" {
+  const v = env.KINO_CAPTURE;
+  if (v === "cdp") return "cdp";
+  if (v === "canvas") return "canvas";
+  return "canvas"; // M5: canvas-toDataURL ~5× faster than CDP screenshot
+}
 
 /** 1–4 supersample. Default 2. Mock/draft → 1 unless KINO_SHADER_SSAA overrides. */
 function resolveShaderSS(env: NodeJS.ProcessEnv = process.env, opts?: { mock?: boolean }): number {
@@ -152,7 +166,17 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
       )) as string | null;
       if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
     },
-    shot: async () => Buffer.from(await p.screenshot({ type: "jpeg", quality: 95 })),
+    shot: async () => {
+      if (captureMode() === "canvas") {
+        const data = (await p.evaluate(`(() => {
+          const el = document.getElementById("kino-stage");
+          if (!el || !(el instanceof HTMLCanvasElement)) return null;
+          return el.toDataURL("image/jpeg", 0.95);
+        })()`)) as string | null;
+        if (data) return Buffer.from(data.split(",")[1]!, "base64");
+      }
+      return Buffer.from(await p.screenshot({ type: "jpeg", quality: 95 }));
+    },
   };
 }
 
@@ -310,7 +334,6 @@ async function pointServerAt(opts: {
       media: opts.media,
       shaderSS: opts.shaderSS,
       shaderFXAA: opts.shaderFXAA,
-      compositor: process.env.KINO_COMPOSITOR === "1",
     }),
   });
 }
@@ -381,7 +404,6 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           mode,
           shaderSS: ss,
           shaderFXAA: fx,
-          compositor: process.env.KINO_COMPOSITOR === "1",
         });
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
@@ -410,47 +432,13 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   }
 }
 
-// Deterministic layout geometry for one element (a `[data-measure]`-tagged node), so alignment is
-// read as numbers instead of eyeballed off a screenshot. All px are frame px (viewport is set at
-// deviceScaleFactor 1, so CSS px == canvas px); dxPct/dyPct are the signed offset of the element
-// center from the frame center (0 = dead center).
-export interface ElementMeasure {
-  label: string;
-  x: number; y: number; w: number; h: number;
-  cx: number; cy: number;
-  cxPct: number; cyPct: number;
-  dxPct: number; dyPct: number;
-}
+// Deterministic layout geometry for one compositor layer. Re-exported for CLI measure sinks.
+export type { ElementMeasure } from "../measure.js";
+export { measureLayers } from "../measure.js";
 export interface FrameMeasure {
   name: string;
   width: number; height: number;
   elements: ElementMeasure[];
-}
-
-// Serialized into the render page and run after a seek: walk the light DOM + every shadow root and
-// report the geometry of each element carrying a `data-measure` attribute. Pure browser code (no
-// Node refs) so puppeteer can .toString() it across the boundary.
-function collectMeasurements(): { width: number; height: number; elements: ElementMeasure[] } {
-  const W = window.innerWidth, H = window.innerHeight;
-  const out: ElementMeasure[] = [];
-  const walk = (root: Document | ShadowRoot): void => {
-    root.querySelectorAll("[data-measure]").forEach((el) => {
-      const r = (el as HTMLElement).getBoundingClientRect();
-      const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
-      out.push({
-        label: el.getAttribute("data-measure") || el.tagName.toLowerCase(),
-        x: r.x, y: r.y, w: r.width, h: r.height, cx, cy,
-        cxPct: (cx / W) * 100, cyPct: (cy / H) * 100,
-        dxPct: (cx / W) * 100 - 50, dyPct: (cy / H) * 100 - 50,
-      });
-    });
-    root.querySelectorAll("*").forEach((el) => {
-      const sr = (el as HTMLElement).shadowRoot;
-      if (sr) walk(sr);
-    });
-  };
-  walk(document);
-  return { width: W, height: H, elements: out };
 }
 
 export interface NativeStillsOpts {
@@ -503,33 +491,13 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
       for (const { frame, name } of wanted) {
         await handle.seek(frame);
         const out = join(outDir, `${name}.png`);
-        await handle.page.screenshot({ type: "png", path: out as `${string}.png` });
+        const buf = await handle.shot();
+        const { writeFileSync } = await import("node:fs");
+        writeFileSync(out, buf);
         outs.push(out);
         if (measureSink) {
-          // String form avoids tsx __name injection on nested fns passed to puppeteer.
-          const m = (await handle.page.evaluate(`(() => {
-            const W = window.innerWidth, H = window.innerHeight;
-            const out = [];
-            function walk(root) {
-              root.querySelectorAll("[data-measure]").forEach(function(el) {
-                const r = el.getBoundingClientRect();
-                const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
-                out.push({
-                  label: el.getAttribute("data-measure") || el.tagName.toLowerCase(),
-                  x: r.x, y: r.y, w: r.width, h: r.height, cx: cx, cy: cy,
-                  cxPct: (cx / W) * 100, cyPct: (cy / H) * 100,
-                  dxPct: (cx / W) * 100 - 50, dyPct: (cy / H) * 100 - 50
-                });
-              });
-              root.querySelectorAll("*").forEach(function(el) {
-                const sr = el.shadowRoot;
-                if (sr) walk(sr);
-              });
-            }
-            walk(document);
-            return { width: W, height: H, elements: out };
-          })()`)) as { width: number; height: number; elements: ElementMeasure[] };
-          measureSink.push({ name, width: m.width, height: m.height, elements: m.elements });
+          const elements = measureLayers(layersAt(props, frame, { width, height }), { width, height });
+          measureSink.push({ name, width, height, elements });
         }
       }
       return outs;
