@@ -10,7 +10,11 @@ import { createCanvas2dSource } from "./providers/canvas2d.js";
 import { createFramesSource } from "./providers/frames.js";
 import { createHtmlSource } from "./providers/html.js";
 import { createImageSource } from "./providers/image.js";
-import { createRegionSource } from "./providers/region.js";
+import { createLottieSource } from "./providers/lottie.js";
+import { createMotionSource } from "./providers/motion.js";
+import { createShaderSource } from "./providers/shader.js";
+import { createRegionCompositorSource } from "./regionHost.js";
+import { createShaderDraw } from "./shaderHost.js";
 import { getPreset, type DrawFn } from "../../../backgrounds/presets.js";
 import { glowDraw, scrimDraw } from "../../../backgrounds/glow.js";
 
@@ -30,7 +34,7 @@ export function resolveBackgroundDraw(bg: BackgroundProps): DrawFn | undefined {
 }
 
 import { captionMarkup, kickerMarkup, textMarkup, disclosureMarkup } from "./textMarkup.js";
-import { hasCaptionContent, isHeroCaption } from "../../../captionLayout.js";
+import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../../../captionLayout.js";
 
 export function buildRegistry(
   props: KinoProps,
@@ -41,30 +45,53 @@ export function buildRegistry(
   const sources = new Map<string, TextureSource>();
   const f = (sec: number) => Math.round(sec * props.fps);
 
+  const shaderBg = props.background.kind === "custom" && Boolean(props.background.shaderCode);
+
   // Backdrop.
-  const draw = resolveBackgroundDraw(props.background) ?? glowDraw;
-  sources.set(
-    "backdrop",
-    createCanvas2dSource({
-      draw,
-      params: {
-        ...props.background.params,
-        night: props.theme.night,
-        green: props.theme.green,
-        mint: props.theme.mint,
-        gold: props.theme.gold,
-      },
-      keyframes: props.background.keyframes,
-      triggers: props.background.triggers,
-      theme: props.theme,
-      width: dims.width,
-      height: dims.height,
-      fps: props.fps,
-    }),
-  );
+  if (shaderBg) {
+    sources.set(
+      "backdrop",
+      createShaderSource({
+        drawFrame: createShaderDraw({
+          shaderSrc: props.background.shaderCode!,
+          params: props.background.params,
+          keyframes: props.background.keyframes,
+          triggers: props.background.triggers,
+          width: dims.width,
+          height: dims.height,
+          fps: props.fps,
+        }),
+        width: dims.width,
+        height: dims.height,
+        params: props.background.params,
+        keyframes: props.background.keyframes,
+        triggers: props.background.triggers,
+      }),
+    );
+  } else {
+    const draw = resolveBackgroundDraw(props.background) ?? glowDraw;
+    sources.set(
+      "backdrop",
+      createCanvas2dSource({
+        draw,
+        params: {
+          ...props.background.params,
+          night: props.theme.night,
+          green: props.theme.green,
+          mint: props.theme.mint,
+          gold: props.theme.gold,
+        },
+        keyframes: props.background.keyframes,
+        triggers: props.background.triggers,
+        theme: props.theme,
+        width: dims.width,
+        height: dims.height,
+        fps: props.fps,
+      }),
+    );
+  }
 
   // Scrim layer (for non-shader backdrops)
-  const shaderBg = props.background.kind === "custom" && Boolean(props.background.shaderCode);
   if (!shaderBg) {
     sources.set(
       "scrim",
@@ -92,8 +119,29 @@ export function buildRegistry(
 
   props.segments.forEach((s, i) => {
     if (s.kind === "video") {
-      const entry = media[`seg${i}`];
-      if (entry) sources.set(`seg${i}`, createFramesSource(entry, f(s.startSec)));
+      if (s.regionShader) {
+        sources.set(
+          `region${i}`,
+          createRegionCompositorSource({
+            region: s.regionShader,
+            theme: props.theme,
+            width: dims.width,
+            height: dims.height,
+            fps: props.fps,
+            beatFrom: f(s.startSec),
+            beatDur: f(s.endSec) - f(s.startSec),
+            assetRel: s.source!,
+            assetMediaKey: s.source && /\.(mp4|mov)$/i.test(s.source) ? `seg${i}` : undefined,
+            maskMediaKeys: s.regionShader.masks.map((m, j) => (m.maskKind === "video" ? `rsmask${i}_${j}` : undefined)),
+            backdropMediaKey:
+              s.regionShader.backdrop && /\.(mp4|mov)$/i.test(s.regionShader.backdrop) ? `rsbd${i}` : undefined,
+            media,
+          }),
+        );
+      } else {
+        const entry = media[`seg${i}`];
+        if (entry) sources.set(`seg${i}`, createFramesSource(entry, f(s.startSec)));
+      }
       if (s.frame) sources.set(`frame${i}`, createImageSource("/public/" + s.frame.src));
     }
     if (s.kicker) {
@@ -146,17 +194,34 @@ export function buildRegistry(
         }),
       );
     }
-    const html = (kind: "motion" | "overlay", markup: string) =>
-      createHtmlSource({
-        html: markup,
+    const motionSource = (data: NonNullable<typeof s.motion>, beatFrom: number, beatDur: number) => {
+      if (data.lottie) {
+        return createLottieSource({
+          data,
+          width: dims.width,
+          height: dims.height,
+          beatFrom,
+          beatDur,
+        });
+      }
+      return createMotionSource({
+        data,
         theme: props.theme,
-        size: { w: dims.width, h: dims.height },
+        width: dims.width,
+        height: dims.height,
         fps: props.fps,
-        hasTier2: kind === "motion" ? Boolean(s.motion?.proc) : Boolean(s.motionOverlay?.proc),
         scale,
+        beatFrom,
+        beatDur,
+        captionBottom: captionBandBottom(s, Boolean(props.avatar)),
       });
-    if (s.kind === "motion" && s.motion) sources.set(`motion${i}`, html("motion", s.motion.html));
-    if (s.motionOverlay) sources.set(`overlay${i}`, html("overlay", s.motionOverlay.html));
+    };
+    if (s.kind === "motion" && s.motion) {
+      sources.set(`motion${i}`, motionSource(s.motion, f(s.startSec), f(s.endSec) - f(s.startSec)));
+    }
+    if (s.motionOverlay) {
+      sources.set(`overlay${i}`, motionSource(s.motionOverlay, f(s.startSec), f(s.endSec) - f(s.startSec)));
+    }
   });
 
   if (props.logo) sources.set("logo", createImageSource("/public/" + props.logo.src));

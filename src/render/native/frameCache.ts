@@ -15,7 +15,7 @@ import { resolveGL } from "./browser.js";
 // Longest pixel bleed across a beat boundary: 24-frame dissolve entry / 15-frame motion xfade /
 // 12-frame chained-app extension — 30 covers all with margin.
 const PAD = 30;
-const VERSION = 3;
+const VERSION = 4;
 
 const sha1 = (s: string) => createHash("sha1").update(s).digest("hex");
 
@@ -46,19 +46,17 @@ export function frameSignatures(opts: {
   shaderSS?: number;
   /** FXAA edge post-pass on/off — different pixels. */
   shaderFXAA?: boolean;
-  /** Compositor vs DOM path — different pixels, must never cross-serve. */
+  /** @deprecated single render path — retained for signature stability during cache migration */
   compositor?: boolean;
 }): string[] {
   const { props, publicDir, pageJsHash, width, height, total, fps } = opts;
   const mode = opts.mode ?? resolveGL();
   const shaderSS = opts.shaderSS ?? 2;
   const shaderFXAA = opts.shaderFXAA ?? true;
-  const compositor = opts.compositor ?? false;
   const f = (s: number) => Math.round(s * fps);
   const globalSig = sha1(
     JSON.stringify({
       v: VERSION,
-      compositor,
       width,
       height,
       fps,

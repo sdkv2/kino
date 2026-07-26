@@ -83,11 +83,12 @@ interface Slot {
 }
 
 // A texture channel's source: a static image (loaded once) or a /vframes video (one <img> per frame).
-interface Src {
+export interface RegionSrc {
   frameVideo: boolean;
   staticUrl: string; // used when !frameVideo
   frameUrl: string | null; // this-frame /vframes URL when frameVideo (may be null at init in sparse stills)
 }
+type Src = RegionSrc;
 
 // An extra sampler channel (uTex2..uTex3). `tpl` present ⇒ a motion .html that re-rasterizes every
 // frame at the beat's progress; `lastCss` is the raster identity (same CSS ⇒ same pixels ⇒ no work).
@@ -98,16 +99,17 @@ interface TexChannel {
   lastCss?: string;
 }
 
-interface GLState {
+export interface RegionGLState {
   gl: WebGL2RenderingContext;
   prog: WebGLProgram;
   loc: Record<string, WebGLUniformLocation | null>;
   asset: Slot;
-  masks: Slot[]; // index 0..region.masks.length-1 are real sources; the rest are inert placeholders
-  texes: TexChannel[]; // uTex2..uTex3; entries past region.textures.length are transparent placeholders
-  backdrop: Slot | null; // the cutout's second source (uTex1), or null when the beat has no backdrop
-  sdfs: Slot[]; // per mask: its precomputed distance field, or a placeholder where none was written
+  masks: Slot[];
+  texes: TexChannel[];
+  backdrop: Slot | null;
+  sdfs: Slot[];
 }
+type GLState = RegionGLState;
 
 // uTex0 is the beat's own asset and uTex1 belongs to the cutout backdrop, so authored channels
 // start at uTex2 — two of them, the rest of what the region header declares.
@@ -385,9 +387,8 @@ async function initGL(
   }
 }
 
-// Per-frame render: ensure init (once), re-upload any video sources for this frame, draw. Registered
-// on the pending set so kinoSeek awaits it. Never throws — a rejected promise would break the gate.
-async function drawFrame(
+// Per-frame render: ensure init (once), re-upload any video sources for this frame, draw.
+export async function drawFrame(
   canvas: HTMLCanvasElement,
   initRef: React.MutableRefObject<Promise<GLState | null> | null>,
   assetSrc: Src,
