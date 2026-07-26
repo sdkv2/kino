@@ -425,6 +425,19 @@ export class StageRenderer {
     return source.textureIsRendered?.(frame, key) ? SAMPLE_RENDERED : SAMPLE_UPLOADED;
   }
 
+  private publishCompositorBackdrop(dest: RenderTarget): RenderTarget {
+    const gl = this.gl;
+    const snap = this.pool.acquire(gl, dest.w, dest.h);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, dest.fbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, snap.fbo);
+    gl.blitFramebuffer(0, 0, dest.w, dest.h, 0, 0, snap.w, snap.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    registerBackdropTexture(snap.tex, snap.w, snap.h);
+    return snap;
+  }
+
   private compositeLayerInner(
     dest: RenderTarget,
     layer: LayerDraw,
@@ -436,9 +449,25 @@ export class StageRenderer {
     const source = sources.get(layer.source.providerId);
     if (!source) return;
 
+    let backdropSnap: RenderTarget | null = null;
     if (source.needsCompositorBackdrop?.(frame, layer.source.key)) {
-      registerBackdropTexture(dest.tex, dest.w, dest.h);
+      backdropSnap = this.publishCompositorBackdrop(dest);
     }
+    try {
+      this.compositeLayerInnerWithBackdrop(dest, layer, source, frame, maskTargets);
+    } finally {
+      if (backdropSnap) this.pool.release(backdropSnap);
+    }
+  }
+
+  private compositeLayerInnerWithBackdrop(
+    dest: RenderTarget,
+    layer: LayerDraw,
+    source: TextureSource,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): void {
+    const gl = this.gl;
 
     const chain = layer.effects
       .map((e) => ({ pass: getPass(e.kind), params: e.params }))

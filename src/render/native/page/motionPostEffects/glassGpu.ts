@@ -26,6 +26,28 @@ function blitRegion(
   blitTexture(gl, dst, srcTex, flipY, sx, sy, sw, sh, sx, sy, sw, sh, texW, texH);
 }
 
+/** Detached copy — never sample a compositor FBO attachment (feedback loop). */
+function snapshotBackdrop(gl: WebGL2RenderingContext, backdrop: Readonly<BackdropTexture>): GpuFbo {
+  const copy = acquireGpuFbo(gl, backdrop.width, backdrop.height, "backdrop-snap");
+  blitTexture(
+    gl,
+    copy,
+    backdrop.tex,
+    1,
+    0,
+    0,
+    copy.w,
+    copy.h,
+    0,
+    0,
+    backdrop.width,
+    backdrop.height,
+    backdrop.width,
+    backdrop.height,
+  );
+  return copy;
+}
+
 function isGlassChromeChild(child: Element): boolean {
   return child.classList.contains("kino-glass-mirror") || child.classList.contains(SHAPE_CLASS);
 }
@@ -141,7 +163,18 @@ export function compositeGlassLayerGpu(opts: {
   const baseTex = uploadCanvas(gl, base);
   blitRegion(gl, layer, baseTex, 0, layerW, layerH, 0, 0, layerW, layerH);
 
-  const mirror = renderGlassMirrorFbo(gl, backdrop, el, pageW, pageH, hostRect);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.activeTexture(gl.TEXTURE0);
+
+  const backdropSnap = snapshotBackdrop(gl, backdrop);
+  const mirror = renderGlassMirrorFbo(
+    gl,
+    { tex: backdropSnap.tex, width: backdropSnap.w, height: backdropSnap.h },
+    el,
+    pageW,
+    pageH,
+    hostRect,
+  );
   if (!mirror) return null;
 
   const rect = el.getBoundingClientRect();

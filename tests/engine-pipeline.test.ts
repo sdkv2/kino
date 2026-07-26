@@ -4,7 +4,8 @@ import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderFrameRange, type PageHandle } from "../src/render/native/engine.js";
+import { renderFrameRange } from "../src/render/native/engine.js";
+import type { WorkerHandle } from "../src/render/native/workerHandle.js";
 import { frameSignatures } from "../src/render/native/frameCache.js";
 import { extractDense, type MediaJob } from "../src/render/native/videoFrames.js";
 import type { KinoProps } from "../src/render/props.js";
@@ -21,18 +22,9 @@ afterAll(() => {
 
 // Fake capture handle: shot() returns the last-sought frame index as bytes, with an optional
 // per-frame delay so worker/drain wait patterns can be forced.
-function fakeHandle(delayFor: (frame: number) => number): PageHandle {
+function fakeHandle(delayFor: (frame: number) => number): WorkerHandle {
   let at = -1;
   return {
-    page: null as never,
-    seek: async (frame) => {
-      at = frame;
-    },
-    shot: async () => {
-      const d = delayFor(at);
-      if (d > 0) await sleep(d);
-      return Buffer.from(String(at));
-    },
     seekAndCapture: async (frame) => {
       at = frame;
       const d = delayFor(at);
@@ -65,12 +57,7 @@ describe("renderFrameRange", () => {
   }, 30000);
 
   it("propagates a worker failure instead of hanging", async () => {
-    const bad: PageHandle = {
-      page: null as never,
-      seek: async () => {},
-      shot: async () => {
-        throw new Error("boom");
-      },
+    const bad: WorkerHandle = {
       seekAndCapture: async () => {
         throw new Error("boom");
       },
@@ -84,6 +71,40 @@ describe("renderFrameRange", () => {
     } as unknown as NodeJS.WritableStream;
     await expect(renderFrameRange([bad], 10, stdin)).rejects.toThrow("boom");
   });
+
+  // Regression: the worker's terminal branch (next >= total) stored the final lagging frame via
+  // storeLag but returned without notify(), so a drain parked in waitTick() never woke — deadlock
+  // only in pipeline mode, where flush is the sole producer of the last frame. Force that race:
+  // one worker, last seek + flush slow enough that drain parks before the final store lands.
+  it("completes when final pipelined flush lands while drain is parked (no lost-wakeup deadlock)", async () => {
+    const total = 20;
+    let pending: Buffer | null = null;
+    const handle: WorkerHandle = {
+      seekAndCapture: async (frame) => {
+        if (frame === total - 1) await sleep(40);
+        const prev = pending;
+        pending = Buffer.from(String(frame));
+        return prev;
+      },
+      flush: async () => {
+        await sleep(40);
+        const last = pending;
+        pending = null;
+        return last;
+      },
+    };
+    const written: number[] = [];
+    const stdin = {
+      write(buf: Buffer, cb: (err?: Error | null) => void) {
+        written.push(Number(buf.toString()));
+        cb(null);
+        return true;
+      },
+    } as unknown as NodeJS.WritableStream;
+
+    await renderFrameRange([handle], total, stdin, undefined, { pipeline: true });
+    expect(written).toEqual(Array.from({ length: total }, (_, i) => i));
+  }, 5000);
 });
 
 describe("frame cache", () => {
@@ -129,12 +150,7 @@ describe("frame cache", () => {
   it("renderFrameRange serves cached frames without touching the page and stores misses", async () => {
     const total = 60;
     const seeks: number[] = [];
-    const handle: PageHandle = {
-      page: null as never,
-      seek: async (f) => {
-        seeks.push(f);
-      },
-      shot: async () => Buffer.from("fresh"),
+    const handle: WorkerHandle = {
       seekAndCapture: async (f) => {
         seeks.push(f);
         return Buffer.from("fresh");

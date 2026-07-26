@@ -251,15 +251,19 @@ function cssColor(raw: string, fallback: [number, number, number, number]): [num
   return out;
 }
 
-/** Render `.kino-glass` refraction mirrors. Pass `elements` for stacked bottom→top walks. */
-export function applyLiquidGlass(root: ShadowRoot | null, opts?: { elements?: HTMLElement[] }): void {
+/** Render `.kino-glass` refraction mirrors. Pass `elements` for stacked bottom→top walks.
+ *  `compositorGl` required to sample GPU backdrop texture — mirror canvases use their own context. */
+export function applyLiquidGlass(
+  root: ShadowRoot | null,
+  opts?: { elements?: HTMLElement[]; compositorGl?: WebGL2RenderingContext },
+): void {
   if (!root) return;
   const allEls = root.querySelectorAll<HTMLElement>(".kino-glass");
   const els = opts?.elements ?? Array.from(allEls);
   if (els.length === 0) return;
 
   const backdrop = peekBackdrop();
-  const backdropTexture = peekBackdropTexture();
+  const backdropTexture = opts?.compositorGl ? peekBackdropTexture() : null;
   if (!backdrop && !backdropTexture) return;
 
   let pool = pools.get(root);

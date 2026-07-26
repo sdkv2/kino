@@ -6,6 +6,8 @@ import { cpus } from "node:os";
 import { copyFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { releaseScratch, scratchDir } from "../../scratch.js";
+import { layersAt } from "../layers.js";
+import { measureLayers, type ElementMeasure } from "../measure.js";
 import type { Browser, Page } from "puppeteer";
 import { log } from "../../log.js";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
@@ -18,13 +20,16 @@ import { ensureRenderServer, takeCaptureBuffer, clearCaptureBuffers } from "./se
 import type { CaptureCodec } from "./captureCodec.js";
 import type { CaptureSource } from "./captureSource.js";
 import { extractDense, extractMaxDim, extractSparse, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
-import { layersAt } from "../layers.js";
-import { measureLayers, type ElementMeasure } from "../measure.js";
+import type { WorkerHandle } from "./workerHandle.js";
+import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.js";
+import { useSharedTextureCapture } from "./electron/gpuCapture.js";
+import { resolveRenderer, type NativeRenderer } from "./renderer.js";
 
-/** Compositor is the only render path. Kept for cache/tests that still pass the flag. */
 export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
   return true;
 }
+
+export { resolveRenderer, type NativeRenderer };
 
 function captureMode(env: NodeJS.ProcessEnv = process.env): "canvas" | "cdp" {
   const v = env.KINO_CAPTURE;
@@ -162,7 +167,16 @@ async function awaitBoot(page: Page): Promise<void> {
   }
 }
 
-async function workerPage(slot: number, browser: Browser, url: string, width: number, height: number): Promise<PageHandle> {
+async function workerHandle(slot: number, browser: Browser, url: string, width: number, height: number): Promise<WorkerHandle> {
+  const p = await workerPageInner(slot, browser, url, width, height);
+  return {
+    seekAndCapture: (frame) => p.seekAndCapture(frame),
+    flush: () => p.flush(),
+    dumpProfile: (frames, captureMs) => dumpProfile(p, frames, captureMs),
+  };
+}
+
+async function workerPageInner(slot: number, browser: Browser, url: string, width: number, height: number): Promise<PageHandle> {
   let page = pageCache.get(slot) ?? null;
   if (page && (page.isClosed() || page.browser() !== browser)) {
     pageCache.delete(slot);
@@ -253,8 +267,8 @@ async function flushCaptureFrom(p: Page, slot: number): Promise<Buffer | null> {
   return takeCaptureBuffer(slot) ?? null;
 }
 
-// Stream captured frames into a single libx264 encode and mux the mixed audio track. H.264 builds
-// ingest WebCodecs all-intra annex-B (no JPEG 4:2:0 sandwich); JPEG builds use image2pipe mjpeg.
+// Stream captured frames into ffmpeg. H.264 builds are already annex-B all-intra — remux with
+// copy; JPEG builds use image2pipe mjpeg → libx264.
 function startEncoder(opts: {
   fps: number;
   out: string;
@@ -266,15 +280,21 @@ function startEncoder(opts: {
     opts.captureCodec === "h264"
       ? ["-f", "h264", "-framerate", String(opts.fps), "-i", "-"]
       : ["-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(opts.fps), "-i", "-"];
+  const videoOut =
+    opts.captureCodec === "h264"
+      ? ["-c:v", "copy"]
+      : [
+          "-c:v", "libx264", "-preset", opts.preset, "-crf", "18",
+          "-vf", "scale=out_color_matrix=bt709:out_range=tv",
+          "-pix_fmt", "yuv420p",
+          "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+        ];
   const args = [
     "-y", "-loglevel", "error",
     ...videoIn,
     ...(opts.audio ? ["-i", opts.audio] : []),
     "-map", "0:v", ...(opts.audio ? ["-map", "1:a"] : []),
-    "-c:v", "libx264", "-preset", opts.preset, "-crf", "18",
-    "-vf", "scale=out_color_matrix=bt709:out_range=tv",
-    "-pix_fmt", "yuv420p",
-    "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+    ...videoOut,
     ...(opts.audio ? ["-c:a", "aac", "-b:a", "320k"] : []),
     "-movflags", "+faststart",
     opts.out,
@@ -302,12 +322,13 @@ const writeFrame = (stdin: NodeJS.WritableStream, buf: Buffer) =>
 // next frame index; a single drain loop writes each frame as soon as its predecessor shipped,
 // with a bounded look-ahead so memory stays flat.
 export async function renderFrameRange(
-  handles: PageHandle[],
+  handles: WorkerHandle[],
   total: number,
   stdin: NodeJS.WritableStream,
   cache?: { get(n: number): Promise<Buffer | null>; put(n: number, buf: Buffer): Promise<void> },
+  opts?: { pipeline?: boolean },
 ): Promise<void> {
-  const pipeline = capturePipelineEnabled();
+  const pipeline = opts?.pipeline ?? capturePipelineEnabled();
   const AHEAD = 48; // max undrained frames in memory
   const ready = new Map<number, Buffer>();
   let next = 0; // next frame index to claim
@@ -324,7 +345,7 @@ export async function renderFrameRange(
   };
   const waitTick = () => new Promise<void>((resolve) => waiters.push(resolve));
 
-  const storeLag = async (h: PageHandle, lagFrame: number | null, buf: Buffer | null) => {
+  const storeLag = async (h: WorkerHandle, lagFrame: number | null, buf: Buffer | null) => {
     if (!pipeline || !buf || lagFrame === null) return;
     ready.set(lagFrame, buf);
     if (cache) await cache.put(lagFrame, buf);
@@ -336,6 +357,7 @@ export async function renderFrameRange(
       if (failure) return;
       if (next >= total) {
         await storeLag(h, lagFrame, await h.flush());
+        notify();
         return;
       }
       if (next - written >= AHEAD) {
@@ -519,13 +541,15 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
       ? "gl: hardware ANGLE (KINO_GPU=0 for bit-stable SwiftShader)"
       : "gl: SwiftShader (software; KINO_GPU=1 for hardware ANGLE)",
   );
+  const renderer = resolveRenderer();
   try {
     const endSec = total / props.fps;
-    // Browser launches overlap frame extraction + the audio mix — none depend on each other.
-    const [{ framesDir, media }, audio, browsers] = await Promise.all([
+    const [{ framesDir, media }, audio, workers] = await Promise.all([
       prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOutputDim(formats), ss)),
       buildAudioTrack(props, publicDir, endSec, scratch),
-      Promise.all(slots.map((i) => acquireBrowser(i))),
+      renderer === "electron"
+        ? Promise.resolve(null)
+        : Promise.all(slots.map((i) => acquireBrowser(i))),
     ]);
     lap("media+audio+browsers");
 
@@ -535,21 +559,56 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         const { width, height } = DIMS[fmt];
         const requestedCodec = resolveCaptureCodec(process.env);
         const requestedSource = resolveCaptureSource(process.env);
+        const electronShared = renderer === "electron" && useSharedTextureCapture();
         const server = await pointServerAt({
           props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx,
-          captureCodec: requestedCodec,
+          captureCodec: electronShared ? "h264" : renderer === "electron" ? "jpeg" : requestedCodec,
           captureSource: requestedSource,
         });
-        const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
-        const captureMeta = (await handles[0]!.page.evaluate(
-          `({ codec: window.__kinoCaptureCodec ?? "jpeg", source: window.__kinoCaptureSource ?? "bitmap" })`,
-        )) as { codec: CaptureCodec; source: CaptureSource };
-        const { codec: captureCodec, source: captureSource } = captureMeta;
-        const capNote =
-          captureCodec !== requestedCodec || captureSource !== requestedSource
-            ? ` (wanted ${requestedCodec}/${requestedSource})`
-            : "";
-        log.step(`capture: ${captureCodec}/${captureSource}${capNote}`);
+
+        let captureCodec: CaptureCodec = electronShared ? "h264" : "jpeg";
+        let captureSource: CaptureSource = "bitmap";
+        let handles: WorkerHandle[];
+
+        if (renderer === "electron") {
+          handles = await Promise.all(
+            slots.map(async (i) => {
+              const h = await acquireElectronWorker(i, server.url, width, height, props.fps);
+              return {
+                seekAndCapture: async (frame: number) => {
+                  const t0 = performance.now();
+                  try {
+                    return await h.seekAndCapture(frame);
+                  } finally {
+                    captureMs += performance.now() - t0;
+                  }
+                },
+                flush: () => h.flush(),
+                dumpProfile: h.dumpProfile,
+              };
+            }),
+          );
+          log.step(
+            electronShared
+              ? "capture: electron/paint → VideoToolbox H.264 annex-B (IOSurface when available)"
+              : "capture: electron/capturePage JPEG q95",
+          );
+        } else {
+          const browsers = workers!;
+          handles = await Promise.all(browsers.map((b, i) => workerHandle(i, b, server.url, width, height)));
+          const page0 = pageCache.get(0);
+          if (!page0) throw new Error("puppeteer page boot failed");
+          const meta = (await page0.evaluate(
+            `({ codec: window.__kinoCaptureCodec ?? "jpeg", source: window.__kinoCaptureSource ?? "bitmap" })`,
+          )) as { codec: CaptureCodec; source: CaptureSource };
+          captureCodec = meta.codec;
+          captureSource = meta.source;
+          const capNote =
+            captureCodec !== requestedCodec || captureSource !== requestedSource
+              ? ` (wanted ${requestedCodec}/${requestedSource})`
+              : "";
+          log.step(`capture: ${captureCodec}/${captureSource}${capNote}`);
+        }
         lap(`pages-boot ${fmt}`);
         const sigs = frameSignatures({
           props,
@@ -570,11 +629,19 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         try {
           captureMs = 0;
           clearCaptureBuffers();
-          await renderFrameRange(handles, total, enc.stdin, cache);
+          await renderFrameRange(handles, total, enc.stdin, cache, {
+            pipeline: renderer === "electron" || capturePipelineEnabled(),
+          });
           lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
-          if (process.env.KINO_PROFILE === "1") await dumpProfile(handles[0], total, captureMs);
+          if (process.env.KINO_PROFILE === "1" && handles[0]?.dumpProfile) {
+            await handles[0].dumpProfile(total, captureMs);
+          }
+          log.step(`mux ${fmt} (${captureCodec} → mp4)`);
           enc.stdin.end();
-          await enc.done;
+          await Promise.all([
+            renderer === "electron" ? releaseElectronWorkers() : Promise.resolve(),
+            enc.done,
+          ]);
         } catch (err) {
           enc.kill();
           throw err;
@@ -586,7 +653,11 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         outputs.push(out);
       }
     } finally {
-      await Promise.all(slots.map((i) => releaseBrowser(i)));
+      if (renderer === "electron") {
+        await releaseElectronWorkers();
+      } else {
+        await Promise.all(slots.map((i) => releaseBrowser(i)));
+      }
     }
     return outputs;
   } finally {
@@ -652,7 +723,7 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
         captureCodec: "jpeg",
         captureSource: "bitmap",
       });
-      const handle = await workerPage(0, browser, server.url, width, height);
+      const handle = await workerPageInner(0, browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {
         await handle.seek(frame);
