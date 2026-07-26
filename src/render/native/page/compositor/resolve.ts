@@ -12,7 +12,7 @@ uniform vec2 uInvRes;
 out vec4 kino_frag;
 float lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }
 void main(){
-  vec2 uv = gl_FragCoord.xy * uInvRes;
+  vec2 uv = vec2(gl_FragCoord.x * uInvRes.x, 1.0 - gl_FragCoord.y * uInvRes.y);
   vec3 m  = texture(uSrc, uv).rgb;
   vec3 nw = texture(uSrc, uv + vec2(-1.0,-1.0) * uInvRes).rgb;
   vec3 ne = texture(uSrc, uv + vec2( 1.0,-1.0) * uInvRes).rgb;
@@ -38,7 +38,7 @@ uniform sampler2D uSrc;
 uniform vec2 uOutRes;
 out vec4 kino_frag;
 void main() {
-  vec2 uv = gl_FragCoord.xy / uOutRes;
+  vec2 uv = vec2(gl_FragCoord.x / uOutRes.x, 1.0 - gl_FragCoord.y / uOutRes.y);
   kino_frag = vec4(texture(uSrc, uv).rgb, 1.0);
 }`;
 
