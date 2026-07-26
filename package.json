@@ -9,7 +9,7 @@
     "url": "git+https://github.com/sdkv2/kino.git"
   },
   "description": "Spec driven video development CLI — JSON spec → deterministic MP4",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "sdkv2",
   "homepage": "https://github.com/sdkv2/kino#readme",
   "bugs": {
