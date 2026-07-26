@@ -596,9 +596,9 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
               elCap === "direct"
                 ? "capture: electron/WebCodecs VideoFrame(canvas) → H.264 annex-B (no OSR paint)"
                 : elCap === "readback"
-                  ? "capture: electron/readPixels → VideoToolbox H.264 annex-B"
+                  ? `capture: electron/readPixels → ${process.platform === "win32" ? "NVENC" : "VideoToolbox"} H.264 annex-B`
                   : elCap === "shared"
-                    ? "capture: electron/paint → VideoToolbox H.264 annex-B (IOSurface)"
+                    ? `capture: electron/paint → ${process.platform === "win32" ? "NVENC H.264 annex-B (DXGI)" : "VideoToolbox H.264 annex-B (IOSurface)"}`
                     : "capture: electron/capturePage JPEG q95",
             );
           }

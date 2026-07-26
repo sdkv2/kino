@@ -95,7 +95,17 @@ KINO_RENDERER=electron KINO_ELECTRON_CAPTURE=shared KINO_NO_FRAME_CACHE=1 KINO_P
 
 ## Success criteria
 
-- [ ] `KINO_ELECTRON_CAPTURE=shared` on Windows NVIDIA box produces valid H.264 annex-B and remuxes to mp4
-- [ ] macOS path still green (`test:light` + glass-helix shared)
-- [ ] Profile shows NVENC encode cost, not a full CPU readback
-- [ ] `KINO_CONCURRENCY=2` works with one Electron host + two sessions (no DXGI/NVENC races)
+- [x] `KINO_ELECTRON_CAPTURE=shared` on Windows NVIDIA box produces valid H.264 annex-B and remuxes to mp4
+  - Proven 2026-07-26 on RTX 3050 Laptop: `glass-helix-win-shared-9x16.mp4` (1080×1920, 115f)
+  - After per-session D3D: c1 ~19.4 / c2 ~33.8 / c3 ~44.3 ms/frame wall; `gpu-shared` ~17.7 / 19.6 / 23.4 ms
+- [ ] macOS path still green (`test:light` + glass-helix shared) — unchanged on this machine
+- [x] Profile shows NVENC encode cost (`gpu-shared`), not JPEG readback
+- [x] `KINO_CONCURRENCY=2` (and c=3) with one Electron host + multi-session; per-session D3D11 device/context (no global GPU lock)
+
+## Windows ops notes
+
+- **Do not bench over SSH Session 0.** GPU process dies (`exit_code=34`). Run in the interactive Console session (scheduled task `/IT`, or local Cursor/terminal).
+- **stdin broken under Electron+spawn on win32** — parent uses TCP (`KINO_ELECTRON_CMD_PORT`); replies still on stdout.
+- **DuplicateHandle** the OSR `ntHandle` before `tex.release()` (async encode).
+- Vendored NVENC header: `n12.2.72.0` (API 12.2). VS 18 needs node-gyp patch (applied in `build-gpu-capture.mjs`).
+- Launch helper on the box: `powershell -File C:\Users\aiden\kino\launch-kino-bench.ps1`

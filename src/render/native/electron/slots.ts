@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createServer, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { onBeforeSweep } from "../../../scratch.js";
@@ -39,24 +40,54 @@ type Wait =
  *   ← F <id> <byteLength>\n + bytes
  */
 class ElectronHostProc {
-  private child: ChildProcessWithoutNullStreams;
+  private child!: ChildProcessWithoutNullStreams;
   private pending = new Map<number, Wait>();
   private nextId = 1;
   private buf = Buffer.alloc(0);
   private alive = true;
   /** After `F id len\n`, await `len` binary bytes for this id. */
   private readingFrame: { id: number; len: number } | null = null;
+  /** Commands go here — stdin on posix; TCP on win32 (Electron closes piped stdin immediately). */
+  private cmd: NodeJS.WritableStream | null = null;
+  private readonly ready: Promise<void>;
 
   constructor() {
+    if (process.platform === "win32") {
+      this.ready = new Promise((resolve, reject) => {
+        const server = createServer((sock: Socket) => {
+          this.cmd = sock;
+          server.close();
+          resolve();
+        });
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", () => {
+          const addr = server.address();
+          if (!addr || typeof addr === "string") {
+            reject(new Error("electron cmd server failed to bind"));
+            return;
+          }
+          this.spawnChild({ KINO_ELECTRON_CMD_PORT: String(addr.port) });
+        });
+        setTimeout(() => reject(new Error("electron cmd socket connect timeout")), 15_000).unref?.();
+      });
+    } else {
+      this.spawnChild();
+      this.cmd = this.child.stdin;
+      this.ready = Promise.resolve();
+    }
+  }
+
+  private spawnChild(extraEnv: Record<string, string> = {}): void {
     this.child = spawn(electronBin(), [workerJs], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, KINO_ELECTRON_WORKER: "1" },
+      env: { ...process.env, KINO_ELECTRON_WORKER: "1", ...extraEnv },
+      windowsHide: true,
     });
     liveHosts.add(this.child);
-    this.child.once("exit", () => {
+    this.child.once("exit", (code, signal) => {
       this.alive = false;
       liveHosts.delete(this.child);
-      const err = new Error("electron host exited");
+      const err = new Error(`electron host exited code=${code} signal=${signal ?? ""}`);
       for (const w of this.pending.values()) w.reject(err);
       this.pending.clear();
     });
@@ -87,10 +118,14 @@ class ElectronHostProc {
 
       const nl = this.buf.indexOf(0x0a);
       if (nl < 0) return;
-      const line = this.buf.subarray(0, nl).toString("utf8");
+      // Windows Electron may emit CRLF; drop CR so the line protocol still matches.
+      let end = nl;
+      if (end > 0 && this.buf[end - 1] === 0x0d) end -= 1;
+      const line = this.buf.subarray(0, end).toString("utf8");
       this.buf = this.buf.subarray(nl + 1);
+      if (!line) continue;
       const m = /^(L|F) (\d+) (.*)$/.exec(line);
-      if (!m) throw new Error(`electron host bad reply: ${line}`);
+      if (!m) throw new Error(`electron host bad reply: ${JSON.stringify(line)}`);
       const kind = m[1];
       const id = Number(m[2]);
       const rest = m[3];
@@ -106,9 +141,11 @@ class ElectronHostProc {
     }
   }
 
-  private send(cmd: string): void {
+  private async send(cmd: string): Promise<void> {
+    await this.ready;
     if (!this.alive) throw new Error("electron host dead");
-    this.child.stdin.write(`${cmd}\n`);
+    if (!this.cmd) throw new Error("electron host cmd channel missing");
+    this.cmd.write(`${cmd}\n`);
   }
 
   private allocId(wait: Wait): number {
@@ -117,15 +154,16 @@ class ElectronHostProc {
     return id;
   }
 
-  private requestLine(cmdWithoutId: string): Promise<string> {
+  private async requestLine(cmdWithoutId: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const id = this.allocId({ kind: "line", resolve, reject });
-      this.send(`${cmdWithoutId} ${id}`);
-      this.pump();
+      void this.send(`${cmdWithoutId} ${id}`)
+        .then(() => this.pump())
+        .catch(reject);
     });
   }
 
-  private requestFrame(cmdWithoutId: string, timeoutMs = 10_000): Promise<Buffer | null> {
+  private async requestFrame(cmdWithoutId: string, timeoutMs = 10_000): Promise<Buffer | null> {
     return new Promise((resolve, reject) => {
       let id = 0;
       const timer = setTimeout(() => {
@@ -143,8 +181,9 @@ class ElectronHostProc {
           reject(e);
         },
       });
-      this.send(`${cmdWithoutId} ${id}`);
-      this.pump();
+      void this.send(`${cmdWithoutId} ${id}`)
+        .then(() => this.pump())
+        .catch(reject);
     });
   }
 
@@ -201,8 +240,14 @@ class ElectronHostProc {
       }, 1000);
       this.child.once("exit", finish);
       try {
-        this.send("quit");
-        this.child.stdin.end();
+        void this.send("quit").then(() => {
+          try {
+            this.cmd?.end();
+            this.child.stdin.end();
+          } catch {
+            // ignore
+          }
+        });
       } catch {
         finish();
       }

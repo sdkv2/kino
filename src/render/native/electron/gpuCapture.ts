@@ -84,10 +84,10 @@ export function gpuCaptureMode(env: NodeJS.ProcessEnv = process.env): ElectronCa
 
 /** True when the native addon artifact exists (parent Node must not dlopen — Electron ABI). */
 export function sharedTextureCaptureAvailable(): boolean {
-  return process.platform === "darwin" && nodePath() != null;
+  return (process.platform === "darwin" || process.platform === "win32") && nodePath() != null;
 }
 
-/** Load IOSurface/RGBA → VideoToolbox addon inside the Electron worker only. */
+/** Load IOSurface→VT (mac) / DXGI→NVENC (win) addon inside the Electron worker only. */
 export function loadGpuCapture(): GpuCaptureNative | null {
   if (cached !== undefined) return cached;
   if (!sharedTextureCaptureAvailable()) {
@@ -114,10 +114,10 @@ export function loadGpuCapture(): GpuCaptureNative | null {
  * Resolve the concrete capture backend.
  * - `direct`: WebCodecs VideoFrame(canvas) → annex-B in-page. Bypasses OSR paint-wait; Chromium
  *   encodes on the GPU (VT under the hood on macOS). No gpu_capture module required.
- * - `shared`: OSR paint → IOSurface → VT. Zero-copy present, but ~15ms paint-wait per frame.
- * - `readback`: WebGL readPixels → IPC → VT. Usually slower than shared (full RGBA copy).
+ * - `shared`: OSR paint → IOSurface→VT (mac) / DXGI→NVENC (win). ~15ms paint-wait (CopyOutput).
+ * - `readback`: WebGL readPixels → IPC → native encode. Usually slower than shared.
  * - `page`: capturePage JPEG (no native module).
- * - `auto`: currently `shared` (proven). Set `KINO_ELECTRON_CAPTURE=direct` for present-bypass.
+ * - `auto`: currently `shared` when native exists. Set `KINO_ELECTRON_CAPTURE=direct` for present-bypass.
  */
 export function resolveElectronCapture(
   env: NodeJS.ProcessEnv = process.env,

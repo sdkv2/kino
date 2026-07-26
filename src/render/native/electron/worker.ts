@@ -1,4 +1,5 @@
-import { createInterface } from "node:readline";
+import { connect } from "node:net";
+import { createInterface, type Interface } from "node:readline";
 import { OffscreenRenderWindow } from "./offscreenWindow.js";
 
 if (!process.versions.electron) {
@@ -61,11 +62,16 @@ async function shutdown(): Promise<void> {
   process.exit(0);
 }
 
-const rl = createInterface({ input: process.stdin, terminal: false });
-rl.on("close", () => {
-  void shutdown();
-});
-rl.on("line", (line) => {
+function bindCommands(rl: Interface): void {
+  rl.on("close", () => {
+    void shutdown();
+  });
+  rl.on("line", (line) => {
+    handleLine(line);
+  });
+}
+
+function handleLine(line: string): void {
   const [cmd, ...rest] = line.trim().split(/\s+/);
   switch (cmd) {
     case "boot": {
@@ -145,4 +151,16 @@ rl.on("line", (line) => {
     default:
       writeErr(`unknown worker cmd: ${cmd}`);
   }
-});
+}
+
+const cmdPort = Number(process.env.KINO_ELECTRON_CMD_PORT ?? "");
+if (Number.isFinite(cmdPort) && cmdPort > 0) {
+  // Windows: Electron EOF's piped stdin immediately — parent speaks TCP instead.
+  const sock = connect({ host: "127.0.0.1", port: cmdPort }, () => {
+    bindCommands(createInterface({ input: sock, terminal: false }));
+  });
+  sock.on("error", (e) => writeErr(`cmd socket: ${(e as Error).message}`));
+} else {
+  if (typeof process.stdin.resume === "function") process.stdin.resume();
+  bindCommands(createInterface({ input: process.stdin, terminal: false }));
+}

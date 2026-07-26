@@ -29,6 +29,14 @@ type PaintWaiter = {
 
 type CaptureKind = "shared" | "readback" | "direct" | "page";
 
+/** Platform shared-texture handle buffer from Electron OSR paint. */
+function sharedTextureHandle(tex: Electron.OffscreenSharedTexture): Buffer | undefined {
+  const h = tex.textureInfo?.handle;
+  if (!h) return undefined;
+  if (process.platform === "win32") return h.ntHandle;
+  return h.ioSurface;
+}
+
 async function awaitBoot(wc: WebContents): Promise<void> {
   const deadline = Date.now() + 60_000;
   for (;;) {
@@ -156,7 +164,7 @@ export class OffscreenRenderWindow {
     try {
       if (tex) {
         const info = tex.textureInfo;
-        const handle = info.handle.ioSurface;
+        const handle = sharedTextureHandle(tex);
         if (!handle?.length) return null;
         const w = info.codedSize.width;
         const h = info.codedSize.height;
@@ -174,7 +182,7 @@ export class OffscreenRenderWindow {
       const sid = this.ensureEncoder(enc.w, enc.h);
       return this.gpu.encodeBitmap(sid, bmp, w, h, enc.w, enc.h);
     } finally {
-      const key = tex ? "vt-iosurface" : "vt-bitmap";
+      const key = tex ? "gpu-shared" : "gpu-bitmap";
       this.capProf.add(key, performance.now() - t0);
     }
   }
@@ -184,10 +192,10 @@ export class OffscreenRenderWindow {
     const tex = painted.tex;
     if (tex && typeof this.gpu.encodeSharedTextureAsync === "function") {
       const info = tex.textureInfo;
-      const handle = info.handle.ioSurface;
+      const handle = sharedTextureHandle(tex);
       if (!handle?.length) {
         tex.release();
-        return Promise.reject(new Error(`paint produced empty IOSurface on frame ${frame}`));
+        return Promise.reject(new Error(`paint produced empty shared texture on frame ${frame}`));
       }
       const w = info.codedSize.width;
       const h = info.codedSize.height;
@@ -196,7 +204,7 @@ export class OffscreenRenderWindow {
       const t0 = performance.now();
       const p = this.gpu.encodeSharedTextureAsync(sid, handle, w, h, info.pixelFormat, enc.w, enc.h);
       tex.release();
-      return p.finally(() => this.capProf.add("vt-iosurface", performance.now() - t0));
+      return p.finally(() => this.capProf.add("gpu-shared", performance.now() - t0));
     }
     return Promise.resolve().then(() => {
       try {
@@ -285,7 +293,7 @@ export class OffscreenRenderWindow {
           return;
         }
         const tex = details.texture;
-        const handle = tex?.textureInfo?.handle?.ioSurface;
+        const handle = tex ? sharedTextureHandle(tex) : undefined;
         if (!tex || !handle?.length) {
           this.capProf.bump(tex ? "paint-empty-tex" : "paint-skip");
           tex?.release();

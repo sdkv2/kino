@@ -20,6 +20,10 @@ function appendGpuSwitches(app: { commandLine: { appendSwitch(sw: string, value?
     ["use-angle", process.platform === "darwin" ? "metal" : process.platform === "win32" ? "d3d11" : "vulkan"],
     ["use-gl", "angle"],
   ];
+  // Session-0 / SSH heads often crash the GPU process (exit_code=34) unless sandbox is off.
+  if (process.platform === "win32") {
+    switches.push("disable-gpu-sandbox", "no-sandbox");
+  }
   for (const s of switches) {
     if (Array.isArray(s)) app.commandLine.appendSwitch(s[0], s[1]);
     else app.commandLine.appendSwitch(s);
