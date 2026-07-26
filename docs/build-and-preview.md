@@ -78,6 +78,7 @@ match byte-for-byte across machines — golden frames, cross-platform CI compari
 | `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
 | `KINO_SHADER_FXAA=0` | Disable the default FXAA edge post-pass on shader backgrounds. |
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
+| `KINO_CAPTURE=cdp` | Use Chromium CDP JPEG screenshot instead of the default canvas `toDataURL` capture. |
 | `KINO_CONCURRENCY=N` | Chrome worker count (default cap 8 short / 12 long). |
 
 Example: `KINO_GPU=0 kino build specs/foo.json --mock` (force the deterministic software path)
