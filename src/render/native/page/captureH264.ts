@@ -155,3 +155,82 @@ export async function captureH264FromCanvas(
   const bitmap = await createImageBitmap(canvas);
   await encodeBitmapH264(slot, bitmap, width, height, fps);
 }
+
+/** Reused main-thread encoder — returns annex-B (no __capture POST). For Electron present-bypass. */
+let bytesEnc: VideoEncoder | null = null;
+let bytesEncW = 0;
+let bytesEncH = 0;
+let bytesEncFps = 0;
+/** Indirection so configure-once encoder can target each call's chunk list. */
+let bytesSink: ((chunk: EncodedVideoChunk) => void) | null = null;
+
+function ensureBytesEncoder(width: number, height: number, fps: number): VideoEncoder {
+  if (bytesEnc && bytesEncW === width && bytesEncH === height && bytesEncFps === fps) return bytesEnc;
+  if (bytesEnc) {
+    try {
+      bytesEnc.close();
+    } catch {
+      // already closed
+    }
+    bytesEnc = null;
+  }
+  bytesEncW = width;
+  bytesEncH = height;
+  bytesEncFps = fps;
+  bytesEnc = new VideoEncoder({
+    output: (chunk) => bytesSink?.(chunk),
+    error: (err) => {
+      throw err;
+    },
+  });
+  bytesEnc.configure({
+    codec: H264_CODEC,
+    width,
+    height,
+    bitrate: H264_BITRATE,
+    framerate: fps,
+    latencyMode: "quality",
+    hardwareAcceleration: "prefer-hardware",
+    avc: { format: "annexb" },
+  });
+  return bytesEnc;
+}
+
+/**
+ * Encode the WebGL canvas via WebCodecs VideoFrame — stays in Chromium's GPU/media path
+ * (typically VideoToolbox on macOS). No OSR paint, no full-frame RGBA IPC.
+ */
+export async function encodeH264BytesFromCanvas(
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+  fps: number,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  bytesSink = (chunk) => {
+    const buf = new Uint8Array(chunk.byteLength);
+    chunk.copyTo(buf);
+    chunks.push(buf);
+  };
+  try {
+    const enc = ensureBytesEncoder(width, height, fps);
+    const frame = new VideoFrame(canvas, { timestamp: 0, alpha: "discard" });
+    try {
+      enc.encode(frame, { keyFrame: true });
+    } finally {
+      frame.close();
+    }
+    await enc.flush();
+  } finally {
+    bytesSink = null;
+  }
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  if (total === 0) throw new Error("WebCodecs H.264 produced no output");
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}

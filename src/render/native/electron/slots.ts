@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,52 +7,61 @@ import { onBeforeSweep } from "../../../scratch.js";
 import type { WorkerHandle } from "../workerHandle.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const workerJs = join(here, "worker.js");
+
+/** Electron needs a real .js entry. tsc emits beside this file in dist/; tsx from src/ falls back. */
+function resolveWorkerJs(): string {
+  const local = join(here, "worker.js");
+  if (existsSync(local)) return local;
+  const fromDist = join(here, "../../../../dist/render/native/electron/worker.js");
+  if (existsSync(fromDist)) return fromDist;
+  throw new Error(`electron worker.js missing (tried ${local} and ${fromDist}; run npm run build)`);
+}
+
+const workerJs = resolveWorkerJs();
 
 function electronBin(): string {
   const require = createRequire(import.meta.url);
   return (require("electron") as string).trim();
 }
 
-type LineWait = { kind: "line"; resolve: (line: string) => void; reject: (e: Error) => void };
-type FrameWait = { kind: "frame"; resolve: (buf: Buffer | null) => void; reject: (e: Error) => void };
-type Wait = LineWait | FrameWait;
+type Wait =
+  | { kind: "line"; resolve: (line: string) => void; reject: (e: Error) => void }
+  | { kind: "frame"; resolve: (buf: Buffer | null) => void; reject: (e: Error) => void };
 
-const liveWorkers = new Set<ChildProcessWithoutNullStreams>();
-let killHookInstalled = false;
-
-function installKillHook(): void {
-  if (killHookInstalled) return;
-  killHookInstalled = true;
-  onBeforeSweep(() => {
-    for (const child of liveWorkers) {
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        // already gone
-      }
-    }
-    liveWorkers.clear();
-  });
-}
-
-/** One electron subprocess — offscreen paint capture over length-prefixed stdin/stdout. */
-class ElectronWorkerProc {
+/**
+ * One Electron subprocess hosting N offscreen windows (slots). Sharing a single Chromium GPU
+ * process cuts the multi-worker contention that made c≥3 regress when each slot spawned its own
+ * Electron.
+ *
+ * Protocol (tagged — responses may reorder vs send order when slots overlap):
+ *   → boot|reload|scap|flush|profile … <id>
+ *   ← L <id> <payload>\n
+ *   ← F <id> <byteLength>\n + bytes
+ */
+class ElectronHostProc {
   private child: ChildProcessWithoutNullStreams;
-  private queue: Wait[] = [];
+  private pending = new Map<number, Wait>();
+  private nextId = 1;
   private buf = Buffer.alloc(0);
+  private alive = true;
+  /** After `F id len\n`, await `len` binary bytes for this id. */
+  private readingFrame: { id: number; len: number } | null = null;
 
   constructor() {
-    installKillHook();
     this.child = spawn(electronBin(), [workerJs], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, KINO_ELECTRON_WORKER: "1" },
     });
-    liveWorkers.add(this.child);
-    this.child.once("exit", () => liveWorkers.delete(this.child));
+    liveHosts.add(this.child);
+    this.child.once("exit", () => {
+      this.alive = false;
+      liveHosts.delete(this.child);
+      const err = new Error("electron host exited");
+      for (const w of this.pending.values()) w.reject(err);
+      this.pending.clear();
+    });
     this.child.stderr.on("data", (chunk: Buffer) => {
       const s = chunk.toString("utf8");
-      // Drop Chromium GL spam; keep worker diagnostics.
       if (s.includes("GL_INVALID_OPERATION") || s.includes("gl_utils.cc") || s.includes("Too many GL errors")) return;
       process.stderr.write(chunk);
     });
@@ -59,50 +69,70 @@ class ElectronWorkerProc {
       this.buf = Buffer.concat([this.buf, chunk]);
       this.pump();
     });
-    this.child.on("exit", (code) => {
-      const err = new Error(`electron worker exited ${code ?? "?"}`);
-      for (const w of this.queue) w.reject(err);
-      this.queue = [];
-    });
   }
 
   private pump(): void {
-    while (this.queue.length) {
-      const head = this.queue[0];
-      if (head.kind === "line") {
-        const nl = this.buf.indexOf(0x0a);
-        if (nl < 0) return;
-        const line = this.buf.subarray(0, nl).toString("utf8");
-        this.buf = this.buf.subarray(nl + 1);
-        this.queue.shift();
-        head.resolve(line);
+    for (;;) {
+      if (this.readingFrame) {
+        const { id, len } = this.readingFrame;
+        if (this.buf.length < len) return;
+        const body = len ? this.buf.subarray(0, len) : null;
+        this.buf = this.buf.subarray(len);
+        this.readingFrame = null;
+        const w = this.pending.get(id);
+        this.pending.delete(id);
+        if (w?.kind === "frame") w.resolve(body && body.length ? Buffer.from(body) : null);
         continue;
       }
-      if (this.buf.length < 4) return;
-      const len = this.buf.readUInt32BE(0);
-      if (this.buf.length < 4 + len) return;
-      const body = len ? this.buf.subarray(4, 4 + len) : null;
-      this.buf = this.buf.subarray(4 + len);
-      this.queue.shift();
-      head.resolve(body);
+
+      const nl = this.buf.indexOf(0x0a);
+      if (nl < 0) return;
+      const line = this.buf.subarray(0, nl).toString("utf8");
+      this.buf = this.buf.subarray(nl + 1);
+      const m = /^(L|F) (\d+) (.*)$/.exec(line);
+      if (!m) throw new Error(`electron host bad reply: ${line}`);
+      const kind = m[1];
+      const id = Number(m[2]);
+      const rest = m[3];
+      if (kind === "L") {
+        const w = this.pending.get(id);
+        this.pending.delete(id);
+        if (w?.kind === "line") w.resolve(rest);
+        continue;
+      }
+      const len = Number(rest);
+      if (!Number.isFinite(len) || len < 0) throw new Error(`electron host bad frame len: ${line}`);
+      this.readingFrame = { id, len };
     }
   }
 
   private send(cmd: string): void {
+    if (!this.alive) throw new Error("electron host dead");
     this.child.stdin.write(`${cmd}\n`);
   }
 
-  private waitLine(): Promise<string> {
+  private allocId(wait: Wait): number {
+    const id = this.nextId++;
+    this.pending.set(id, wait);
+    return id;
+  }
+
+  private requestLine(cmdWithoutId: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      this.queue.push({ kind: "line", resolve, reject });
+      const id = this.allocId({ kind: "line", resolve, reject });
+      this.send(`${cmdWithoutId} ${id}`);
       this.pump();
     });
   }
 
-  private waitFrame(timeoutMs = 10_000): Promise<Buffer | null> {
+  private requestFrame(cmdWithoutId: string, timeoutMs = 10_000): Promise<Buffer | null> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("electron worker frame timeout")), timeoutMs);
-      this.queue.push({
+      let id = 0;
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("electron worker frame timeout"));
+      }, timeoutMs);
+      id = this.allocId({
         kind: "frame",
         resolve: (buf) => {
           clearTimeout(timer);
@@ -113,46 +143,52 @@ class ElectronWorkerProc {
           reject(e);
         },
       });
+      this.send(`${cmdWithoutId} ${id}`);
       this.pump();
     });
   }
 
-  async boot(url: string, width: number, height: number, fps: number): Promise<"shared" | "page"> {
-    this.send(`boot ${url} ${width} ${height} ${fps}`);
-    const line = await this.waitLine();
-    if (line === "ok shared") return "shared";
-    if (line === "ok page" || line === "ok") return "page";
-    throw new Error(`electron worker boot failed: ${line}`);
+  boot(
+    slot: number,
+    url: string,
+    width: number,
+    height: number,
+    fps: number,
+  ): Promise<"shared" | "readback" | "direct" | "page"> {
+    return this.requestLine(`boot ${slot} ${url} ${width} ${height} ${fps}`).then((line) => {
+      if (line === "ok shared") return "shared";
+      if (line === "ok readback") return "readback";
+      if (line === "ok direct") return "direct";
+      if (line === "ok page" || line === "ok") return "page";
+      throw new Error(`electron worker boot failed: ${line}`);
+    });
   }
 
-  async reload(): Promise<void> {
-    this.send("reload");
-    const line = await this.waitLine();
-    if (line !== "ok") throw new Error(`electron worker reload failed: ${line}`);
+  reload(slot: number): Promise<void> {
+    return this.requestLine(`reload ${slot}`).then((line) => {
+      if (line !== "ok") throw new Error(`electron worker reload failed: ${line}`);
+    });
   }
 
-  async seekAndCapture(frame: number): Promise<Buffer | null> {
-    this.send(`scap ${frame}`);
-    const buf = await this.waitFrame();
-    return buf;
+  seekAndCapture(slot: number, frame: number): Promise<Buffer | null> {
+    return this.requestFrame(`scap ${slot} ${frame}`);
   }
 
-  async flush(): Promise<Buffer | null> {
-    this.send("flush");
-    return this.waitFrame();
+  flush(slot: number): Promise<Buffer | null> {
+    return this.requestFrame(`flush ${slot}`);
   }
 
-  async profile(): Promise<Array<{ key: string; ms: number; n: number }>> {
-    this.send("profile");
-    const line = await this.waitLine();
-    return JSON.parse(line) as Array<{ key: string; ms: number; n: number }>;
+  profile(slot: number): Promise<Array<{ key: string; ms: number; n: number }>> {
+    return this.requestLine(`profile ${slot}`).then(
+      (line) => JSON.parse(line) as Array<{ key: string; ms: number; n: number }>,
+    );
   }
 
   close(): Promise<void> {
     return new Promise((resolve) => {
       const finish = () => {
         clearTimeout(force);
-        liveWorkers.delete(this.child);
+        liveHosts.delete(this.child);
         resolve();
       };
       const force = setTimeout(() => {
@@ -174,7 +210,33 @@ class ElectronWorkerProc {
   }
 }
 
-const workers = new Map<number, ElectronWorkerProc>();
+const liveHosts = new Set<ChildProcessWithoutNullStreams>();
+let killHookInstalled = false;
+let host: ElectronHostProc | null = null;
+const slotted = new Set<number>();
+
+function installKillHook(): void {
+  if (killHookInstalled) return;
+  killHookInstalled = true;
+  onBeforeSweep(() => {
+    for (const child of liveHosts) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+    liveHosts.clear();
+    host = null;
+    slotted.clear();
+  });
+}
+
+function getHost(): ElectronHostProc {
+  installKillHook();
+  if (!host) host = new ElectronHostProc();
+  return host;
+}
 
 export async function acquireElectronWorker(
   slot: number,
@@ -183,33 +245,35 @@ export async function acquireElectronWorker(
   height: number,
   fps: number,
 ): Promise<WorkerHandle> {
-  let proc = workers.get(slot) ?? null;
-  if (!proc) {
-    proc = new ElectronWorkerProc();
-    await proc.boot(url, width, height, fps);
-    workers.set(slot, proc);
+  const h = getHost();
+  if (slotted.has(slot)) {
+    await h.reload(slot);
   } else {
-    await proc.reload();
+    await h.boot(slot, url, width, height, fps);
+    slotted.add(slot);
   }
-  const p = proc;
   return {
-    seekAndCapture: (frame) => p.seekAndCapture(frame),
-    flush: () => p.flush(),
-    dumpProfile: (frames, captureMs) => dumpElectronProfile(p, frames, captureMs),
+    seekAndCapture: (frame) => h.seekAndCapture(slot, frame),
+    flush: () => h.flush(slot),
+    dumpProfile: (frames, captureMs) => dumpElectronProfile(h, slot, frames, captureMs),
   };
 }
 
 export async function releaseElectronWorkers(): Promise<void> {
-  await Promise.all([...workers.values()].map((p) => p.close()));
-  workers.clear();
+  if (host) {
+    await host.close();
+    host = null;
+  }
+  slotted.clear();
 }
 
 async function dumpElectronProfile(
-  proc: ElectronWorkerProc,
+  proc: ElectronHostProc,
+  slot: number,
   frames: number,
   captureMs: number,
 ): Promise<void> {
-  const rows = await proc.profile();
+  const rows = await proc.profile(slot);
   if (!rows.length) return;
   const pageRows = rows.filter((r) => !r.key.startsWith("cap:"));
   const capRows = rows.filter((r) => r.key.startsWith("cap:"));
@@ -219,7 +283,7 @@ async function dumpElectronProfile(
     .reduce((a, r) => a + r.ms, 0);
   const capTotal = capRows.reduce((a, r) => a + r.ms, 0);
 
-  console.error(`[native profile] electron offscreen, ${frames} frames`);
+  console.error(`[native profile] electron offscreen (shared host), ${frames} frames`);
   if (pageRows.length) {
     console.error("  page (GL-flushed seek phases):");
     for (const r of pageRows) {

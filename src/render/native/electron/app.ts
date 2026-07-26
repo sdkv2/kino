@@ -2,6 +2,37 @@ import { isElectronProcess } from "../renderer.js";
 
 let ready: Promise<void> | null = null;
 
+/** Chromium flags stolen from the puppeteer path (browser.ts) — must run before ready. */
+function appendGpuSwitches(app: { commandLine: { appendSwitch(sw: string, value?: string): void } }): void {
+  const switches: Array<string | [string, string]> = [
+    "enable-gpu",
+    "ignore-gpu-blocklist",
+    "enable-gpu-rasterization",
+    "enable-zero-copy",
+    "disable-gpu-vsync",
+    "enable-surface-synchronization",
+    "disable-background-timer-throttling",
+    "disable-renderer-backgrounding",
+    "disable-backgrounding-occluded-windows",
+    ["force-device-scale-factor", "1"],
+    ["force-color-profile", "srgb"],
+    // Match puppeteer's macOS ANGLE backend — without this Electron can pick a slower path.
+    ["use-angle", process.platform === "darwin" ? "metal" : process.platform === "win32" ? "d3d11" : "vulkan"],
+    ["use-gl", "angle"],
+  ];
+  for (const s of switches) {
+    if (Array.isArray(s)) app.commandLine.appendSwitch(s[0], s[1]);
+    else app.commandLine.appendSwitch(s);
+  }
+  // Extra escape hatch: KINO_ELECTRON_ARGS="--flag --other=1"
+  for (const arg of (process.env.KINO_ELECTRON_ARGS ?? "").split(/\s+/).filter(Boolean)) {
+    if (!arg.startsWith("--")) continue;
+    const eq = arg.indexOf("=");
+    if (eq === -1) app.commandLine.appendSwitch(arg.slice(2));
+    else app.commandLine.appendSwitch(arg.slice(2, eq), arg.slice(eq + 1));
+  }
+}
+
 /** One Electron app per process — required before BrowserWindow. */
 export function ensureElectronApp(): Promise<void> {
   if (!isElectronProcess()) {
@@ -10,12 +41,7 @@ export function ensureElectronApp(): Promise<void> {
   if (ready) return ready;
   ready = (async () => {
     const { app } = await import("electron");
-    app.commandLine.appendSwitch("enable-gpu");
-    app.commandLine.appendSwitch("ignore-gpu-blocklist");
-    app.commandLine.appendSwitch("enable-gpu-rasterization");
-    app.commandLine.appendSwitch("disable-background-timer-throttling");
-    app.commandLine.appendSwitch("disable-renderer-backgrounding");
-    app.commandLine.appendSwitch("force-device-scale-factor", "1");
+    appendGpuSwitches(app);
     await app.whenReady();
   })();
   return ready;

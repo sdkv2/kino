@@ -3,6 +3,7 @@
 import {
   captureH264FromCanvas,
   encodeBitmapH264,
+  encodeH264BytesFromCanvas,
   probeH264Capture,
   resetH264Capture,
 } from "./captureH264.js";
@@ -131,6 +132,18 @@ export async function captureSync(slot: number): Promise<void> {
     return;
   }
   await postBlob(slot, await canvasBlob(canvas));
+}
+
+/** Electron present-bypass: annex-B bytes from the WebGL canvas (no OSR paint, no POST). */
+export async function captureH264Bytes(): Promise<Uint8Array> {
+  const canvas = stageCanvas();
+  if (!canvas) throw new Error("kino-stage canvas missing");
+  if (!(await probeH264Capture(dims.width || canvas.width, dims.height || canvas.height, dims.fps))) {
+    throw new Error("WebCodecs H.264 not supported in this Chromium");
+  }
+  const w = dims.width || canvas.width;
+  const h = dims.height || canvas.height;
+  return encodeH264BytesFromCanvas(canvas, w, h, dims.fps);
 }
 
 /** After seek(N): wait for the previous POST, snapshot N, kick async encode+POST. */

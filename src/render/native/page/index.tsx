@@ -10,6 +10,7 @@ import type { KinoProps } from "../../props.js";
 import { Stage, type StageHandle } from "./compositor/Stage.js";
 import { enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
 import {
+  captureH264Bytes,
   capturePipelined,
   captureSync,
   flushCapturePipeline,
@@ -37,6 +38,13 @@ declare global {
     kinoCapturePipelined: (slot: number) => Promise<void>;
     kinoCaptureSync: (slot: number) => Promise<void>;
     kinoFlushCapture: () => Promise<void>;
+    /** Electron present-bypass: WebCodecs annex-B from the stage canvas. */
+    kinoCaptureH264Bytes: () => Promise<Uint8Array>;
+    kinoElectron?: {
+      pushFrame?: (rgba: Uint8Array, width: number, height: number) => Promise<boolean>;
+      pushH264?: (annexB: Uint8Array) => Promise<boolean>;
+      frameReady?: (frame: number) => void;
+    };
     __kinoCaptureCodec?: CaptureCodec;
     __kinoCaptureSource?: CaptureSource;
     __kinoReady: boolean;
@@ -83,6 +91,8 @@ let stageHandle: StageHandle | null = null;
 async function kinoSeek(frame: number): Promise<void> {
   if (!current || !stageHandle) throw new Error("kinoSeek before kinoLoad");
   await stageHandle.seek(frame);
+  // Electron shared capture: nudge OSR invalidate before executeJavaScript returns to main.
+  window.kinoElectron?.frameReady?.(frame);
 }
 
 async function kinoLoad(): Promise<void> {
@@ -139,6 +149,7 @@ window.kinoSeek = kinoSeek;
 window.kinoCapturePipelined = capturePipelined;
 window.kinoCaptureSync = captureSync;
 window.kinoFlushCapture = flushCapturePipeline;
+window.kinoCaptureH264Bytes = captureH264Bytes;
 window.__kinoProf = snapshot;
 
 kinoLoad()

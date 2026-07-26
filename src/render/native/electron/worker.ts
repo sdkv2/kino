@@ -6,14 +6,35 @@ if (!process.versions.electron) {
   process.exit(1);
 }
 
-let win: OffscreenRenderWindow | null = null;
-let chain = Promise.resolve();
+/** One Chromium GPU process, many offscreen windows — avoids N× Electron GPU contention. */
+const wins = new Map<number, OffscreenRenderWindow>();
+/** Per-slot serial queues so scap on slot 0∥1 can overlap; boot/quit stay ordered per slot. */
+const chains = new Map<number, Promise<void>>();
+let globalChain = Promise.resolve();
+/** stdout is multiplexed — serialize tagged replies so length-prefixed frames never interleave. */
+let outLock = Promise.resolve();
 
-function writeFrame(buf: Buffer | null): void {
-  const hdr = Buffer.alloc(4);
-  hdr.writeUInt32BE(buf?.length ?? 0, 0);
-  process.stdout.write(hdr);
-  if (buf?.length) process.stdout.write(buf);
+function withStdout(fn: () => void): Promise<void> {
+  const run = outLock.then(fn);
+  outLock = run.then(
+    () => {},
+    () => {},
+  );
+  return run;
+}
+
+function writeLine(id: number, payload: string): Promise<void> {
+  return withStdout(() => {
+    process.stdout.write(`L ${id} ${payload}\n`);
+  });
+}
+
+function writeFrame(id: number, buf: Buffer | null): Promise<void> {
+  return withStdout(() => {
+    const len = buf?.length ?? 0;
+    process.stdout.write(`F ${id} ${len}\n`);
+    if (len && buf) process.stdout.write(buf);
+  });
 }
 
 function writeErr(msg: string): void {
@@ -21,13 +42,20 @@ function writeErr(msg: string): void {
   process.exit(1);
 }
 
-function enqueue(fn: () => Promise<void>): void {
-  chain = chain.then(fn).catch((e) => writeErr((e as Error).stack ?? String(e)));
+function enqueueSlot(slot: number, fn: () => Promise<void>): void {
+  const prev = chains.get(slot) ?? Promise.resolve();
+  const next = prev.then(fn).catch((e) => writeErr((e as Error).stack ?? String(e)));
+  chains.set(slot, next);
+}
+
+function enqueueGlobal(fn: () => Promise<void>): void {
+  globalChain = globalChain.then(fn).catch((e) => writeErr((e as Error).stack ?? String(e)));
 }
 
 async function shutdown(): Promise<void> {
-  await win?.close();
-  win = null;
+  await Promise.all([...wins.values()].map((w) => w.close()));
+  wins.clear();
+  chains.clear();
   const { quitElectronApp } = await import("./app.js");
   await quitElectronApp();
   process.exit(0);
@@ -39,39 +67,82 @@ rl.on("close", () => {
 });
 rl.on("line", (line) => {
   const [cmd, ...rest] = line.trim().split(/\s+/);
-  enqueue(async () => {
-    switch (cmd) {
-      case "boot": {
-        const [url, w, h, fps] = rest;
-        win = new OffscreenRenderWindow(url, Number(w), Number(h), Number(fps) || 30);
+  switch (cmd) {
+    case "boot": {
+      // boot <slot> <url> <w> <h> <fps> <id>
+      const slot = Number(rest[0]);
+      const url = rest[1];
+      const w = Number(rest[2]);
+      const h = Number(rest[3]);
+      const fps = Number(rest[4]) || 30;
+      const id = Number(rest[5]);
+      enqueueSlot(slot, async () => {
+        const existing = wins.get(slot);
+        if (existing) {
+          await existing.reloadConfig();
+          await writeLine(id, `ok ${existing.captureKind()}`);
+          return;
+        }
+        const win = new OffscreenRenderWindow(url, w, h, fps);
         await win.boot();
-        process.stdout.write(win.usesSharedTexture() ? "ok shared\n" : "ok page\n");
-        break;
-      }
-      case "reload":
-        await win!.reloadConfig();
-        process.stdout.write("ok\n");
-        break;
-      case "scap": {
-        const buf = await win!.seekAndCapture(Number(rest[0]));
-        writeFrame(buf);
-        break;
-      }
-      case "flush": {
-        const buf = await win!.flush();
-        writeFrame(buf);
-        break;
-      }
-      case "profile": {
-        const rows = await win!.profile();
-        process.stdout.write(`${JSON.stringify(rows)}\n`);
-        break;
-      }
-      case "quit":
-        await shutdown();
-        break;
-      default:
-        writeErr(`unknown worker cmd: ${cmd}`);
+        wins.set(slot, win);
+        await writeLine(id, `ok ${win.captureKind()}`);
+      });
+      break;
     }
-  });
+    case "reload": {
+      // reload <slot> <id>
+      const slot = Number(rest[0]);
+      const id = Number(rest[1]);
+      enqueueSlot(slot, async () => {
+        const win = wins.get(slot);
+        if (!win) throw new Error(`reload: no window for slot ${slot}`);
+        await win.reloadConfig();
+        await writeLine(id, "ok");
+      });
+      break;
+    }
+    case "scap": {
+      // scap <slot> <frame> <id> — concurrent across slots
+      const slot = Number(rest[0]);
+      const frame = Number(rest[1]);
+      const id = Number(rest[2]);
+      enqueueSlot(slot, async () => {
+        const win = wins.get(slot);
+        if (!win) throw new Error(`scap: no window for slot ${slot}`);
+        const buf = await win.seekAndCapture(frame);
+        await writeFrame(id, buf);
+      });
+      break;
+    }
+    case "flush": {
+      // flush <slot> <id>
+      const slot = Number(rest[0]);
+      const id = Number(rest[1]);
+      enqueueSlot(slot, async () => {
+        const win = wins.get(slot);
+        if (!win) throw new Error(`flush: no window for slot ${slot}`);
+        const buf = await win.flush();
+        await writeFrame(id, buf);
+      });
+      break;
+    }
+    case "profile": {
+      // profile <slot> <id>
+      const slot = Number(rest[0] ?? 0);
+      const id = Number(rest[1]);
+      enqueueSlot(slot, async () => {
+        const win = wins.get(slot);
+        if (!win) throw new Error(`profile: no window for slot ${slot}`);
+        const rows = await win.profile();
+        await writeLine(id, JSON.stringify(rows));
+      });
+      break;
+    }
+    case "quit":
+      enqueueGlobal(() => shutdown());
+      break;
+    default:
+      writeErr(`unknown worker cmd: ${cmd}`);
+  }
 });

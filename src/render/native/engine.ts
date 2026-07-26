@@ -22,7 +22,7 @@ import type { CaptureSource } from "./captureSource.js";
 import { extractDense, extractMaxDim, extractSparse, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
 import type { WorkerHandle } from "./workerHandle.js";
 import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.js";
-import { useSharedTextureCapture } from "./electron/gpuCapture.js";
+import { resolveElectronCapture, useSharedTextureCapture } from "./electron/gpuCapture.js";
 import { resolveRenderer, type NativeRenderer } from "./renderer.js";
 
 export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
@@ -108,10 +108,9 @@ export function resolveCaptureSource(env: NodeJS.ProcessEnv = process.env): Capt
   return "bitmap";
 }
 
-// Each worker is a separate browser process holding its own compositor canvas, which at SS=2 is a
-// 2160x3840 render target — so the binding resource is GPU memory, not CPU cores. Measured on M4
-// (showcase + bench4k): throughput peaks at 2 workers; 3 regresses. RTX 2070 SUPER/Vulkan also
-// peaks at 2–3 before VRAM exhaustion ("render target incomplete"). Override with KINO_CONCURRENCY.
+// Binding resource is GPU memory / Metal, not CPU cores. Puppeteer: each worker = own Chrome GPU
+// process — peaks at 2; 3+ regresses. Electron: one shared host, N offscreen windows, each with
+// its own VT session (parallel encode). Default 2; override with KINO_CONCURRENCY after measuring.
 const MAX_WORKERS = 2;
 export function concurrency(
   totalFrames: number,
@@ -214,10 +213,13 @@ async function workerPageInner(slot: number, browser: Browser, url: string, widt
       )) as string | null;
       if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
     },
+    // One-shot API (stills / motion probe): must return the frame just seeked. Pipelined
+    // capture kicks encode+POST async and relies on flush()/lag tracking in renderFrameRange —
+    // calling it here leaves takeCaptureBuffer empty ("capture returned empty frame N").
     shot: async () => {
       const t0 = performance.now();
       try {
-        return await captureFrom(p, pipelined, slot);
+        return await captureFrom(p, false, slot);
       } finally {
         captureMs += performance.now() - t0;
       }
@@ -588,11 +590,18 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
               };
             }),
           );
-          log.step(
-            electronShared
-              ? "capture: electron/paint → VideoToolbox H.264 annex-B (IOSurface when available)"
-              : "capture: electron/capturePage JPEG q95",
-          );
+          {
+            const elCap = resolveElectronCapture();
+            log.step(
+              elCap === "direct"
+                ? "capture: electron/WebCodecs VideoFrame(canvas) → H.264 annex-B (no OSR paint)"
+                : elCap === "readback"
+                  ? "capture: electron/readPixels → VideoToolbox H.264 annex-B"
+                  : elCap === "shared"
+                    ? "capture: electron/paint → VideoToolbox H.264 annex-B (IOSurface)"
+                    : "capture: electron/capturePage JPEG q95",
+            );
+          }
         } else {
           const browsers = workers!;
           handles = await Promise.all(browsers.map((b, i) => workerHandle(i, b, server.url, width, height)));
