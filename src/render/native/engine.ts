@@ -14,8 +14,10 @@ import { buildAudioTrack } from "./audioMix.js";
 import { acquireBrowser, glMode, releaseBrowser } from "./browser.js";
 import { frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
-import { ensureRenderServer } from "./server.js";
-import { extractDense, extractSparse, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
+import { ensureRenderServer, takeCaptureBuffer, clearCaptureBuffers } from "./server.js";
+import type { CaptureCodec } from "./captureCodec.js";
+import type { CaptureSource } from "./captureSource.js";
+import { extractDense, extractMaxDim, extractSparse, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
 import { layersAt } from "../layers.js";
 import { measureLayers, type ElementMeasure } from "../measure.js";
 
@@ -81,12 +83,40 @@ function durationInFrames(props: KinoProps): number {
   return Math.max(1, Math.round(total * props.fps));
 }
 
-function concurrency(totalFrames: number): number {
-  const env = Number(process.env.KINO_CONCURRENCY);
-  if (Number.isFinite(env) && env >= 1) return Math.round(env);
-  // Scale worker pool up to CPU core count - 1 (min 1, max 24) to utilize available hardware.
-  const logicalCores = Math.max(1, cpus().length - 1);
-  return Math.min(24, Math.max(1, logicalCores));
+function capturePipelineEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.KINO_CAPTURE_PIPELINE !== "0" && captureMode(env) === "canvas";
+}
+
+/** Video builds default to WebCodecs H.264; stills and KINO_CAPTURE_CODEC=jpeg stay on JPEG q95. */
+export function resolveCaptureCodec(env: NodeJS.ProcessEnv = process.env, forStills = false): CaptureCodec {
+  if (forStills) return "jpeg";
+  const v = env.KINO_CAPTURE_CODEC;
+  if (v === "jpeg") return "jpeg";
+  if (v === "h264") return "h264";
+  return "h264";
+}
+
+/** Pixel path into VideoEncoder — benchmark with KINO_CAPTURE_SOURCE=bitmap|stream|videoframe. */
+export function resolveCaptureSource(env: NodeJS.ProcessEnv = process.env): CaptureSource {
+  const v = env.KINO_CAPTURE_SOURCE;
+  if (v === "stream" || v === "videoframe" || v === "bitmap") return v;
+  return "bitmap";
+}
+
+// Each worker is a separate browser process holding its own compositor canvas, which at SS=2 is a
+// 2160x3840 render target — so the binding resource is GPU memory, not CPU cores. Measured on M4
+// (showcase + bench4k): throughput peaks at 2 workers; 3 regresses. RTX 2070 SUPER/Vulkan also
+// peaks at 2–3 before VRAM exhaustion ("render target incomplete"). Override with KINO_CONCURRENCY.
+const MAX_WORKERS = 2;
+export function concurrency(
+  totalFrames: number,
+  env: NodeJS.ProcessEnv = process.env,
+  cores: number = cpus().length,
+): number {
+  const cap = Math.max(1, totalFrames);
+  const override = Number(env.KINO_CONCURRENCY);
+  if (Number.isFinite(override) && override >= 1) return Math.min(Math.round(override), cap);
+  return Math.min(MAX_WORKERS, Math.max(1, cores - 1), cap);
 }
 
 // The render server and its config are process-wide singletons the pages re-read via kinoLoad();
@@ -101,7 +131,10 @@ function withRenderLock<T>(fn: () => Promise<T>): Promise<T> {
 export interface PageHandle {
   page: Page;
   seek: (frame: number) => Promise<void>;
-  shot: () => Promise<Buffer>;
+  shot: () => Promise<Buffer | null>;
+  /** One CDP round-trip: seek then kick capture (saves ~2–4 ms/frame vs split calls). */
+  seekAndCapture: (frame: number) => Promise<Buffer | null>;
+  flush: () => Promise<Buffer | null>;
 }
 
 // Booted pages cached per worker slot: a page stays on the singleton server's origin, so later
@@ -154,6 +187,7 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
     pageCache.set(slot, page);
   }
   const p = page;
+  const pipelined = capturePipelineEnabled();
   return {
     page: p,
     seek: async (frame: number) => {
@@ -167,26 +201,74 @@ async function workerPage(slot: number, browser: Browser, url: string, width: nu
       if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
     },
     shot: async () => {
-      if (captureMode() === "canvas") {
-        const data = (await p.evaluate(`(() => {
-          const el = document.getElementById("kino-stage");
-          if (!el || !(el instanceof HTMLCanvasElement)) return null;
-          return el.toDataURL("image/jpeg", 0.95);
-        })()`)) as string | null;
-        if (data) return Buffer.from(data.split(",")[1]!, "base64");
+      const t0 = performance.now();
+      try {
+        return await captureFrom(p, pipelined, slot);
+      } finally {
+        captureMs += performance.now() - t0;
       }
-      return Buffer.from(await p.screenshot({ type: "jpeg", quality: 95 }));
+    },
+    seekAndCapture: async (frame: number) => {
+      const t0 = performance.now();
+      try {
+        const cap = pipelined ? `window.kinoCapturePipelined(${slot})` : `window.kinoCaptureSync(${slot})`;
+        const fatal = (await p.evaluate(
+          `window.kinoSeek(${frame}).then(() => ${cap}).then(() => window.__kinoFatal ?? null)`,
+        )) as string | null;
+        if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
+        return takeCaptureBuffer(slot) ?? null;
+      } finally {
+        captureMs += performance.now() - t0;
+      }
+    },
+    flush: async () => {
+      if (!pipelined) return null;
+      const t0 = performance.now();
+      try {
+        return await flushCaptureFrom(p, slot);
+      } finally {
+        captureMs += performance.now() - t0;
+      }
     },
   };
 }
 
-// Stream ordered JPEG frames (q95 — Chrome's PNG encoder is ~10× slower per frame; the legacy
-// engine's own frame format was JPEG) into a single libx264 encode (image2pipe on stdin) and mux
-// the mixed audio track in the same pass. bt709 tags + matrix match players' expectations.
-function startEncoder(opts: { fps: number; out: string; audio: string | null; preset: EncodePreset }): { stdin: NodeJS.WritableStream; done: Promise<void>; kill: () => void } {
+// Wall time spent in shot() across all workers, for the KINO_PROFILE dump.
+let captureMs = 0;
+
+async function captureFrom(p: Page, pipelined: boolean, slot: number): Promise<Buffer | null> {
+  if (captureMode() === "canvas") {
+    if (pipelined) {
+      await p.evaluate(`window.kinoCapturePipelined(${slot})`);
+    } else {
+      await p.evaluate(`window.kinoCaptureSync(${slot})`);
+    }
+    return takeCaptureBuffer(slot) ?? null;
+  }
+  return Buffer.from(await p.screenshot({ type: "jpeg", quality: 95 }));
+}
+
+async function flushCaptureFrom(p: Page, slot: number): Promise<Buffer | null> {
+  await p.evaluate("window.kinoFlushCapture()");
+  return takeCaptureBuffer(slot) ?? null;
+}
+
+// Stream captured frames into a single libx264 encode and mux the mixed audio track. H.264 builds
+// ingest WebCodecs all-intra annex-B (no JPEG 4:2:0 sandwich); JPEG builds use image2pipe mjpeg.
+function startEncoder(opts: {
+  fps: number;
+  out: string;
+  audio: string | null;
+  preset: EncodePreset;
+  captureCodec: CaptureCodec;
+}): { stdin: NodeJS.WritableStream; done: Promise<void>; kill: () => void } {
+  const videoIn =
+    opts.captureCodec === "h264"
+      ? ["-f", "h264", "-framerate", String(opts.fps), "-i", "-"]
+      : ["-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(opts.fps), "-i", "-"];
   const args = [
     "-y", "-loglevel", "error",
-    "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", String(opts.fps), "-i", "-",
+    ...videoIn,
     ...(opts.audio ? ["-i", opts.audio] : []),
     "-map", "0:v", ...(opts.audio ? ["-map", "1:a"] : []),
     "-c:v", "libx264", "-preset", opts.preset, "-crf", "18",
@@ -225,6 +307,7 @@ export async function renderFrameRange(
   stdin: NodeJS.WritableStream,
   cache?: { get(n: number): Promise<Buffer | null>; put(n: number, buf: Buffer): Promise<void> },
 ): Promise<void> {
+  const pipeline = capturePipelineEnabled();
   const AHEAD = 48; // max undrained frames in memory
   const ready = new Map<number, Buffer>();
   let next = 0; // next frame index to claim
@@ -241,10 +324,20 @@ export async function renderFrameRange(
   };
   const waitTick = () => new Promise<void>((resolve) => waiters.push(resolve));
 
+  const storeLag = async (h: PageHandle, lagFrame: number | null, buf: Buffer | null) => {
+    if (!pipeline || !buf || lagFrame === null) return;
+    ready.set(lagFrame, buf);
+    if (cache) await cache.put(lagFrame, buf);
+  };
+
   const workers = handles.map(async (h) => {
+    let lagFrame: number | null = null;
     for (;;) {
       if (failure) return;
-      if (next >= total) return;
+      if (next >= total) {
+        await storeLag(h, lagFrame, await h.flush());
+        return;
+      }
       if (next - written >= AHEAD) {
         await waitTick();
         continue;
@@ -253,12 +346,20 @@ export async function renderFrameRange(
       try {
         const cached = cache ? await cache.get(frame) : null;
         if (cached) {
+          if (pipeline) {
+            await storeLag(h, lagFrame, await h.flush());
+            lagFrame = null;
+          }
           ready.set(frame, cached);
         } else {
-          await h.seek(frame);
-          const buf = await h.shot();
-          ready.set(frame, buf);
-          if (cache) await cache.put(frame, buf);
+          const buf = await h.seekAndCapture(frame);
+          if (pipeline) {
+            await storeLag(h, lagFrame, buf);
+            lagFrame = frame;
+          } else {
+            ready.set(frame, buf!);
+            if (cache) await cache.put(frame, buf!);
+          }
         }
       } catch (err) {
         failure = err as Error;
@@ -291,7 +392,18 @@ interface PreparedMedia {
   media: Record<string, MediaEntryNode>;
 }
 
-async function prepareDenseMedia(props: KinoProps, publicDir: string, scratch: string): Promise<PreparedMedia> {
+/** Largest output edge across the formats this render produces — the basis for the extraction
+ *  budget. Frames are extracted once and shared by every format, so take the max. */
+function maxOutputDim(formats: string[]): number {
+  return Math.max(...formats.map((f) => Math.max(DIMS[f].width, DIMS[f].height)));
+}
+
+async function prepareDenseMedia(
+  props: KinoProps,
+  publicDir: string,
+  scratch: string,
+  maxDim?: number,
+): Promise<PreparedMedia> {
   const framesDir = join(scratch, "vframes");
   mkdirSync(framesDir, { recursive: true });
   const jobs = [...planMediaJobs(props, props.fps), ...planMaskJobs(props, props.fps)];
@@ -303,7 +415,7 @@ async function prepareDenseMedia(props: KinoProps, publicDir: string, scratch: s
     Array.from({ length: Math.min(pool, jobs.length) }, async () => {
       while (i < jobs.length) {
         const job = jobs[i++];
-        media[job.key] = await extractDense(job, join(publicDir, job.assetRel), framesDir);
+        media[job.key] = await extractDense(job, join(publicDir, job.assetRel), framesDir, maxDim);
       }
     }),
   );
@@ -320,6 +432,8 @@ async function pointServerAt(opts: {
   total: number;
   shaderSS: number;
   shaderFXAA: boolean;
+  captureCodec: CaptureCodec;
+  captureSource: CaptureSource;
 }): Promise<{ url: string }> {
   const pageJs = await getPageBundle();
   return ensureRenderServer({
@@ -334,8 +448,39 @@ async function pointServerAt(opts: {
       media: opts.media,
       shaderSS: opts.shaderSS,
       shaderFXAA: opts.shaderFXAA,
+      profile: process.env.KINO_PROFILE === "1",
+      captureCodec: opts.captureCodec,
+      captureSource: opts.captureSource,
     }),
   });
+}
+
+/**
+ * Dump one worker page's phase totals. KINO_PROFILE=1 only: the page flushes GL after each phase
+ * to attribute cost correctly, which makes the profiled render slower than a real one — read the
+ * shares, not the wall time. Node-side capture cost is reported alongside for comparison.
+ * seekAndCapture includes seek time in the capture tally — use wall time for capture wins.
+ */
+async function dumpProfile(handle: PageHandle, frames: number, captureMs: number): Promise<void> {
+  const rows = (await handle.page.evaluate("window.__kinoProf ? window.__kinoProf() : []")) as Array<{
+    key: string;
+    ms: number;
+    n: number;
+  }>;
+  if (!rows.length) return;
+  const draw = rows.find((r) => r.key === "draw")?.ms ?? 0;
+  const total = rows.filter((r) => r.key === "draw" || r.key.startsWith("prep:")).reduce((a, r) => a + r.ms, 0);
+  console.error(`[native profile] one worker page, ${frames} frames (GL-flushed; shares not wall time)`);
+  for (const r of rows) {
+    if (r.ms >= 1) {
+      const share = total > 0 ? ((r.ms / total) * 100).toFixed(1).padStart(5) : "    -";
+      console.error(
+        `  ${r.key.padEnd(24)} ${(r.ms / Math.max(1, r.n)).toFixed(2).padStart(7)} ms/call  ×${String(r.n).padStart(4)}  ${share}% of prep+draw`,
+      );
+    }
+  }
+  console.error(`  ${"[node] capture".padEnd(24)} ${(captureMs / Math.max(1, frames)).toFixed(2).padStart(7)} ms/frame (all workers)`);
+  console.error(`  draw total ${draw.toFixed(0)}ms of ${total.toFixed(0)}ms prep+draw`);
 }
 
 export interface NativeRenderOpts {
@@ -361,7 +506,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   // One browser PER WORKER — CDP screenshot capture serializes within a browser process, so
   // worker parallelism only pays off across processes.
   const total = durationInFrames(props);
-  const n = Math.min(concurrency(total), total);
+  const n = concurrency(total);
   const slots = Array.from({ length: n }, (_, i) => i);
   // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
   const ss = resolveShaderSS(process.env, { mock: preset === "veryfast" });
@@ -378,7 +523,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     const endSec = total / props.fps;
     // Browser launches overlap frame extraction + the audio mix — none depend on each other.
     const [{ framesDir, media }, audio, browsers] = await Promise.all([
-      prepareDenseMedia(props, publicDir, scratch),
+      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOutputDim(formats), ss)),
       buildAudioTrack(props, publicDir, endSec, scratch),
       Promise.all(slots.map((i) => acquireBrowser(i))),
     ]);
@@ -388,11 +533,24 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     try {
       for (const fmt of formats) {
         const { width, height } = DIMS[fmt];
-        const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx });
+        const requestedCodec = resolveCaptureCodec(process.env);
+        const requestedSource = resolveCaptureSource(process.env);
+        const server = await pointServerAt({
+          props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx,
+          captureCodec: requestedCodec,
+          captureSource: requestedSource,
+        });
         const handles = await Promise.all(browsers.map((b, i) => workerPage(i, b, server.url, width, height)));
+        const captureMeta = (await handles[0]!.page.evaluate(
+          `({ codec: window.__kinoCaptureCodec ?? "jpeg", source: window.__kinoCaptureSource ?? "bitmap" })`,
+        )) as { codec: CaptureCodec; source: CaptureSource };
+        const { codec: captureCodec, source: captureSource } = captureMeta;
+        const capNote =
+          captureCodec !== requestedCodec || captureSource !== requestedSource
+            ? ` (wanted ${requestedCodec}/${requestedSource})`
+            : "";
+        log.step(`capture: ${captureCodec}/${captureSource}${capNote}`);
         lap(`pages-boot ${fmt}`);
-        // Capture cache: unchanged beats reuse their stored JPEGs; only dirty frames hit Chrome.
-        // mode + shaderSS are in the global sig so GPU/SW and SS=1/2 never cross-serve.
         const sigs = frameSignatures({
           props,
           publicDir,
@@ -404,13 +562,17 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           mode,
           shaderSS: ss,
           shaderFXAA: fx,
+          captureCodec,
         });
         const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
         const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
-        const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset });
+        const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset, captureCodec });
         try {
+          captureMs = 0;
+          clearCaptureBuffers();
           await renderFrameRange(handles, total, enc.stdin, cache);
           lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
+          if (process.env.KINO_PROFILE === "1") await dumpProfile(handles[0], total, captureMs);
           enc.stdin.end();
           await enc.done;
         } catch (err) {
@@ -476,7 +638,7 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
             .map(({ frame }) => frame - job.fromFrame)
             .filter((local) => local >= 0 && local < job.seqDurFrames);
           if (!locals.length) continue;
-          media[job.key] = await extractSparse(job, join(publicDir, job.assetRel), framesDir, locals);
+          media[job.key] = await extractSparse(job, join(publicDir, job.assetRel), framesDir, locals, extractMaxDim(maxOutputDim([format]), resolveShaderSS(process.env)));
         }
       })(),
     ]);
@@ -485,13 +647,18 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
     try {
       const ss = resolveShaderSS(process.env);
       const fx = resolveShaderFXAA(process.env);
-      const server = await pointServerAt({ props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx });
+      const server = await pointServerAt({
+        props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx,
+        captureCodec: "jpeg",
+        captureSource: "bitmap",
+      });
       const handle = await workerPage(0, browser, server.url, width, height);
       const outs: string[] = [];
       for (const { frame, name } of wanted) {
         await handle.seek(frame);
         const out = join(outDir, `${name}.png`);
         const buf = await handle.shot();
+        if (!buf) throw new Error(`capture returned empty frame ${frame}`);
         const { writeFileSync } = await import("node:fs");
         writeFileSync(out, buf);
         outs.push(out);

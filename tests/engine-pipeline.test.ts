@@ -11,6 +11,14 @@ import type { KinoProps } from "../src/render/props.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Pipeline capture returns the previous frame's JPEG; fake handles model synchronous capture.
+beforeAll(() => {
+  process.env.KINO_CAPTURE_PIPELINE = "0";
+});
+afterAll(() => {
+  delete process.env.KINO_CAPTURE_PIPELINE;
+});
+
 // Fake capture handle: shot() returns the last-sought frame index as bytes, with an optional
 // per-frame delay so worker/drain wait patterns can be forced.
 function fakeHandle(delayFor: (frame: number) => number): PageHandle {
@@ -25,6 +33,13 @@ function fakeHandle(delayFor: (frame: number) => number): PageHandle {
       if (d > 0) await sleep(d);
       return Buffer.from(String(at));
     },
+    seekAndCapture: async (frame) => {
+      at = frame;
+      const d = delayFor(at);
+      if (d > 0) await sleep(d);
+      return Buffer.from(String(at));
+    },
+    flush: async () => null,
   };
 }
 
@@ -56,6 +71,10 @@ describe("renderFrameRange", () => {
       shot: async () => {
         throw new Error("boom");
       },
+      seekAndCapture: async () => {
+        throw new Error("boom");
+      },
+      flush: async () => null,
     };
     const stdin = {
       write(_buf: Buffer, cb: (err?: Error | null) => void) {
@@ -116,6 +135,11 @@ describe("frame cache", () => {
         seeks.push(f);
       },
       shot: async () => Buffer.from("fresh"),
+      seekAndCapture: async (f) => {
+        seeks.push(f);
+        return Buffer.from("fresh");
+      },
+      flush: async () => null,
     };
     const stored = new Map<number, Buffer>();
     for (let n = 0; n < 30; n++) stored.set(n, Buffer.from("cached"));

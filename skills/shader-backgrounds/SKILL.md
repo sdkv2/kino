@@ -140,9 +140,8 @@ Liquid glass **refracts the background canvas**. Flat night fields make the lens
 | `--glass-strength` / `--glass-band` / `--glass-chroma` / `--glass-profile` | bend + dispersion |
 | `--glass-frost` / `--glass-edge-blur` | body / rim blur (keep low for "liquid") |
 | `--glass-film` / `--glass-saturate` / `--glass-brightness` | film grade |
-| `--glass-morph` / `--glass-from` / `--glass-to` | SDF shape continuum |
-| **`--glass-tilt`** | degrees — rotate **in-shader**; never CSS-`rotate` the glass node |
-| **`--glass-fit`** | override SDF fit (default: untilted → `1`, any tilt → `0.7`) for known-static tilted cards |
+
+Silhouette follows the element's `border-radius` — keep the glass node axis-aligned (no CSS `rotate`/`skew`).
 
 Stress-test: rim must **bend** structured lines, not shear/ghost. Copyable motion:
 `assets-lib/motion/liquid-glass.html`. Full glass craft: `motion-design` → Liquid glass.
@@ -163,7 +162,7 @@ where you want an edge extra-crisp (masks, rings). Heavy raymarch + glass → pr
 
 - Centre-slice texture zoom (`0.5 + rd.xy * k`) instead of cover-fit local uv
 - Relying on CLAMP edges without `kinoMirrorUV` / `kinoBackdrop*`
-- CSS-rotating a `.kino-glass` element (breaks backdrop sampling) — use `--glass-tilt`
+- CSS-rotating or skewing a `.kino-glass` element (breaks backdrop sampling)
 - Frosted `backdrop-filter: blur()` pretending to be liquid glass
 - `Date.now` / wall clock / non-deterministic noise in the frag
 - Flat single-color field under `kino-glass` (nothing to refract)
@@ -217,9 +216,8 @@ pulses land on triggers, stills match encode (determinism).
 - **Drift offsets need mirror.** Even a tiny parallax (`±0.02`) on a full-bleed sample leaves
   `[0,1]` at the frame edge; without `kinoMirrorUV` / `kinoBackdropOffset`, CLAMP smears streaks.
   Drop hand-rolled `uv*0.92+0.04` insets once edges mirror — that inset was a streak workaround.
-- **`kino-glass` doubled-card:** untilted lens fit is `1.0` (matches element); any tilt falls
-  back to `0.7` AABB (spin-safe, no pulse). Known-static tilted cards → set `--glass-fit`.
-  Never CSS-`rotate` the glass node — use `--glass-tilt`.
+- **Glass lens matches `border-radius`.** Keep the glass node axis-aligned — no CSS `rotate`/`skew`.
+  Pair with a bright border + diagonal sheen for the lit edge.
 - **Preserve look while hardening.** Swap sampling helpers; do not redesign the SDF, palette,
   or motion curve. Prove with `kino still … --at` / `--around` before calling it done.
 
@@ -238,8 +236,6 @@ Hardening footguns (WebGL runtime, not Blender):
 - **FXAA FBO must not stay bound for sampling** while the shader draws into it (undefined /
   feedback). Runtime unbinds unit 4 every frame before pass 1; don’t “optimize” that away.
 - **FXAA is opaque RGB.** Fine for fullscreen backgrounds; not for intentional alpha mattes.
-- **Glass fit:** untilted → `uFit=1`; `|tilt|≥~0.57°` → `0.70`. Static tilted cards →
-  `--glass-fit`. No per-frame angle-exact fit (pulses on spin; breaks still/video match).
 
 ## Hero reel lessons
 

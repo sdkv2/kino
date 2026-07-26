@@ -112,7 +112,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 Long source recordings: see [Importing footage](importing-footage.md) for clipping, chrome frames, and retiming.
 
 ### `motion` segment
-A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CSS variables. See [Motion graphics](motion-graphics.md) for the authoring contract.
+A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CSS variables. See [Motion graphics](motion-graphics.md) for the authoring contract; [multi-element choreography](motion-graphics.md#multi-element-choreography) for stacked layers and shared `params` drivers.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|

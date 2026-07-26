@@ -56,9 +56,51 @@ export function resolveGL(
   return platform === "darwin" ? "gpu" : "sw";
 }
 
+/** Probe inputs for sandbox detection — injected so the decision stays pure and testable. */
+export interface SandboxProbe {
+  uid?: number;
+  dockerEnv?: boolean;
+}
+
+/** ANGLE backend per platform. A valueless `--use-angle` is a no-op: Chrome needs an explicit
+ *  backend, and headless Linux then silently falls back to SwiftShader (~9.6x slower). Probed on
+ *  an RTX 2070 SUPER: `vulkan` is the only value that binds the NVIDIA GPU headless — `gl` reports
+ *  SwiftShader because the EGL/GL backend needs a display. d3d11 is Chrome's own Windows default. */
+function angleBackend(platform: NodeJS.Platform): string {
+  if (platform === "darwin") return "metal";
+  if (platform === "win32") return "d3d11";
+  return "vulkan";
+}
+
+/** Whether Chrome's sandbox can initialise here. It cannot as root, nor where unprivileged user
+ *  namespaces are blocked (most container runtimes) — Chrome aborts in the zygote host with
+ *  "Failed to move to new namespace" before any page loads, so every containerised or CI render
+ *  needs --no-sandbox. Explicit KINO_NO_SANDBOX always wins. */
+export function needsNoSandbox(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  probe: SandboxProbe = {},
+): boolean {
+  if (env.KINO_NO_SANDBOX === "1") return true;
+  if (env.KINO_NO_SANDBOX === "0") return false;
+  if (platform === "darwin" || platform === "win32") return false;
+  const uid = probe.uid ?? (typeof process.getuid === "function" ? process.getuid() : undefined);
+  const inContainer = probe.dockerEnv ?? (existsSync("/.dockerenv") || existsSync("/run/.containerenv"));
+  return uid === 0 || inContainer;
+}
+
 /** GL + determinism launch flags. Pure of env/platform so tests can assert without launching. */
-export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string[] {
+export function launchArgs(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  probe: SandboxProbe = {},
+): string[] {
+  // Anything the caller needs that isn't modelled here — a distro-specific GL flag, a profiling
+  // switch — rather than patching this file. Space-separated, appended last so it can override.
+  const extra = (env.KINO_CHROME_ARGS ?? "").split(/\s+/).filter(Boolean);
+  const sandbox = needsNoSandbox(env, platform, probe) ? ["--no-sandbox", "--disable-setuid-sandbox"] : [];
   const shared = [
+    ...sandbox,
     "--force-color-profile=srgb",
     "--force-device-scale-factor=1",
     "--hide-scrollbars",
@@ -81,7 +123,8 @@ export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
     return [
       ...shared,
       "--use-gl=angle",
-      platform === "darwin" ? "--use-angle=metal" : "--use-angle",
+      `--use-angle=${angleBackend(platform)}`,
+      ...extra,
     ];
   }
   return [
@@ -90,6 +133,7 @@ export function launchArgs(env: NodeJS.ProcessEnv = process.env, platform: NodeJ
     "--use-gl=angle",
     "--use-angle=swiftshader-webgl",
     "--enable-unsafe-swiftshader",
+    ...extra,
   ];
 }
 

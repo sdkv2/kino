@@ -78,5 +78,9 @@ export interface TextureSource {
   texture(gl: WebGL2RenderingContext, frame: number, key?: string): WebGLTexture | null;
   /** Natural pixel size when the source knows it; null means "use the layer rect". */
   size(): { w: number; h: number } | null;
+  /** True when `texture()` samples the compositor backdrop (post-raster effects). */
+  needsCompositorBackdrop?(frame: number, key?: string): boolean;
+  /** When true, compositor samples with SAMPLE_RENDERED (FBO output) instead of SAMPLE_UPLOADED. */
+  textureIsRendered?(frame?: number, key?: string): boolean;
   dispose?(): void;
 }

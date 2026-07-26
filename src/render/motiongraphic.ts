@@ -30,7 +30,12 @@ const BANNED: { re: RegExp; msg: string }[] = [
 
 // Returns a list of human-readable violations (empty = clean). Pure; no DOMPurify needed.
 export function lintMotionHtml(html: string): string[] {
-  return BANNED.filter((b) => b.re.test(html)).map((b) => b.msg);
+  // SMIL is allowed inside `.kino-glass-shape` (scrubbed via svg.setCurrentTime + --progress).
+  const forLint = html.replace(
+    /<svg\b[^>]*\bkino-glass-shape\b[^>]*>[\s\S]*?<\/svg>/gi,
+    '<svg class="kino-glass-shape"></svg>',
+  );
+  return BANNED.filter((b) => b.re.test(forLint)).map((b) => b.msg);
 }
 
 // Determinism + safety denylist for Tier-2 procedural sources (JS). The function must be a pure

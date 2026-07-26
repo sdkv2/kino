@@ -179,7 +179,12 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     out.push({ id: "disclosure", source: { providerId: "disclosure" }, rect: full });
   }
 
-  // 11. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
+  // 11. Still/storyboard QA overlays, above every content layer so nothing hides a safe-zone
+  // breach. `kino build` never sets these props.
+  if (props.platformGuide) out.push({ id: "platformGuide", source: { providerId: "platformGuide" }, rect: full });
+  if (props.grid) out.push({ id: "grid", source: { providerId: "grid" }, rect: full });
+
+  // 12. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
   // Under the compositor the post stage owns film; the DOM path still uses the html layer.
   return out.map(normalizeLayer);
 }

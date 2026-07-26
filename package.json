@@ -43,6 +43,7 @@
     "prepare": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
+    "test:light": "KINO_TEST_SCOPE=light vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {

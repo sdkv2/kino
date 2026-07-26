@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   test:
-    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    # PRs: 3 jobs — ubuntu node 22 runs the full suite (incl. GPU pixel tests); macOS/Windows node 22
+    # run KINO_TEST_SCOPE=light (segment-mock + unit only — see vitest.config.ts). main / dispatch:
+    # full 3×2 matrix, every job full scope.
+    name: test (${{ matrix.os }}, node ${{ matrix.node }}${{ github.event_name == 'pull_request' && matrix.os != 'ubuntu-latest' && ', light' || '' }})
     runs-on: ${{ matrix.os }}
+    if: github.event_name != 'pull_request' || matrix.node == 22
     strategy:
       fail-fast: false
       matrix:
@@ -100,5 +104,6 @@ jobs:
       - run: npm test
         env:
           KINO_CONCURRENCY: 1
+          KINO_TEST_SCOPE: ${{ github.event_name == 'pull_request' && matrix.os != 'ubuntu-latest' && 'light' || '' }}
       # CLI smoke test: verifies compiled dist/ actually boots on this OS/node
       - run: node bin/kino.mjs --version

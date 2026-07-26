@@ -15,7 +15,7 @@ import { resolveGL } from "./browser.js";
 // Longest pixel bleed across a beat boundary: 24-frame dissolve entry / 15-frame motion xfade /
 // 12-frame chained-app extension — 30 covers all with margin.
 const PAD = 30;
-const VERSION = 4;
+const VERSION = 5;
 
 const sha1 = (s: string) => createHash("sha1").update(s).digest("hex");
 
@@ -46,6 +46,8 @@ export function frameSignatures(opts: {
   shaderSS?: number;
   /** FXAA edge post-pass on/off — different pixels. */
   shaderFXAA?: boolean;
+  /** h264 vs jpeg capture — different cached bytes. */
+  captureCodec?: "jpeg" | "h264";
   /** @deprecated single render path — retained for signature stability during cache migration */
   compositor?: boolean;
 }): string[] {
@@ -53,6 +55,7 @@ export function frameSignatures(opts: {
   const mode = opts.mode ?? resolveGL();
   const shaderSS = opts.shaderSS ?? 2;
   const shaderFXAA = opts.shaderFXAA ?? true;
+  const captureCodec = opts.captureCodec ?? "jpeg";
   const f = (s: number) => Math.round(s * fps);
   const globalSig = sha1(
     JSON.stringify({
@@ -65,6 +68,7 @@ export function frameSignatures(opts: {
       mode,
       shaderSS,
       shaderFXAA,
+      captureCodec,
       avatar: props.avatar ? statSig(join(publicDir, props.avatar)) : "none",
       props: { ...props, segments: undefined, music: undefined },
     }),
@@ -93,10 +97,10 @@ export interface FrameCache {
 
 interface Manifest {
   version: number;
-  sigs: Record<string, string>; // frame index → signature of the stored JPEG
+  sigs: Record<string, string>; // frame index → signature of the stored capture blob
 }
 
-const frameFile = (n: number) => `f${String(n).padStart(6, "0")}.jpg`;
+const frameFile = (n: number) => `f${String(n).padStart(6, "0")}.cap`;
 
 /**
  * Open the on-disk cache for one format. `sigs` are this build's per-frame signatures; a stored

@@ -74,6 +74,11 @@ describe("lintMotionHtml", () => {
   it("rejects SVG SMIL <animate>", () => {
     expect(lintMotionHtml(`<svg><rect><animate attributeName="x" dur="1s"/></rect></svg>`)[0]).toMatch(/SMIL|animate/i);
   });
+  it("allows SVG SMIL inside .kino-glass-shape only", () => {
+    const html = `<div class="kino-glass"><svg class="kino-glass-shape" viewBox="0 0 1 1"><path d="M0 0"><animate attributeName="d" dur="1s"/></path></svg></div>`;
+    expect(lintMotionHtml(html)).toEqual([]);
+    expect(sanitizeMotionHtml(html)).toContain("<animate");
+  });
 });
 
 describe("lintMotionJs", () => {

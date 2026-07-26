@@ -13,7 +13,7 @@ import { getPass, runChain, type EffectPass } from "./effects/index.js";
 import { resolveFilmPass, resolveTailPostChain, runPost } from "./post.js";
 import type { PostFx } from "../../../postSpec.js";
 import type { Theme } from "../../../props.js";
-import { registerBackdropTexture, clearBackdropTexture } from "../liquidGlass.js";
+import { clearBackdrop, registerBackdropTexture } from "../backdrop.js";
 import { mixGroups } from "./transitions/index.js";
 import {
   groupSpans,
@@ -23,6 +23,7 @@ import {
 import type { KinoProps } from "../../../props.js";
 import { CompositeResolve } from "./resolve.js";
 import { shaderFXAA } from "../../shaderQuality.js";
+import * as prof from "./profile.js";
 
 // Two texture origins meet in this file, and mixing them up mirrors the frame.
 //
@@ -170,6 +171,21 @@ export class StageRenderer {
     this.resolve = new CompositeResolve(gl);
   }
 
+  /**
+   * Time one GL phase. GL commands are queued, not executed, so a bare timer would credit every
+   * phase's real cost to the trailing gl.finish(). When profiling is on this flushes after each
+   * phase to attribute it correctly — which serializes the pipeline, so profiled runs are SLOWER
+   * than real ones. Use the shares, not the absolute totals.
+   */
+  private glPhase<T>(key: string, fn: () => T): T {
+    if (!prof.profileOn()) return fn();
+    return prof.sync(key, () => {
+      const r = fn();
+      this.gl.finish();
+      return r;
+    });
+  }
+
   private scaled(layer: LayerDraw): LayerDraw {
     if (this.ss === 1) return layer;
     const s = this.ss;
@@ -229,15 +245,17 @@ export class StageRenderer {
     const belowFilm = layers.filter((l) => !isAboveFilmLayer(l));
     const aboveFilm = layers.filter((l) => isAboveFilmLayer(l));
 
-    for (const run of groupRuns(belowFilm)) {
-      const gid = run[0].group ?? BASE_GROUP;
-      if (skipGroups?.has(gid)) continue;
-      this.compositeRun(accum, run, sources, frame, maskTargets);
-    }
+    this.glPhase("draw:composite-below", () => {
+      for (const run of groupRuns(belowFilm)) {
+        const gid = run[0].group ?? BASE_GROUP;
+        if (skipGroups?.has(gid)) continue;
+        this.compositeRun(accum, run, sources, frame, maskTargets);
+      }
+    });
 
     const filmChain = resolveFilmPass(opts.postFx, opts.theme);
     if (filmChain.length) {
-      const filmed = runPost(gl, this.pool, accum, filmChain, frame);
+      const filmed = this.glPhase("draw:film", () => runPost(gl, this.pool, accum, filmChain, frame));
       if (filmed !== accum) {
         this.pool.release(accum);
         accum = filmed;
@@ -249,11 +267,13 @@ export class StageRenderer {
       if (ref?.kind === "layer" && ref.layerId) ensureLayerMaskTarget(ref.layerId);
     }
 
-    for (const run of groupRuns(aboveFilm)) {
-      const gid = run[0].group ?? BASE_GROUP;
-      if (skipGroups?.has(gid)) continue;
-      this.compositeRun(accum, run, sources, frame, maskTargets);
-    }
+    this.glPhase("draw:composite-above", () => {
+      for (const run of groupRuns(aboveFilm)) {
+        const gid = run[0].group ?? BASE_GROUP;
+        if (skipGroups?.has(gid)) continue;
+        this.compositeRun(accum, run, sources, frame, maskTargets);
+      }
+    });
 
     if (transition) {
       const byGroup = groupsOf(layers);
@@ -272,36 +292,49 @@ export class StageRenderer {
     }
     for (const t of maskTargets.values()) this.pool.unhold(t);
 
+    // Resolve to OUTPUT resolution BEFORE the tail post chain. grade/bloom/lens are full-frame
+    // passes, so at SS=2 they each burn 4× the fill for no anti-aliasing benefit — the AA comes
+    // from compositing the layers at SS, which is finished by here. Bloom's pixel radius is
+    // compensated in resolveTailPostChain so the visible result is unchanged.
+    if (this.ss > 1) {
+      const resolved = this.pool.acquire(gl, this.outW, this.outH);
+      this.glPhase("draw:resolve", () =>
+        this.resolve.resolveTo(resolved.fbo, accum.tex, this.outW, this.outH, shaderFXAA()),
+      );
+      this.pool.release(accum);
+      accum = resolved;
+    }
+
     let composite = accum;
-    const posted = runPost(gl, this.pool, accum, resolveTailPostChain(opts.postFx, opts.theme), frame);
+    const posted = this.glPhase("draw:post-tail", () =>
+      runPost(gl, this.pool, accum, resolveTailPostChain(opts.postFx, opts.theme, this.ss), frame),
+    );
     if (posted !== accum) {
       this.pool.release(accum);
       composite = posted;
     }
 
-    // Blit accumulated composite to the display canvas (FXAA downsample when SS>1).
-    if (this.ss > 1) {
-      this.resolve.present(composite.tex, this.outW, this.outH, shaderFXAA());
-    } else {
+    // Composite is at output resolution either way now — straight 1:1 blit to the canvas.
+    this.glPhase("draw:present", () => {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, this.width, this.height);
+      gl.viewport(0, 0, this.outW, this.outH);
       gl.useProgram(this.prog);
       gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
-      gl.uniform2f(this.uRes, this.width, this.height);
+      gl.uniform2f(this.uRes, this.outW, this.outH);
       gl.disable(gl.BLEND);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, composite.tex);
       gl.uniformMatrix3fv(
         this.uModel,
         false,
-        modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", effects: [] }),
+        modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.outW, h: this.outH }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", effects: [] }),
       );
       gl.uniform1f(this.uOpacity, 1.0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
+    });
     this.pool.release(composite);
-    clearBackdropTexture();
-    gl.finish();
+    clearBackdrop();
+    prof.sync("draw:finish", () => gl.finish());
   }
 
   private pool = new TargetPool();
@@ -376,11 +409,36 @@ export class StageRenderer {
     frame: number,
     maskTargets: Map<string, RenderTarget>,
   ): void {
+    if (!prof.profileOn()) {
+      this.compositeLayerInner(dest, layer, sources, frame, maskTargets);
+      return;
+    }
+    // Offscreen path (mask or effect chain) costs several FULL-FRAME passes; the direct path is
+    // one quad over the layer rect. Label them apart so the profile says which is eating the frame.
+    const path = layer.mask || layer.effects.length ? "target" : "direct";
+    this.glPhase(`layer:${layer.id}:${path}`, () =>
+      this.compositeLayerInner(dest, layer, sources, frame, maskTargets),
+    );
+  }
+
+  private sampleFlip(source: TextureSource, frame: number, key?: string): number {
+    return source.textureIsRendered?.(frame, key) ? SAMPLE_RENDERED : SAMPLE_UPLOADED;
+  }
+
+  private compositeLayerInner(
+    dest: RenderTarget,
+    layer: LayerDraw,
+    sources: Map<string, TextureSource>,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): void {
     const gl = this.gl;
     const source = sources.get(layer.source.providerId);
     if (!source) return;
 
-    registerBackdropTexture(dest.tex, this.width, this.height);
+    if (source.needsCompositorBackdrop?.(frame, layer.source.key)) {
+      registerBackdropTexture(dest.tex, dest.w, dest.h);
+    }
 
     const chain = layer.effects
       .map((e) => ({ pass: getPass(e.kind), params: e.params }))
@@ -442,12 +500,12 @@ export class StageRenderer {
       return;
     }
 
-    const tex = source.texture(gl, frame, layer.source.key);
+    const tex = this.glPhase(`texture:${layer.id}`, () => source.texture(gl, frame, layer.source.key));
     if (!tex) return;
     gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
     gl.viewport(0, 0, this.width, this.height);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
     gl.uniform2f(this.uRes, this.width, this.height);
     applyBlend(gl, layer.blend);
     gl.activeTexture(gl.TEXTURE0);
@@ -469,7 +527,7 @@ export class StageRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, w, h);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
     gl.uniform2f(this.uRes, w, h);
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
@@ -491,7 +549,7 @@ export class StageRenderer {
     const target = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, target);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
     gl.uniform2f(this.uRes, this.width, this.height);
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);

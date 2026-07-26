@@ -11,8 +11,8 @@ Each beat flexes a different shader **and** advances that claim, so the piece re
 statement, not a feature checklist (the "AI-ad-template" generic-tell the `motion-design`
 skill warns against).
 
-Quality bar is the `glass-morph` demo, **not** the throwaway `shader-demo` test fixtures:
-motion locked to speech via `atWord`, SDF-rim glass (no CSS borders that ghost), `.kino-camera`
+Quality bar is the `liquid-glass` demo + compositor glass stack, **not** the throwaway `shader-demo`
+test fixtures: motion locked to speech via `atWord`, SDF-rim glass (no CSS borders that ghost), `.kino-camera`
 velocity blur, `data-measure` alignment QA, dual-format.
 
 ## Fixed parameters

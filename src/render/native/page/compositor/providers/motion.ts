@@ -1,16 +1,15 @@
-// Motion-graphic layers: beat-relative vars, Tier-2 proc, kino-glass mirrors.
+// Motion-graphic layers: beat-relative vars, Tier-2 proc, post-raster effects (glass, …).
 import type { MotionEnv, MotionGraphicProps, Theme } from "../../../../props.js";
 import { paramsAt, pulseAt, progressCurves } from "../../../../bgparams.js";
 import { buildMotionVars, cameraBlurVars } from "../../../../motionVars.js";
 import { sanitizeMotionHtml } from "../../../../sanitizeMotion.js";
 import { buildTemplate, rasterAt, TEX_ROOT } from "../../bgTextures.js";
 import { KINO_DEFS, motionScrubCss } from "../../motionCss.js";
-import { applyLiquidGlass } from "../../liquidGlass.js";
+import { applyMotionPostEffects, isGpuMotionPostResult, motionNeedsCompositorBackdrop } from "../../motionPostEffects/index.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
 
 const CACHE_MAX = 24;
-const GLASS_RE = /\bkino-glass\b/;
 
 function varsCss(vars: Record<string, string>): string {
   return `.${TEX_ROOT}{${Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(";")}}`;
@@ -31,48 +30,6 @@ async function rasterMotion(
     defs: /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html) ? KINO_DEFS : undefined,
   });
   return rasterAt(tpl, "x", css, null);
-}
-
-/** Glass mirrors need the true composite beneath — only available when the compositor calls
- *  texture() after registerBackdropTexture(). */
-function rasterGlassMirrors(
-  base: HTMLCanvasElement,
-  html: string,
-  vars: Record<string, string>,
-  width: number,
-  height: number,
-): HTMLCanvasElement {
-  if (!GLASS_RE.test(html)) return base;
-
-  const host = document.createElement("div");
-  host.style.cssText = `position:absolute;left:-99999px;top:0;width:${width}px;height:${height}px;visibility:hidden`;
-  for (const [k, v] of Object.entries(vars)) host.style.setProperty(k, v);
-  const shadow = host.attachShadow({ mode: "open" });
-  shadow.innerHTML = `<style>${motionScrubCss(":host")}</style>${KINO_DEFS}${html}`;
-  document.body.appendChild(host);
-  applyLiquidGlass(shadow);
-  // `base` is rasterized at layout size × the raster supersample, so the output canvas has to
-  // match BASE's pixel size while element rects stay in layout px — hence the `s` conversion.
-  // Sizing `out` to the layout box instead would crop the raster to its top-left corner.
-  const out = document.createElement("canvas");
-  out.width = base.width;
-  out.height = base.height;
-  const s = width > 0 ? base.width / width : 1;
-  const ctx = out.getContext("2d");
-  if (!ctx) {
-    host.remove();
-    return base;
-  }
-  const hr = host.getBoundingClientRect();
-  ctx.drawImage(base, 0, 0);
-  shadow.querySelectorAll<HTMLElement>(".kino-glass").forEach((el) => {
-    const mirror = el.querySelector("canvas");
-    if (!mirror) return;
-    const r = el.getBoundingClientRect();
-    ctx.drawImage(mirror, (r.left - hr.left) * s, (r.top - hr.top) * s, r.width * s, r.height * s);
-  });
-  host.remove();
-  return out;
 }
 
 export function createMotionSource(opts: {
@@ -176,6 +133,13 @@ export function createMotionSource(opts: {
       cache.set(cacheKey, { base, html, vars });
       if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
     },
+    needsCompositorBackdrop(frame?: number, key?: string): boolean {
+      const local = frame !== undefined ? frame - opts.beatFrom : undefined;
+      const cacheKey = key ?? current ?? (local !== undefined ? `f:${local}` : null);
+      if (!cacheKey) return false;
+      const entry = cache.get(cacheKey);
+      return entry ? motionNeedsCompositorBackdrop(entry.html) : false;
+    },
     texture(gl: WebGL2RenderingContext, frame?: number, key?: string): WebGLTexture | null {
       const local = frame !== undefined ? frame - opts.beatFrom : undefined;
       const cacheKey = key ?? current ?? (local !== undefined ? `f:${local}` : null);
@@ -183,8 +147,20 @@ export function createMotionSource(opts: {
       const entry = cache.get(cacheKey);
       if (!entry) return null;
       if (uploaded !== cacheKey || !tex) {
-        const finalCanvas = rasterGlassMirrors(entry.base, entry.html, entry.vars, opts.width, opts.height);
-        tex = uploadCanvasOrImage(gl, tex, finalCanvas);
+        const result = applyMotionPostEffects({
+          base: entry.base,
+          html: entry.html,
+          vars: entry.vars,
+          width: opts.width,
+          height: opts.height,
+          gl,
+        });
+        if (isGpuMotionPostResult(result)) {
+          tex = result.tex;
+          uploaded = cacheKey;
+          return tex;
+        }
+        tex = uploadCanvasOrImage(gl, tex, result);
         uploaded = cacheKey;
       }
       return tex;

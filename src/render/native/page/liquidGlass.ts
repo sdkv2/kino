@@ -1,154 +1,58 @@
-// Liquid-glass runtime: true per-pixel edge refraction for motion-graphic elements tagged
-// `class="kino-glass"`. Chromium's compositor cannot run feImage displacement maps inside
-// backdrop-filter (they degrade to a uniform white-map shift — see docs/motion-graphics.md),
-// so this sidesteps backdrop-filter entirely: each frame the background canvas region behind
-// the element is copied into a per-element WebGL mirror whose fragment shader computes an SDF
-// lens (rounded-rect / circle / triangle, morphable) — displacement + blur at the rim,
-// frosted body, per-channel chromatic dispersion, luminous film — Apple Liquid Glass material.
-//
-// Everything is synchronous inside the flushSync seek (texImage2D + drawArrays + finish),
-// so captures stay deterministic: no feImage, no async image decode, no wall clock.
-//
-// Author contract (motion HTML): add `kino-glass` to a positioned element (keep background
-// transparent — film lives in the mirror). Optional knobs, read from computed style each frame
-// (tweenable via params/keyframes):
-//   --glass-strength   max rim displacement in px            (default 26)
-//   --glass-band       rim band width in px                  (default max(radius, 48))
-//   --glass-chroma     RGB dispersion spread, 0..~0.2        (default 0.07)
-//   --glass-profile    lens falloff exponent                 (default 2.2)
-//   --glass-film       film color over the refraction        (default rgba(255,255,255,0.13))
-//   --glass-saturate   backdrop saturation boost             (default 1.25)
-//   --glass-brightness backdrop brightness boost             (default 1.06)
-//   --glass-frost      body frost blur radius in px          (default 0)
-//   --glass-edge-blur  extra blur at the rim in px           (default 0)
-//   --glass-morph      continuum: 0=tri → 1=circ → 2=rect (default 2);
-//                      pair mode (--glass-from ≥ 0): 0..1 blend from→to
-//   --glass-from       optional shape id 0|1|2; ≥0 enables direct pair morph
-//   --glass-to         pair-mode target shape id 0|1|2       (default 2)
-//   --glass-tilt       SDF rotation in degrees               (default 0; element stays unrotated)
-//   --glass-fit        shape scale 0.3..1 (default adaptive: 1 untilted, 0.70 when tilted)
-// Supersample (SS) comes from render-config / window.__kinoShaderSS (mock defaults to 1).
+// Liquid-glass runtime: per-pixel edge refraction for motion elements tagged `class="kino-glass"`.
+// Silhouette: `border-radius` round-rect (default) or inline `<svg class="kino-glass-shape">` mask.
 
+import { peekBackdrop, peekBackdropTexture, type BackdropTexture } from "./backdrop.js";
+import { rasterGlassShapeMask } from "./glassShape.js";
 import { reportFatal } from "./fatal";
 import { shaderSS } from "../shaderQuality.js";
-
-/** Pure fit selector for the liquid-glass SDF (`uFit`). Exported for unit tests.
- *  A plain card that never opts into tilt/morph FILLS the element (1.0) so its lens matches the element
- *  edge — a CSS border/decoration no longer ghosts a 2nd rounded rect outside a 70%-inset lens. Once
- *  the author drives `--glass-tilt`/`--glass-morph` (a shape that may rotate/morph) fall back to the
- *  worst-case 45° AABB (0.70). Keyed off *whether the feature is used* (static CSS → deterministic),
- *  not the per-frame tilt value: keying off the value would pulse the size between a rect-hold (tilt 0)
- *  and its spin — exactly what a constant 0.70 was chosen to avoid. `--glass-fit` overrides either way. */
-export function resolveGlassFit(usesTiltMorph: boolean, fitOverride = -1): number {
-  if (fitOverride > 0) return Math.min(1, Math.max(0.3, fitOverride));
-  return usesTiltMorph ? 0.7 : 1.0;
-}
-
-interface Backdrop {
-  source: CanvasImageSource;
-  width: number; // backing pixels
-  height: number;
-}
-
-export interface BackdropTexture {
-  tex: WebGLTexture;
-  width: number;
-  height: number;
-}
-
-let backdrop: Backdrop | null = null;
-let backdropTexture: BackdropTexture | null = null;
-
-/** Called by background layers each frame after they draw. Idempotent. */
-export function registerBackdrop(source: CanvasImageSource, width: number, height: number): void {
-  backdrop = { source, width, height };
-}
-
-/** Compositor entry point: the true composite beneath this layer, already on the GPU. */
-export function registerBackdropTexture(tex: WebGLTexture, width: number, height: number): void {
-  backdropTexture = { tex, width, height };
-}
-
-export function clearBackdropTexture(): void {
-  backdropTexture = null;
-  backdrop = null;
-}
 
 const FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uBg;
-uniform vec4 uBgRect;      // xy = bottom-left UV, zw = size UV for full bg; (0,0,1,1) for cropped
-uniform float uIsFullBg;   // 1.0 if using full-frame backdrop texture, 0.0 for cropped stage
-uniform vec2 uSize;        // element size in css px
-uniform float uRadius;     // border radius px (round-rect corner)
-uniform float uBand;       // rim band width px
-uniform float uStrength;   // max displacement px
-uniform float uChroma;     // per-channel spread
-uniform float uProfile;    // falloff exponent
-uniform vec4 uFilm;        // film rgba (straight alpha)
+uniform sampler2D uShape;
+uniform vec4 uBgRect;
+uniform float uIsFullBg;
+uniform float uUseShape;
+uniform vec2 uSize;
+uniform float uRadius;
+uniform float uBand;
+uniform float uStrength;
+uniform float uChroma;
+uniform float uProfile;
+uniform vec4 uFilm;
 uniform float uSaturate;
 uniform float uBrightness;
-uniform float uFrost;      // body frost blur px
-uniform float uEdgeBlur;   // extra rim blur px
-uniform float uMorph;      // continuum 0..2, or 0..1 blend when uMorphFrom >= 0
-uniform float uMorphFrom;  // <0 = continuum; else discrete shape id 0|1|2
-uniform float uMorphTo;    // pair-mode target shape id 0|1|2
-uniform float uTilt;       // radians
-uniform float uFit;        // shape scale vs element (1 = fill; <1 keeps a tilted/morphing AABB off the edge)
-uniform float uSS;         // supersample factor
+uniform float uFrost;
+uniform float uEdgeBlur;
+uniform float uSS;
 out vec4 outColor;
 
-mat2 rot2(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
-
-// IQ-style SDFs: positive outside, negative inside. center = element-space midpoint.
 float sdRoundRect(vec2 p, vec2 center, vec2 half_, float r) {
   vec2 c = p - center;
   vec2 q = abs(c) - (half_ - vec2(r));
   return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
 }
 
-float sdCircle(vec2 p, vec2 center, float r) {
-  return length(p - center) - r;
+float maskAlpha(vec2 px) {
+  vec2 uv = vec2(px.x / uSize.x, 1.0 - px.y / uSize.y);
+  return texture(uShape, clamp(uv, vec2(0.001), vec2(0.999))).a;
 }
 
-// Isosceles triangle pointing up, fitted inside half_ extents around center.
-float sdTriangle(vec2 p, vec2 center, vec2 half_) {
-  vec2 q = p - center;
-  float r = min(half_.x, half_.y) * 0.72;
-  float k = sqrt(3.0);
-  q.x = abs(q.x) - r;
-  q.y = q.y + r / k;
-  if (q.x + k * q.y > 0.0) q = vec2(q.x - k * q.y, -k * q.x - q.y) / 2.0;
-  q.x -= clamp(q.x, -2.0 * r, 0.0);
-  return -length(q) * sign(q.y);
+float maskShapeSd(vec2 p) {
+  float a = maskAlpha(p);
+  float e = max(1.5, 1.0 / uSS);
+  float ax = maskAlpha(p + vec2(e, 0.0)) - maskAlpha(p - vec2(e, 0.0));
+  float ay = maskAlpha(p + vec2(0.0, e)) - maskAlpha(p - vec2(0.0, e));
+  float g = length(vec2(ax, ay)) + 1e-4;
+  return (0.5 - a) / g * e;
 }
 
 float shapeSd(vec2 p) {
-  // Shape scale vs element. JS drives uFit: 1.0 untilted (fill; kills doubled-rect vs CSS chrome),
-  // 0.70 when tilted (worst-case 45° AABB). Per-frame angle-exact fit would pulse during spins.
-  float fit = uFit;
-  float pad = 8.0;
+  if (uUseShape > 0.5) return maskShapeSd(p);
   vec2 center = 0.5 * uSize;
-  vec2 half_ = max(center * fit - vec2(pad), vec2(8.0));
-  float rRect = min(uRadius, min(half_.x, half_.y));
-  float rCirc = min(half_.x, half_.y);
-  float dTri = sdTriangle(p, center, half_);
-  float dCirc = sdCircle(p, center, rCirc);
-  float dRect = sdRoundRect(p, center, half_, rRect);
-  // Pair morph (--glass-from ≥ 0): blend two discrete shapes so rect↔tri skips circle.
-  if (uMorphFrom >= 0.0) {
-    float a = floor(clamp(uMorphFrom, 0.0, 2.0) + 0.5);
-    float b = floor(clamp(uMorphTo, 0.0, 2.0) + 0.5);
-    float dA = a < 0.5 ? dTri : (a < 1.5 ? dCirc : dRect);
-    float dB = b < 0.5 ? dTri : (b < 1.5 ? dCirc : dRect);
-    // Smoothstep the blend — linear mix reads as two stacked silhouettes mid-way.
-    float t = clamp(uMorph, 0.0, 1.0);
-    t = t * t * (3.0 - 2.0 * t);
-    return mix(dA, dB, t);
-  }
-  float m = clamp(uMorph, 0.0, 2.0);
-  if (m < 1.0) return mix(dTri, dCirc, m);
-  return mix(dCirc, dRect, m - 1.0);
+  vec2 half_ = 0.5 * uSize;
+  float r = min(uRadius, min(half_.x, half_.y));
+  return sdRoundRect(p, center, half_, r);
 }
 
 vec3 sampleBg(vec2 px) {
@@ -161,7 +65,6 @@ vec3 sampleBg(vec2 px) {
   return texture(uBg, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
 }
 
-// 17-tap disk blur — readable frost + soft rim (no extra FBO).
 vec3 sampleBgBlur(vec2 px, float radius) {
   if (radius < 0.35) return sampleBg(px);
   vec3 a = sampleBg(px) * 2.0;
@@ -189,41 +92,25 @@ vec3 sampleBgBlur(vec2 px, float radius) {
 
 void main() {
   vec2 px = vec2(gl_FragCoord.x, uSize.y * uSS - gl_FragCoord.y) / uSS;
-  vec2 half_ = 0.5 * uSize;
-  // Tilt the SDF in local space; backdrop samples stay in element AABB (no CSS rotate).
-  vec2 pl = half_ + rot2(uTilt) * (px - half_);
-
-  float sd = shapeSd(pl);          // + outside, − inside
-  float d = -sd;                   // inside distance, ≥0 inside
-  // Softer outer falloff — frosted glass edge, not a hard cut.
+  float sd = shapeSd(px);
+  float d = -sd;
   float alpha = smoothstep(-3.5, 2.5, d);
   if (alpha < 0.004) {
     outColor = vec4(0.0);
     return;
   }
 
-  // Refraction normal via WIDE-step central differences on the tilted SDF. The exact SDF
-  // gradient hard-flips across the field's medial-axis kinks (where the nearest edge switches —
-  // the short ends of a wide card), which tears a triangular refraction seam whenever uBand
-  // reaches that deep. Differencing at ~1/3 of the band instead averages the field across the
-  // kink, so the lens normal sweeps continuously around the ends like a real glass slab.
-  // Where the wide samples cancel (flat medial interior) the vector→0: damp displacement to
-  // zero there rather than normalize (an epsilon-normalized flip would re-tear the seam,
-  // and true normalize(0) is NaN — which would poison pixels even at f=0).
   float gs = clamp(uBand * 0.35, 1.2, 0.4 * min(uSize.x, uSize.y));
   vec2 e = vec2(gs, 0.0);
   vec2 gv = vec2(
-    shapeSd(pl + e.xy) - shapeSd(pl - e.xy),
-    shapeSd(pl + e.yx) - shapeSd(pl - e.yx));
-  // Straight-edge baseline magnitude is 2*gs (unit slope); smoothstep keeps direction intact
-  // on real rims and only fades displacement in the cancel zone.
+    shapeSd(px + e.xy) - shapeSd(px - e.xy),
+    shapeSd(px + e.yx) - shapeSd(px - e.yx));
   vec2 grad = gv / max(length(gv), 1e-4) * smoothstep(0.15, 0.6, length(gv) / (2.0 * gs));
 
-  float edgeU = clamp(1.0 - d / max(uBand, 1.0), 0.0, 1.0); // 1 at rim, 0 deep inside
+  float edgeU = clamp(1.0 - d / max(uBand, 1.0), 0.0, 1.0);
   float f = pow(edgeU, uProfile) * uStrength;
   float blurR = uFrost * (0.55 + 0.45 * (1.0 - edgeU * 0.35)) + edgeU * edgeU * uEdgeBlur;
 
-  // Refract + frost: chroma split around the blurred sample center.
   vec2 base = px - grad * f;
   vec3 col = vec3(
     sampleBgBlur(base - grad * (f * uChroma), blurR).r,
@@ -232,17 +119,15 @@ void main() {
 
   float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col = mix(vec3(luma), col, uSaturate) * uBrightness;
-  // Frost haze — slight desat + milky lift in the body (reads as etched glass).
   float frostAmt = clamp(uFrost / 28.0, 0.0, 1.0) * (1.0 - edgeU * 0.5);
   col = mix(col, vec3(luma), frostAmt * 0.28);
   col = mix(col, vec3(0.92, 0.95, 1.0), frostAmt * 0.12);
   col = mix(col, uFilm.rgb, uFilm.a);
 
-  // Soft lit rim — keep thin when frosted so edge blur reads, not a hard white stroke.
   float rim = exp(-d * d / max(uBand * 0.5 + uEdgeBlur * 0.25, 1.0)) * (0.22 - 0.08 * clamp(uEdgeBlur / 64.0, 0.0, 1.0));
   col += vec3(1.0) * max(rim, 0.0);
 
-  outColor = vec4(col * alpha, alpha); // premultiplied for ONE / ONE_MINUS_SRC_ALPHA
+  outColor = vec4(col * alpha, alpha);
 }`;
 
 const VERT = `#version 300 es
@@ -259,18 +144,23 @@ interface GlassState {
   prog: WebGLProgram;
   loc: Record<string, WebGLUniformLocation | null>;
   tex: WebGLTexture;
+  shapeTex: WebGLTexture;
   w: number;
   h: number;
 }
 
-// Pool per shadow root, keyed by glass-element index: Tier-2 sources replace the shadow's
-// innerHTML every frame, which would otherwise churn a fresh WebGL context per frame per
-// element (Chromium caps live contexts). Re-parenting a pooled <canvas> keeps its context.
 const pools = new WeakMap<ShadowRoot, Map<number, GlassState>>();
+
+function bindTex2D(gl: WebGL2RenderingContext, tex: WebGLTexture): void {
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
 
 function makeState(): GlassState | null {
   const canvas = document.createElement("canvas");
-  // alpha:true so SDF outside can be transparent (morph shapes / soft edge)
   const gl = canvas.getContext("webgl2", {
     preserveDrawingBuffer: true,
     antialias: false,
@@ -300,39 +190,18 @@ function makeState(): GlassState | null {
     return null;
   }
   const names = [
-    "uBg",
-    "uBgRect",
-    "uIsFullBg",
-    "uSize",
-    "uRadius",
-    "uBand",
-    "uStrength",
-    "uChroma",
-    "uProfile",
-    "uFilm",
-    "uSaturate",
-    "uBrightness",
-    "uFrost",
-    "uEdgeBlur",
-    "uMorph",
-    "uMorphFrom",
-    "uMorphTo",
-    "uTilt",
-    "uFit",
-    "uSS",
+    "uBg", "uShape", "uBgRect", "uIsFullBg", "uUseShape", "uSize", "uRadius", "uBand", "uStrength",
+    "uChroma", "uProfile", "uFilm", "uSaturate", "uBrightness", "uFrost", "uEdgeBlur", "uSS",
   ];
   const loc: Record<string, WebGLUniformLocation | null> = {};
   for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
   const tex = gl.createTexture()!;
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  bindTex2D(gl, tex);
+  const shapeTex = gl.createTexture()!;
+  bindTex2D(gl, shapeTex);
 
   const wrapper = document.createElement("div");
   wrapper.className = "kino-glass-mirror";
-  // No border-radius clip — silhouette comes from SDF alpha (needed for circle/triangle morph).
   wrapper.setAttribute(
     "style",
     "position:absolute;inset:0;overflow:hidden;z-index:-1;pointer-events:none",
@@ -340,7 +209,7 @@ function makeState(): GlassState | null {
   canvas.setAttribute("style", "width:100%;height:100%;display:block");
   wrapper.appendChild(canvas);
   const stage = document.createElement("canvas");
-  return { wrapper, canvas, stage, gl, prog, loc, tex, w: 0, h: 0 };
+  return { wrapper, canvas, stage, gl, prog, loc, tex, shapeTex, w: 0, h: 0 };
 }
 
 function cssVar(style: CSSStyleDeclaration, name: string, fallback: number): number {
@@ -348,7 +217,6 @@ function cssVar(style: CSSStyleDeclaration, name: string, fallback: number): num
   return Number.isFinite(v) ? v : fallback;
 }
 
-/** Resolve a length custom property that may be `calc()`/`var()` to CSS px. */
 function cssVarPx(el: HTMLElement, name: string, fallback: number): number {
   const raw = getComputedStyle(el).getPropertyValue(name).trim();
   if (!raw) return fallback;
@@ -356,7 +224,6 @@ function cssVarPx(el: HTMLElement, name: string, fallback: number): number {
     const n = parseFloat(raw);
     return Number.isFinite(n) ? n : fallback;
   }
-  // Apply as width so the engine resolves calc()/var() to used px.
   const prev = el.style.width;
   el.style.width = raw;
   const px = parseFloat(getComputedStyle(el).width);
@@ -365,7 +232,6 @@ function cssVarPx(el: HTMLElement, name: string, fallback: number): number {
   return Number.isFinite(px) ? px : fallback;
 }
 
-// Parse any CSS color via a 1px canvas roundtrip (deterministic; cached).
 const colorCache = new Map<string, [number, number, number, number]>();
 let colorCtx: CanvasRenderingContext2D | null = null;
 function cssColor(raw: string, fallback: [number, number, number, number]): [number, number, number, number] {
@@ -377,7 +243,7 @@ function cssColor(raw: string, fallback: [number, number, number, number]): [num
   if (!colorCtx) return fallback;
   colorCtx.clearRect(0, 0, 1, 1);
   colorCtx.fillStyle = "#000";
-  colorCtx.fillStyle = s; // invalid values keep previous → detected below only loosely; fine for config
+  colorCtx.fillStyle = s;
   colorCtx.fillRect(0, 0, 1, 1);
   const d = colorCtx.getImageData(0, 0, 1, 1).data;
   const out: [number, number, number, number] = [d[0] / 255, d[1] / 255, d[2] / 255, d[3] / 255];
@@ -385,32 +251,31 @@ function cssColor(raw: string, fallback: [number, number, number, number]): [num
   return out;
 }
 
-/**
- * Find `.kino-glass` elements in a motion shadow root and render their refraction mirrors
- * for the current frame. Call once per frame after the background layer has drawn.
- */
-export function applyLiquidGlass(root: ShadowRoot | null): void {
+/** Render `.kino-glass` refraction mirrors. Pass `elements` for stacked bottom→top walks. */
+export function applyLiquidGlass(root: ShadowRoot | null, opts?: { elements?: HTMLElement[] }): void {
   if (!root) return;
-  const els = root.querySelectorAll<HTMLElement>(".kino-glass");
+  const allEls = root.querySelectorAll<HTMLElement>(".kino-glass");
+  const els = opts?.elements ?? Array.from(allEls);
   if (els.length === 0) return;
-  if (!backdrop && !backdropTexture) return; // skip gracefully
+
+  const backdrop = peekBackdrop();
+  const backdropTexture = peekBackdropTexture();
+  if (!backdrop && !backdropTexture) return;
 
   let pool = pools.get(root);
   if (!pool) {
     pool = new Map();
     pools.set(root, pool);
   }
-  // `pageW`/`pageH` are the LAYOUT box the glass elements were measured in, because uBgRect is
-  // built from getBoundingClientRect values. The backdrop texture may be larger (supersampled) —
-  // uBgRect is normalized, so its resolution is irrelevant here and using it as the divisor only
-  // ever worked while markup happened to lay out at texture size.
   const hostBox = (root.host as HTMLElement | undefined)?.getBoundingClientRect();
   const pageW = hostBox?.width || backdropTexture?.width || backdrop?.width || window.innerWidth;
   const pageH = hostBox?.height || backdropTexture?.height || backdrop?.height || window.innerHeight;
   const scaleX = backdropTexture ? backdropTexture.width / pageW : (backdrop ? backdrop.width / pageW : 1);
   const scaleY = backdropTexture ? backdropTexture.height / pageH : (backdrop ? backdrop.height / pageH : 1);
 
-  els.forEach((el, i) => {
+  els.forEach((el) => {
+    const i = Array.prototype.indexOf.call(allEls, el);
+    if (i < 0) return;
     const state = pool!.get(i) ?? makeState();
     if (!state) return;
     pool!.set(i, state);
@@ -420,14 +285,14 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     }
     const cs = getComputedStyle(el);
     if (cs.position === "static") el.style.position = "relative";
-    if (cs.isolation !== "isolate") el.style.isolation = "isolate"; // keep the z:-1 mirror inside this element
+    if (cs.isolation !== "isolate") el.style.isolation = "isolate";
 
     const rect = el.getBoundingClientRect();
     const w = Math.round(rect.width);
     const h = Math.round(rect.height);
     if (w < 4 || h < 4) return;
 
-    const { gl, canvas, stage, prog, loc, tex } = state;
+    const { gl, canvas, stage, prog, loc, tex, shapeTex } = state;
     const SS = shaderSS();
     if (state.w !== w || state.h !== h) {
       canvas.width = w * SS;
@@ -441,12 +306,16 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
       canvas.height = h * SS;
     }
 
+    const hostEl = el.getRootNode() instanceof ShadowRoot ? ((el.getRootNode() as ShadowRoot).host as HTMLElement) : null;
+    const hr = hostEl ? hostEl.getBoundingClientRect() : { left: 0, top: 0 };
+    const relLeft = rect.left - hr.left;
+    const relTop = rect.top - hr.top;
+
     if (!backdropTexture && backdrop) {
-      // Snapshot the background region behind the element (source backing px → element px).
       const sctx = stage.getContext("2d");
       if (!sctx) return;
       sctx.clearRect(0, 0, w, h);
-      sctx.drawImage(backdrop.source, rect.left * scaleX, rect.top * scaleY, w * scaleX, h * scaleY, 0, 0, w, h);
+      sctx.drawImage(backdrop.source, relLeft * scaleX, relTop * scaleY, w * scaleX, h * scaleY, 0, 0, w, h);
     }
 
     const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, Math.min(w, h) / 2);
@@ -459,24 +328,13 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     const brightness = cssVar(cs, "--glass-brightness", 1.06);
     const frost = cssVarPx(el, "--glass-frost", 0);
     const edgeBlur = cssVarPx(el, "--glass-edge-blur", 0);
-    const morph = cssVar(cs, "--glass-morph", 2); // default round-rect = prior behavior
-    const morphFrom = cssVar(cs, "--glass-from", -1); // <0 = continuum mode
-    const morphTo = cssVar(cs, "--glass-to", 2);
-    const tiltDeg = cssVar(cs, "--glass-tilt", 0);
-    const tilt = (tiltDeg * Math.PI) / 180;
 
-    const usesTiltMorph =
-      cs.getPropertyValue("--glass-tilt").trim() !== "" || cs.getPropertyValue("--glass-morph").trim() !== "";
-    const fit = resolveGlassFit(usesTiltMorph, cssVar(cs, "--glass-fit", -1));
-
-    const hostEl = el.getRootNode() instanceof ShadowRoot ? ((el.getRootNode() as ShadowRoot).host as HTMLElement) : null;
-    const hr = hostEl ? hostEl.getBoundingClientRect() : { left: 0, top: 0 };
-    const relLeft = rect.left - hr.left;
-    const relTop = rect.top - hr.top;
+    const shapeMask = rasterGlassShapeMask(el, w, h, SS);
+    const useShape = shapeMask ? 1.0 : 0.0;
 
     gl.viewport(0, 0, w * SS, h * SS);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(prog);
@@ -498,6 +356,14 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
       gl.uniform4f(loc.uBgRect, 0, 0, 1, 1);
     }
     gl.uniform1i(loc.uBg, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, shapeTex);
+    if (shapeMask) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, shapeMask);
+    }
+    gl.uniform1i(loc.uShape, 1);
+    gl.uniform1f(loc.uUseShape, useShape);
+    gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(loc.uSize, w, h);
     gl.uniform1f(loc.uRadius, radius);
     gl.uniform1f(loc.uBand, band);
@@ -509,13 +375,162 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     gl.uniform1f(loc.uBrightness, brightness);
     gl.uniform1f(loc.uFrost, frost);
     gl.uniform1f(loc.uEdgeBlur, edgeBlur);
-    gl.uniform1f(loc.uMorph, morph);
-    gl.uniform1f(loc.uMorphFrom, morphFrom);
-    gl.uniform1f(loc.uMorphTo, morphTo);
-    gl.uniform1f(loc.uTilt, tilt);
-    gl.uniform1f(loc.uFit, fit);
     gl.uniform1f(loc.uSS, SS);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.finish(); // complete before the frame screenshot
+    gl.finish();
   });
+}
+
+interface SharedGlassProgram {
+  prog: WebGLProgram;
+  loc: Record<string, WebGLUniformLocation | null>;
+  shapeTex: WebGLTexture;
+}
+
+const sharedPrograms = new WeakMap<WebGL2RenderingContext, SharedGlassProgram | null>();
+
+function sharedGlassProgram(gl: WebGL2RenderingContext): SharedGlassProgram | null {
+  if (sharedPrograms.has(gl)) return sharedPrograms.get(gl)!;
+  const mk = (type: number, src: string): WebGLShader | null => {
+    const sh = gl.createShader(type)!;
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    return gl.getShaderParameter(sh, gl.COMPILE_STATUS) ? sh : null;
+  };
+  const vs = mk(gl.VERTEX_SHADER, VERT);
+  const fs = mk(gl.FRAGMENT_SHADER, FRAG);
+  let entry: SharedGlassProgram | null = null;
+  if (vs && fs) {
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      const names = [
+        "uBg", "uShape", "uBgRect", "uIsFullBg", "uUseShape", "uSize", "uRadius", "uBand", "uStrength",
+        "uChroma", "uProfile", "uFilm", "uSaturate", "uBrightness", "uFrost", "uEdgeBlur", "uSS",
+      ];
+      const loc: Record<string, WebGLUniformLocation | null> = {};
+      for (const n of names) loc[n] = gl.getUniformLocation(prog, n);
+      const shapeTex = gl.createTexture()!;
+      bindTex2D(gl, shapeTex);
+      entry = { prog, loc, shapeTex };
+    }
+  }
+  sharedPrograms.set(gl, entry);
+  return entry;
+}
+
+interface SharedGlassFbo {
+  fbo: WebGLFramebuffer;
+  tex: WebGLTexture;
+  w: number;
+  h: number;
+}
+
+const sharedFbos = new WeakMap<WebGL2RenderingContext, SharedGlassFbo>();
+
+function sharedGlassFbo(gl: WebGL2RenderingContext, w: number, h: number): SharedGlassFbo {
+  let fbo = sharedFbos.get(gl);
+  if (!fbo || fbo.w !== w || fbo.h !== h) {
+    if (fbo) {
+      gl.deleteFramebuffer(fbo.fbo);
+      gl.deleteTexture(fbo.tex);
+    }
+    const tex = gl.createTexture()!;
+    bindTex2D(gl, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fb = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    fbo = { fbo: fb, tex, w, h };
+    sharedFbos.set(gl, fbo);
+  }
+  return fbo;
+}
+
+/**
+ * Render one `.kino-glass` mirror into an FBO on the compositor GL context (no readback).
+ */
+export function renderGlassMirrorFbo(
+  sharedGl: WebGL2RenderingContext,
+  backdrop: Readonly<BackdropTexture>,
+  el: HTMLElement,
+  pageW: number,
+  pageH: number,
+  hostRect: DOMRect,
+): SharedGlassFbo | null {
+  const entry = sharedGlassProgram(sharedGl);
+  if (!entry) return null;
+
+  const rect = el.getBoundingClientRect();
+  const w = Math.round(rect.width);
+  const h = Math.round(rect.height);
+  if (w < 4 || h < 4) return null;
+
+  const SS = shaderSS();
+  const pw = Math.max(1, w * SS);
+  const ph = Math.max(1, h * SS);
+  const { prog, loc, shapeTex } = entry;
+  const target = sharedGlassFbo(sharedGl, pw, ph);
+
+  const cs = getComputedStyle(el);
+  const relLeft = rect.left - hostRect.left;
+  const relTop = rect.top - hostRect.top;
+  const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, Math.min(w, h) / 2);
+  const strength = cssVarPx(el, "--glass-strength", 26);
+  const band = cssVarPx(el, "--glass-band", Math.max(radius, 48));
+  const chroma = cssVar(cs, "--glass-chroma", 0.07);
+  const profile = cssVar(cs, "--glass-profile", 2.2);
+  const film = cssColor(cs.getPropertyValue("--glass-film"), [1, 1, 1, 0.13]);
+  const saturate = cssVar(cs, "--glass-saturate", 1.25);
+  const brightness = cssVar(cs, "--glass-brightness", 1.06);
+  const frost = cssVarPx(el, "--glass-frost", 0);
+  const edgeBlur = cssVarPx(el, "--glass-edge-blur", 0);
+  const shapeMask = rasterGlassShapeMask(el, w, h, SS);
+  const useShape = shapeMask ? 1.0 : 0.0;
+
+  const prevFb = sharedGl.getParameter(sharedGl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
+  sharedGl.bindFramebuffer(sharedGl.FRAMEBUFFER, target.fbo);
+  sharedGl.viewport(0, 0, pw, ph);
+  sharedGl.enable(sharedGl.BLEND);
+  sharedGl.blendFunc(sharedGl.ONE, sharedGl.ONE_MINUS_SRC_ALPHA);
+  sharedGl.clearColor(0, 0, 0, 0);
+  sharedGl.clear(sharedGl.COLOR_BUFFER_BIT);
+  sharedGl.useProgram(prog);
+  sharedGl.activeTexture(sharedGl.TEXTURE0);
+  sharedGl.bindTexture(sharedGl.TEXTURE_2D, backdrop.tex);
+  sharedGl.uniform1f(loc.uIsFullBg, 1.0);
+  sharedGl.uniform4f(
+    loc.uBgRect,
+    relLeft / pageW,
+    (pageH - relTop - rect.height) / pageH,
+    rect.width / pageW,
+    rect.height / pageH,
+  );
+  sharedGl.uniform1i(loc.uBg, 0);
+  sharedGl.activeTexture(sharedGl.TEXTURE1);
+  sharedGl.bindTexture(sharedGl.TEXTURE_2D, shapeTex);
+  if (shapeMask) {
+    sharedGl.texImage2D(sharedGl.TEXTURE_2D, 0, sharedGl.RGBA, sharedGl.RGBA, sharedGl.UNSIGNED_BYTE, shapeMask);
+  }
+  sharedGl.uniform1i(loc.uShape, 1);
+  sharedGl.uniform1f(loc.uUseShape, useShape);
+  sharedGl.activeTexture(sharedGl.TEXTURE0);
+  sharedGl.uniform2f(loc.uSize, w, h);
+  sharedGl.uniform1f(loc.uRadius, radius);
+  sharedGl.uniform1f(loc.uBand, band);
+  sharedGl.uniform1f(loc.uStrength, strength);
+  sharedGl.uniform1f(loc.uChroma, chroma);
+  sharedGl.uniform1f(loc.uProfile, profile);
+  sharedGl.uniform4f(loc.uFilm, film[0], film[1], film[2], film[3]);
+  sharedGl.uniform1f(loc.uSaturate, saturate);
+  sharedGl.uniform1f(loc.uBrightness, brightness);
+  sharedGl.uniform1f(loc.uFrost, frost);
+  sharedGl.uniform1f(loc.uEdgeBlur, edgeBlur);
+  sharedGl.uniform1f(loc.uSS, SS);
+  sharedGl.drawArrays(sharedGl.TRIANGLES, 0, 3);
+  sharedGl.bindFramebuffer(sharedGl.FRAMEBUFFER, prevFb);
+  return target;
 }

@@ -98,8 +98,21 @@ export class CompositeResolve {
 
   /** Downsample (+ optional FXAA) from `src` into the default framebuffer at `outW`×`outH`. */
   present(src: WebGLTexture, outW: number, outH: number, useFxaa: boolean): void {
+    this.blit(null, src, outW, outH, useFxaa);
+  }
+
+  /**
+   * Same resolve, into an offscreen FBO instead of the canvas — lets the tail post chain run at
+   * output resolution. Orientation matches `present`: both map gl_FragCoord to uv with no y-flip,
+   * so the result reads back as an ordinary RENDERED target.
+   */
+  resolveTo(dst: WebGLFramebuffer, src: WebGLTexture, outW: number, outH: number, useFxaa: boolean): void {
+    this.blit(dst, src, outW, outH, useFxaa);
+  }
+
+  private blit(dst: WebGLFramebuffer | null, src: WebGLTexture, outW: number, outH: number, useFxaa: boolean): void {
     const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst);
     gl.viewport(0, 0, outW, outH);
     gl.disable(gl.BLEND);
     gl.activeTexture(gl.TEXTURE0);

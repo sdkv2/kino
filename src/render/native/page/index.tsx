@@ -8,6 +8,15 @@ import { MediaProvider, type MediaMap } from "./media";
 import { loadBgTextures } from "./bgTextures";
 import type { KinoProps } from "../../props.js";
 import { Stage, type StageHandle } from "./compositor/Stage.js";
+import { enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
+import {
+  capturePipelined,
+  captureSync,
+  flushCapturePipeline,
+  initCapture,
+} from "./capturePipeline.js";
+import type { CaptureCodec } from "../captureCodec.js";
+import type { CaptureSource } from "../captureSource.js";
 
 interface RenderConfig {
   props: KinoProps;
@@ -16,16 +25,25 @@ interface RenderConfig {
   durationInFrames: number;
   media: MediaMap;
   shaderSS?: number;
+  profile?: boolean;
+  captureCodec?: CaptureCodec;
+  captureSource?: CaptureSource;
 }
 
 declare global {
   interface Window {
     kinoLoad: () => Promise<void>;
     kinoSeek: (frame: number) => Promise<void>;
+    kinoCapturePipelined: (slot: number) => Promise<void>;
+    kinoCaptureSync: (slot: number) => Promise<void>;
+    kinoFlushCapture: () => Promise<void>;
+    __kinoCaptureCodec?: CaptureCodec;
+    __kinoCaptureSource?: CaptureSource;
     __kinoReady: boolean;
     __kinoError?: string;
     __kinoShaderSS?: number;
     __kinoShaderFXAA?: boolean;
+    __kinoProf?: () => Array<{ key: string; ms: number; n: number }>;
   }
 }
 
@@ -83,6 +101,8 @@ async function kinoLoad(): Promise<void> {
   await loadBgTextures(cfg.props);
   window.__kinoShaderSS = cfg.shaderSS ?? 2;
   window.__kinoShaderFXAA = true;
+  enableProfile(cfg.profile === true);
+  resetProfile();
 
   current = cfg;
   root ??= createRoot(container);
@@ -103,10 +123,23 @@ async function kinoLoad(): Promise<void> {
     );
   });
   await kinoSeek(0);
+  const cap = await initCapture({
+    codec: cfg.captureCodec ?? "h264",
+    captureSource: cfg.captureSource ?? "bitmap",
+    width: cfg.width,
+    height: cfg.height,
+    fps: cfg.props.fps,
+  });
+  window.__kinoCaptureCodec = cap.codec;
+  window.__kinoCaptureSource = cap.source;
 }
 
 window.kinoLoad = kinoLoad;
 window.kinoSeek = kinoSeek;
+window.kinoCapturePipelined = capturePipelined;
+window.kinoCaptureSync = captureSync;
+window.kinoFlushCapture = flushCapturePipeline;
+window.__kinoProf = snapshot;
 
 kinoLoad()
   .then(() => {

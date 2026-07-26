@@ -3,28 +3,28 @@
 // uMask0..N = the segmentation mask(s), and mixes the two regions by the union of their channels
 // (RegionShaderProps.masks — usually 1 entry, up to MAX_REGION_MASKS for compositing several
 // independently-segmented subjects onto one shared background). Renders full-frame as the app
-// beat's content; chrome/captions composite on top exactly as a normal app beat (KinoVideo layers
-// them above this in its own passes).
+// beat's content; chrome/captions composite on top exactly as a normal app beat.
+//
+// This module is the GL draw path only. `compositor/regionHost.ts` is its sole caller — it wraps
+// drawFrame in a compositor TextureSource and owns the per-frame URL lookups. The React component
+// that used to live here went with the DOM path.
 //
 // VIDEO sources (mask.mp4, and a video beat asset) do NOT use a <video> element: <video> seeking
 // never advances under kino's deterministic headless capture, so the split froze at frame 0. They
 // route through the SAME node-side frame pipeline footage uses — videoFrames.ts pre-extracts one
-// image per composition frame, served at /vframes; RegionShader draws the current frame's <img> into
-// each GL texture (useFrameImageUrl picks the exact file, identical lookup to FrameVideo). Image
-// sources load once and stay static.
+// image per composition frame, served at /vframes; the caller passes the current frame's URL and
+// drawFrame draws that <img> into each GL texture. Image sources load once and stay static.
 //
 // Determinism: the initial texture load and every per-frame image upload are registered on a module
-// pending-set that kinoSeek drains (awaitRegionShaders) after flushSync — the same gate role
-// settleImages plays for DOM <img>. So frame 0 is never the bare night fill.
-import React, { useLayoutEffect, useRef } from "react";
+// pending-set that kinoSeek drains (awaitRegionShaders) after flushSync. So frame 0 is never the
+// bare night fill.
 import { reportFatal } from "./fatal";
-import { AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig } from "./runtime";
+import { staticFile } from "./runtime";
 import type { BgParamValue, RegionShaderMask, RegionShaderProps, Theme } from "../../props.js";
 import { assembleRegionShaderSource, MAX_REGION_MASKS, resolveUniforms, extraParamNames } from "../../shaderSource.js";
 import { SDF_MAX_PX } from "../../sdf.js";
 import { paramsAt } from "../../bgparams.js";
 import { buildMotionVars } from "../../motionVars.js";
-import { useFrameImageUrl, useSdfImageUrl } from "./media";
 import { buildTemplate, rasterAt, scrubCss, TEX_ROOT, type HtmlTemplate } from "./bgTextures";
 import { motionScrubCss, KINO_FILTERS } from "./motionCss";
 
@@ -390,7 +390,7 @@ async function initGL(
 // Per-frame render: ensure init (once), re-upload any video sources for this frame, draw.
 export async function drawFrame(
   canvas: HTMLCanvasElement,
-  initRef: React.MutableRefObject<Promise<GLState | null> | null>,
+  initRef: { current: Promise<GLState | null> | null },
   assetSrc: Src,
   maskSrcs: Src[],
   sdfSrcs: (Src | null)[],
@@ -475,98 +475,3 @@ export async function drawFrame(
   }
 }
 
-export const RegionShader: React.FC<{
-  asset: string;
-  region: RegionShaderProps;
-  t: Theme;
-  assetMediaKey?: string; // /vframes key when the beat asset is a video (else the asset is a static image)
-  maskMediaKeys?: (string | undefined)[]; // one per region.masks entry; set when that mask's kind === "video"
-  durationFrames?: number; // beat length — maps a motion-HTML texture channel's --progress 0→1, as MotionGraphic does
-  backdropMediaKey?: string; // /vframes key when region.backdrop is a video (else it's a static image)
-}> = ({ asset, region, t, assetMediaKey, maskMediaKeys, durationFrames = 0, backdropMediaKey }) => {
-  const frame = useCurrentFrame();
-  const { width, height, fps } = useVideoConfig();
-  const ref = useRef<HTMLCanvasElement>(null);
-  const initRef = useRef<Promise<GLState | null> | null>(null);
-  const keyRef = useRef<string | null>(null);
-
-  // Current-frame /vframes URLs for the video sources (null for static-image sources or un-extracted
-  // sparse-still frames). Same lookup FrameVideo uses, so the GL texture tracks the identical frame.
-  // Fixed MAX_REGION_MASKS hook calls (rules of hooks) regardless of how many masks this beat has.
-  const assetSrc: Src = { frameVideo: !!assetMediaKey, staticUrl: staticFile(asset), frameUrl: useFrameImageUrl(assetMediaKey) };
-  const mUrl0 = useFrameImageUrl(maskMediaKeys?.[0]);
-  const mUrl1 = useFrameImageUrl(maskMediaKeys?.[1]);
-  const mUrl2 = useFrameImageUrl(maskMediaKeys?.[2]);
-  const mUrl3 = useFrameImageUrl(maskMediaKeys?.[3]);
-  const maskFrameUrls: (string | null)[] = [mUrl0, mUrl1, mUrl2, mUrl3];
-  // The matching distance-field frames, same fixed hook count for the same reason.
-  const sUrl0 = useSdfImageUrl(maskMediaKeys?.[0]);
-  const sUrl1 = useSdfImageUrl(maskMediaKeys?.[1]);
-  const sUrl2 = useSdfImageUrl(maskMediaKeys?.[2]);
-  const sUrl3 = useSdfImageUrl(maskMediaKeys?.[3]);
-  const sdfFrameUrls: (string | null)[] = [sUrl0, sUrl1, sUrl2, sUrl3];
-  const maskSrcs: Src[] = region.masks.map((m, i) => ({
-    frameVideo: m.maskKind === "video",
-    staticUrl: staticFile(m.maskSrc),
-    frameUrl: maskFrameUrls[i],
-  }));
-  // One per mask entry, null only where a field can never exist (an image mask). A video mask always
-  // gets a slot; frameUrl being null just means "not this frame", which drives uMaskSdfMaxN.
-  const sdfSrcs: (Src | null)[] = region.masks.map((m, i) =>
-    m.maskKind === "video" ? { frameVideo: true, staticUrl: "", frameUrl: sdfFrameUrls[i] } : null,
-  );
-
-  // The cutout's second source. The hook runs unconditionally (rules of hooks); the Src is null when
-  // this beat has no backdrop, which is what keeps the program byte-identical for everyone else.
-  const backdropFrameUrl = useFrameImageUrl(backdropMediaKey);
-  const backdropSrc: Src | null = region.backdrop
-    ? { frameVideo: !!backdropMediaKey, staticUrl: staticFile(region.backdrop), frameUrl: backdropFrameUrl }
-    : null;
-
-  // Everything initGL bakes in: every GLSL body (the assembled program) and the texture sources
-  // (built once into slots). Per-frame /vframes URLs are deliberately NOT here — those re-upload
-  // through updateFrameSlot and must not rebuild the program.
-  const glKey = [
-    region.subjectCode,
-    region.backgroundCode,
-    // Per-mask bodies are baked into the program too — two specs differing ONLY in a masks[].subject
-    // would otherwise reuse the first one's compiled shader (see render-region-reuse.test.ts).
-    ...region.masks.map((m) => m.subjectCode ?? ""),
-    // Param NAMES are baked in as `#define u_<name> uParamI`, so two specs differing only in their
-    // param names must not share a compiled program (same trap as the per-mask bodies above).
-    regionExtras(region).join(","),
-    `${assetSrc.frameVideo}|${assetSrc.staticUrl}`,
-    ...maskSrcs.map((s) => `${s.frameVideo}|${s.staticUrl}`),
-    // Which SDF slots initGL builds — NOT whether a field resolved this frame, which changes between
-    // the first and second render pass and would rebuild the program mid-still.
-    ...region.masks.map((m) => (m.maskKind === "video" ? "sdf" : "-")),
-    // Texture channels are built into slots by initGL too (an html channel measures + serializes
-    // its template there), so a spec differing only in its textures must not reuse cached state.
-    ...(region.textures ?? []).map((tex) => `${tex.kind}|${tex.src ?? tex.html?.length}`),
-    // Whether a backdrop exists is baked into the program (the uBackdrop aliases and the background
-    // passthrough), and its slot is built once at init - so it belongs in the key like the bodies.
-    `${backdropSrc?.frameVideo}|${backdropSrc?.staticUrl}`,
-  ].join(" ");
-
-  useLayoutEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    // Worker pages are cached and re-loaded for the NEXT spec, and React keeps this component
-    // instance at the same tree position — so initRef outlives the program it describes. Without
-    // this a second render in one process would draw the FIRST spec's shader (identical bytes out
-    // of two different region bodies). Same guard ShaderBackground uses for its progRef.
-    if (keyRef.current !== glKey) {
-      keyRef.current = glKey;
-      const stale = initRef.current;
-      initRef.current = null;
-      if (stale) void stale.then(disposeGL, () => {});
-    }
-    track(drawFrame(canvas, initRef, assetSrc, maskSrcs, sdfSrcs, region, frame, width, height, fps, t, durationFrames, backdropSrc));
-  });
-
-  return (
-    <AbsoluteFill style={{ backgroundColor: t.night }}>
-      <canvas ref={ref} style={{ width: "100%", height: "100%" }} />
-    </AbsoluteFill>
-  );
-};

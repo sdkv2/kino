@@ -3,7 +3,7 @@ import { reportFatal } from "../fatal.js";
 import type { BgKeyframe, BgParamValue, BgTrigger } from "../../../props.js";
 import { paramsAt, pulseAt } from "../../../bgparams.js";
 import { assembleShaderSource, resolveUniforms, fitTextureDims, extraParamNames } from "../../../shaderSource.js";
-import { registerBackdrop } from "../liquidGlass.js";
+import { registerBackdrop } from "../backdrop.js";
 import { getBgTextures } from "../bgTextures.js";
 import { shaderFXAA } from "../../shaderQuality.js";
 

@@ -36,7 +36,8 @@ export const motionScrubCss = (host: string): string =>
   ".kino-mesh{background:radial-gradient(60% 60% at 18% 22%,var(--kino-mint),transparent 60%)," +
   "radial-gradient(55% 55% at 82% 28%,var(--kino-gold),transparent 60%)," +
   "radial-gradient(70% 70% at 50% 92%,var(--kino-green),transparent 65%),var(--kino-night)}" +
-  ".kino-shadow{filter:drop-shadow(0 12px 26px rgba(0,0,0,.32))}";
+  ".kino-shadow{filter:drop-shadow(0 12px 26px rgba(0,0,0,.32))}" +
+  ".kino-glass-shape{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0}";
 
 /** The same rules as a ready-to-inject <style> element. */
 export const motionScrubStyle = (host: string): string => `<style>${motionScrubCss(host)}</style>`;

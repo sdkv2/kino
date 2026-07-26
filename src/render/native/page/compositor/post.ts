@@ -35,9 +35,24 @@ export function resolveFilmPass(post: PostFx | undefined, theme: Theme): Resolve
   return pass ? [{ pass, params: { intensity, night: theme.night } }] : [];
 }
 
-/** Grade / bloom / lens — run over the finished composite (film excluded; see resolveFilmPass). */
-export function resolveTailPostChain(post: PostFx | undefined, theme: Theme): ResolvedPass[] {
-  return resolvePostChain(post, theme).filter((p) => p.pass.name !== "film");
+/**
+ * Grade / bloom / lens — run over the finished composite (film excluded; see resolveFilmPass).
+ *
+ * `ss` is the stage supersample factor. The tail chain runs AFTER the resolve to output
+ * resolution (StageRenderer.draw), but bloom's `radius` is in target pixels — it used to be
+ * applied to the SS-sized composite, so its visible radius has always been `radius / ss`.
+ * Dividing here keeps existing specs pixel-comparable across the move.
+ *
+ * That also means `radius` currently means different things at SS=1 (draft) and SS=2 (final) —
+ * a draft preview shows a 2× wider bloom than the final. Making `radius` mean output pixels is a
+ * deliberate visual change; it is this one division, deleted.
+ */
+export function resolveTailPostChain(post: PostFx | undefined, theme: Theme, ss = 1): ResolvedPass[] {
+  const chain = resolvePostChain(post, theme).filter((p) => p.pass.name !== "film");
+  if (ss === 1) return chain;
+  return chain.map((p) =>
+    p.pass.name === "bloom" ? { ...p, params: { ...p.params, radius: Number(p.params.radius ?? 24) / ss } } : p,
+  );
 }
 
 export function resolvePostChain(post: PostFx | undefined, theme: Theme): ResolvedPass[] {

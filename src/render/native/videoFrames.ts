@@ -239,6 +239,7 @@ async function extractIndices(
   assetAbs: string,
   framesRoot: string,
   localFrames: number[],
+  maxDim?: number,
 ): Promise<MediaEntryNode> {
   const dir = join(framesRoot, job.key);
   mkdirSync(dir, { recursive: true });
@@ -281,7 +282,10 @@ async function extractIndices(
     const part = uniq.slice(c, c + CHUNK);
     const terms = part.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
     const select = `select='${terms.join("+")}'`;
-    const vf = hdr ? `${select},${hdr}` : select;
+    // Masks are never downscaled: writeSdfSequence below builds its distance field against
+    // probeSize(assetAbs), i.e. the source dimensions, so a resized frame would mismatch.
+    const fit = maxDim && !isMask ? scaleFilter(maxDim) : "";
+    const vf = [select, hdr, fit].filter(Boolean).join(",");
     const firstPts = pts[part[0]];
     const preseek = firstPts > 2 ? ["-ss", Math.max(0, firstPts - 1).toFixed(3), "-noaccurate_seek", "-copyts"] : [];
     await execa(FFMPEG_PATH, [
@@ -343,15 +347,43 @@ async function probeSize(assetAbs: string): Promise<{ width: number; height: num
   return { width: w, height: h };
 }
 
+// Deepest crop any shot applies to its source (push-in / pull-out peak — see shotTransform).
+// Source pixels beyond output * this * ss are decoded and uploaded only to be thrown away.
+const MAX_SHOT_ZOOM = 1.2;
+
+/** Longest source edge worth extracting, given the largest output edge and the supersample
+ *  factor. The whole compositor canvas is supersampled (renderer.ts: width = outW * ss), so the
+ *  budget has to scale with it or SS=2 renders would lose real detail. */
+export function extractMaxDim(outputMaxDim: number, ss: number): number {
+  return Math.ceil(outputMaxDim * MAX_SHOT_ZOOM * Math.max(1, ss));
+}
+
+/** Fit-within filter: downscales only when the source exceeds the budget, preserves aspect, and
+ *  keeps both edges even so the yuv420p paths stay legal. */
+export function scaleFilter(maxDim: number): string {
+  return `scale=w='min(iw,${maxDim})':h='min(ih,${maxDim})':force_original_aspect_ratio=decrease:force_divisible_by=2`;
+}
+
 // Dense extraction (video renders): every local frame of the usage.
-export async function extractDense(job: MediaJob, assetAbs: string, framesRoot: string): Promise<MediaEntryNode> {
+export async function extractDense(
+  job: MediaJob,
+  assetAbs: string,
+  framesRoot: string,
+  maxDim?: number,
+): Promise<MediaEntryNode> {
   if (!existsSync(assetAbs)) return { dir: job.key, byFrame: {}, maxFrame: 0 };
   const locals = Array.from({ length: job.seqDurFrames }, (_, n) => n);
-  return extractIndices(job, assetAbs, framesRoot, locals);
+  return extractIndices(job, assetAbs, framesRoot, locals, maxDim);
 }
 
 // Sparse extraction (stills): only the requested local frames.
-export async function extractSparse(job: MediaJob, assetAbs: string, framesRoot: string, localFrames: number[]): Promise<MediaEntryNode> {
+export async function extractSparse(
+  job: MediaJob,
+  assetAbs: string,
+  framesRoot: string,
+  localFrames: number[],
+  maxDim?: number,
+): Promise<MediaEntryNode> {
   if (!existsSync(assetAbs)) return { dir: job.key, byFrame: {}, maxFrame: 0 };
-  return extractIndices(job, assetAbs, framesRoot, localFrames);
+  return extractIndices(job, assetAbs, framesRoot, localFrames, maxDim);
 }

@@ -5,7 +5,7 @@
 // The SS/FXAA resolve stays here in phase 1 so shader output is byte-identical to today's;
 // moving it to the composite is phase 4 work and would change pixels.
 import type { BgKeyframe, BgParamValue, BgTrigger } from "../../../../props.js";
-import { registerBackdrop } from "../../liquidGlass.js";
+import { registerBackdrop } from "../../backdrop.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
 
