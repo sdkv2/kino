@@ -531,6 +531,9 @@ export async function prepare(
         ),
         words: motionWords,
       },
+      motionOverlay: seg.motionOverlay
+        ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
+        : undefined,
     };
   });
 

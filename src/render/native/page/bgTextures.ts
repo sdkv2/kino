@@ -152,7 +152,7 @@ export const TEX_ROOT = "kino-tex-root";
 export async function buildTemplate(
   html: string,
   theme: KinoProps["theme"],
-  opts: { size?: { w: number; h: number }; scale?: number; defs?: string; hostVars?: Record<string, string> } = {},
+  opts: { size?: { w: number; h: number }; scale?: number; defs?: string } = {},
 ): Promise<HtmlTemplate> {
   // Measure in a hidden live container so CSS (including vw units) resolves for real.
   // Inner wrapper keeps <style> blocks (and any sibling markup) in the serialization while giving
@@ -181,16 +181,13 @@ export async function buildTemplate(
   const fonts = await fontFaceCss(theme);
   const scale = opts.scale ?? RASTER_SCALE;
   const defs = opts.defs ?? "";
-  const hostExtra = opts.hostVars
-    ? Object.entries(opts.hostVars).map(([k, v]) => `${k}:${v}`).join(";") + ";"
-    : "";
   const makeSvg = (css: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}">` +
     // Palette vars live in a <style> block, NOT a style attribute: font families contain double
     // quotes, which would terminate the XML attribute and invalidate the whole SVG.
     `<style>html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
     `<foreignObject width="${w}" height="${h}">` +
-    `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px;background:transparent;${hostExtra}">${xhtml}</div>` +
+    `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px;background:transparent">${xhtml}</div>` +
     `</foreignObject></svg>`;
   return { w, h, makeSvg };
 }

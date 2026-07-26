@@ -29,10 +29,20 @@ async function rasterMotion(
     size: { w: width, h: height },
     scale,
     defs: /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html) ? KINO_DEFS : undefined,
-    hostVars: vars,
   });
-  const base = await rasterAt(tpl, "x", css, null);
-  if (!base || !GLASS_RE.test(html)) return base;
+  return rasterAt(tpl, "x", css, null);
+}
+
+/** Glass mirrors need the true composite beneath — only available when the compositor calls
+ *  texture() after registerBackdropTexture(). */
+function rasterGlassMirrors(
+  base: HTMLCanvasElement,
+  html: string,
+  vars: Record<string, string>,
+  width: number,
+  height: number,
+): HTMLCanvasElement {
+  if (!GLASS_RE.test(html)) return base;
 
   const host = document.createElement("div");
   host.style.cssText = `position:absolute;left:-99999px;top:0;width:${width}px;height:${height}px;visibility:hidden`;
@@ -49,8 +59,8 @@ async function rasterMotion(
     host.remove();
     return base;
   }
-  ctx.drawImage(base, 0, 0);
   const hr = host.getBoundingClientRect();
+  ctx.drawImage(base, 0, 0);
   shadow.querySelectorAll<HTMLElement>(".kino-glass").forEach((el) => {
     const mirror = el.querySelector("canvas");
     if (!mirror) return;
@@ -72,7 +82,7 @@ export function createMotionSource(opts: {
   beatDur: number;
   captionBottom?: number;
 }): TextureSource {
-  const cache = new Map<string, HTMLCanvasElement>();
+  const cache = new Map<string, { base: HTMLCanvasElement; html: string; vars: Record<string, string> }>();
   const procFn =
     opts.data.proc && !opts.data.lottie
       ? // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -157,19 +167,20 @@ export function createMotionSource(opts: {
         }
       }
 
-      const canvas = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
-      if (!canvas) return;
-      cache.set(cacheKey, canvas);
+      const base = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
+      if (!base) return;
+      cache.set(cacheKey, { base, html, vars });
       if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
     },
     texture(gl: WebGL2RenderingContext, frame?: number, key?: string): WebGLTexture | null {
       const local = frame !== undefined ? frame - opts.beatFrom : undefined;
       const cacheKey = key ?? current ?? (local !== undefined ? `f:${local}` : null);
       if (!cacheKey) return null;
-      const canvas = cache.get(cacheKey);
-      if (!canvas) return null;
+      const entry = cache.get(cacheKey);
+      if (!entry) return null;
       if (uploaded !== cacheKey || !tex) {
-        tex = uploadCanvasOrImage(gl, tex, canvas);
+        const finalCanvas = rasterGlassMirrors(entry.base, entry.html, entry.vars, opts.width, opts.height);
+        tex = uploadCanvasOrImage(gl, tex, finalCanvas);
         uploaded = cacheKey;
       }
       return tex;

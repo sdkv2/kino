@@ -48,11 +48,18 @@ export function createStage(
       const layers = layersAt(props, frame, dims);
       await sources.get("backdrop")?.prepare(frame);
       await sources.get("scrim")?.prepare(frame);
-      await Promise.all(
-        layers
+      await Promise.all([
+        ...layers
           .filter((l) => l.source.providerId !== "backdrop" && l.source.providerId !== "scrim")
           .map((l) => sources.get(l.source.providerId)?.prepare(frame, l.source.key) ?? Promise.resolve()),
-      );
+        ...layers
+          .map((l) => (l.mask as { source?: { kind?: string; layerId?: string } } | undefined)?.source)
+          .filter((s): s is { kind: "layer"; layerId: string } => s?.kind === "layer")
+          .map((ref) => {
+            const mLayer = layers.find((l) => l.id === ref.layerId);
+            return mLayer ? sources.get(mLayer.source.providerId)?.prepare(frame, mLayer.source.key) : undefined;
+          }),
+      ]);
       renderer.draw(layers, sources, frame, { theme: props.theme, postFx: props.postFx, props });
       const next = layersAt(props, frame + 1, dims);
       prefetch = prepareKeys(nextFrameKeys(layers, next), frame + 1);
