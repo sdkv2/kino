@@ -3,11 +3,7 @@
 **Not legal advice, and not yet reviewed by a lawyer. If you are contributing on behalf of an
 employer, have someone who can bind that employer read this first.**
 
-kino is MIT-licensed and intended to stay that way. This agreement exists so the project can
-keep shipping under a licence of its choosing without having to track down every past
-contributor for permission — the situation that has stranded plenty of open-source projects
-mid-relicence. Signing it does not take your rights away: you keep full ownership of
-everything you write.
+kino is source-available (free for individuals, non-profits, and teams ≤ 3; company licence required for for-profit teams of 4+). This agreement exists so the project can keep shipping under a licence of its choosing without having to track down every past contributor for permission — the situation that has stranded plenty of projects mid-relicence. Signing it does not take your rights away: you keep full ownership of everything you write.
 
 ## Who signs
 
@@ -41,7 +37,7 @@ contribution to it infringes a patent, the patent licences granted to you under 
 terminate as of the date that litigation is filed.
 
 **4. Relicensing.** You agree that sdkv2 may distribute your contribution, and license it to
-others, under the MIT Licence or under any other licence — including a commercial or
+others, under the Kino Licence, the MIT Licence, or under any other licence — including a commercial or
 source-available licence, and as part of a paid or hosted product. This is the operative clause:
 it is what lets the project change course later without a rights cleanup.
 
