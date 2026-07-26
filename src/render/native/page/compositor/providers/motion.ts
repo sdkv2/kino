@@ -51,9 +51,13 @@ function rasterGlassMirrors(
   shadow.innerHTML = `<style>${motionScrubCss(":host")}</style>${KINO_DEFS}${html}`;
   document.body.appendChild(host);
   applyLiquidGlass(shadow);
+  // `base` is rasterized at layout size × the raster supersample, so the output canvas has to
+  // match BASE's pixel size while element rects stay in layout px — hence the `s` conversion.
+  // Sizing `out` to the layout box instead would crop the raster to its top-left corner.
   const out = document.createElement("canvas");
-  out.width = width;
-  out.height = height;
+  out.width = base.width;
+  out.height = base.height;
+  const s = width > 0 ? base.width / width : 1;
   const ctx = out.getContext("2d");
   if (!ctx) {
     host.remove();
@@ -65,7 +69,7 @@ function rasterGlassMirrors(
     const mirror = el.querySelector("canvas");
     if (!mirror) return;
     const r = el.getBoundingClientRect();
-    ctx.drawImage(mirror, r.left - hr.left, r.top - hr.top, r.width, r.height);
+    ctx.drawImage(mirror, (r.left - hr.left) * s, (r.top - hr.top) * s, r.width * s, r.height * s);
   });
   host.remove();
   return out;

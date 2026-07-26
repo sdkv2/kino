@@ -43,6 +43,11 @@ export function buildRegistry(
   media: MediaMap,
   scale: number,
 ): Map<string, TextureSource> {
+  // Backdrops, scrims and lottie draw resolution-independently, so they paint at the full
+  // supersampled size. Markup rasters are different: their content is authored in composition
+  // pixels (caption font sizes, `top: 480px` in a motion graphic), so they must LAY OUT at
+  // composition size and gain their supersample from the raster `scale` instead. Laying markup
+  // out at renderDims renders every authored px at 1/ss of its intended size.
   const dims = renderDims;
   const sources = new Map<string, TextureSource>();
   const f = (sec: number) => Math.round(sec * props.fps);
@@ -152,7 +157,7 @@ export function buildRegistry(
         createHtmlSource({
           html: kickerMarkup({ text: s.kicker.text, color: s.kicker.color, fg: s.kicker.fg, theme: props.theme }),
           theme: props.theme,
-          size: { w: dims.width, h: dims.height },
+          size: { w: compDims.width, h: compDims.height },
           fps: props.fps,
           hasTier2: false,
           scale,
@@ -165,7 +170,7 @@ export function buildRegistry(
         createHtmlSource({
           html: textMarkup({ overlay: t, theme: props.theme }),
           theme: props.theme,
-          size: { w: dims.width, h: dims.height },
+          size: { w: compDims.width, h: compDims.height },
           fps: props.fps,
           hasTier2: false,
           scale,
@@ -189,7 +194,7 @@ export function buildRegistry(
             });
           },
           theme: props.theme,
-          size: { w: dims.width, h: dims.height },
+          size: { w: compDims.width, h: compDims.height },
           fps: props.fps,
           hasTier2: false,
           scale,
@@ -210,8 +215,8 @@ export function buildRegistry(
       return createMotionSource({
         data,
         theme: props.theme,
-        width: dims.width,
-        height: dims.height,
+        width: compDims.width,
+        height: compDims.height,
         fps: props.fps,
         scale,
         beatFrom,
@@ -235,7 +240,7 @@ export function buildRegistry(
       createHtmlSource({
         html: disclosureMarkup({ text: props.disclosure, theme: props.theme }),
         theme: props.theme,
-        size: { w: dims.width, h: dims.height },
+        size: { w: compDims.width, h: compDims.height },
         fps: props.fps,
         hasTier2: false,
         scale,

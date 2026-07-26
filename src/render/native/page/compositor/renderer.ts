@@ -24,6 +24,20 @@ import type { KinoProps } from "../../../props.js";
 import { CompositeResolve } from "./resolve.js";
 import { shaderFXAA } from "../../shaderQuality.js";
 
+// Two texture origins meet in this file, and mixing them up mirrors the frame.
+//
+//   UPLOADED   (uploadCanvasOrImage: canvas/img/video, UNPACK_FLIP_Y_WEBGL=false)
+//              row 0 of the source image is v=0, so the visual TOP is v=0.
+//   RENDERED   (a RenderTarget an FBO pass wrote into)
+//              the quad program maps y-down pixel space to clip via `-clip.y`, so the visual
+//              TOP lands at the highest GL row — v=1.
+//
+// The quad program samples with v ascending downwards, which is the UPLOADED convention. So every
+// draw whose bound texture is a RENDERED target must set uFlipY=1; every draw of an UPLOADED
+// texture must set uFlipY=0. Use SAMPLE_RENDERED / SAMPLE_UPLOADED rather than bare literals.
+const SAMPLE_UPLOADED = 0;
+const SAMPLE_RENDERED = 1;
+
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
 uniform mat3 uModel;
@@ -272,7 +286,8 @@ export class StageRenderer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, this.width, this.height);
       gl.useProgram(this.prog);
-      gl.uniform1f(this.uFlipY, 1.0);
+      gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
+      gl.uniform2f(this.uRes, this.width, this.height);
       gl.disable(gl.BLEND);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, composite.tex);
@@ -332,7 +347,8 @@ export class StageRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
     gl.viewport(0, 0, this.width, this.height);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, 0);
+    gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
+    gl.uniform2f(this.uRes, this.width, this.height);
     applyBlend(gl, blend);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, src.tex);
@@ -371,7 +387,8 @@ export class StageRenderer {
       .filter((e): e is { pass: EffectPass; params: Record<string, number | string> } => Boolean(e.pass));
 
     if (layer.mask || chain.length) {
-      const rendered = this.drawToTarget(this.scaled(layer), source, frame);
+      // drawToTarget scales to frame resolution itself — pre-scaling here would apply ss twice.
+      const rendered = this.drawToTarget(layer, source, frame);
       if (!rendered) return;
 
       let current = rendered;
@@ -407,7 +424,8 @@ export class StageRenderer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
       gl.viewport(0, 0, this.width, this.height);
       gl.useProgram(this.prog);
-      gl.uniform1f(this.uFlipY, 0);
+      gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
+      gl.uniform2f(this.uRes, this.width, this.height);
       applyBlend(gl, layer.blend);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, finalTarget.tex);
@@ -429,7 +447,8 @@ export class StageRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
     gl.viewport(0, 0, this.width, this.height);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, 0);
+    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
+    gl.uniform2f(this.uRes, this.width, this.height);
     applyBlend(gl, layer.blend);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -450,7 +469,7 @@ export class StageRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, w, h);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, 0);
+    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
     gl.uniform2f(this.uRes, w, h);
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
@@ -472,7 +491,7 @@ export class StageRenderer {
     const target = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, target);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, 0);
+    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
     gl.uniform2f(this.uRes, this.width, this.height);
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);

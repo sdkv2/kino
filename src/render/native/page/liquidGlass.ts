@@ -400,8 +400,13 @@ export function applyLiquidGlass(root: ShadowRoot | null): void {
     pool = new Map();
     pools.set(root, pool);
   }
-  const pageW = backdropTexture?.width ?? backdrop?.width ?? window.innerWidth;
-  const pageH = backdropTexture?.height ?? backdrop?.height ?? window.innerHeight;
+  // `pageW`/`pageH` are the LAYOUT box the glass elements were measured in, because uBgRect is
+  // built from getBoundingClientRect values. The backdrop texture may be larger (supersampled) —
+  // uBgRect is normalized, so its resolution is irrelevant here and using it as the divisor only
+  // ever worked while markup happened to lay out at texture size.
+  const hostBox = (root.host as HTMLElement | undefined)?.getBoundingClientRect();
+  const pageW = hostBox?.width || backdropTexture?.width || backdrop?.width || window.innerWidth;
+  const pageH = hostBox?.height || backdropTexture?.height || backdrop?.height || window.innerHeight;
   const scaleX = backdropTexture ? backdropTexture.width / pageW : (backdrop ? backdrop.width / pageW : 1);
   const scaleY = backdropTexture ? backdropTexture.height / pageH : (backdrop ? backdrop.height / pageH : 1);
 

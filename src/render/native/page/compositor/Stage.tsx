@@ -30,7 +30,9 @@ export function createStage(
 ): StageHandle {
   const renderer = new StageRenderer(canvas, { width: dims.width, height: dims.height, ss });
   const renderDims = { width: dims.width * ss, height: dims.height * ss };
-  const rasterScale = ss > 1 ? 1 : ss;
+  // Markup rasters lay out at composition size (see buildRegistry), so the supersample has to
+  // come from the raster scale — an SS=2 composite wants its caption/motion SVGs drawn at 2×.
+  const rasterScale = ss;
   const sources: Map<string, TextureSource> = buildRegistry(props, renderDims, dims, media, rasterScale);
   let prefetch: Promise<void> = Promise.resolve();
 
