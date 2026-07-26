@@ -12,7 +12,7 @@ export function createRegionSource(opts: {
   region: RegionShaderProps;
   /** Renders this frame into `canvas` — the program, uniforms, mask textures and SDF
    *  channels lifted from RegionShader.tsx. Built by Stage.tsx, which owns compilation. */
-  drawFrame: (canvas: HTMLCanvasElement, frame: number) => void;
+  drawFrame: (canvas: HTMLCanvasElement, frame: number) => void | Promise<void>;
   width: number;
   height: number;
 }): TextureSource {
@@ -23,7 +23,7 @@ export function createRegionSource(opts: {
 
   return {
     async prepare(frame: number): Promise<void> {
-      opts.drawFrame(canvas, frame);
+      await opts.drawFrame(canvas, frame);
     },
     texture(gl: WebGL2RenderingContext): WebGLTexture | null {
       tex = uploadCanvasOrImage(gl, tex, canvas);

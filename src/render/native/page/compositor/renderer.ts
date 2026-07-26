@@ -21,6 +21,8 @@ import {
   transitionProgress,
 } from "../../../transitionSpec.js";
 import type { KinoProps } from "../../../props.js";
+import { CompositeResolve } from "./resolve.js";
+import { shaderFXAA } from "../../shaderQuality.js";
 
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
@@ -103,12 +105,19 @@ export class StageRenderer {
   private uFlipY: WebGLUniformLocation;
   readonly width: number;
   readonly height: number;
+  readonly outW: number;
+  readonly outH: number;
+  readonly ss: number;
+  private resolve: CompositeResolve;
 
   constructor(canvas: HTMLCanvasElement, opts: { width: number; height: number; ss: number }) {
-    this.width = opts.width;
-    this.height = opts.height;
-    canvas.width = opts.width;
-    canvas.height = opts.height;
+    this.ss = Math.max(1, opts.ss);
+    this.outW = opts.width;
+    this.outH = opts.height;
+    this.width = this.outW * this.ss;
+    this.height = this.outH * this.ss;
+    canvas.width = this.outW;
+    canvas.height = this.outH;
     const gl = canvas.getContext("webgl2", {
       preserveDrawingBuffer: true,
       premultipliedAlpha: true,
@@ -131,6 +140,19 @@ export class StageRenderer {
     this.uOpacity = gl.getUniformLocation(prog, "uOpacity")!;
     this.uTex = gl.getUniformLocation(prog, "uTex")!;
     this.uFlipY = gl.getUniformLocation(prog, "uFlipY")!;
+    this.resolve = new CompositeResolve(gl);
+  }
+
+  private scaled(layer: LayerDraw): LayerDraw {
+    if (this.ss === 1) return layer;
+    const s = this.ss;
+    const { x, y, w, h } = layer.rect;
+    const { translate, scale, rotate } = layer.transform;
+    return {
+      ...layer,
+      rect: { x: x * s, y: y * s, w: w * s, h: h * s },
+      transform: { scale, rotate, translate: [translate[0] * s, translate[1] * s] },
+    };
   }
 
   draw(
@@ -164,7 +186,7 @@ export class StageRenderer {
       const maskLayer = layers.find((l) => l.id === ref.layerId);
       const maskSource = maskLayer && sources.get(maskLayer.source.providerId);
       if (!maskLayer || !maskSource) continue;
-      const t = this.drawToTarget(maskLayer, maskSource, frame);
+      const t = this.drawToTarget(this.scaled(maskLayer), maskSource, frame);
       if (t) maskTargets.set(ref.layerId, t);
     }
 
@@ -204,21 +226,25 @@ export class StageRenderer {
       composite = posted;
     }
 
-    // Blit accumulated composite to default screen framebuffer (FBO texture memory has t=1 at top, t=0 at bottom)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.width, this.height);
-    gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, 1.0);
-    gl.disable(gl.BLEND);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, composite.tex);
-    gl.uniformMatrix3fv(
-      this.uModel,
-      false,
-      modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", effects: [] }),
-    );
-    gl.uniform1f(this.uOpacity, 1.0);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // Blit accumulated composite to the display canvas (FXAA downsample when SS>1).
+    if (this.ss > 1) {
+      this.resolve.present(composite.tex, this.outW, this.outH, shaderFXAA());
+    } else {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, this.width, this.height);
+      gl.useProgram(this.prog);
+      gl.uniform1f(this.uFlipY, 1.0);
+      gl.disable(gl.BLEND);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, composite.tex);
+      gl.uniformMatrix3fv(
+        this.uModel,
+        false,
+        modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", effects: [] }),
+      );
+      gl.uniform1f(this.uOpacity, 1.0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
     this.pool.release(composite);
     clearBackdropTexture();
     gl.finish();
@@ -305,7 +331,7 @@ export class StageRenderer {
       .filter((e): e is { pass: EffectPass; params: Record<string, number | string> } => Boolean(e.pass));
 
     if (layer.mask || chain.length) {
-      const rendered = this.drawToTarget(layer, source, frame);
+      const rendered = this.drawToTarget(this.scaled(layer), source, frame);
       if (!rendered) return;
 
       let current = rendered;
@@ -359,7 +385,7 @@ export class StageRenderer {
     applyBlend(gl, layer.blend);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.uniformMatrix3fv(this.uModel, false, modelMatrix(layer));
+    gl.uniformMatrix3fv(this.uModel, false, modelMatrix(this.scaled(layer)));
     gl.uniform1f(this.uOpacity, layer.opacity);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
@@ -380,7 +406,7 @@ export class StageRenderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.uniformMatrix3fv(this.uModel, false, modelMatrix(layer));
+    gl.uniformMatrix3fv(this.uModel, false, modelMatrix(this.scaled(layer)));
     gl.uniform1f(this.uOpacity, 1); // opacity applies at composite time, not here
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return target;
@@ -391,6 +417,7 @@ export class StageRenderer {
   }
 
   dispose(): void {
+    this.resolve.dispose();
     this.pool.dispose(this.gl);
     this.gl.deleteProgram(this.prog);
   }
