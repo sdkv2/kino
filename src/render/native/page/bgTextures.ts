@@ -125,7 +125,7 @@ async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   return faces.join("");
 }
 
-function paletteVars(theme: KinoProps["theme"]): string {
+export function paletteVars(theme: KinoProps["theme"]): string {
   return (
     `--kino-mint:${theme.mint};--kino-green:${theme.green};--kino-night:${theme.night};` +
     `--kino-white:${theme.white};--kino-gold:${theme.gold};` +

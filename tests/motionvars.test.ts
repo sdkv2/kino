@@ -18,7 +18,7 @@ describe("buildMotionVars", () => {
     const v = buildMotionVars(theme, dyn);
     expect(v["--frame"]).toBe("12");
     expect(v["--t"]).toBe("0.4000");
-    expect(v["--progress"]).toBe("0.5000");
+    expect(v["--progress"]).toBe("0.500000");
     expect(v["--pulse"]).toBe("0.2500");
     expect(v["--kino-in"]).toBeDefined();
     expect(v["--kino-out"]).toBeDefined();

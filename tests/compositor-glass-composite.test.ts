@@ -93,4 +93,26 @@ describe("glass on the true composite", () => {
       delete process.env.KINO_COMPOSITOR;
     }
   }, 300000);
+
+  it("frame 0 has lens composite after kinoLoad boot seek (no poisoned texture cache)", async () => {
+    process.env.KINO_COMPOSITOR = "1";
+    try {
+      const outDir = mkdtempSync(join(tmpdir(), "kino-lensf0-"));
+      const pngs = await renderStills({
+        props,
+        publicDir: mkdtempSync(join(tmpdir(), "glasscomp-f0-pub-")),
+        format: "9:16",
+        frames: [{ frame: 0, name: "f0" }, { frame: 1, name: "f1" }],
+        outDir,
+      });
+      const std = (p: string) =>
+        parseFloat(
+          magick([p, "-crop", "760x760+160+580", "+repage", "-format", "%[fx:standard_deviation]", "info:"]).trim(),
+        );
+      expect(std(pngs[0])).toBeGreaterThan(0.05);
+      expect(Math.abs(std(pngs[0]) - std(pngs[1]))).toBeLessThan(0.04);
+    } finally {
+      delete process.env.KINO_COMPOSITOR;
+    }
+  }, 300000);
 });

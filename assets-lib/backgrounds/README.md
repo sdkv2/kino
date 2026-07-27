@@ -46,4 +46,4 @@ Author only ShaderToy `mainImage(out vec4 fragColor, in vec2 fragCoord)`. Unifor
 Or set `backgroundComponent` on the brand (`brand.md` frontmatter) so every spec inherits it.
 
 **Craft exemplars (project-local):** `projects/old-light/` (galaxy refraction),
-`projects/vesper/` (ink bloom + `kino-glass`).
+`projects/vesper/` (ink bloom + `kino-lens`).

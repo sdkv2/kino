@@ -1,4 +1,5 @@
 // Post-raster hooks for motion HTML (backdrop-sampling effects run after foreignObject raster).
+import type { MotionLayoutManifest } from "../lensLayout.js";
 import { lensPostEffect } from "./lens.js";
 import { isGpuMotionPostResult, type MotionPostResult } from "./types.js";
 export type { MotionPostEffect, MotionPostResult, GpuMotionPostResult } from "./types.js";
@@ -17,12 +18,16 @@ export function motionNeedsCompositorBackdrop(html: string): boolean {
 
 export function applyMotionPostEffects(ctx: {
   base: HTMLCanvasElement;
-  field?: HTMLCanvasElement;
+  sample?: HTMLCanvasElement;
+  manifest?: MotionLayoutManifest;
+  plates?: import("../lensLayout.js").MotionPaintPlates;
+  lensHost?: import("../lensLayout.js").MotionLensHost;
   chrome?: HTMLCanvasElement;
   html: string;
   vars: Record<string, string>;
   width: number;
   height: number;
+  theme: import("../../props.js").Theme;
   gl?: WebGL2RenderingContext;
   lensShaders?: Record<string, string>;
 }): MotionPostResult {

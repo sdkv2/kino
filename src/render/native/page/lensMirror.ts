@@ -17,6 +17,7 @@ void main() {
 const UNIFORM_NAMES = [
   "uBg", "uShape", "uBgRect", "uIsFullBg", "uUseShape", "uSize", "uRadius", "uRadii", "uBand", "uStrength",
   "uChroma", "uProfile", "uFilm", "uSaturate", "uBrightness", "uFrost", "uEdgeBlur", "uSS", "uSdfMax",
+  "uLayerPass", "uPageOrigin", "uLayerDevSize", "uDevScale",
 ] as const;
 
 interface LensState {
@@ -33,7 +34,38 @@ interface LensState {
   h: number;
 }
 
-const pools = new WeakMap<ShadowRoot, Map<number, LensState>>();
+const pools = new WeakMap<ParentNode, Map<number, LensState>>();
+
+/** Lens bounds in page space (float) — one measure per frame, shared by mirror + blit. */
+export interface LensPageRect {
+  relLeft: number;
+  relTop: number;
+  w: number;
+  h: number;
+}
+
+export function lensPageRect(el: HTMLElement, hostRect: DOMRect): LensPageRect {
+  const rect = el.getBoundingClientRect();
+  return {
+    relLeft: rect.left - hostRect.left,
+    relTop: rect.top - hostRect.top,
+    w: rect.width,
+    h: rect.height,
+  };
+}
+
+export function lensStackOrder(els: HTMLElement[]): HTMLElement[] {
+  return [...els].sort((a, b) => {
+    const za = parseInt(getComputedStyle(a).zIndex, 10);
+    const zb = parseInt(getComputedStyle(b).zIndex, 10);
+    const nza = Number.isFinite(za) ? za : 0;
+    const nzb = Number.isFinite(zb) ? zb : 0;
+    if (nza !== nzb) return nza - nzb;
+    if (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+    if (b.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) return 1;
+    return 0;
+  });
+}
 
 function bindTex2D(gl: WebGL2RenderingContext, tex: WebGLTexture): void {
   gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -48,8 +80,7 @@ function lensIdFor(el: HTMLElement): string {
   return raw || DEFAULT_LENS_ID;
 }
 
-function fragFor(el: HTMLElement, shaders: Record<string, string>): string {
-  const id = lensIdFor(el);
+function fragForId(id: string, shaders: Record<string, string>): string {
   const src = shaders[id];
   if (!src) {
     reportFatal(
@@ -59,6 +90,10 @@ function fragFor(el: HTMLElement, shaders: Record<string, string>): string {
     return "";
   }
   return src;
+}
+
+function fragFor(el: HTMLElement, shaders: Record<string, string>): string {
+  return fragForId(lensIdFor(el), shaders);
 }
 
 function compileProgram(
@@ -197,6 +232,90 @@ function cssCornerRadii(cs: CSSStyleDeclaration, w: number, h: number): [number,
   ];
 }
 
+export interface LensMaterial {
+  radius: number;
+  radii: [number, number, number, number];
+  strength: number;
+  band: number;
+  chroma: number;
+  profile: number;
+  film: [number, number, number, number];
+  saturate: number;
+  brightness: number;
+  frost: number;
+  edgeBlur: number;
+}
+
+function readLensMaterial(el: HTMLElement, w: number, h: number): LensMaterial {
+  const cs = getComputedStyle(el);
+  const radii = cssCornerRadii(cs, w, h);
+  const radius = Math.max(radii[0], radii[1], radii[2], radii[3]);
+  return {
+    radius,
+    radii,
+    strength: cssVarPx(el, "--glass-strength", 26),
+    band: cssVarPx(el, "--glass-band", Math.max(radius, 48)),
+    chroma: cssVar(cs, "--glass-chroma", 0.07),
+    profile: cssVar(cs, "--glass-profile", 2.2),
+    film: cssColor(cs.getPropertyValue("--glass-film"), [1, 1, 1, 0.13]),
+    saturate: cssVar(cs, "--glass-saturate", 1.25),
+    brightness: cssVar(cs, "--glass-brightness", 1.06),
+    frost: cssVarPx(el, "--glass-frost", 0),
+    edgeBlur: cssVarPx(el, "--glass-edge-blur", 0),
+  };
+}
+
+/** Scrape layout-time lens material + shape mask from a live element. */
+export function scrapeLensLayout(el: HTMLElement): {
+  lensId: string;
+  material: LensMaterial;
+  localW: number;
+  localH: number;
+  shapeMask: HTMLCanvasElement | null;
+  sdfMax: number;
+} {
+  const rect = el.getBoundingClientRect();
+  const localW = Math.max(4, Math.ceil(rect.width));
+  const localH = Math.max(4, Math.ceil(rect.height));
+  const SS = shaderSS();
+  const shapeMask = rasterLensShapeMask(el, localW, localH, SS);
+  return {
+    lensId: lensIdFor(el),
+    material: readLensMaterial(el, localW, localH),
+    localW,
+    localH,
+    shapeMask,
+    sdfMax: shapeMask ? shapeSdfMax(localW, localH) : 0,
+  };
+}
+
+function applyLensMaterialUniforms(
+  gl: WebGL2RenderingContext,
+  loc: Record<string, WebGLUniformLocation | null>,
+  material: LensMaterial,
+  w: number,
+  h: number,
+  SS: number,
+  shapeMask: HTMLCanvasElement | null,
+  sdfMax: number,
+): void {
+  gl.uniform2f(loc.uSize, w, h);
+  gl.uniform1f(loc.uRadius, material.radius);
+  gl.uniform4f(loc.uRadii, material.radii[0], material.radii[1], material.radii[2], material.radii[3]);
+  gl.uniform1f(loc.uBand, material.band);
+  gl.uniform1f(loc.uStrength, material.strength);
+  gl.uniform1f(loc.uChroma, material.chroma);
+  gl.uniform1f(loc.uProfile, material.profile);
+  gl.uniform4f(loc.uFilm, material.film[0], material.film[1], material.film[2], material.film[3]);
+  gl.uniform1f(loc.uSaturate, material.saturate);
+  gl.uniform1f(loc.uBrightness, material.brightness);
+  gl.uniform1f(loc.uFrost, material.frost);
+  gl.uniform1f(loc.uEdgeBlur, material.edgeBlur);
+  gl.uniform1f(loc.uSS, SS);
+  gl.uniform1f(loc.uUseShape, shapeMask ? 1.0 : 0.0);
+  gl.uniform1f(loc.uSdfMax, shapeMask ? sdfMax : 0.0);
+}
+
 function setLensUniforms(
   gl: WebGL2RenderingContext,
   loc: Record<string, WebGLUniformLocation | null>,
@@ -205,40 +324,14 @@ function setLensUniforms(
   h: number,
   SS: number,
 ): HTMLCanvasElement | null {
-  const cs = getComputedStyle(el);
-  const radii = cssCornerRadii(cs, w, h);
-  const radius = Math.max(radii[0], radii[1], radii[2], radii[3]);
-  const strength = cssVarPx(el, "--glass-strength", 26);
-  const band = cssVarPx(el, "--glass-band", Math.max(radius, 48));
-  const chroma = cssVar(cs, "--glass-chroma", 0.07);
-  const profile = cssVar(cs, "--glass-profile", 2.2);
-  const film = cssColor(cs.getPropertyValue("--glass-film"), [1, 1, 1, 0.13]);
-  const saturate = cssVar(cs, "--glass-saturate", 1.25);
-  const brightness = cssVar(cs, "--glass-brightness", 1.06);
-  const frost = cssVarPx(el, "--glass-frost", 0);
-  const edgeBlur = cssVarPx(el, "--glass-edge-blur", 0);
-  const shapeMask = rasterLensShapeMask(el, w, h, SS);
-  gl.uniform2f(loc.uSize, w, h);
-  gl.uniform1f(loc.uRadius, radius);
-  gl.uniform4f(loc.uRadii, radii[0], radii[1], radii[2], radii[3]);
-  gl.uniform1f(loc.uBand, band);
-  gl.uniform1f(loc.uStrength, strength);
-  gl.uniform1f(loc.uChroma, chroma);
-  gl.uniform1f(loc.uProfile, profile);
-  gl.uniform4f(loc.uFilm, film[0], film[1], film[2], film[3]);
-  gl.uniform1f(loc.uSaturate, saturate);
-  gl.uniform1f(loc.uBrightness, brightness);
-  gl.uniform1f(loc.uFrost, frost);
-  gl.uniform1f(loc.uEdgeBlur, edgeBlur);
-  gl.uniform1f(loc.uSS, SS);
-  gl.uniform1f(loc.uUseShape, shapeMask ? 1.0 : 0.0);
-  gl.uniform1f(loc.uSdfMax, shapeMask ? shapeSdfMax(w, h) : 0.0);
-  return shapeMask;
+  const scraped = scrapeLensLayout(el);
+  applyLensMaterialUniforms(gl, loc, scraped.material, w, h, SS, scraped.shapeMask, scraped.sdfMax);
+  return scraped.shapeMask;
 }
 
 /** Render lens refraction mirrors (canvas backdrop path — non-compositor / multi-fallback). */
 export function applyLensMirrors(
-  root: ShadowRoot | null,
+  root: ParentNode | null,
   opts?: { elements?: HTMLElement[]; lensShaders?: Record<string, string> },
 ): void {
   if (!root) return;
@@ -259,7 +352,12 @@ export function applyLensMirrors(
     pool = new Map();
     pools.set(root, pool);
   }
-  const hostBox = (root.host as HTMLElement | undefined)?.getBoundingClientRect();
+  const hostBox =
+    root instanceof ShadowRoot
+      ? (root.host as HTMLElement | undefined)?.getBoundingClientRect()
+      : root instanceof HTMLElement
+        ? root.getBoundingClientRect()
+        : undefined;
   const pageW = hostBox?.width || backdrop.width || window.innerWidth;
   const pageH = hostBox?.height || backdrop.height || window.innerHeight;
   const scaleX = backdrop.width / pageW;
@@ -304,10 +402,14 @@ export function applyLensMirrors(
       canvas.height = h * SS;
     }
 
-    const hostEl = el.getRootNode() instanceof ShadowRoot ? ((el.getRootNode() as ShadowRoot).host as HTMLElement) : null;
-    const hr = hostEl ? hostEl.getBoundingClientRect() : { left: 0, top: 0 };
-    const relLeft = Math.round(rect.left - hr.left);
-    const relTop = Math.round(rect.top - hr.top);
+    const hr =
+      root instanceof ShadowRoot
+        ? ((root.host as HTMLElement | undefined)?.getBoundingClientRect() ?? { left: 0, top: 0 })
+        : root instanceof HTMLElement
+          ? root.getBoundingClientRect()
+          : { left: 0, top: 0 };
+    const relLeft = rect.left - hr.left;
+    const relTop = rect.top - hr.top;
 
     const sctx = stage.getContext("2d");
     if (!sctx) return;
@@ -325,6 +427,7 @@ export function applyLensMirrors(
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage);
     gl.uniform1f(loc.uIsFullBg, 0.0);
     gl.uniform4f(loc.uBgRect, 0, 0, 1, 1);
+    gl.uniform1f(loc.uLayerPass, 0.0);
     gl.uniform1i(loc.uBg, 0);
     const shapeMask = setLensUniforms(gl, loc, el, w, h, SS);
     gl.activeTexture(gl.TEXTURE1);
@@ -364,93 +467,75 @@ function sharedLensProgram(gl: WebGL2RenderingContext, fragSrc: string): SharedL
   return entry;
 }
 
-interface SharedLensFbo {
-  fbo: WebGLFramebuffer;
-  tex: WebGLTexture;
-  w: number;
-  h: number;
-}
-
-const sharedFbos = new WeakMap<WebGL2RenderingContext, SharedLensFbo>();
-
-function sharedLensFbo(gl: WebGL2RenderingContext, w: number, h: number): SharedLensFbo {
-  let fbo = sharedFbos.get(gl);
-  if (!fbo || fbo.w !== w || fbo.h !== h) {
-    if (fbo) {
-      gl.deleteFramebuffer(fbo.fbo);
-      gl.deleteTexture(fbo.tex);
-    }
-    const tex = gl.createTexture()!;
-    bindTex2D(gl, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    const fb = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    fbo = { fbo: fb, tex, w, h };
-    sharedFbos.set(gl, fbo);
-  }
-  return fbo;
+export interface BakedLensPass {
+  lensId: string;
+  material: LensMaterial;
+  pageRect: LensPageRect;
+  localW: number;
+  localH: number;
+  shapeMask: HTMLCanvasElement | null;
+  sdfMax: number;
 }
 
 /**
- * Render one lens mirror into an FBO on the compositor GL context (no readback).
- * Note: shared FBO is reused — blit the result before calling again.
+ * Caller must bind the destination FBO and enable premultiplied src-over blending.
  */
-export function renderLensMirrorFbo(
-  sharedGl: WebGL2RenderingContext,
+export function drawLensLayerPassEntry(
+  gl: WebGL2RenderingContext,
   backdrop: Readonly<BackdropTexture>,
-  el: HTMLElement,
+  entry: BakedLensPass,
   pageW: number,
   pageH: number,
-  hostRect: DOMRect,
+  layerDevW: number,
+  layerDevH: number,
   lensShaders: Record<string, string>,
-): SharedLensFbo | null {
-  const fragSrc = fragFor(el, lensShaders);
-  if (!fragSrc) return null;
-  const entry = sharedLensProgram(sharedGl, fragSrc);
-  if (!entry) return null;
+): boolean {
+  const fragSrc = fragForId(entry.lensId, lensShaders);
+  if (!fragSrc) return false;
+  const program = sharedLensProgram(gl, fragSrc);
+  if (!program) return false;
 
-  const rect = el.getBoundingClientRect();
-  // Snap to device px — match chrome blit rounding or backdrop UV drifts vs mirror (motion shimmer).
-  const relLeft = Math.round(rect.left - hostRect.left);
-  const relTop = Math.round(rect.top - hostRect.top);
-  const w = Math.max(1, Math.round(rect.width));
-  const h = Math.max(1, Math.round(rect.height));
-  if (w < 4 || h < 4) return null;
+  const { relLeft, relTop, w, h } = entry.pageRect;
+  if (w < 4 || h < 4) return false;
 
   const SS = shaderSS();
-  const pw = Math.max(1, w * SS);
-  const ph = Math.max(1, h * SS);
-  const { prog, loc, shapeTex } = entry;
-  const target = sharedLensFbo(sharedGl, pw, ph);
+  const devScale = pageW > 0 ? layerDevW / pageW : 1;
+  const { prog, loc, shapeTex } = program;
 
-  const prevFb = sharedGl.getParameter(sharedGl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
-  sharedGl.bindFramebuffer(sharedGl.FRAMEBUFFER, target.fbo);
-  sharedGl.viewport(0, 0, pw, ph);
-  sharedGl.enable(sharedGl.BLEND);
-  sharedGl.blendFunc(sharedGl.ONE, sharedGl.ONE_MINUS_SRC_ALPHA);
-  sharedGl.clearColor(0, 0, 0, 0);
-  sharedGl.clear(sharedGl.COLOR_BUFFER_BIT);
-  sharedGl.useProgram(prog);
-  sharedGl.activeTexture(sharedGl.TEXTURE0);
-  sharedGl.bindTexture(sharedGl.TEXTURE_2D, backdrop.tex);
-  sharedGl.uniform1f(loc.uIsFullBg, 1.0);
-  sharedGl.uniform4f(
+  gl.viewport(0, 0, layerDevW, layerDevH);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(prog);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, backdrop.tex);
+  gl.uniform1f(loc.uIsFullBg, 1.0);
+  gl.uniform4f(
     loc.uBgRect,
     relLeft / pageW,
     (pageH - relTop - h) / pageH,
     w / pageW,
     h / pageH,
   );
-  sharedGl.uniform1i(loc.uBg, 0);
-  const shapeMask = setLensUniforms(sharedGl, loc, el, w, h, SS);
-  sharedGl.activeTexture(sharedGl.TEXTURE1);
-  sharedGl.bindTexture(sharedGl.TEXTURE_2D, shapeTex);
-  if (shapeMask) uploadShapeMask(sharedGl, shapeMask);
-  sharedGl.uniform1i(loc.uShape, 1);
-  sharedGl.activeTexture(sharedGl.TEXTURE0);
-  sharedGl.drawArrays(sharedGl.TRIANGLES, 0, 3);
-  sharedGl.bindFramebuffer(sharedGl.FRAMEBUFFER, prevFb);
-  return target;
+  gl.uniform1i(loc.uBg, 0);
+  gl.uniform1f(loc.uLayerPass, 1.0);
+  gl.uniform2f(loc.uPageOrigin, relLeft, relTop);
+  gl.uniform2f(loc.uLayerDevSize, layerDevW, layerDevH);
+  gl.uniform1f(loc.uDevScale, devScale);
+  applyLensMaterialUniforms(
+    gl,
+    loc,
+    entry.material,
+    entry.localW,
+    entry.localH,
+    SS,
+    entry.shapeMask,
+    entry.sdfMax,
+  );
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, shapeTex);
+  if (entry.shapeMask) uploadShapeMask(gl, entry.shapeMask);
+  gl.uniform1i(loc.uShape, 1);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  return true;
 }

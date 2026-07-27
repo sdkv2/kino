@@ -3,7 +3,13 @@ import type { MotionEnv, MotionGraphicProps, Theme } from "../../../../props.js"
 import { paramsAt, pulseAt, progressCurves } from "../../../../bgparams.js";
 import { buildMotionVars, cameraBlurVars } from "../../../../motionVars.js";
 import { sanitizeMotionHtml } from "../../../../sanitizeMotion.js";
-import { motionNeedsLensLayers, rasterMotionFull, rasterMotionLayers } from "../../motionRaster.js";
+import {
+  disposeMotionFrameBundle,
+  motionNeedsLensLayers,
+  prepareMotionFrameBundle,
+  rasterMotionFull,
+  type MotionFrameBundle,
+} from "../../motionRaster.js";
 import { applyMotionPostEffects, isGpuMotionPostResult, motionNeedsCompositorBackdrop } from "../../motionPostEffects/index.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
@@ -17,14 +23,18 @@ async function rasterMotion(
   width: number,
   height: number,
   scale: number,
-): Promise<{ full: HTMLCanvasElement; field: HTMLCanvasElement; chrome: HTMLCanvasElement } | null> {
+): Promise<MotionFrameBundle | null> {
   if (motionNeedsLensLayers(html)) {
-    const layers = await rasterMotionLayers(html, vars, theme, width, height, scale);
-    return layers;
+    return prepareMotionFrameBundle(html, vars, theme, width, height, scale);
   }
   const full = await rasterMotionFull(html, vars, theme, width, height, scale);
   if (!full) return null;
-  return { full, field: full, chrome: full };
+  return {
+    manifest: { pageW: width, pageH: height, rasterScale: scale, lenses: [] },
+    plates: { full, sample: full, chrome: full },
+    html,
+    vars,
+  };
 }
 
 export function createMotionSource(opts: {
@@ -38,10 +48,7 @@ export function createMotionSource(opts: {
   beatDur: number;
   captionBottom?: number;
 }): TextureSource {
-  const cache = new Map<
-    string,
-    { full: HTMLCanvasElement; field: HTMLCanvasElement; chrome: HTMLCanvasElement; html: string; vars: Record<string, string> }
-  >();
+  const cache = new Map<string, MotionFrameBundle>();
   const procFn =
     opts.data.proc && !opts.data.lottie
       ? // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -57,6 +64,12 @@ export function createMotionSource(opts: {
       const local = frame - opts.beatFrom;
       const cacheKey = key ?? `f:${local}`;
       current = cacheKey;
+      if (motionNeedsLensLayers(opts.data.html)) {
+        // Lens samples compositor backdrop published per draw. kinoLoad boot seek(0) can texture()
+        // before backdrop exists; invalidate so the real capture re-runs lens composite.
+        uploaded = null;
+        gpuRendered = false;
+      }
       if (cache.has(cacheKey)) return;
 
       const tt = opts.fps > 0 ? local / opts.fps : 0;
@@ -88,6 +101,7 @@ export function createMotionSource(opts: {
         wordCount: opts.data.words?.length ?? 0,
         width: opts.width,
         height: opts.height,
+        durationFrames,
       });
 
       let html = opts.data.html;
@@ -127,10 +141,14 @@ export function createMotionSource(opts: {
         }
       }
 
-      const raster = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
-      if (!raster) return;
-      cache.set(cacheKey, { ...raster, html, vars });
-      if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
+      const bundle = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
+      if (!bundle) return;
+      cache.set(cacheKey, bundle);
+      if (cache.size > CACHE_MAX) {
+        const oldest = cache.keys().next().value!;
+        disposeMotionFrameBundle(cache.get(oldest)!);
+        cache.delete(oldest);
+      }
     },
     needsCompositorBackdrop(frame?: number, key?: string): boolean {
       const local = frame !== undefined ? frame - opts.beatFrom : undefined;
@@ -146,14 +164,19 @@ export function createMotionSource(opts: {
       const entry = cache.get(cacheKey);
       if (!entry) return null;
       if (uploaded !== cacheKey || !tex) {
+        const { plates, manifest } = entry;
         const result = applyMotionPostEffects({
-          base: entry.full,
-          field: entry.field,
-          chrome: entry.chrome,
+          base: plates.full,
+          sample: plates.sample,
+          manifest,
+          plates,
+          lensHost: entry.lensHost,
+          chrome: plates.chrome,
           html: entry.html,
           vars: entry.vars,
           width: opts.width,
           height: opts.height,
+          theme: opts.theme,
           gl,
           lensShaders: opts.data.lensShaders,
         });
@@ -177,6 +200,7 @@ export function createMotionSource(opts: {
       return { w: opts.width, h: opts.height };
     },
     dispose(): void {
+      for (const bundle of cache.values()) disposeMotionFrameBundle(bundle);
       cache.clear();
       gpuRendered = false;
     },

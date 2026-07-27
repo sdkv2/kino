@@ -1,17 +1,34 @@
-// Dual FO plates for backdrop-sampling lenses: field (shell) + chrome (descendants).
+// FO plates for backdrop-sampling lenses + per-frame layout manifest (sample / chrome).
 import type { Theme } from "../../props.js";
 import { LENS_CLASS_RE } from "../../lensContract.js";
-import { buildTemplate, rasterAt, TEX_ROOT } from "./bgTextures.js";
+import { buildTemplate, paletteVars, rasterAt, TEX_ROOT } from "./bgTextures.js";
 import { KINO_DEFS, motionScrubCss } from "./motionCss.js";
+import {
+  buildMotionLayoutManifest,
+  disposeMotionFrameBundle,
+  openMotionLensHost,
+  type MotionFrameBundle,
+  type MotionPaintPlates,
+} from "./lensLayout.js";
 
-export interface MotionRasterLayers {
-  full: HTMLCanvasElement;
-  field: HTMLCanvasElement;
-  chrome: HTMLCanvasElement;
-}
+export type {
+  LensLayoutEntry,
+  LensMaterial,
+  MotionFrameBundle,
+  MotionLayoutManifest,
+  MotionLensHost,
+  MotionPaintPlates,
+} from "./lensLayout.js";
+export {
+  buildMotionLayoutManifest,
+  disposeMotionFrameBundle,
+  layoutMotionFrame,
+  manifestLensRects,
+  openMotionLensHost,
+} from "./lensLayout.js";
 
-/** Lens shell only — direct descendants hidden so mirror samples desk / vibrancy, not UI chrome. */
-export const LENS_FIELD_SCRUB = `.kino-lens>*{visibility:hidden!important}`;
+/** Full scene with every `kino-lens` hidden — what's optically behind the glass. */
+export const LENS_SAMPLE_SCRUB = `.kino-lens,.kino-lens *{visibility:hidden!important}`;
 
 /**
  * Lens descendants only — everything else hidden; shell bg + pseudos stripped.
@@ -23,35 +40,129 @@ export const LENS_CHROME_SCRUB =
   `.kino-lens{background:transparent!important;background-image:none!important;box-shadow:none!important}` +
   `.kino-lens::before,.kino-lens::after{display:none!important;content:none!important}`;
 
-function varsCss(vars: Record<string, string>): string {
+/** Motion scrub + beat vars on the same root FO uses — keeps lens measure host in sync with raster. */
+export function motionVarsCss(vars: Record<string, string>): string {
   return `.${TEX_ROOT}{${Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(";")}}`;
 }
 
-function motionCss(html: string, vars: Record<string, string>, extra = ""): string {
-  return motionScrubCss(TEX_ROOT) + varsCss(vars) + extra;
+export function motionHostCss(vars: Record<string, string>, extra = ""): string {
+  return motionScrubCss(TEX_ROOT) + motionVarsCss(vars) + extra;
 }
 
-async function rasterOnce(
+export interface MotionRasterProbe {
+  texRoot: HTMLElement;
+  unmount: () => void;
+}
+
+/**
+ * Live layout probe matching buildTemplate → foreignObject (inner sized div inside .kino-tex-root).
+ * Not the wrapMotionHtml shortcut — that tree diverges from the FO raster and desyncs mirrors.
+ */
+export function mountMotionRasterProbe(
   html: string,
   vars: Record<string, string>,
   theme: Theme,
   width: number,
   height: number,
-  scale: number,
-  extraCss: string,
-  key: string,
-): Promise<HTMLCanvasElement | null> {
-  const css = motionCss(html, vars, extraCss);
-  const tpl = await buildTemplate(html, theme, {
-    size: { w: width, h: height },
-    scale,
-    defs: /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html) ? KINO_DEFS : undefined,
-  });
-  return rasterAt(tpl, key, css, null);
+  defs = "",
+): MotionRasterProbe {
+  const probe = document.createElement("div");
+  probe.setAttribute(
+    "style",
+    `position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;${paletteVars(theme)}`,
+  );
+  const style = document.createElement("style");
+  style.textContent = motionHostCss(vars);
+  probe.appendChild(style);
+  if (defs) probe.insertAdjacentHTML("beforeend", defs);
+
+  const inner = document.createElement("div");
+  inner.style.position = "relative";
+  inner.style.width = `${width}px`;
+  inner.style.height = `${height}px`;
+  inner.innerHTML = html;
+
+  const texRoot = document.createElement("div");
+  texRoot.className = TEX_ROOT;
+  texRoot.style.cssText = `width:${width}px;height:${height}px;background:transparent`;
+  texRoot.appendChild(inner);
+  probe.appendChild(texRoot);
+  document.body.appendChild(probe);
+  void texRoot.offsetHeight;
+  return { texRoot, unmount: () => probe.remove() };
+}
+
+function motionCss(vars: Record<string, string>, extra = ""): string {
+  return motionHostCss(vars, extra);
+}
+
+function needsMotionDefs(html: string): boolean {
+  return /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html);
 }
 
 export function motionNeedsLensLayers(html: string): boolean {
   return LENS_CLASS_RE.test(html);
+}
+
+/** FO supersample — draft SS=1 still FO-rasters at 2× then downsamples (1× FO snaps transforms to whole px). */
+export const MOTION_FO_MIN_SCALE = 2;
+
+export function motionFoScale(outScale: number): number {
+  return Math.max(outScale, MOTION_FO_MIN_SCALE);
+}
+
+function downscaleCanvasTo(canvas: HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
+  if (canvas.width === w && canvas.height === h) return canvas;
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const ctx = out.getContext("2d");
+  if (!ctx) return canvas;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(canvas, 0, 0, w, h);
+  return out;
+}
+
+/** Match plate pixel size to compositor outScale after optional FO supersample. */
+export function normalizeMotionPlates(
+  plates: MotionPaintPlates,
+  pageW: number,
+  pageH: number,
+  outScale: number,
+): MotionPaintPlates {
+  const wantW = Math.round(pageW * outScale);
+  const wantH = Math.round(pageH * outScale);
+  if (plates.full.width === wantW && plates.full.height === wantH) return plates;
+  return {
+    full: downscaleCanvasTo(plates.full, wantW, wantH),
+    sample: downscaleCanvasTo(plates.sample, wantW, wantH),
+    chrome: downscaleCanvasTo(plates.chrome, wantW, wantH),
+  };
+}
+
+async function rasterMotionPlates(
+  html: string,
+  vars: Record<string, string>,
+  theme: Theme,
+  width: number,
+  height: number,
+  outScale: number,
+): Promise<MotionPaintPlates | null> {
+  const foScale = motionFoScale(outScale);
+  const defs = needsMotionDefs(html) ? KINO_DEFS : undefined;
+  const tpl = await buildTemplate(html, theme, {
+    size: { w: width, h: height },
+    scale: foScale,
+    defs,
+  });
+  const [full, sample, chrome] = await Promise.all([
+    rasterAt(tpl, "full", motionCss(vars), null),
+    rasterAt(tpl, "sample", motionCss(vars, LENS_SAMPLE_SCRUB), null),
+    rasterAt(tpl, "chrome", motionCss(vars, LENS_CHROME_SCRUB), null),
+  ]);
+  if (!full || !sample || !chrome) return null;
+  return normalizeMotionPlates({ full, sample, chrome }, width, height, outScale);
 }
 
 export async function rasterMotionFull(
@@ -62,22 +173,36 @@ export async function rasterMotionFull(
   height: number,
   scale: number,
 ): Promise<HTMLCanvasElement | null> {
-  return rasterOnce(html, vars, theme, width, height, scale, "", "full");
+  const plates = await rasterMotionPlates(html, vars, theme, width, height, scale);
+  return plates?.full ?? null;
 }
 
-export async function rasterMotionLayers(
+export async function prepareMotionFrameBundle(
   html: string,
   vars: Record<string, string>,
   theme: Theme,
   width: number,
   height: number,
   scale: number,
-): Promise<MotionRasterLayers | null> {
-  const [full, field, chrome] = await Promise.all([
-    rasterOnce(html, vars, theme, width, height, scale, "", "full"),
-    rasterOnce(html, vars, theme, width, height, scale, LENS_FIELD_SCRUB, "field"),
-    rasterOnce(html, vars, theme, width, height, scale, LENS_CHROME_SCRUB, "chrome"),
-  ]);
-  if (!full || !field || !chrome) return null;
-  return { full, field, chrome };
+): Promise<MotionFrameBundle | null> {
+  const defs = needsMotionDefs(html) ? KINO_DEFS : "";
+  const lensHost = motionNeedsLensLayers(html)
+    ? openMotionLensHost(html, vars, theme, width, height, defs)
+    : undefined;
+  const manifest = lensHost
+    ? buildMotionLayoutManifest(lensHost, width, height, scale)
+    : { pageW: width, pageH: height, rasterScale: scale, lenses: [] };
+
+  const plates = await rasterMotionPlates(html, vars, theme, width, height, scale);
+  if (!plates) {
+    lensHost?.unmount();
+    return null;
+  }
+  return {
+    manifest,
+    plates,
+    html,
+    vars,
+    lensHost,
+  };
 }

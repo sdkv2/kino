@@ -1947,7 +1947,7 @@ const stripes = {
   params: {}, keyframes: [], triggers: [],
 };
 const card = {
-  html: `<style>.c{position:absolute;left:14%;right:14%;top:36%;bottom:36%;border-radius:48px;background:transparent;--glass-strength:48px;--glass-band:120px}</style><div class="c kino-glass"></div>`,
+  html: `<style>.c{position:absolute;left:14%;right:14%;top:36%;bottom:36%;border-radius:48px;background:transparent;--glass-strength:48px;--glass-band:120px}</style><div class="c kino-lens"></div>`,
   params: {}, keyframes: [], triggers: [],
 };
 
@@ -1966,7 +1966,7 @@ describe("glass on the true composite", () => {
   it("refracts a layer above the background, which the DOM path cannot", async () => {
     process.env.KINO_COMPOSITOR = "1";
     try {
-      const outDir = mkdtempSync(join(tmpdir(), "kino-glasscomp-"));
+      const outDir = mkdtempSync(join(tmpdir(), "kino-lenscomp-"));
       const pngs = await renderStills({
         props, publicDir: mkdtempSync(join(tmpdir(), "glasscomp-pub-")),
         format: "9:16", frames: [{ frame: 20, name: "a" }, { frame: 20, name: "b" }], outDir,
@@ -2012,7 +2012,7 @@ Reset `backdropTexture = null` at the start of each frame so a stale texture fro
 
 - [ ] **Step 4: Feed the composite from the renderer**
 
-In `draw`, accumulate into a target rather than straight to the default framebuffer, and before drawing any layer whose markup contains `kino-glass`, hand the accumulated target to glass:
+In `draw`, accumulate into a target rather than straight to the default framebuffer, and before drawing any layer whose markup contains `kino-lens`, hand the accumulated target to glass:
 
 ```ts
       // Glass layers refract everything already composited beneath them.
@@ -2021,7 +2021,7 @@ In `draw`, accumulate into a target rather than straight to the default framebuf
       }
 ```
 
-then blit `accum` to the default framebuffer once at the end. `glassLayerIds` is computed at registry build time by scanning each `html` source's markup for `kino-glass`.
+then blit `accum` to the default framebuffer once at the end. `glassLayerIds` is computed at registry build time by scanning each `html` source's markup for `kino-lens`.
 
 **ASSUMPTION**: glass refracts everything beneath it in layer order. The alternative — refracting only the background — is what happens today, and the whole point of this task is that it is a limitation rather than a design.
 

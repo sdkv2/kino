@@ -53,7 +53,7 @@ punches (pure mint/green reads monochrome-teal). Set per beat via `backgroundKey
 | 3 | 7 | `card-render` (custom .frag) bg + tex (avatar) | texture **live-scrub typewriter** — scan bar draws the empty editor, then the spec **types itself in char-by-char** | "This card is the actual spec — a real interface element, handed straight to the shader as a texture." |
 | 4 | 4 | `orb-badge` bg + tex (avatar) | texture **static** + 3D cylindrical decal wrap + correct occlusion | "So your own interface can ride a live 3D surface." |
 | 5 | 5 | `player.html` (motion) | **`--t` real clock** + cam easing + `.kino-camera` blur + `--kino-aspect` | "Same spec in, same frames out — every single time." |
-| 6 | 5 | `liquid-glass` bg + `kino-glass` overlay (avatar) | refractive drop **+ real-refraction material stacked** | "Cinematic 3D. One build command." |
+| 6 | 5 | `liquid-glass` bg + `kino-lens` overlay (avatar) | refractive drop **+ real-refraction material stacked** | "Cinematic 3D. One build command." |
 
 ### Beat mechanics
 
@@ -82,8 +82,8 @@ punches (pure mint/green reads monochrome-teal). Set per beat via `backgroundKey
   scrubber: a timestamp **and** a fill bar both derived from a single `--elapsed = --start + --t`
   (real clock), ticking 1:1 with render seconds — the determinism proof. `.kino-camera` push; widens via
   `--kino-aspect` in 16:9. `data-measure` on the card + scrubber.
-- **6 — liquid-glass + kino-glass CTA.** `background: custom / liquid-glass`, `backgroundIntensity: 0.9`,
-  cold cyan/indigo + gold palette. `motionOverlay: { source: "motion/cta-glass.html", ... }` — a `kino-glass`
+- **6 — liquid-glass + kino-lens CTA.** `background: custom / liquid-glass`, `backgroundIntensity: 0.9`,
+  cold cyan/indigo + gold palette. `motionOverlay: { source: "motion/cta-glass.html", ... }` — a `kino-lens`
   card (SDF rim, `--glass-*` knobs) that refracts the liquid-glass shader behind it (glass refracting glass).
   CTA copy: `kino build` + repo. `cam` push, `data-measure`.
 
@@ -92,7 +92,7 @@ punches (pure mint/green reads monochrome-teal). Set per beat via `backgroundKey
 Covered by beats: `aurora-flow`, `liquid-orb`, `orb-badge`, `liquid-glass` (4 bundled shaders) + a custom
 `card-render.frag` (beat 3; the bundled `ui-hero` was dropped by user request — the custom shader still
 covers the shader-background + texture-channel features and additionally dogfoods authoring a `.frag`);
-texture channels **live-scrub** (beat 3) + **static** (beat 4); `kino-glass` material (beat 6); `--t`
+texture channels **live-scrub** (beat 3) + **static** (beat 4); `kino-lens` material (beat 6); `--t`
 real clock + cam easing + `.kino-camera` blur (beat 5); 16:9 dual-format + `--kino-aspect`.
 
 Covered by process: `--measure` (alignment QA), high **quality tier** / SSAA (render).
@@ -106,7 +106,7 @@ workspace detection` is infra, not video-visible (exercised just by running insi
 1. `motion/spec-card.html` — the `advert.json` spec as a mini code editor (live-scrub caret) + `backgrounds/card-render.frag` — the scan-wipe presentation shader. *(v2; replaced `render-card.html` + `ui-hero`.)*
 2. `motion/badge.html` — kino wordmark chip (IBM Plex Mono + mint dot), static decal.
 3. `motion/player.html` — `--t` determinism timeline UI, `.kino-camera`, aspect-aware.
-4. `motion/cta-glass.html` — SDF-rim `kino-glass` CTA card over the liquid-glass shader.
+4. `motion/cta-glass.html` — SDF-rim `kino-lens` CTA card over the liquid-glass shader.
 
 Plus the six section specs (`specs/reel-{1..6}-*.json`), `project.json`, the `kino-reel` brand
 (`brands/kino-reel/brand.md`), and `build-reel.sh` (render ×6 → xfade concat per format).
@@ -124,9 +124,9 @@ Plus the six section specs (`specs/reel-{1..6}-*.json`), `project.json`, the `ki
 
 ## Risks & how they resolved during the build
 
-1. **kino-glass over a shader background via `motionOverlay`** (beat 6) — **RESOLVED, works.** The glass
+1. **kino-lens over a shader background via `motionOverlay`** (beat 6) — **RESOLVED, works.** The glass
    CTA card genuinely refracts the liquid-glass shader behind it (glass refracting glass). Fallback
-   (kino-glass over Canvas2D `brand-wash`) not needed.
+   (kino-lens over Canvas2D `brand-wash`) not needed.
 2. **16:9 framing** — **fine.** Motion beats (player, CTA) widen via `--kino-aspect`; shader beats render
    centered/reflected in wide and read well.
 3. **`scan`/`fill` seconds-based timing** (beat 3) — estimated from VO length; retune at real build.

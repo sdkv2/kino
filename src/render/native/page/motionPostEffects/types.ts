@@ -3,14 +3,20 @@ export interface MotionPostEffect {
   apply(ctx: {
     /** Full FO raster (reference / non-lens effects). */
     base: HTMLCanvasElement;
-    /** Lens shell plate — mirror samples this (+ compositor-under). */
-    field?: HTMLCanvasElement;
+    /** Scene minus lens trees — merged with compositor-under for mirror sampling. */
+    sample?: HTMLCanvasElement;
+    /** Per-frame layout manifest — placement + baked lens materials. */
+    manifest?: import("../lensLayout.js").MotionLayoutManifest;
+    plates?: import("../lensLayout.js").MotionPaintPlates;
+    /** Live DOM host from prepare(); CPU fallback only. */
+    lensHost?: import("../lensLayout.js").MotionLensHost;
     /** Lens descendant plate — composited above mirrors. */
     chrome?: HTMLCanvasElement;
     html: string;
     vars: Record<string, string>;
     width: number;
     height: number;
+    theme: Theme;
     gl?: WebGL2RenderingContext;
     lensShaders?: Record<string, string>;
   }): MotionPostResult;

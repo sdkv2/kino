@@ -3111,7 +3111,7 @@ Every row that fails names a provider whose port is incomplete. Work the list to
 
 - [ ] **Step 3: Extend the matrix once the base rows pass**
 
-Add rows for the providers the base matrix does not reach: `shader-background` (a spec with `shaderCode`), `video-cutaway` (a beat with a `source` mp4 and a chrome `frame`), `region-shader` (a beat with `regionShader`), `lottie` (a motion beat whose markup embeds a Lottie canvas), `glass` (markup using `kino-glass`), and `logo`. Each needs its own fixture; follow the shape of the existing entries.
+Add rows for the providers the base matrix does not reach: `shader-background` (a spec with `shaderCode`), `video-cutaway` (a beat with a `source` mp4 and a chrome `frame`), `region-shader` (a beat with `regionShader`), `lottie` (a motion beat whose markup embeds a Lottie canvas), `glass` (markup using `kino-lens`), and `logo`. Each needs its own fixture; follow the shape of the existing entries.
 
 - [ ] **Step 4: Commit**
 

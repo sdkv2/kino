@@ -1,7 +1,8 @@
 #version 300 es
 // liquid-glass — default kino-lens material (Apple-style edge refraction).
 // Required uniforms: uBg, uShape, uBgRect, uIsFullBg, uUseShape, uSize, uRadius, uRadii,
-// uBand, uStrength, uChroma, uProfile, uFilm, uSaturate, uBrightness, uFrost, uEdgeBlur, uSS, uSdfMax
+// uBand, uStrength, uChroma, uProfile, uFilm, uSaturate, uBrightness, uFrost, uEdgeBlur, uSS, uSdfMax,
+// uLayerPass, uPageOrigin, uLayerDevSize, uDevScale
 // Shape mask R = encoded signed distance (0.5 edge, IQ +outside); A = silhouette.
 // uRadii = CSS corner order (TL, TR, BR, BL). uRadius kept as max(corners) for legacy.
 precision highp float;
@@ -24,6 +25,10 @@ uniform float uFrost;
 uniform float uEdgeBlur;
 uniform float uSS;
 uniform float uSdfMax;
+uniform float uLayerPass;
+uniform vec2 uPageOrigin;
+uniform vec2 uLayerDevSize;
+uniform float uDevScale;
 out vec4 outColor;
 
 /** Uniform round-rect SDF (Y-down px). */
@@ -99,8 +104,16 @@ vec3 sampleBgBlur(vec2 px, float radius) {
   return a * (1.0 / 18.0);
 }
 
+vec2 lensPx() {
+  if (uLayerPass < 0.5) {
+    return vec2(gl_FragCoord.x, uSize.y * uSS - gl_FragCoord.y) / uSS;
+  }
+  vec2 dev = vec2(gl_FragCoord.x, uLayerDevSize.y - gl_FragCoord.y);
+  return dev / max(uDevScale, 1e-4) - uPageOrigin;
+}
+
 void main() {
-  vec2 px = vec2(gl_FragCoord.x, uSize.y * uSS - gl_FragCoord.y) / uSS;
+  vec2 px = lensPx();
   float sd = shapeSd(px);
   float d = -sd;
   // No exterior softstep bleed — wide AA (-3.5) darkened neighbors (black seam beside solids).
