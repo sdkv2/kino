@@ -11,7 +11,9 @@ import {
 } from "./lensMirror.js";
 import { mountMotionRasterProbe } from "./motionRaster.js";
 import { buildLensPlateScrubs, type LensPlateScrubs } from "./lensPaintOrder.js";
+import { measureHoistedQuads, type HoistedQuad } from "./underlay.js";
 
+export type { HoistedQuad } from "./underlay.js";
 export type { LensMaterial } from "./lensMirror.js";
 export type { LensPlateScrubs } from "./lensPaintOrder.js";
 export { buildLensPlateScrubs } from "./lensPaintOrder.js";
@@ -26,6 +28,8 @@ export interface MotionLayoutManifest {
   pageH: number;
   rasterScale: number;
   lenses: LensLayoutEntry[];
+  /** Imagery hoisted out of the raster and blitted at these rects (see underlay.ts). */
+  quads: HoistedQuad[];
 }
 
 export interface MotionPaintPlates {
@@ -98,7 +102,8 @@ export function buildMotionLayoutManifest(
     const scraped = scrapeLensLayout(el);
     return { index, pageRect, ...scraped };
   });
-  return { pageW, pageH, rasterScale, lenses };
+  const quads = measureHoistedQuads(host.texRoot, hostRect);
+  return { pageW, pageH, rasterScale, lenses, quads };
 }
 
 /** One-shot layout (mount → measure → unmount). Prefer openMotionLensHost + bundle cache. */

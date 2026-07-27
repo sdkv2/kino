@@ -14,6 +14,7 @@
 //   background param's per-frame value; without it, the raster is a single static frame.
 import type { KinoProps } from "../../props.js";
 import { paramsAt } from "../../bgparams.js";
+import * as prof from "./compositor/profile.js";
 
 export interface LoadedTex {
   source: CanvasImageSource;
@@ -242,15 +243,19 @@ export async function rasterAt(
   try {
     // data: URL, NOT a blob URL — Chromium taints canvases painted from blob-URL foreignObject
     // SVGs (texImage2D would then throw), while data-URL foreignObject SVGs stay clean.
-    const svg = tpl.makeSvg(css);
-    const img = await loadImage("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
+    const url = prof.sync(`raster:encode:${key}`, () => {
+      const svg = tpl.makeSvg(css);
+      prof.addSample(`raster:svgKB:${key}`, svg.length / 1024);
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    });
+    const img = await prof.awaited(`raster:decode:${key}`, () => loadImage(url));
     const canvas = document.createElement("canvas");
     canvas.width = img.naturalWidth || tpl.w;
     canvas.height = img.naturalHeight || tpl.h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     try {
-      ctx.drawImage(img, 0, 0);
+      prof.sync(`raster:draw:${key}`, () => ctx.drawImage(img, 0, 0));
     } finally {
       // Drop decoded SVG bitmap so Chromium's data-URL image cache can't grow with every motion frame.
       img.src = "";

@@ -11,6 +11,7 @@ import {
   type MotionPaintPlates,
 } from "./lensLayout.js";
 import { buildLensPlateScrubs, type LensPlateScrubs } from "./lensPaintOrder.js";
+import * as prof from "./compositor/profile.js";
 
 export type {
   LensLayoutEntry,
@@ -165,20 +166,24 @@ async function rasterMotionPlates(
       defs,
     }));
   const sampleScrub = LENS_SAMPLE_SCRUB + (scrubs?.sampleExtra ?? "");
-  const [full, sample, chrome, foreground] = await Promise.all([
-    rasterAt(tpl, "full", motionCss(vars), null),
-    rasterAt(tpl, "sample", motionCss(vars, sampleScrub), null),
-    rasterAt(tpl, "chrome", motionCss(vars, LENS_CHROME_SCRUB), null),
-    scrubs?.hasForeground
-      ? rasterAt(tpl, "foreground", motionCss(vars, scrubs.foregroundScrub), null)
-      : Promise.resolve(null),
-  ]);
+  const [full, sample, chrome, foreground] = await prof.awaited("motion:plates", () =>
+    Promise.all([
+      rasterAt(tpl, "full", motionCss(vars), null),
+      rasterAt(tpl, "sample", motionCss(vars, sampleScrub), null),
+      rasterAt(tpl, "chrome", motionCss(vars, LENS_CHROME_SCRUB), null),
+      scrubs?.hasForeground
+        ? rasterAt(tpl, "foreground", motionCss(vars, scrubs.foregroundScrub), null)
+        : Promise.resolve(null),
+    ]),
+  );
   if (!full || !sample || !chrome) return null;
-  return normalizeMotionPlates(
-    { full, sample, chrome, foreground: foreground ?? undefined },
-    width,
-    height,
-    outScale,
+  return prof.sync("motion:normalize", () =>
+    normalizeMotionPlates(
+      { full, sample, chrome, foreground: foreground ?? undefined },
+      width,
+      height,
+      outScale,
+    ),
   );
 }
 
@@ -204,21 +209,27 @@ export async function prepareMotionFrameBundle(
 ): Promise<MotionFrameBundle | null> {
   const defs = needsMotionDefs(html) ? KINO_DEFS : "";
   const lensHost = motionNeedsLensLayers(html)
-    ? openMotionLensHost(html, vars, theme, width, height, defs)
+    ? prof.sync("motion:lensHost", () => openMotionLensHost(html, vars, theme, width, height, defs))
     : undefined;
   const manifest = lensHost
-    ? buildMotionLayoutManifest(lensHost, width, height, scale)
-    : { pageW: width, pageH: height, rasterScale: scale, lenses: [] };
-  const scrubs = lensHost ? buildLensPlateScrubs(lensHost.texRoot, lensHost.stack) : undefined;
+    ? prof.sync("motion:manifest", () => buildMotionLayoutManifest(lensHost, width, height, scale))
+    : { pageW: width, pageH: height, rasterScale: scale, lenses: [], quads: [] };
+  const scrubs = lensHost
+    ? prof.sync("motion:scrubs", () => buildLensPlateScrubs(lensHost.texRoot, lensHost.stack))
+    : undefined;
   let tpl: HtmlTemplate | undefined;
   if (lensHost) {
     const inner = lensHost.texRoot.firstElementChild;
     if (inner) {
-      const xhtml = new XMLSerializer().serializeToString(inner);
-      tpl = await buildTemplateFromXhtml(xhtml, theme, width, height, {
-        scale: motionFoScale(scale),
-        defs: defs || undefined,
-      });
+      const xhtml = prof.sync("motion:serialize", () =>
+        new XMLSerializer().serializeToString(inner),
+      );
+      tpl = await prof.awaited("motion:tpl", () =>
+        buildTemplateFromXhtml(xhtml, theme, width, height, {
+          scale: motionFoScale(scale),
+          defs: defs || undefined,
+        }),
+      );
     }
   }
 

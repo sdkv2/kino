@@ -11,9 +11,11 @@ import {
   type MotionFrameBundle,
 } from "../../motionRaster.js";
 import { applyMotionPostEffects, isGpuMotionPostResult } from "../../motionPostEffects/index.js";
+import { extractUnderlay, loadUnderlay, type UnderlayPlate } from "../../underlay.js";
 import { fetchAsDataUrl, inlineExternalRefs } from "../inline.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
+import * as prof from "../profile.js";
 
 /** Lens motion at SS≥2 holds 4 full plates per entry — keep cache shallow on finals. */
 function motionCacheMax(scale: number, hasLenses: boolean): number {
@@ -35,7 +37,7 @@ async function rasterMotion(
   const full = await rasterMotionFull(html, vars, theme, width, height, scale);
   if (!full) return null;
   return {
-    manifest: { pageW: width, pageH: height, rasterScale: scale, lenses: [] },
+    manifest: { pageW: width, pageH: height, rasterScale: scale, lenses: [], quads: [] },
     plates: { full, sample: full, chrome: full },
     needsLensPost: false,
     vars,
@@ -65,6 +67,9 @@ export function createMotionSource(opts: {
   let uploaded: string | null = null;
   let current: string | null = null;
   let gpuRendered = false;
+  // Hoisted static backplate: same src every frame, so decoded and uploaded exactly once.
+  let underlay: UnderlayPlate | null = null;
+  const quadPlates = new Map<string, UnderlayPlate>();
 
   return {
     async prepare(frame: number, key?: string): Promise<void> {
@@ -144,17 +149,34 @@ export function createMotionSource(opts: {
           durationFrames,
           duration: opts.fps > 0 ? durationFrames / opts.fps : 0,
         };
-        try {
-          html = sanitizeMotionHtml(String(procFn(env) ?? ""));
-        } catch {
-          html = "";
-        }
+        prof.sync("motion:proc", () => {
+          try {
+            html = sanitizeMotionHtml(String(procFn(env) ?? ""));
+          } catch {
+            html = "";
+          }
+        });
       }
 
-      html = await inlineExternalRefs(html, fetchAsDataUrl);
+      // Strip the underlay marker BEFORE inlining: the whole point is that this asset never
+      // reaches the foreignObject, so it is never re-resampled per plate per frame.
+      const hoisted = extractUnderlay(html);
+      html = hoisted.html;
+      if (hoisted.src && !underlay) underlay = await loadUnderlay(hoisted.src);
 
-      const bundle = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
+      html = await prof.awaited("motion:inline", () => inlineExternalRefs(html, fetchAsDataUrl));
+      prof.addSample("motion:htmlKB", html.length / 1024);
+
+      const bundle = await prof.awaited("motion:raster", () =>
+        rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale),
+      );
       if (!bundle) return;
+      // Hoisted quads: one decode + upload per distinct src for the whole render, not per frame.
+      for (const q of bundle.manifest.quads ?? []) {
+        if (quadPlates.has(q.src)) continue;
+        const plate = await loadUnderlay(q.src);
+        if (plate) quadPlates.set(q.src, plate);
+      }
       cache.set(cacheKey, bundle);
       if (bundle.manifest.lenses.length > 0) {
         uploaded = null;
@@ -194,6 +216,8 @@ export function createMotionSource(opts: {
           height: opts.height,
           theme: opts.theme,
           gl,
+          underlay,
+          quadPlates,
           lensShaders: opts.data.lensShaders,
         });
         if (isGpuMotionPostResult(result)) {

@@ -6,6 +6,7 @@ import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MediaProvider, type MediaMap } from "./media";
 import { loadBgTextures } from "./bgTextures";
+import { clearUnderlays } from "./underlay";
 import type { KinoProps } from "../../props.js";
 import { Stage, type StageHandle } from "./compositor/Stage.js";
 import { enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
@@ -108,6 +109,8 @@ async function kinoLoad(): Promise<void> {
     overflow: "hidden",
   });
   await syncFonts(cfg.props);
+  // Underlay textures belong to the previous render's GL context — drop them with the bg textures.
+  clearUnderlays();
   await loadBgTextures(cfg.props);
   window.__kinoShaderSS = cfg.shaderSS ?? 2;
   window.__kinoShaderFXAA = true;

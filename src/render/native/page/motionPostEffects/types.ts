@@ -18,6 +18,10 @@ export interface MotionPostEffect {
     height: number;
     theme: Theme;
     gl?: WebGL2RenderingContext;
+    /** Static backplate hoisted out of the FO raster — composited beneath the plates. */
+    underlay?: import("../underlay.js").UnderlayPlate | null;
+    /** Textures for hoisted quads, by src — blitted at their per-frame measured rects. */
+    quadPlates?: Map<string, import("../underlay.js").UnderlayPlate>;
     lensShaders?: Record<string, string>;
   }): MotionPostResult;
 }

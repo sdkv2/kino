@@ -29,6 +29,8 @@ export function applyMotionPostEffects(ctx: {
   height: number;
   theme: import("../../props.js").Theme;
   gl?: WebGL2RenderingContext;
+  underlay?: import("../underlay.js").UnderlayPlate | null;
+  quadPlates?: Map<string, import("../underlay.js").UnderlayPlate>;
   lensShaders?: Record<string, string>;
 }): MotionPostResult {
   let current: MotionPostResult = ctx.base;
