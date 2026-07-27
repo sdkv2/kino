@@ -204,7 +204,10 @@ export function createMotionSource(opts: {
       if (uploaded !== cacheKey || !tex) {
         const { plates, manifest } = entry;
         const result = applyMotionPostEffects({
-          base: plates.full,
+          // Lens bundles carry no `full` plate; the lens effect always fires for them (same
+          // LENS_CLASS_RE gate) and rebuilds the frame, so `base` is only ever read on the
+          // non-lens path — where full is set (and aliases sample).
+          base: plates.full ?? plates.sample,
           sample: plates.sample,
           manifest,
           plates,

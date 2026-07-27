@@ -33,7 +33,13 @@ export interface MotionLayoutManifest {
 }
 
 export interface MotionPaintPlates {
-  full: HTMLCanvasElement;
+  /**
+   * Full FO raster. ABSENT on the lens-post path: both the GPU lens composite and the CPU
+   * mirror fallback rebuild the frame from sample+chrome(+foreground), so rastering the whole
+   * scene a fourth time was pure decode-pool contention. Non-lens bundles always set it — there
+   * it IS the frame (sample/chrome alias it).
+   */
+  full?: HTMLCanvasElement;
   /** Scene with lenses hidden — optical input for mirror sampling. */
   sample: HTMLCanvasElement;
   /** Lens descendants only — composited above glass passes. */

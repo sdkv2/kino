@@ -137,11 +137,13 @@ export function normalizeMotionPlates(
 ): MotionPaintPlates {
   const wantW = Math.round(pageW * outScale);
   const wantH = Math.round(pageH * outScale);
-  if (plates.full.width === wantW && plates.full.height === wantH) return plates;
+  if (plates.sample.width === wantW && plates.sample.height === wantH) return plates;
+  // On the non-lens path full/sample/chrome alias ONE canvas — downscale once, not three times.
+  const sample = downscaleCanvasTo(plates.sample, wantW, wantH);
   return {
-    full: downscaleCanvasTo(plates.full, wantW, wantH),
-    sample: downscaleCanvasTo(plates.sample, wantW, wantH),
-    chrome: downscaleCanvasTo(plates.chrome, wantW, wantH),
+    full: plates.full ? (plates.full === plates.sample ? sample : downscaleCanvasTo(plates.full, wantW, wantH)) : undefined,
+    sample,
+    chrome: plates.chrome === plates.sample ? sample : downscaleCanvasTo(plates.chrome, wantW, wantH),
     foreground: plates.foreground ? downscaleCanvasTo(plates.foreground, wantW, wantH) : undefined,
   };
 }
@@ -166,9 +168,11 @@ async function rasterMotionPlates(
       defs,
     }));
   const sampleScrub = LENS_SAMPLE_SCRUB + (scrubs?.sampleExtra ?? "");
-  const [full, sample, chrome, foreground] = await prof.awaited("motion:plates", () =>
+  // No `full` raster here: this is the lens-post path, and both lens composites (GPU node and
+  // CPU mirror fallback) rebuild the frame from sample+chrome(+foreground). A full-scene pass
+  // would re-decode the same image payload a fourth time for pixels nothing samples.
+  const [sample, chrome, foreground] = await prof.awaited("motion:plates", () =>
     Promise.all([
-      rasterAt(tpl, "full", motionCss(vars), null),
       rasterAt(tpl, "sample", motionCss(vars, sampleScrub), null),
       rasterAt(tpl, "chrome", motionCss(vars, LENS_CHROME_SCRUB), null),
       scrubs?.hasForeground
@@ -176,10 +180,10 @@ async function rasterMotionPlates(
         : Promise.resolve(null),
     ]),
   );
-  if (!full || !sample || !chrome) return null;
+  if (!sample || !chrome) return null;
   return prof.sync("motion:normalize", () =>
     normalizeMotionPlates(
-      { full, sample, chrome, foreground: foreground ?? undefined },
+      { sample, chrome, foreground: foreground ?? undefined },
       width,
       height,
       outScale,
@@ -195,8 +199,16 @@ export async function rasterMotionFull(
   height: number,
   scale: number,
 ): Promise<HTMLCanvasElement | null> {
-  const plates = await rasterMotionPlates(html, vars, theme, width, height, scale);
-  return plates?.full ?? null;
+  // Non-lens path: the full scene IS the frame — one raster, no scrub variants. (This used to
+  // route through rasterMotionPlates and pay sample+chrome rasters that were discarded.)
+  const foScale = motionFoScale(scale);
+  const defs = needsMotionDefs(html) ? KINO_DEFS : undefined;
+  const tpl = await buildTemplate(html, theme, { size: { w: width, h: height }, scale: foScale, defs });
+  const full = await prof.awaited("motion:plates", () => rasterAt(tpl, "full", motionCss(vars), null));
+  if (!full) return null;
+  return prof.sync("motion:normalize", () =>
+    normalizeMotionPlates({ full, sample: full, chrome: full }, width, height, scale),
+  ).sample;
 }
 
 export async function prepareMotionFrameBundle(
