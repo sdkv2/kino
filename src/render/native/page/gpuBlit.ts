@@ -1,6 +1,9 @@
-// Minimal textured-quad blits on the compositor GL context — shared by kino-glass GPU compositing.
+// Minimal textured-quad blits on the compositor GL context — shared by lens GPU compositing.
 import { uploadCanvasOrImage } from "./compositor/providers/upload.js";
 
+// Large-triangle verts at (0,0)/(2,0)/(0,2) cover the unit square in UV.
+// Geometry spans 2× uDst; fragments outside UV 0..1 are discarded, and blitTexture also
+// scissors to uDst — without that, CLAMP-edge rim pixels smear across the extra half.
 const BLIT_VERT = `#version 300 es
 uniform vec4 uDst;
 uniform vec2 uRes;
@@ -19,11 +22,21 @@ uniform sampler2D uTex;
 uniform vec4 uSrc;
 uniform float uFlipY;
 uniform float uOpacity;
+uniform float uAlphaCut;
 in vec2 vUv;
 out vec4 kino_frag;
 void main() {
+  if (vUv.x > 1.001 || vUv.y > 1.001) discard;
   vec2 uv = uSrc.xy + vec2(vUv.x, uFlipY > 0.5 ? 1.0 - vUv.y : vUv.y) * uSrc.zw;
-  kino_frag = texture(uTex, uv) * uOpacity;
+  vec4 s = texture(uTex, uv) * uOpacity;
+  // Chrome over glass: FO AA fringe is partial-alpha dark. Discard it (keep glass);
+  // force near-opaque texels to a=1 so they don't darken the mirror underneath.
+  if (uAlphaCut > 0.0) {
+    if (s.a < uAlphaCut) discard;
+    kino_frag = vec4(s.rgb / max(s.a, 1e-4), 1.0);
+    return;
+  }
+  kino_frag = s;
 }`;
 
 interface BlitProgram {
@@ -34,12 +47,17 @@ interface BlitProgram {
   uSrc: WebGLUniformLocation | null;
   uFlipY: WebGLUniformLocation | null;
   uOpacity: WebGLUniformLocation | null;
+  uAlphaCut: WebGLUniformLocation | null;
 }
 
 const programs = new WeakMap<WebGL2RenderingContext, BlitProgram | null>();
+// Bump when BLIT_FRAG/VERT changes — WeakMap otherwise keeps a stale linked program on reused GL.
+const BLIT_PROG_VER = 13;
+const programVer = new WeakMap<WebGL2RenderingContext, number>();
 
 function blitProgram(gl: WebGL2RenderingContext): BlitProgram | null {
-  if (programs.has(gl)) return programs.get(gl)!;
+  if (programs.has(gl) && programVer.get(gl) === BLIT_PROG_VER) return programs.get(gl)!;
+  programVer.set(gl, BLIT_PROG_VER);
   const mk = (type: number, src: string): WebGLShader | null => {
     const sh = gl.createShader(type)!;
     gl.shaderSource(sh, src);
@@ -63,6 +81,7 @@ function blitProgram(gl: WebGL2RenderingContext): BlitProgram | null {
         uSrc: gl.getUniformLocation(prog, "uSrc"),
         uFlipY: gl.getUniformLocation(prog, "uFlipY"),
         uOpacity: gl.getUniformLocation(prog, "uOpacity"),
+        uAlphaCut: gl.getUniformLocation(prog, "uAlphaCut"),
       };
     }
   }
@@ -121,7 +140,8 @@ export function uploadCanvas(gl: WebGL2RenderingContext, src: CanvasImageSource)
   return uploadCanvasOrImage(gl, existing ?? null, src);
 }
 
-/** Blit a texture sub-rect into a destination FBO rect. `flipY`: 0 = uploaded, 1 = rendered target. */
+/** Blit a texture sub-rect into a destination FBO rect. `flipY`: 0 = uploaded, 1 = rendered target.
+ *  `alphaCut` > 0: discard low-alpha FO fringe (kills black seams on glass) and force opaque. */
 export function blitTexture(
   gl: WebGL2RenderingContext,
   dst: GpuFbo,
@@ -138,12 +158,22 @@ export function blitTexture(
   texW: number,
   texH: number,
   opacity = 1,
+  alphaCut = 0,
 ): void {
   const p = blitProgram(gl);
   if (!p || dstW < 1 || dstH < 1) return;
   const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
+  const prevScissor = gl.getParameter(gl.SCISSOR_TEST) as boolean;
   gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
   gl.viewport(0, 0, dst.w, dst.h);
+  // FB scissor origin is bottom-left; uDst is top-left.
+  gl.enable(gl.SCISSOR_TEST);
+  gl.scissor(
+    Math.max(0, Math.round(dstX)),
+    Math.max(0, Math.round(dst.h - dstY - dstH)),
+    Math.max(0, Math.round(dstW)),
+    Math.max(0, Math.round(dstH)),
+  );
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(p.prog);
@@ -152,9 +182,11 @@ export function blitTexture(
   gl.uniform4f(p.uSrc, srcX / texW, srcY / texH, srcW / texW, srcH / texH);
   gl.uniform1f(p.uFlipY, flipY);
   gl.uniform1f(p.uOpacity, opacity);
+  gl.uniform1f(p.uAlphaCut, alphaCut);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, srcTex);
   gl.uniform1i(p.uTex, 0);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (!prevScissor) gl.disable(gl.SCISSOR_TEST);
   gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
 }

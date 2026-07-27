@@ -1,6 +1,8 @@
-// Rasterize SVG / clip-path silhouettes for kino-glass (alpha mask → lens SDF in the mirror shader).
+// Rasterize SVG / clip-path silhouettes for kino-lens → chamfer SDF in R (opaque RGBA).
 
-export const SHAPE_CLASS = "kino-glass-shape";
+import { LENS_SHAPE_CLASS } from "../../lensContract.js";
+
+export const SHAPE_CLASS = LENS_SHAPE_CLASS;
 
 interface ViewBox {
   x: number;
@@ -252,43 +254,125 @@ function planFromCssPaths(el: HTMLElement, w: number, h: number): ShapePlan | nu
 }
 
 /** Resolve silhouette source: child svg → CSS path morph → clip-path url/path → --glass-path. */
-export function resolveGlassShapePlan(el: HTMLElement, w: number, h: number): ShapePlan | null {
+export function resolveLensShapePlan(el: HTMLElement, w: number, h: number): ShapePlan | null {
   const svg = el.querySelector<SVGSVGElement>(`:scope > svg.${SHAPE_CLASS}`);
   if (svg) return planFromSvg(svg, el, w, h);
   const cssPaths = planFromCssPaths(el, w, h);
   if (cssPaths) return cssPaths;
   const clip = planFromClipPathCss(el, w, h);
   if (clip) return clip;
+  // ponytail: no analytic asymmetric border-radius bake — 8-bit chamfer SDF fans
+  // refraction into wedges. Authors use uniform radius; outer-only look via plate overlap.
   return null;
 }
 
-export function findGlassShapeSvg(el: HTMLElement): SVGSVGElement | null {
+export function findLensShapeSvg(el: HTMLElement): SVGSVGElement | null {
   return el.querySelector<SVGSVGElement>(`:scope > svg.${SHAPE_CLASS}`);
 }
 
+/** Decode scale for R-channel SDF. Sized to the lens, not the diagonal (keeps 8-bit precision). */
+export function shapeSdfMax(cssW: number, cssH: number): number {
+  return Math.max(64, Math.min(cssW, cssH) * 0.55);
+}
+
+/** 2-pass chamfer DT. `seedZero[i]` true → distance 0. Returns dist in cells. */
+export function chamferDistance(seedZero: Uint8Array, w: number, h: number): Float32Array {
+  const d = new Float32Array(w * h);
+  const INF = w + h;
+  for (let i = 0; i < d.length; i++) d[i] = seedZero[i] ? 0 : INF;
+  const ortho = 1;
+  const diag = Math.SQRT2;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      let v = d[i];
+      if (x > 0) v = Math.min(v, d[i - 1] + ortho);
+      if (y > 0) v = Math.min(v, d[i - w] + ortho);
+      if (x > 0 && y > 0) v = Math.min(v, d[i - w - 1] + diag);
+      if (x < w - 1 && y > 0) v = Math.min(v, d[i - w + 1] + diag);
+      d[i] = v;
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      let v = d[i];
+      if (x < w - 1) v = Math.min(v, d[i + 1] + ortho);
+      if (y < h - 1) v = Math.min(v, d[i + w] + ortho);
+      if (x < w - 1 && y < h - 1) v = Math.min(v, d[i + w + 1] + diag);
+      if (x > 0 && y < h - 1) v = Math.min(v, d[i + w - 1] + diag);
+      d[i] = v;
+    }
+  }
+  return d;
+}
+
+/**
+ * Pack signed distance into R (IQ: sd>0 outside, <0 inside; 0.5 = edge,
+ * >0.5 outside, <0.5 inside). A keeps binary silhouette. Units: CSS px.
+ */
+export function encodeShapeSdf(
+  rgba: Uint8ClampedArray,
+  w: number,
+  h: number,
+  ss: number,
+  maxDistCss: number,
+): void {
+  const n = w * h;
+  const outside = new Uint8Array(n);
+  const inside = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const on = rgba[i * 4 + 3] > 128 ? 1 : 0;
+    outside[i] = on ? 0 : 1;
+    inside[i] = on;
+  }
+  const dout = chamferDistance(outside, w, h); // dist → outside (0 outside)
+  const din = chamferDistance(inside, w, h); // dist → inside (0 inside)
+  const inv = maxDistCss > 1e-6 ? 0.5 / maxDistCss : 0;
+  const cell = ss > 0 ? 1 / ss : 1;
+  for (let i = 0; i < n; i++) {
+    const sdCss = (din[i] - dout[i]) * cell;
+    const e = 0.5 + Math.max(-0.5, Math.min(0.5, sdCss * inv));
+    const o = i * 4;
+    const r = Math.round(e * 255);
+    rgba[o] = r;
+    rgba[o + 1] = r;
+    rgba[o + 2] = r;
+    // Opaque — canvas→WebGL premultiply zeroes RGB when A=0 and kills exterior SDF.
+    rgba[o + 3] = 255;
+  }
+}
+
 /** White-filled alpha mask at mirror resolution (SS included). Reads live DOM (SMIL / CSS morph). */
-export function rasterGlassShapeMask(
+export function rasterLensShapeMask(
   el: HTMLElement,
   w: number,
   h: number,
   ss: number,
 ): HTMLCanvasElement | null {
-  const plan = resolveGlassShapePlan(el, w, h);
+  const plan = resolveLensShapePlan(el, w, h);
   if (!plan) return null;
 
   plan.scrub?.();
 
-  const pw = w * ss;
-  const ph = h * ss;
+  const pw = Math.max(1, Math.round(w * ss));
+  const ph = Math.max(1, Math.round(h * ss));
   const canvas = document.createElement("canvas");
   canvas.width = pw;
   canvas.height = ph;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
   const { vb } = plan;
   ctx.clearRect(0, 0, pw, ph);
   ctx.fillStyle = "#ffffff";
   ctx.setTransform(pw / vb.w, 0, 0, ph / vb.h, (-vb.x * pw) / vb.w, (-vb.y * ph) / vb.h);
-  return plan.draw(ctx) ? canvas : null;
+  if (!plan.draw(ctx)) return null;
+
+  // Binary alpha is flat inside → gradient SDF ≈ 0 → no bend. Bake chamfer SDF into R.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const img = ctx.getImageData(0, 0, pw, ph);
+  encodeShapeSdf(img.data, pw, ph, ss, shapeSdfMax(w, h));
+  ctx.putImageData(img, 0, 0);
+  return canvas;
 }

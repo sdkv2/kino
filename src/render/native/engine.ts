@@ -24,12 +24,15 @@ import type { WorkerHandle } from "./workerHandle.js";
 import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.js";
 import { resolveElectronCapture, useSharedTextureCapture } from "./electron/gpuCapture.js";
 import { resolveRenderer, type NativeRenderer } from "./renderer.js";
+import { FORMAT_DIMS, formatFileTag, maxOutputDim, type FormatId } from "../formats.js";
 
 export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
   return true;
 }
 
 export { resolveRenderer, type NativeRenderer };
+
+const DIMS = FORMAT_DIMS;
 
 function captureMode(env: NodeJS.ProcessEnv = process.env): "canvas" | "cdp" {
   const v = env.KINO_CAPTURE;
@@ -51,12 +54,6 @@ function resolveShaderSS(env: NodeJS.ProcessEnv = process.env, opts?: { mock?: b
 function resolveShaderFXAA(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.KINO_SHADER_FXAA !== "0";
 }
-
-const DIMS: Record<string, { width: number; height: number }> = {
-  "9:16": { width: 1080, height: 1920 },
-  "3:4": { width: 1080, height: 1440 },
-  "16:9": { width: 1920, height: 1080 },
-};
 
 export type EncodePreset = "medium" | "veryfast";
 
@@ -416,12 +413,6 @@ interface PreparedMedia {
   media: Record<string, MediaEntryNode>;
 }
 
-/** Largest output edge across the formats this render produces — the basis for the extraction
- *  budget. Frames are extracted once and shared by every format, so take the max. */
-function maxOutputDim(formats: string[]): number {
-  return Math.max(...formats.map((f) => Math.max(DIMS[f].width, DIMS[f].height)));
-}
-
 async function prepareDenseMedia(
   props: KinoProps,
   publicDir: string,
@@ -510,7 +501,7 @@ async function dumpProfile(handle: PageHandle, frames: number, captureMs: number
 export interface NativeRenderOpts {
   props: KinoProps;
   publicDir: string;
-  formats: Array<"9:16" | "3:4" | "16:9">;
+  formats: FormatId[];
   outDir: string;
   title: string;
   preset?: EncodePreset; // veryfast for mock/preview builds; medium (default) for finals
@@ -632,8 +623,8 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           shaderFXAA: fx,
           captureCodec,
         });
-        const cache = openFrameCache(join(outDir, ".frame-cache", fmt.replace(":", "x")), sigs);
-        const tmpOut = join(scratch, `video-${fmt.replace(":", "x")}.mp4`);
+        const cache = openFrameCache(join(outDir, ".frame-cache", formatFileTag(fmt)), sigs);
+        const tmpOut = join(scratch, `video-${formatFileTag(fmt)}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset, captureCodec });
         try {
           captureMs = 0;
@@ -657,7 +648,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         }
         cache.commit();
         lap(`encode-flush ${fmt}`);
-        const out = join(outDir, `${title}-${fmt.replace(":", "x")}.mp4`);
+        const out = join(outDir, `${title}-${formatFileTag(fmt)}.mp4`);
         moveFile(tmpOut, out);
         outputs.push(out);
       }
@@ -686,7 +677,7 @@ export interface FrameMeasure {
 export interface NativeStillsOpts {
   props: KinoProps;
   publicDir: string;
-  format: "9:16" | "3:4" | "16:9";
+  format: FormatId;
   frames: Array<{ frame: number; name: string }>;
   outDir: string;
   // If provided, the engine collects [data-measure] element geometry at each rendered frame and

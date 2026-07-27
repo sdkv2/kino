@@ -1,19 +1,14 @@
-// Motion-graphic layers: beat-relative vars, Tier-2 proc, post-raster effects (glass, …).
+// Motion-graphic layers: beat-relative vars, Tier-2 proc, post-raster backdrop lenses.
 import type { MotionEnv, MotionGraphicProps, Theme } from "../../../../props.js";
 import { paramsAt, pulseAt, progressCurves } from "../../../../bgparams.js";
 import { buildMotionVars, cameraBlurVars } from "../../../../motionVars.js";
 import { sanitizeMotionHtml } from "../../../../sanitizeMotion.js";
-import { buildTemplate, rasterAt, TEX_ROOT } from "../../bgTextures.js";
-import { KINO_DEFS, motionScrubCss } from "../../motionCss.js";
+import { motionNeedsLensLayers, rasterMotionFull, rasterMotionLayers } from "../../motionRaster.js";
 import { applyMotionPostEffects, isGpuMotionPostResult, motionNeedsCompositorBackdrop } from "../../motionPostEffects/index.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
 
 const CACHE_MAX = 24;
-
-function varsCss(vars: Record<string, string>): string {
-  return `.${TEX_ROOT}{${Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(";")}}`;
-}
 
 async function rasterMotion(
   html: string,
@@ -22,14 +17,14 @@ async function rasterMotion(
   width: number,
   height: number,
   scale: number,
-): Promise<HTMLCanvasElement | null> {
-  const css = motionScrubCss(TEX_ROOT) + varsCss(vars);
-  const tpl = await buildTemplate(html, theme, {
-    size: { w: width, h: height },
-    scale,
-    defs: /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html) ? KINO_DEFS : undefined,
-  });
-  return rasterAt(tpl, "x", css, null);
+): Promise<{ full: HTMLCanvasElement; field: HTMLCanvasElement; chrome: HTMLCanvasElement } | null> {
+  if (motionNeedsLensLayers(html)) {
+    const layers = await rasterMotionLayers(html, vars, theme, width, height, scale);
+    return layers;
+  }
+  const full = await rasterMotionFull(html, vars, theme, width, height, scale);
+  if (!full) return null;
+  return { full, field: full, chrome: full };
 }
 
 export function createMotionSource(opts: {
@@ -43,7 +38,10 @@ export function createMotionSource(opts: {
   beatDur: number;
   captionBottom?: number;
 }): TextureSource {
-  const cache = new Map<string, { base: HTMLCanvasElement; html: string; vars: Record<string, string> }>();
+  const cache = new Map<
+    string,
+    { full: HTMLCanvasElement; field: HTMLCanvasElement; chrome: HTMLCanvasElement; html: string; vars: Record<string, string> }
+  >();
   const procFn =
     opts.data.proc && !opts.data.lottie
       ? // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -52,6 +50,7 @@ export function createMotionSource(opts: {
   let tex: WebGLTexture | null = null;
   let uploaded: string | null = null;
   let current: string | null = null;
+  let gpuRendered = false;
 
   return {
     async prepare(frame: number, key?: string): Promise<void> {
@@ -128,9 +127,9 @@ export function createMotionSource(opts: {
         }
       }
 
-      const base = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
-      if (!base) return;
-      cache.set(cacheKey, { base, html, vars });
+      const raster = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
+      if (!raster) return;
+      cache.set(cacheKey, { ...raster, html, vars });
       if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
     },
     needsCompositorBackdrop(frame?: number, key?: string): boolean {
@@ -148,28 +147,38 @@ export function createMotionSource(opts: {
       if (!entry) return null;
       if (uploaded !== cacheKey || !tex) {
         const result = applyMotionPostEffects({
-          base: entry.base,
+          base: entry.full,
+          field: entry.field,
+          chrome: entry.chrome,
           html: entry.html,
           vars: entry.vars,
           width: opts.width,
           height: opts.height,
           gl,
+          lensShaders: opts.data.lensShaders,
         });
         if (isGpuMotionPostResult(result)) {
           tex = result.tex;
           uploaded = cacheKey;
+          // blit-dst FBO stores visual top at v=1 (RENDERED), same as compositor targets.
+          gpuRendered = true;
           return tex;
         }
         tex = uploadCanvasOrImage(gl, tex, result);
         uploaded = cacheKey;
+        gpuRendered = false;
       }
       return tex;
+    },
+    textureIsRendered(_frame?: number, _key?: string): boolean {
+      return gpuRendered;
     },
     size(): { w: number; h: number } {
       return { w: opts.width, h: opts.height };
     },
     dispose(): void {
       cache.clear();
+      gpuRendered = false;
     },
   };
 }

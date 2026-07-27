@@ -1,22 +1,22 @@
 import DOMPurify from "isomorphic-dompurify";
 
 const GLASS_SHAPE_SVG =
-  /<svg\b[^>]*\bkino-glass-shape\b[^>]*>[\s\S]*?<\/svg>/gi;
+  /<svg\b[^>]*\bkino-lens-shape\b[^>]*>[\s\S]*?<\/svg>/gi;
 
-// ponytail: stash/restore round-trip — only SMIL inside `.kino-glass-shape` bypasses DOMPurify
+// ponytail: stash/restore round-trip — only SMIL inside `.kino-lens-shape` bypasses DOMPurify
 // (global `<animate>` stays forbidden elsewhere).
 function stashGlassShapeSmil(html: string): { html: string; blocks: string[] } {
   const blocks: string[] = [];
   const stripped = html.replace(GLASS_SHAPE_SVG, (block) => {
     blocks.push(block);
-    return `<svg class="kino-glass-shape" data-kino-smil-stash="${blocks.length - 1}"></svg>`;
+    return `<svg class="kino-lens-shape" data-kino-smil-stash="${blocks.length - 1}"></svg>`;
   });
   return { html: stripped, blocks };
 }
 
 function restoreGlassShapeSmil(html: string, blocks: string[]): string {
   return html.replace(
-    /<svg class="kino-glass-shape" data-kino-smil-stash="(\d+)"><\/svg>/gi,
+    /<svg class="kino-lens-shape" data-kino-smil-stash="(\d+)"><\/svg>/gi,
     (_, i) => blocks[Number(i)] ?? "",
   );
 }

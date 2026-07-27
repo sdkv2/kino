@@ -1,29 +1,32 @@
-# kino-glass refraction under the GL compositor
+# kino-lens / liquid-glass under the GL compositor
 
-**Status:** **Fixed.** Compositor path uses GPU→CPU readback (`publishCompositorBackdrop` in
-`compositor/backdropReadback.ts`) into the shared `backdrop` bus (`backdrop.ts`), then the glass
-post-effect (`motionPostEffects/glass.ts`) samples via the canvas path in `liquidGlass.ts`.
+**Status:** **Done** (shape masks, MotionPostEffect registry, loadable materials, multi-panel GPU).
 
-## What was broken
+## What shipped
 
-WebGL textures are not shareable across contexts. The compositor tried to pass `dest.tex` directly
-into per-element glass WebGL contexts → black samples → flat film-only cards.
+1. **Shape** — `border-radius`, child `svg.kino-lens-shape`, or `--glass-path*` / `clip-path` (`glassShape.ts`).
+2. **Registry** — `motionPostEffects/` (`kino-lens` / `kino-lens`); glass is one entry.
+3. **Loadable material** — `assets-lib/effects/liquid-glass.frag` via `data-lens` (default `liquid-glass`); resolved by `effectsLib.ts`, baked into `MotionGraphicProps.lensShaders`.
+4. **Compositor-native** — renderer snaps accum FBO → `registerBackdropTexture`; `glassGpu.ts` renders all stacked lenses on the **compositor** GL context (no cross-context bind, no GPU→CPU readback). Canvas / per-element WebGL remains only when the GPU backdrop bus is absent.
 
-## Fix shipped (option 2: canvas readback)
+## Author contract
 
-Before a motion layer with `needsCompositorBackdrop()` draws, the renderer readbacks the accumulated
-composite into a 2D canvas and calls `registerBackdrop()`. Stacked panels merge compositor-under +
-base raster via `registerMergedBackdrop()`.
+```html
+<div class="card kino-lens"><!-- or class="kino-lens" -->
+  <!-- optional: data-lens="liquid-glass" | project path | other effects id -->
+  <svg class="kino-lens-shape" viewBox="0 0 100 100" aria-hidden="true">…</svg>
+  <span style="position:relative;z-index:2">Label</span>
+</div>
+```
+
+CSS knobs: `--glass-strength`, `--glass-band`, `--glass-chroma`, `--glass-profile`,
+`--glass-film`, `--glass-saturate`, `--glass-brightness`, `--glass-frost`, `--glass-edge-blur`,
+`--glass-path` / `--glass-path-from` / `--glass-path-to`, `--glass-viewbox`, `--glass-morph`.
 
 ## Verification
 
 ```bash
-npx vitest run tests/liquid-glass-showcase.test.ts tests/compositor-glass-composite.test.ts
+npx vitest run tests/effectsLib.test.ts tests/render-glass.test.ts \
+  tests/liquid-glass-showcase.test.ts tests/compositor-glass-composite.test.ts \
+  tests/glass-shape.test.ts
 ```
-
-Visual: `projects/compositor-demo/specs/glass-refraction-demos.json` beats 1–5.
-
-## Deferred
-
-Render mirrors in the compositor's own GL context (option 1) — avoids readback cost but needs glass
-to stop travelling through the motion 2D raster or to blit mirrors back as compositor layers.

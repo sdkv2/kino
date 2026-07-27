@@ -255,14 +255,14 @@ desperate punctuation. Chrome labels must use the **same nouns the VO speaks** o
 
 `backdrop-filter: blur()` is *frosted* glass (glassmorphism) — a uniform fog. Apple **Liquid Glass**
 *refracts*: it bends/magnifies the background at the edges, disperses color, and catches light on
-a lit rim. In kino this is an engine material: add **`class="kino-glass"`** to a positioned
+a lit rim. In kino this is an engine material: add **`class="kino-lens"`** to a positioned
 element and the engine renders a true per-pixel refraction mirror behind it (WebGL rounded-rect
 SDF lens over the frame's background canvas: warp at the rim, clear center, chromatic dispersion,
 luminous film). Copyable reference: **`assets-lib/motion/liquid-glass.html`** (bare id `liquid-glass`).
 
 Do NOT hand-roll it with backdrop-filter: Chromium's compositor cannot run `feImage` displacement
 maps in backdrop chains (they silently degrade to a uniform shift with mirror-fold artifacts), and
-feOffset strip approximations ghost on hard edges. `kino-glass` is the only correct path.
+feOffset strip approximations ghost on hard edges. `kino-lens` is the only correct path.
 
 Craft rules:
 - Element background stays transparent — the film lives in the mirror (`--glass-film`); content at

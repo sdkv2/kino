@@ -2,11 +2,10 @@
      Copy into a project's assets/motion/ and edit the .card content/size. Needs a STRUCTURED, colorful
      background behind it to refract (pair with a shader background, e.g. backgroundComponent:"liquid-orb").
      How it works:
-       • `class="kino-glass"` — the engine renders a per-pixel refraction mirror behind the element:
-         a rounded-rect SDF lens over the frame's background canvas, warp concentrated at the rim,
-         clear center, per-channel chromatic dispersion, luminous film. True displacement (WebGL),
-         not the feOffset/backdrop-filter approximation (Chromium can't run feImage displacement maps
-         in backdrop-filter — see docs/motion-graphics.md).
+       • `class="kino-lens"` (or `kino-lens`) — per-pixel refraction mirror; material defaults to
+         assets-lib/effects/liquid-glass.frag (override with data-lens). Rounded-rect / shape-mask
+         SDF over the under-composite; true displacement (WebGL), not backdrop-filter feImage
+         (see docs/motion-graphics.md).
        • Keep the element's own background transparent — the film is drawn inside the mirror
          (tune with --glass-film). Knobs (all optional, tweenable via params/keyframes):
          --glass-strength (px, default 26) · --glass-band (px, default max(radius,48)) ·
@@ -44,4 +43,4 @@
     mix-blend-mode: screen;
   }
 </style>
-<div class="stage" data-measure="stage"><div class="card kino-glass" data-measure="card"><span style="position:relative;z-index:2">Liquid Glass</span></div></div>
+<div class="stage" data-measure="stage"><div class="card kino-lens" data-measure="card"><span style="position:relative;z-index:2">Liquid Glass</span></div></div>

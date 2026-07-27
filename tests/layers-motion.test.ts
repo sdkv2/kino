@@ -38,6 +38,26 @@ describe("layersAt — motion beats", () => {
     expect(op(60 + MOTION_XFADE_FRAMES)).toBeCloseTo(1, 2);
   });
 
+  it("holds the outgoing motion through the dissolve so the backdrop never shows", () => {
+    const p = mk([
+      { kind: "motion", caption: "", startSec: 0, endSec: 2, motion },
+      { kind: "motion", caption: "", startSec: 2, endSec: 4, motion },
+    ]);
+    const ids = layersAt(p, 60 + 5, DIMS).map((l) => l.id);
+    expect(ids).toContain("motion0");
+    expect(ids).toContain("motion1");
+  });
+
+  it("hard-cuts when the incoming beat sets transition cut", () => {
+    const p = mk([
+      { kind: "motion", caption: "", startSec: 0, endSec: 2, motion },
+      { kind: "motion", caption: "", startSec: 2, endSec: 4, motion, transition: "cut" },
+    ]);
+    expect(layersAt(p, 59, DIMS).some((l) => l.id === "motion0")).toBe(true);
+    expect(layersAt(p, 60, DIMS).some((l) => l.id === "motion0")).toBe(false);
+    expect(layersAt(p, 60, DIMS).find((l) => l.id === "motion1")!.opacity).toBe(1);
+  });
+
   it("emits an overlay layer above the beat's own content", () => {
     const p = mk([{ kind: "video", caption: "", startSec: 0, endSec: 2, source: "c.mp4", motionOverlay: motion }]);
     const ids = layersAt(p, 15, DIMS).map((l) => l.id);

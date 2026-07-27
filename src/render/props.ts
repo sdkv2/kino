@@ -94,7 +94,7 @@ export interface KinoSegment {
   cta?: boolean;
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
-  transition?: string; // resolved in/out transition for video cut-ins
+  transition?: string; // video cut-ins + motion handoffs (`cut` = hard abut)
   clipFrom?: number; // seconds into source asset
   clipTo?: number;
   speed?: number; // playbackRate; default 1
@@ -172,6 +172,8 @@ export interface MotionGraphicProps {
   keyframes: BgKeyframe[]; // tween params over time (--<name>)
   triggers: BgTrigger[]; // one-shot pulses (--pulse)
   words?: WordTiming[]; // beat-relative spoken-word spans, for typed-in-sync graphics (env.words + --kino-words-shown)
+  /** Lens material GLSL keyed by `data-lens` id (default `liquid-glass`). Filled at resolve/hydrate. */
+  lensShaders?: Record<string, string>;
 }
 
 // The argument passed to a Tier-2 procedural graphic's render(env) every frame.

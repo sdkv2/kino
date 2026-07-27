@@ -6,7 +6,7 @@
 import type { KinoProps } from "./props.js";
 import { interpolate } from "./interpolate.js";
 import { normalizeLayer, type Dims, type LayerDraw, type LayerSpec } from "./native/page/compositor/graph.js";
-import { MOTION_XFADE_FRAMES } from "./motion.js";
+import { motionHandoff, motionXfadeFrames } from "./motion.js";
 import { hasCaptionContent } from "./captionLayout.js";
 
 import { kenBurnsScale } from "./backgrounds/glow.js";
@@ -92,22 +92,34 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity, group: beat });
   });
 
-  // 5. Full-screen motion beats. A motion beat that follows another dissolves in over the
-  // overlap; the first one stays opaque so a looping open has no seam.
+  // 5. Full-screen motion beats. Hold the outgoing graphic through the next beat's xfade so the
+  // dissolve never drops onto the backdrop; `transition: "cut"` abuts with no overlap.
   props.segments.forEach((s, i) => {
     if (s.kind !== "motion" || !s.motion) return;
-    const from = f(s.startSec);
-    const dur = f(s.endSec) - from;
-    const local = frame - from;
-    if (local < 0 || local >= dur) return;
-    const fadeIn = props.segments[i - 1]?.kind === "motion";
-    const opacity = fadeIn
-      ? interpolate(local, [0, MOTION_XFADE_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+    const prev = props.segments[i - 1];
+    const next = props.segments[i + 1];
+    const nextMotion = next?.kind === "motion" ? next : null;
+    const h = motionHandoff({
+      startSec: s.startSec,
+      endSec: s.endSec,
+      nextMotionStartSec: nextMotion ? nextMotion.startSec : null,
+      prevIsMotion: prev?.kind === "motion",
+      fps: props.fps,
+      // Outgoing hold length follows the *incoming* beat's transition.
+      xfadeFrames: nextMotion ? motionXfadeFrames(nextMotion.transition) : 0,
+      fadeIn: prev?.kind === "motion" && motionXfadeFrames(s.transition) > 0,
+    });
+    const local = frame - h.from;
+    if (local < 0 || local >= h.seqDur) return;
+    const opacity = h.fadeIn
+      ? interpolate(local, [0, h.xfade], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
       : 1;
+    // Freeze --progress at end of authored beat while held into the handoff.
+    const beatLocal = Math.min(local, h.beatDur - 1);
     const beat = `beat${i}`;
     out.push({
       id: `motion${i}`,
-      source: { providerId: `motion${i}`, key: String(local) },
+      source: { providerId: `motion${i}`, key: String(beatLocal) },
       rect: full,
       opacity,
       mask: motionMask((s as any).mask),

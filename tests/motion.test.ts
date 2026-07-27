@@ -63,7 +63,7 @@ describe("motionHandoff", () => {
       prevIsMotion: true,
       fps: 30,
     });
-    expect(h).toEqual({ from: 300, seqDur: 60, beatDur: 60, fadeIn: true });
+    expect(h).toEqual({ from: 300, seqDur: 60, beatDur: 60, fadeIn: true, xfade: MOTION_XFADE_FRAMES });
   });
 
   it("holds through a VO gap and overlaps the next motion beat", () => {
@@ -79,6 +79,7 @@ describe("motionHandoff", () => {
     expect(h.beatDur).toBe(60);
     expect(h.fadeIn).toBe(false); // opener — loop-safe
     expect(h.seqDur).toBe(Math.round(2.32 * 30) + MOTION_XFADE_FRAMES);
+    expect(h.xfade).toBe(MOTION_XFADE_FRAMES);
   });
 
   it("incoming beat after another motion fades in", () => {
@@ -90,5 +91,19 @@ describe("motionHandoff", () => {
       fps: 30,
     });
     expect(h.fadeIn).toBe(true);
+  });
+
+  it("cut disables fade-in even after a motion beat", () => {
+    const h = motionHandoff({
+      startSec: 2,
+      endSec: 4,
+      nextMotionStartSec: null,
+      prevIsMotion: true,
+      fps: 30,
+      xfadeFrames: 0,
+      fadeIn: false,
+    });
+    expect(h.fadeIn).toBe(false);
+    expect(h.xfade).toBe(0);
   });
 });

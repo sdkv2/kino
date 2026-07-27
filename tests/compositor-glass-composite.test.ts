@@ -22,7 +22,7 @@ const stripes = {
   params: {}, keyframes: [], triggers: [],
 };
 const card = {
-  html: `<style>.c{position:absolute;left:14%;right:14%;top:36%;bottom:36%;border-radius:48px;background:transparent;--glass-strength:48px;--glass-band:120px}</style><div class="c kino-glass"></div>`,
+  html: `<style>.c{position:absolute;left:14%;right:14%;top:36%;bottom:36%;border-radius:48px;background:transparent;--glass-strength:48px;--glass-band:120px}</style><div class="c kino-lens"></div>`,
   params: {}, keyframes: [], triggers: [],
 };
 
@@ -41,7 +41,7 @@ describe("glass on the true composite", () => {
   it("refracts a layer above the background, which the DOM path cannot", async () => {
     process.env.KINO_COMPOSITOR = "1";
     try {
-      const outDir = mkdtempSync(join(tmpdir(), "kino-glasscomp-"));
+      const outDir = mkdtempSync(join(tmpdir(), "kino-lenscomp-"));
       const pngs = await renderStills({
         props, publicDir: mkdtempSync(join(tmpdir(), "glasscomp-pub-")),
         format: "9:16", frames: [{ frame: 20, name: "a" }, { frame: 20, name: "b" }], outDir,
@@ -54,6 +54,41 @@ describe("glass on the true composite", () => {
         magick([pngs[0], "-crop", "760x760+160+580", "+repage", "-format", "%[fx:standard_deviation]", "info:"]).trim(),
       );
       expect(stddev).toBeGreaterThan(0.05);
+    } finally {
+      delete process.env.KINO_COMPOSITOR;
+    }
+  }, 300000);
+
+  it("multi-panel GPU: two kino-lens cards both refract the under-layer", async () => {
+    process.env.KINO_COMPOSITOR = "1";
+    try {
+      const dual = {
+        html:
+          `<style>
+            .a,.b{position:absolute;left:10%;right:10%;height:22%;border-radius:36px;background:transparent;
+              --glass-strength:48px;--glass-band:100px}
+            .a{top:18%}.b{top:58%}
+          </style>
+          <div class="a kino-lens"></div><div class="b kino-lens"></div>`,
+        params: {}, keyframes: [], triggers: [],
+      };
+      const dualProps: KinoProps = {
+        ...props,
+        segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion: stripes, motionOverlay: dual }],
+      };
+      const outDir = mkdtempSync(join(tmpdir(), "kino-lensdual-"));
+      const pngs = await renderStills({
+        props: dualProps, publicDir: mkdtempSync(join(tmpdir(), "glassdual-pub-")),
+        format: "9:16", frames: [{ frame: 20, name: "d" }], outDir,
+      });
+      const topStd = parseFloat(
+        magick([pngs[0], "-crop", "760x360+160+320", "+repage", "-format", "%[fx:standard_deviation]", "info:"]).trim(),
+      );
+      const botStd = parseFloat(
+        magick([pngs[0], "-crop", "760x360+160+1100", "+repage", "-format", "%[fx:standard_deviation]", "info:"]).trim(),
+      );
+      expect(topStd).toBeGreaterThan(0.05);
+      expect(botStd).toBeGreaterThan(0.05);
     } finally {
       delete process.env.KINO_COMPOSITOR;
     }

@@ -287,6 +287,8 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
     caption: z.string().optional(),
     cta: z.boolean().default(false), // semantic end-card marker; a full-screen wordmark motion beat is itself the CTA
+    // Motion→motion handoff. Default = dissolve (hold + xfade). `"cut"` abuts with no backdrop gap.
+    transition: Transition.optional(),
 
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
@@ -310,7 +312,8 @@ export const SpecSchema = z
     brand: z.string().optional(), // falls back to the project's project.json brand
     title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
     kinoVersion: z.string().optional(), // kino version this spec was authored/built against — mismatch warns, doesn't fail
-    format: z.array(z.enum(["9:16", "3:4", "16:9"])).default(["9:16"]),
+    // `*-4k` = UHD canvas (e.g. 9:16-4k → 2160×3840). Same aspect as the 1080-class twin.
+    format: z.array(z.enum(["9:16", "3:4", "16:9", "9:16-4k", "3:4-4k", "16:9-4k"])).default(["9:16"]),
     // Composition frame rate. 30 suits talking-head and motion work and keeps render cost down,
     // but it resamples higher-rate source: 60fps footage (and a 60fps segmentation mask tracking
     // it) lands on every other frame. Raise it to carry that cadence through — cost scales with
@@ -427,7 +430,7 @@ const TOP_LEVEL_KEYS: Record<string, string> = {
 
 /** Keys valid on some segment kinds but rejected on others (strict). */
 const SEGMENT_KIND_HINTS: Record<string, string> = {
-  transition: "transition is video-only (motion hard-cuts; motion→motion auto-dissolves)",
+  transition: "transition is video or motion (motion default = dissolve; use \"cut\" for hard abut)",
   asset: "asset was renamed to source (video beats)",
   clipFrom: "clipFrom/clipTo are video-only (importing-footage)",
   clipTo: "clipFrom/clipTo are video-only (importing-footage)",

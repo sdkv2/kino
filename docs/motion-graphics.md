@@ -26,7 +26,7 @@ kino renders by seeking to frame *N* and capturing the composited stage. There i
 - **JSON owns the clock** — `params`, `keyframes`, and `triggers` in the spec.
 - **HTML is a stateless canvas** — one markup file + one inline `<style>`, reading the variables kino sets every frame.
 
-At build time the file is **lint-checked** (determinism + safety) and **sanitized** (DOMPurify), then **rasterized into a compositor layer** (SVG `foreignObject` for most markup; `kino-glass` runs an extra mirror pass) so its styles never leak into the composition.
+At build time the file is **lint-checked** (determinism + safety) and **sanitized** (DOMPurify), then **rasterized into a compositor layer** (SVG `foreignObject` for most markup; `kino-lens` runs an extra mirror pass) so its styles never leak into the composition.
 
 ## The CSS-variable contract
 
@@ -246,14 +246,14 @@ Prefer **few shared drivers** over many per-element params — easier to retune 
 .front { z-index: 3; transform: translate(calc(var(--fan) * 64px),  calc(var(--lift) * 48px)); }
 ```
 
-- **`transform: translate()` is fine** on any element, including `kino-glass` — the mirror tracks `getBoundingClientRect()` each frame.
-- **Do not `transform: rotate()` or `skew()` a `kino-glass` element** — that breaks backdrop sampling. Keep the lens axis-aligned; use `border-radius` for the silhouette.
+- **`transform: translate()` is fine** on any element, including `kino-lens` — the mirror tracks `getBoundingClientRect()` each frame.
+- **Do not `transform: rotate()` or `skew()` a `kino-lens` element** — that breaks backdrop sampling. Keep the lens axis-aligned; use `border-radius` for the silhouette.
 - **Content above the mirror** — keep labels/CTAs at `z-index: 2+`; the mirror injects at `z-index: -1` inside the glass element.
 - **Optional `sin(var(--t))` drift** — combine with keyframed params for motion that doesn't need its own spec key (see `.back` below in the worked example).
 
-### Stacked `kino-glass` (same beat)
+### Stacked `kino-lens` (same beat)
 
-Multiple `kino-glass` panels in **one** motion HTML are supported. The engine walks panels **bottom → top** (`z-index`, then DOM order) and, for each panel, samples whatever is already drawn beneath it in that beat — compositor layers under the motion beat **plus** the same-layer base raster **plus** mirrors from lower panels.
+Multiple `kino-lens` panels in **one** motion HTML are supported. The engine walks panels **bottom → top** (`z-index`, then DOM order) and, for each panel, samples whatever is already drawn beneath it in that beat — compositor layers under the motion beat **plus** the same-layer base raster **plus** mirrors from lower panels.
 
 | Setup | What the first glass panel refracts |
 |---|---|
@@ -283,9 +283,9 @@ Reference: `projects/compositor-demo/assets/motion/liquid-glass-stack.html` + be
     transform:translate(calc(var(--fan)*64px), calc(var(--lift)*48px)); }
 </style>
 <div class="stage">
-  <div class="panel back kino-glass"><span>Back</span></div>
-  <div class="panel mid kino-glass"><span>Mid</span></div>
-  <div class="panel front kino-glass"><span>Front</span></div>
+  <div class="panel back kino-lens"><span>Back</span></div>
+  <div class="panel mid kino-lens"><span>Mid</span></div>
+  <div class="panel front kino-lens"><span>Front</span></div>
 </div>
 ```
 
@@ -436,30 +436,31 @@ kino injects a small SVG filter library plus finish helpers, so you can add anal
 
 Grain is subtle by design — set the element's `opacity` higher for a heavier stock. The displacement filter is great on text or shape edges for a rough, screen-printed feel: `<h1 style="filter:url(#kino-displace)">…</h1>`.
 
-### Liquid glass (`kino-glass`)
+### Liquid glass / lens (`kino-lens` · `kino-lens`)
 
-Add `class="kino-glass"` to a positioned element and the engine renders a **true refraction mirror**
-behind it: each frame the background canvas region under the element is sampled through a rounded-rect
-SDF lens (WebGL) — warp + blur concentrated at the rim, frosted body (`--glass-frost`), per-channel
-chromatic dispersion, luminous film. Silhouette follows the element's `border-radius`. This is the real
-Apple Liquid Glass material, and the only way to get it: Chromium's compositor cannot run `feImage`
-displacement maps inside `backdrop-filter` (they silently degrade to a uniform white-map shift), so
-backdrop-filter can never do more than frosted blur + axial `feOffset` approximations.
+Add `class="kino-lens"` **or** `class="kino-lens"` to a positioned element and the engine renders a
+**true refraction mirror** behind it: each frame the under-composite is sampled through a lens
+material (WebGL) — warp + blur at the rim, frosted body (`--glass-frost`), chromatic dispersion,
+luminous film. Default material is `assets-lib/effects/liquid-glass.frag`. Override per element with
+`data-lens="<id|path>"` (bare id → `assets-lib/effects/<id>.frag`, else project/workspace path).
+Chromium cannot run `feImage` displacement inside `backdrop-filter`, so this path is the only real
+Apple-style liquid glass.
 
-Post-raster effects (glass today, more later) run via `motionPostEffects/` after the foreignObject
-raster. When glass needs the true compositor composite, the renderer readbacks pixels into the shared
-`backdrop` bus (`needsCompositorBackdrop`).
+Post-raster effects run via `motionPostEffects/` after the foreignObject raster. On the compositor
+path the renderer publishes a GPU backdrop snap (`needsCompositorBackdrop`); stacked lenses render
+on the **compositor GL context** (`glassGpu.ts`) — no cross-context texture bind, no GPU→CPU readback.
 
 ```html
-<div class="card kino-glass" style="border-radius:8vw">…content at z-index ≥ 1…</div>
+<div class="card kino-lens" style="border-radius:8vw">…content at z-index ≥ 1…</div>
+<!-- alias + custom material -->
+<div class="card kino-lens" data-lens="liquid-glass" style="border-radius:8vw">…</div>
 ```
 
 Rules and knobs:
 
 - **Keep the element's own `background` transparent** — the film is drawn inside the mirror
   (`--glass-film`). The mirror injects at `z-index:-1`; give your content `z-index: 1+`.
-- **Silhouette = `border-radius`** on the element — the lens matches the rounded rect; pair with CSS
-  border / `::before` sheen for the lit edge.
+- **Silhouette = `border-radius`**, child `svg.kino-lens-shape`, or `--glass-path*` / `clip-path`.
 - **Do not CSS-`transform: rotate()` or `skew()` the glass element** — that breaks backdrop sampling.
 - Works over **shader (`.frag`) and Canvas2D draw-fn backgrounds**. On the **GL compositor** path,
   `motionOverlay` glass refracts the true composite beneath the overlay (including the host motion
@@ -479,19 +480,19 @@ Rules and knobs:
 | `--glass-saturate` | `1.25` | backdrop saturation boost |
 | `--glass-brightness` | `1.06` | backdrop brightness boost |
 
-**SVG silhouette:** add a direct child `<svg class="kino-glass-shape" viewBox="…">` with filled paths (`path`, `circle`, `rect`, …). The lens follows that alpha mask instead of `border-radius`. Keep the SVG invisible (`opacity: 0` — injected by `.kino-glass-shape`). Content stays in sibling elements at `z-index ≥ 1`.
+**SVG silhouette:** add a direct child `<svg class="kino-lens-shape" viewBox="…">` with filled paths (`path`, `circle`, `rect`, …). The lens follows that alpha mask instead of `border-radius`. Keep the SVG invisible (`opacity: 0` — injected by `.kino-lens-shape`). Content stays in sibling elements at `z-index ≥ 1`.
 
 **Path morph (CSS):** set `--glass-path-from`, `--glass-path-to`, and tween `--glass-morph` (0→1) via `params` / `keyframes` (same command count in both paths). Optional `--glass-viewbox` (default `0 0 100 100`).
 
-**Path morph (SMIL):** put `<animate attributeName="d">` inside `.kino-glass-shape` with `values` + `keyTimes`; kino samples and lerps path `d` at `--progress` (Chromium SMIL playback is inert in the render engine).
+**Path morph (SMIL):** put `<animate attributeName="d">` inside `.kino-lens-shape` with `values` + `keyTimes`; kino samples and lerps path `d` at `--progress` (Chromium SMIL playback is inert in the render engine).
 
-**clip-path:** `clip-path: url(#id)` (prefer `clipPathUnits="objectBoundingBox"`) or `clip-path: path('…')` on `.kino-glass` — used when there is no child shape SVG.
+**clip-path:** `clip-path: url(#id)` (prefer `clipPathUnits="objectBoundingBox"`) or `clip-path: path('…')` on `.kino-lens` — used when there is no child shape SVG.
 
 **Stroke-only silhouettes:** paths with `fill="none"` and a `stroke-width` rasterize the stroke as the lens mask.
 
 ```html
-<div class="hero kino-glass">
-  <svg class="kino-glass-shape" viewBox="0 0 100 100" aria-hidden="true">
+<div class="hero kino-lens">
+  <svg class="kino-lens-shape" viewBox="0 0 100 100" aria-hidden="true">
     <path fill="#fff" d="M50 4 L61 38 H97 … Z"/>
   </svg>
   <h1 style="position:relative;z-index:2">Title</h1>
@@ -500,7 +501,7 @@ Rules and knobs:
 
 ```html
 <!-- CSS path morph -->
-<div class="kino-glass" style="--glass-viewbox:0 0 100 100;
+<div class="kino-lens" style="--glass-viewbox:0 0 100 100;
   --glass-path-from:'M12 12 H88 V88 H12 Z';
   --glass-path-to:'M50 8 L92 50 L50 92 L8 50 Z';">
   …
@@ -514,7 +515,7 @@ Pair with a bright border / diagonal sheen for quiet rect cards. Copyable refere
 `assets-lib/motion/liquid-glass.html` (bare id `liquid-glass`). Needs a STRUCTURED, colorful
 background to refract (e.g. `backgroundComponent: "liquid-orb"`); refraction of a flat field is
 invisible. For mask-shaped refraction on footage beats, use `region-glass.frag` (`docs/segmentation.md`)
-— a separate path from motion `kino-glass`.
+— a separate path from motion `kino-lens`.
 
 ## Procedural graphics (Tier 2)
 
