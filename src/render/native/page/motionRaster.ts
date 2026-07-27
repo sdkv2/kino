@@ -12,6 +12,7 @@ import {
 } from "./lensLayout.js";
 import { buildLensPlateScrubs, type LensPlateScrubs } from "./lensPaintOrder.js";
 import * as prof from "./compositor/profile.js";
+import { probeLensGeometry } from "./geomProbe.js";
 
 export type {
   LensLayoutEntry,
@@ -226,6 +227,8 @@ export async function prepareMotionFrameBundle(
   const manifest = lensHost
     ? prof.sync("motion:manifest", () => buildMotionLayoutManifest(lensHost, width, height, scale))
     : { pageW: width, pageH: height, rasterScale: scale, lenses: [], quads: [] };
+  // Spike: Route C geometry probe — lens × below-lens DOM overlap (KINO_PROFILE counters).
+  if (lensHost) prof.sync("geom:probe", () => probeLensGeometry(lensHost, vars));
   const scrubs = lensHost
     ? prof.sync("motion:scrubs", () => buildLensPlateScrubs(lensHost.texRoot, lensHost.stack))
     : undefined;

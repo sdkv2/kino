@@ -7,6 +7,8 @@
 // call straight through.
 let on = false;
 const totals = new Map<string, { ms: number; n: number }>();
+const maxes = new Map<string, number>();
+const holds = new Map<string, number>();
 
 export function enableProfile(v: boolean): void {
   on = v;
@@ -22,6 +24,18 @@ export function addSample(key: string, ms: number): void {
   e.ms += ms;
   e.n += 1;
   totals.set(key, e);
+}
+
+/** Spike: track max of a metric (emitted as n=1 on snapshot). */
+export function noteMax(key: string, v: number): void {
+  if (!on) return;
+  maxes.set(key, Math.max(maxes.get(key) ?? -Infinity, v));
+}
+
+/** Spike: last-write-wins scalar (emitted as n=1 on snapshot). */
+export function noteHold(key: string, v: number): void {
+  if (!on) return;
+  holds.set(key, v);
 }
 
 export function sync<T>(key: string, fn: () => T): T {
@@ -45,9 +59,13 @@ export async function awaited<T>(key: string, fn: () => Promise<T> | T): Promise
 }
 
 export function snapshot(): Array<{ key: string; ms: number; n: number }> {
+  for (const [key, v] of maxes) totals.set(key, { ms: v, n: 1 });
+  for (const [key, v] of holds) totals.set(key, { ms: v, n: 1 });
   return [...totals.entries()].map(([key, v]) => ({ key, ms: v.ms, n: v.n })).sort((a, b) => b.ms - a.ms);
 }
 
 export function resetProfile(): void {
   totals.clear();
+  maxes.clear();
+  holds.clear();
 }

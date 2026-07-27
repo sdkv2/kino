@@ -332,10 +332,11 @@ async function dumpElectronProfile(
   if (pageRows.length) {
     console.error("  page (GL-flushed seek phases):");
     for (const r of pageRows) {
-      if (r.ms >= 1) {
+      // Spike: always print geom:* keys (overlap counts can be small).
+      if (r.ms >= 1 || r.key.startsWith("geom:")) {
         const share = pageTotal > 0 ? ((r.ms / pageTotal) * 100).toFixed(1).padStart(5) : "    -";
         console.error(
-          `    ${r.key.padEnd(22)} ${(r.ms / Math.max(1, r.n)).toFixed(2).padStart(7)} ms/call  ×${String(r.n).padStart(4)}  ${share}%`,
+          `    ${r.key.padEnd(40)} ${(r.ms / Math.max(1, r.n)).toFixed(2).padStart(7)} ms/call  ×${String(r.n).padStart(4)}  ${share}%`,
         );
       }
     }

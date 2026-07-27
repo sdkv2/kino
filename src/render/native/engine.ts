@@ -498,10 +498,11 @@ async function dumpProfile(handle: PageHandle, frames: number, captureMs: number
   const total = rows.filter((r) => r.key === "draw" || r.key.startsWith("prep:")).reduce((a, r) => a + r.ms, 0);
   console.error(`[native profile] one worker page, ${frames} frames (GL-flushed; shares not wall time)`);
   for (const r of rows) {
-    if (r.ms >= 1) {
+    // Spike: always print geom:* keys (overlap counts can be small).
+    if (r.ms >= 1 || r.key.startsWith("geom:")) {
       const share = total > 0 ? ((r.ms / total) * 100).toFixed(1).padStart(5) : "    -";
       console.error(
-        `  ${r.key.padEnd(24)} ${(r.ms / Math.max(1, r.n)).toFixed(2).padStart(7)} ms/call  ×${String(r.n).padStart(4)}  ${share}% of prep+draw`,
+        `  ${r.key.padEnd(40)} ${(r.ms / Math.max(1, r.n)).toFixed(2).padStart(7)} ms/call  ×${String(r.n).padStart(4)}  ${share}% of prep+draw`,
       );
     }
   }
