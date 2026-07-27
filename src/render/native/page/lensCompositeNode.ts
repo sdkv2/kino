@@ -116,5 +116,11 @@ export function executeLensCompositeNode(opts: {
   const chromeTex = uploadCanvas(gl, chrome);
   blitRegion(gl, layer, chromeTex, 0, layerW, layerH, 0, 0, layerW, layerH);
 
+  const fg = plates.foreground;
+  if (fg) {
+    const fgTex = uploadCanvas(gl, fg);
+    blitRegion(gl, layer, fgTex, 0, layerW, layerH, 0, 0, layerW, layerH);
+  }
+
   return { kind: "gpu", tex: layer.tex, w: layerW, h: layerH };
 }

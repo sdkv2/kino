@@ -1,7 +1,7 @@
-// FO plates for backdrop-sampling lenses + per-frame layout manifest (sample / chrome).
+// FO plates for backdrop-sampling lenses + per-frame layout manifest (sample / chrome / foreground).
 import type { Theme } from "../../props.js";
 import { LENS_CLASS_RE } from "../../lensContract.js";
-import { buildTemplate, paletteVars, rasterAt, TEX_ROOT } from "./bgTextures.js";
+import { buildTemplate, buildTemplateFromXhtml, paletteVars, rasterAt, TEX_ROOT, type HtmlTemplate } from "./bgTextures.js";
 import { KINO_DEFS, motionScrubCss } from "./motionCss.js";
 import {
   buildMotionLayoutManifest,
@@ -10,6 +10,7 @@ import {
   type MotionFrameBundle,
   type MotionPaintPlates,
 } from "./lensLayout.js";
+import { buildLensPlateScrubs, type LensPlateScrubs } from "./lensPaintOrder.js";
 
 export type {
   LensLayoutEntry,
@@ -19,6 +20,7 @@ export type {
   MotionLensHost,
   MotionPaintPlates,
 } from "./lensLayout.js";
+export type { LensPlateScrubs } from "./lensPaintOrder.js";
 export {
   buildMotionLayoutManifest,
   disposeMotionFrameBundle,
@@ -26,6 +28,7 @@ export {
   manifestLensRects,
   openMotionLensHost,
 } from "./lensLayout.js";
+export { buildLensPlateScrubs } from "./lensPaintOrder.js";
 
 /** Full scene with every `kino-lens` hidden — what's optically behind the glass. */
 export const LENS_SAMPLE_SCRUB = `.kino-lens,.kino-lens *{visibility:hidden!important}`;
@@ -138,6 +141,7 @@ export function normalizeMotionPlates(
     full: downscaleCanvasTo(plates.full, wantW, wantH),
     sample: downscaleCanvasTo(plates.sample, wantW, wantH),
     chrome: downscaleCanvasTo(plates.chrome, wantW, wantH),
+    foreground: plates.foreground ? downscaleCanvasTo(plates.foreground, wantW, wantH) : undefined,
   };
 }
 
@@ -148,21 +152,34 @@ async function rasterMotionPlates(
   width: number,
   height: number,
   outScale: number,
+  scrubs?: LensPlateScrubs,
+  existingTpl?: HtmlTemplate,
 ): Promise<MotionPaintPlates | null> {
   const foScale = motionFoScale(outScale);
   const defs = needsMotionDefs(html) ? KINO_DEFS : undefined;
-  const tpl = await buildTemplate(html, theme, {
-    size: { w: width, h: height },
-    scale: foScale,
-    defs,
-  });
-  const [full, sample, chrome] = await Promise.all([
+  const tpl =
+    existingTpl ??
+    (await buildTemplate(html, theme, {
+      size: { w: width, h: height },
+      scale: foScale,
+      defs,
+    }));
+  const sampleScrub = LENS_SAMPLE_SCRUB + (scrubs?.sampleExtra ?? "");
+  const [full, sample, chrome, foreground] = await Promise.all([
     rasterAt(tpl, "full", motionCss(vars), null),
-    rasterAt(tpl, "sample", motionCss(vars, LENS_SAMPLE_SCRUB), null),
+    rasterAt(tpl, "sample", motionCss(vars, sampleScrub), null),
     rasterAt(tpl, "chrome", motionCss(vars, LENS_CHROME_SCRUB), null),
+    scrubs?.hasForeground
+      ? rasterAt(tpl, "foreground", motionCss(vars, scrubs.foregroundScrub), null)
+      : Promise.resolve(null),
   ]);
   if (!full || !sample || !chrome) return null;
-  return normalizeMotionPlates({ full, sample, chrome }, width, height, outScale);
+  return normalizeMotionPlates(
+    { full, sample, chrome, foreground: foreground ?? undefined },
+    width,
+    height,
+    outScale,
+  );
 }
 
 export async function rasterMotionFull(
@@ -192,8 +209,20 @@ export async function prepareMotionFrameBundle(
   const manifest = lensHost
     ? buildMotionLayoutManifest(lensHost, width, height, scale)
     : { pageW: width, pageH: height, rasterScale: scale, lenses: [] };
+  const scrubs = lensHost ? buildLensPlateScrubs(lensHost.texRoot, lensHost.stack) : undefined;
+  let tpl: HtmlTemplate | undefined;
+  if (lensHost) {
+    const inner = lensHost.texRoot.firstElementChild;
+    if (inner) {
+      const xhtml = new XMLSerializer().serializeToString(inner);
+      tpl = await buildTemplateFromXhtml(xhtml, theme, width, height, {
+        scale: motionFoScale(scale),
+        defs: defs || undefined,
+      });
+    }
+  }
 
-  const plates = await rasterMotionPlates(html, vars, theme, width, height, scale);
+  const plates = await rasterMotionPlates(html, vars, theme, width, height, scale, scrubs, tpl);
   if (!plates) {
     lensHost?.unmount();
     return null;
@@ -201,7 +230,7 @@ export async function prepareMotionFrameBundle(
   return {
     manifest,
     plates,
-    html,
+    needsLensPost: motionNeedsLensLayers(html),
     vars,
     lensHost,
   };

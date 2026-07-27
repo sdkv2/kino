@@ -317,6 +317,16 @@ const writeFrame = (stdin: NodeJS.WritableStream, buf: Buffer) =>
     stdin.write(buf, (err) => (err ? reject(err) : resolve()));
   });
 
+function logMemProfile(written: number, total: number): void {
+  if (process.env.KINO_MEM_PROFILE !== "1") return;
+  if (written > 0 && written % 120 !== 0 && written !== total) return;
+  const mu = process.memoryUsage();
+  const rss = (mu.rss / 1024 / 1024).toFixed(0);
+  const heap = (mu.heapUsed / 1024 / 1024).toFixed(0);
+  const ext = (mu.external / 1024 / 1024).toFixed(0);
+  console.error(`[mem] frame ${written}/${total} node rss=${rss}MB heap=${heap}MB external=${ext}MB (Electron GPU/renderer separate)`);
+}
+
 // Render frames [0, total) across `workers` pages into the encoder, in order. Workers claim the
 // next frame index; a single drain loop writes each frame as soon as its predecessor shipped,
 // with a bounded look-ahead so memory stays flat.
@@ -400,6 +410,7 @@ export async function renderFrameRange(
       ready.delete(written);
       await writeFrame(stdin, buf);
       written++;
+      logMemProfile(written, total);
       notify();
     }
   })();

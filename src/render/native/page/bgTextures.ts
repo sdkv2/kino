@@ -181,15 +181,40 @@ export async function buildTemplate(
   const fonts = await fontFaceCss(theme);
   const scale = opts.scale ?? RASTER_SCALE;
   const defs = opts.defs ?? "";
-  const makeSvg = (css: string) =>
+  return { w, h, makeSvg: makeSvgFromXhtml(xhtml, theme, w, h, scale, fonts, defs) };
+}
+
+/** FO template from pre-serialized inner markup — skips a second measure probe when a live host exists. */
+export async function buildTemplateFromXhtml(
+  xhtml: string,
+  theme: KinoProps["theme"],
+  w: number,
+  h: number,
+  opts: { scale?: number; defs?: string } = {},
+): Promise<HtmlTemplate> {
+  const fonts = await fontFaceCss(theme);
+  const scale = opts.scale ?? RASTER_SCALE;
+  const defs = opts.defs ?? "";
+  return { w, h, makeSvg: makeSvgFromXhtml(xhtml, theme, w, h, scale, fonts, defs) };
+}
+
+function makeSvgFromXhtml(
+  xhtml: string,
+  theme: KinoProps["theme"],
+  w: number,
+  h: number,
+  scale: number,
+  fonts: string,
+  defs: string,
+): (css: string) => string {
+  return (css: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}">` +
     // Palette vars live in a <style> block, NOT a style attribute: font families contain double
     // quotes, which would terminate the XML attribute and invalidate the whole SVG.
-    `<style>html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
+    `<style>${fonts} html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
     `<foreignObject width="${w}" height="${h}">` +
     `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px;background:transparent">${xhtml}</div>` +
     `</foreignObject></svg>`;
-  return { w, h, makeSvg };
 }
 
 /** Scrub CSS: pause + negative delay against the 1s @keyframes convention. */
@@ -224,7 +249,12 @@ export async function rasterAt(
     canvas.height = img.naturalHeight || tpl.h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(img, 0, 0);
+    try {
+      ctx.drawImage(img, 0, 0);
+    } finally {
+      // Drop decoded SVG bitmap so Chromium's data-URL image cache can't grow with every motion frame.
+      img.src = "";
+    }
     if (cache) {
       cache.set(key, canvas);
       if (cache.size > ANIM_CACHE_MAX) cache.delete(cache.keys().next().value!);

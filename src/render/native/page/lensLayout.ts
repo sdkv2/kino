@@ -10,8 +10,11 @@ import {
   type LensPageRect,
 } from "./lensMirror.js";
 import { mountMotionRasterProbe } from "./motionRaster.js";
+import { buildLensPlateScrubs, type LensPlateScrubs } from "./lensPaintOrder.js";
 
 export type { LensMaterial } from "./lensMirror.js";
+export type { LensPlateScrubs } from "./lensPaintOrder.js";
+export { buildLensPlateScrubs } from "./lensPaintOrder.js";
 
 export interface LensLayoutEntry extends BakedLensPass {
   index: number;
@@ -31,6 +34,8 @@ export interface MotionPaintPlates {
   sample: HTMLCanvasElement;
   /** Lens descendants only — composited above glass passes. */
   chrome: HTMLCanvasElement;
+  /** Non-lens content that paints above the lens stack — composited last. */
+  foreground?: HTMLCanvasElement;
 }
 
 /** Live DOM host kept mounted while a frame bundle is cached (layout == raster tree). */
@@ -44,7 +49,8 @@ export interface MotionLensHost {
 export interface MotionFrameBundle {
   manifest: MotionLayoutManifest;
   plates: MotionPaintPlates;
-  html: string;
+  /** Lens post path (backdrop sampling) — avoids retaining multi-MB inlined html per cache entry. */
+  needsLensPost: boolean;
   vars: Record<string, string>;
   /** Mounted through texture() — unmount on cache eviction. */
   lensHost?: MotionLensHost;
@@ -53,6 +59,13 @@ export interface MotionFrameBundle {
 export function disposeMotionFrameBundle(bundle: MotionFrameBundle): void {
   bundle.lensHost?.unmount();
   bundle.lensHost = undefined;
+  const { plates } = bundle;
+  for (const c of [plates.full, plates.sample, plates.chrome, plates.foreground]) {
+    if (c) {
+      c.width = 0;
+      c.height = 0;
+    }
+  }
 }
 
 export function manifestLensRects(manifest: MotionLayoutManifest): LensPageRect[] {

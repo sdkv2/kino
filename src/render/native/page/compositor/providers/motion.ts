@@ -10,11 +10,16 @@ import {
   rasterMotionFull,
   type MotionFrameBundle,
 } from "../../motionRaster.js";
-import { applyMotionPostEffects, isGpuMotionPostResult, motionNeedsCompositorBackdrop } from "../../motionPostEffects/index.js";
+import { applyMotionPostEffects, isGpuMotionPostResult } from "../../motionPostEffects/index.js";
+import { fetchAsDataUrl, inlineExternalRefs } from "../inline.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
 
-const CACHE_MAX = 24;
+/** Lens motion at SS≥2 holds 4 full plates per entry — keep cache shallow on finals. */
+function motionCacheMax(scale: number, hasLenses: boolean): number {
+  if (!hasLenses) return 24;
+  return scale >= 2 ? 8 : 16;
+}
 
 async function rasterMotion(
   html: string,
@@ -32,7 +37,7 @@ async function rasterMotion(
   return {
     manifest: { pageW: width, pageH: height, rasterScale: scale, lenses: [] },
     plates: { full, sample: full, chrome: full },
-    html,
+    needsLensPost: false,
     vars,
   };
 }
@@ -48,6 +53,8 @@ export function createMotionSource(opts: {
   beatDur: number;
   captionBottom?: number;
 }): TextureSource {
+  const hasLenses = motionNeedsLensLayers(opts.data.html);
+  const cacheMax = motionCacheMax(opts.scale, hasLenses);
   const cache = new Map<string, MotionFrameBundle>();
   const procFn =
     opts.data.proc && !opts.data.lottie
@@ -64,13 +71,16 @@ export function createMotionSource(opts: {
       const local = frame - opts.beatFrom;
       const cacheKey = key ?? `f:${local}`;
       current = cacheKey;
-      if (motionNeedsLensLayers(opts.data.html)) {
-        // Lens samples compositor backdrop published per draw. kinoLoad boot seek(0) can texture()
-        // before backdrop exists; invalidate so the real capture re-runs lens composite.
-        uploaded = null;
-        gpuRendered = false;
+      if (cache.has(cacheKey)) {
+        // Lens samples compositor backdrop published per draw. Invalidate from the baked
+        // manifest — proc tiers emit kino-lens in generated html, not opts.data.html.
+        const entry = cache.get(cacheKey)!;
+        if (entry.manifest.lenses.length > 0) {
+          uploaded = null;
+          gpuRendered = false;
+        }
+        return;
       }
-      if (cache.has(cacheKey)) return;
 
       const tt = opts.fps > 0 ? local / opts.fps : 0;
       const durationFrames = opts.beatDur;
@@ -141,10 +151,16 @@ export function createMotionSource(opts: {
         }
       }
 
+      html = await inlineExternalRefs(html, fetchAsDataUrl);
+
       const bundle = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
       if (!bundle) return;
       cache.set(cacheKey, bundle);
-      if (cache.size > CACHE_MAX) {
+      if (bundle.manifest.lenses.length > 0) {
+        uploaded = null;
+        gpuRendered = false;
+      }
+      if (cache.size > cacheMax) {
         const oldest = cache.keys().next().value!;
         disposeMotionFrameBundle(cache.get(oldest)!);
         cache.delete(oldest);
@@ -155,7 +171,7 @@ export function createMotionSource(opts: {
       const cacheKey = key ?? current ?? (local !== undefined ? `f:${local}` : null);
       if (!cacheKey) return false;
       const entry = cache.get(cacheKey);
-      return entry ? motionNeedsCompositorBackdrop(entry.html) : false;
+      return entry?.needsLensPost ?? false;
     },
     texture(gl: WebGL2RenderingContext, frame?: number, key?: string): WebGLTexture | null {
       const local = frame !== undefined ? frame - opts.beatFrom : undefined;
@@ -172,7 +188,7 @@ export function createMotionSource(opts: {
           plates,
           lensHost: entry.lensHost,
           chrome: plates.chrome,
-          html: entry.html,
+          html: entry.needsLensPost ? '<span class="kino-lens"></span>' : "",
           vars: entry.vars,
           width: opts.width,
           height: opts.height,

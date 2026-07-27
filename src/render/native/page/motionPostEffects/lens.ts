@@ -65,6 +65,7 @@ export const lensPostEffect: MotionPostEffect = {
       ctx.drawImage(mirror, x, y, w, h);
     }
     ctx.drawImage(chrome, 0, 0);
+    if (plates.foreground) ctx.drawImage(plates.foreground, 0, 0);
     return out;
   },
 };
