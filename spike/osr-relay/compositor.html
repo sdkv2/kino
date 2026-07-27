@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>spike-compositor</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #111; }
+  canvas { display: block; width: 1920px; height: 1080px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+(function () {
+  const W = 1920, H = 1080;
+  const canvas = document.getElementById("c");
+  const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, premultipliedAlpha: false, alpha: true });
+  if (!gl) throw new Error("no webgl");
+
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, `
+    attribute vec2 a; varying vec2 v;
+    void main(){ v=a*0.5+0.5; v.y=1.0-v.y; gl_Position=vec4(a,0.,1.); }
+  `);
+  gl.compileShader(vs);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  // BGRA → RGBA via swizzle; Electron NativeImage.toBitmap is BGRA, often premultiplied.
+  gl.shaderSource(fs, `
+    precision mediump float; varying vec2 v; uniform sampler2D u; uniform int uPremul;
+    void main(){
+      vec4 c = texture2D(u, v);
+      // tex uploaded as RGBA but bytes were BGRA → swizzle B<->R
+      c = vec4(c.b, c.g, c.r, c.a);
+      if (uPremul == 1 && c.a > 0.001) c.rgb = c.rgb / c.a;
+      gl_FragColor = c;
+    }
+  `);
+  gl.compileShader(fs);
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, "a");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const uPremul = gl.getUniformLocation(prog, "uPremul");
+  gl.uniform1i(uPremul, 1); // Electron paint bitmaps are typically premultiplied
+
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+
+  let lastUploadMs = 0;
+  let lastDrawMs = 0;
+  let premulMode = 1;
+
+  /** Upload BGRA buffer (as RGBA bytes), draw fullscreen, return timings. */
+  window.__spikeUpload = function (bgra, w, h, premul) {
+    if (typeof premul === "number") {
+      premulMode = premul;
+      gl.uniform1i(uPremul, premulMode);
+    }
+    const pixels = bgra instanceof Uint8Array ? bgra : new Uint8Array(bgra);
+    const t0 = performance.now();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    // force upload complete
+    gl.finish();
+    lastUploadMs = performance.now() - t0;
+    const t1 = performance.now();
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.finish();
+    lastDrawMs = performance.now() - t1;
+    return { uploadMs: lastUploadMs, drawMs: lastDrawMs };
+  };
+
+  window.__spikeReadbackPNG = function () {
+    return canvas.toDataURL("image/png");
+  };
+
+  window.__spikeReadbackRGBA = function () {
+    const out = new Uint8Array(W * H * 4);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    // readPixels is bottom-up; flip
+    const row = W * 4;
+    const flipped = new Uint8Array(out.length);
+    for (let y = 0; y < H; y++) {
+      flipped.set(out.subarray((H - 1 - y) * row, (H - y) * row), y * row);
+    }
+    return flipped;
+  };
+
+  // --- foreignObject raster path (minimal buildTemplate/rasterAt) ---
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  /** Rasterize HTML string via SVG foreignObject → canvas (scale=1). */
+  window.__spikeForeignObjectRaster = async function (innerHtml, w, h) {
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+      `<foreignObject width="${w}" height="${h}">` +
+      `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px;margin:0;overflow:hidden;background:#000">` +
+      innerHtml +
+      `</div></foreignObject></svg>`;
+    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    const t0 = performance.now();
+    const img = await loadImage(url);
+    const decodeMs = performance.now() - t0;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d", { alpha: true });
+    ctx.clearRect(0, 0, w, h);
+    const t1 = performance.now();
+    ctx.drawImage(img, 0, 0);
+    const drawMs = performance.now() - t1;
+    img.src = "";
+    return { png: c.toDataURL("image/png"), decodeMs, drawMs, rgba: ctx.getImageData(0, 0, w, h).data };
+  };
+
+  window.__spikeReady = true;
+})();
+</script>
+</body>
+</html>

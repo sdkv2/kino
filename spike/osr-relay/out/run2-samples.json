@@ -1,0 +1,576 @@
+{
+  "capture": [
+    {
+      "i": 0,
+      "x": 200,
+      "y": 600,
+      "frameId": 101,
+      "attempts": 1,
+      "paintWaitMs": 1.047,
+      "copyMs": 1.009,
+      "mutateMs": 4.077,
+      "bytes": 8294400,
+      "hash": "20cf5768cae8bea0635566a689af79c3fc40763778ea3c4ee11415453632d2e7"
+    },
+    {
+      "i": 1,
+      "x": 252,
+      "y": 664,
+      "frameId": 102,
+      "attempts": 1,
+      "paintWaitMs": 1.118,
+      "copyMs": 1.086,
+      "mutateMs": 4.117,
+      "bytes": 8294400,
+      "hash": "001ffc663897df49e7117ee5d33f249fba0a9fbd1cace5657c536d643238ee29"
+    },
+    {
+      "i": 2,
+      "x": 305,
+      "y": 726,
+      "frameId": 103,
+      "attempts": 1,
+      "paintWaitMs": 1.242,
+      "copyMs": 1.211,
+      "mutateMs": 4.558,
+      "bytes": 8294400,
+      "hash": "92074eeb7a3620ece3d59668f6c03e072c3a09d1596003889c6cc57dadb7c7b7"
+    },
+    {
+      "i": 3,
+      "x": 357,
+      "y": 782,
+      "frameId": 104,
+      "attempts": 1,
+      "paintWaitMs": 1.164,
+      "copyMs": 1.122,
+      "mutateMs": 4.822,
+      "bytes": 8294400,
+      "hash": "bb3431fed4965ac0b801cb9913a6d9646314dc32202743158bf075f91df7ee52"
+    },
+    {
+      "i": 4,
+      "x": 410,
+      "y": 829,
+      "frameId": 105,
+      "attempts": 1,
+      "paintWaitMs": 1.066,
+      "copyMs": 1.037,
+      "mutateMs": 4.349,
+      "bytes": 8294400,
+      "hash": "7a7ad00becc180b2bf5537997ee27176315232ce5dfd9896ad053e0be44d6187"
+    },
+    {
+      "i": 5,
+      "x": 462,
+      "y": 865,
+      "frameId": 106,
+      "attempts": 1,
+      "paintWaitMs": 1.316,
+      "copyMs": 1.294,
+      "mutateMs": 5.093,
+      "bytes": 8294400,
+      "hash": "fd46830e18c64bd946d13c10f79f7f8d14990c995cc3560b2f1330027a8f7c63"
+    },
+    {
+      "i": 6,
+      "x": 514,
+      "y": 889,
+      "frameId": 107,
+      "attempts": 1,
+      "paintWaitMs": 1.087,
+      "copyMs": 1.046,
+      "mutateMs": 5.025,
+      "bytes": 8294400,
+      "hash": "c45312a1eb0b083b584e1581d46e26e0f7f91d5ddaf0c4a47c0602d7666c24ef"
+    },
+    {
+      "i": 7,
+      "x": 567,
+      "y": 900,
+      "frameId": 108,
+      "attempts": 1,
+      "paintWaitMs": 1.197,
+      "copyMs": 1.173,
+      "mutateMs": 4.26,
+      "bytes": 8294400,
+      "hash": "b79f1bbbfa8502c33a0f3d00302d70604be919e67e30fa75f65473665575fe19"
+    },
+    {
+      "i": 8,
+      "x": 619,
+      "y": 896,
+      "frameId": 109,
+      "attempts": 1,
+      "paintWaitMs": 1.428,
+      "copyMs": 1.39,
+      "mutateMs": 4.779,
+      "bytes": 8294400,
+      "hash": "dde0142a7af1c8df363e0ef3d87639a66a490a503a14f35057d94b22484763d3"
+    },
+    {
+      "i": 9,
+      "x": 672,
+      "y": 879,
+      "frameId": 110,
+      "attempts": 2,
+      "paintWaitMs": 11.84,
+      "copyMs": 1.797,
+      "mutateMs": 26.434,
+      "bytes": 8294400,
+      "hash": "2eea4c55c2411fb63a99dc092efb18a3255d751477a48652a9b670eb5439a9f3"
+    },
+    {
+      "i": 10,
+      "x": 724,
+      "y": 848,
+      "frameId": 111,
+      "attempts": 1,
+      "paintWaitMs": 1.16,
+      "copyMs": 1.126,
+      "mutateMs": 4.415,
+      "bytes": 8294400,
+      "hash": "e37ca456059574789458ed930a3dc4355efc51c3b0177ac687eb70c835992421"
+    },
+    {
+      "i": 11,
+      "x": 777,
+      "y": 806,
+      "frameId": 112,
+      "attempts": 1,
+      "paintWaitMs": 1.589,
+      "copyMs": 1.478,
+      "mutateMs": 4.502,
+      "bytes": 8294400,
+      "hash": "28e9312cc0c40ad6f24565c8a38f9129f0095b908c0ead43e3690227c3912871"
+    },
+    {
+      "i": 12,
+      "x": 829,
+      "y": 755,
+      "frameId": 113,
+      "attempts": 1,
+      "paintWaitMs": 1.292,
+      "copyMs": 1.238,
+      "mutateMs": 4.851,
+      "bytes": 8294400,
+      "hash": "a737bec163e204d1639d97078011164e4aac9f81c9448e4db79c6283c0c2b46d"
+    },
+    {
+      "i": 13,
+      "x": 881,
+      "y": 696,
+      "frameId": 114,
+      "attempts": 1,
+      "paintWaitMs": 1.24,
+      "copyMs": 1.193,
+      "mutateMs": 4.479,
+      "bytes": 8294400,
+      "hash": "db33e8aa057ac0c536691d1030bacb77063d09c9757e20acfd49f83fbce9ee71"
+    },
+    {
+      "i": 14,
+      "x": 934,
+      "y": 632,
+      "frameId": 115,
+      "attempts": 1,
+      "paintWaitMs": 1.392,
+      "copyMs": 1.352,
+      "mutateMs": 4.35,
+      "bytes": 8294400,
+      "hash": "cff3dc3c2f3cb41f605449df33c3a26ccdcd62389a6ed6ab30d1be1b67927d79"
+    },
+    {
+      "i": 15,
+      "x": 986,
+      "y": 568,
+      "frameId": 116,
+      "attempts": 2,
+      "paintWaitMs": 13.033,
+      "copyMs": 1.03,
+      "mutateMs": 3.766,
+      "bytes": 8294400,
+      "hash": "136f8064819afb8e0c73a1ec494814c2de56b387ab120ce770af9ea99e456668"
+    },
+    {
+      "i": 16,
+      "x": 1039,
+      "y": 504,
+      "frameId": 117,
+      "attempts": 2,
+      "paintWaitMs": 12.646,
+      "copyMs": 1.312,
+      "mutateMs": 1.028,
+      "bytes": 8294400,
+      "hash": "3dee957caf3679cd1e0771926c6d38f051245a9b5cec283c7a426955ab421c5a"
+    },
+    {
+      "i": 17,
+      "x": 1091,
+      "y": 445,
+      "frameId": 118,
+      "attempts": 2,
+      "paintWaitMs": 10.361,
+      "copyMs": 1.199,
+      "mutateMs": 1.451,
+      "bytes": 8294400,
+      "hash": "cfc687afbff5317d59e201ef6a4e391c1f30f023235ee1e2fa2866c6ab25bf90"
+    },
+    {
+      "i": 18,
+      "x": 1143,
+      "y": 394,
+      "frameId": 119,
+      "attempts": 2,
+      "paintWaitMs": 13.119,
+      "copyMs": 1.139,
+      "mutateMs": 3.754,
+      "bytes": 8294400,
+      "hash": "34e9f6892c9a78f8c04743b37d6278f3d56832a96e0afb95cab59a7e313a882c"
+    },
+    {
+      "i": 19,
+      "x": 1196,
+      "y": 352,
+      "frameId": 120,
+      "attempts": 2,
+      "paintWaitMs": 11.557,
+      "copyMs": 1.092,
+      "mutateMs": 0.461,
+      "bytes": 8294400,
+      "hash": "1a51bfe051848933d9afdbfbf7765e1a533d47cda741b7bb57198376a97ac5a8"
+    },
+    {
+      "i": 20,
+      "x": 1248,
+      "y": 321,
+      "frameId": 121,
+      "attempts": 2,
+      "paintWaitMs": 12.062,
+      "copyMs": 1.297,
+      "mutateMs": 2.431,
+      "bytes": 8294400,
+      "hash": "d990855efcfd3d6a2fd9d965538383e1880eb020f2ae5e2d1e04774f8e8f7221"
+    },
+    {
+      "i": 21,
+      "x": 1301,
+      "y": 304,
+      "frameId": 122,
+      "attempts": 2,
+      "paintWaitMs": 13.05,
+      "copyMs": 1.178,
+      "mutateMs": 1.746,
+      "bytes": 8294400,
+      "hash": "412239ebd83797649ec08780666def86adafac58955f5f4a8a2e19898c908e12"
+    },
+    {
+      "i": 22,
+      "x": 1353,
+      "y": 300,
+      "frameId": 123,
+      "attempts": 2,
+      "paintWaitMs": 12.09,
+      "copyMs": 1.176,
+      "mutateMs": 0.772,
+      "bytes": 8294400,
+      "hash": "6f2d24bb5832489833a744c9382049feb664d939b041a6da586d14468bea70af"
+    },
+    {
+      "i": 23,
+      "x": 1406,
+      "y": 311,
+      "frameId": 124,
+      "attempts": 2,
+      "paintWaitMs": 12.03,
+      "copyMs": 1.26,
+      "mutateMs": 1.934,
+      "bytes": 8294400,
+      "hash": "008692ae3ae1efea953b16e51dcd2263d389320c395b6122e756d03c62ed7515"
+    },
+    {
+      "i": 24,
+      "x": 1458,
+      "y": 335,
+      "frameId": 125,
+      "attempts": 2,
+      "paintWaitMs": 12.913,
+      "copyMs": 1.18,
+      "mutateMs": 1.774,
+      "bytes": 8294400,
+      "hash": "b83f6028aee7039a19c833d574dee154b8b0d1176dea95a616f37e9b9e5cc32d"
+    },
+    {
+      "i": 25,
+      "x": 1510,
+      "y": 371,
+      "frameId": 126,
+      "attempts": 2,
+      "paintWaitMs": 13.046,
+      "copyMs": 1.399,
+      "mutateMs": 0.889,
+      "bytes": 8294400,
+      "hash": "38d44d0feb0981998c729a5e74090624094bca50530e8840e2ff58a33e14ecce"
+    },
+    {
+      "i": 26,
+      "x": 1563,
+      "y": 418,
+      "frameId": 127,
+      "attempts": 2,
+      "paintWaitMs": 11.822,
+      "copyMs": 1.242,
+      "mutateMs": 0.777,
+      "bytes": 8294400,
+      "hash": "55585ef45a8b28b79fa1e2c18eb780a1da816cf18ada4db169edfca52166776a"
+    },
+    {
+      "i": 27,
+      "x": 1615,
+      "y": 474,
+      "frameId": 128,
+      "attempts": 2,
+      "paintWaitMs": 11.92,
+      "copyMs": 1.196,
+      "mutateMs": 2.3,
+      "bytes": 8294400,
+      "hash": "fadd5ce8ad2628693c60963f97cf31fd05b05c96b51b9e6515560fb9f11f594f"
+    },
+    {
+      "i": 28,
+      "x": 1668,
+      "y": 536,
+      "frameId": 129,
+      "attempts": 2,
+      "paintWaitMs": 12.072,
+      "copyMs": 1.34,
+      "mutateMs": 1.917,
+      "bytes": 8294400,
+      "hash": "6ad9966d6121280c65b2758ff5740feeb2773238038766373ce77b456c5978a3"
+    },
+    {
+      "i": 29,
+      "x": 1720,
+      "y": 600,
+      "frameId": 130,
+      "attempts": 2,
+      "paintWaitMs": 11.628,
+      "copyMs": 1.238,
+      "mutateMs": 1.72,
+      "bytes": 8294400,
+      "hash": "1828917242b668ad91e692ceef5c1054651eccea20a6948f5cba2aad9f4bc905"
+    }
+  ],
+  "upload": [
+    {
+      "i": 0,
+      "ipcMs": 6.968,
+      "uploadMs": 0.2,
+      "drawMs": 0.1,
+      "roundTripMs": 7.268
+    },
+    {
+      "i": 1,
+      "ipcMs": 6.147,
+      "uploadMs": 0.4,
+      "drawMs": 0,
+      "roundTripMs": 6.547
+    },
+    {
+      "i": 2,
+      "ipcMs": 6.244,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.544
+    },
+    {
+      "i": 3,
+      "ipcMs": 6.005,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.305
+    },
+    {
+      "i": 4,
+      "ipcMs": 6.568,
+      "uploadMs": 0.3,
+      "drawMs": 0.1,
+      "roundTripMs": 6.968
+    },
+    {
+      "i": 5,
+      "ipcMs": 6.185,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.485
+    },
+    {
+      "i": 6,
+      "ipcMs": 6.462,
+      "uploadMs": 0.2,
+      "drawMs": 0.1,
+      "roundTripMs": 6.762
+    },
+    {
+      "i": 7,
+      "ipcMs": 5.899,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.199
+    },
+    {
+      "i": 8,
+      "ipcMs": 6.927,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 7.227
+    },
+    {
+      "i": 9,
+      "ipcMs": 6.333,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.633
+    },
+    {
+      "i": 10,
+      "ipcMs": 6.889,
+      "uploadMs": 0.5,
+      "drawMs": 0,
+      "roundTripMs": 7.389
+    },
+    {
+      "i": 11,
+      "ipcMs": 5.981,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.281
+    },
+    {
+      "i": 12,
+      "ipcMs": 5.966,
+      "uploadMs": 0.2,
+      "drawMs": 0,
+      "roundTripMs": 6.166
+    },
+    {
+      "i": 13,
+      "ipcMs": 6.696,
+      "uploadMs": 0.2,
+      "drawMs": 0,
+      "roundTripMs": 6.896
+    },
+    {
+      "i": 14,
+      "ipcMs": 6.623,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.923
+    },
+    {
+      "i": 15,
+      "ipcMs": 7.387,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 7.687
+    },
+    {
+      "i": 16,
+      "ipcMs": 6.386,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.686
+    },
+    {
+      "i": 17,
+      "ipcMs": 6.43,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.73
+    },
+    {
+      "i": 18,
+      "ipcMs": 6.105,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.405
+    },
+    {
+      "i": 19,
+      "ipcMs": 6.547,
+      "uploadMs": 0.4,
+      "drawMs": 0,
+      "roundTripMs": 6.947
+    },
+    {
+      "i": 20,
+      "ipcMs": 6.253,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.553
+    },
+    {
+      "i": 21,
+      "ipcMs": 6.22,
+      "uploadMs": 0.4,
+      "drawMs": 0,
+      "roundTripMs": 6.62
+    },
+    {
+      "i": 22,
+      "ipcMs": 6.028,
+      "uploadMs": 0.2,
+      "drawMs": 0.1,
+      "roundTripMs": 6.329
+    },
+    {
+      "i": 23,
+      "ipcMs": 6.23,
+      "uploadMs": 0.5,
+      "drawMs": 0,
+      "roundTripMs": 6.73
+    },
+    {
+      "i": 24,
+      "ipcMs": 6.33,
+      "uploadMs": 0.3,
+      "drawMs": 0,
+      "roundTripMs": 6.63
+    },
+    {
+      "i": 25,
+      "ipcMs": 6.433,
+      "uploadMs": 0.2,
+      "drawMs": 0,
+      "roundTripMs": 6.633
+    },
+    {
+      "i": 26,
+      "ipcMs": 6.354,
+      "uploadMs": 0.2,
+      "drawMs": 0,
+      "roundTripMs": 6.554
+    },
+    {
+      "i": 27,
+      "ipcMs": 6.046,
+      "uploadMs": 0.5,
+      "drawMs": 0,
+      "roundTripMs": 6.546
+    },
+    {
+      "i": 28,
+      "ipcMs": 6.442,
+      "uploadMs": 0.2,
+      "drawMs": 0,
+      "roundTripMs": 6.642
+    },
+    {
+      "i": 29,
+      "ipcMs": 6.117,
+      "uploadMs": 0.5,
+      "drawMs": 0,
+      "roundTripMs": 6.617
+    }
+  ]
+}

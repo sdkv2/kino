@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>spike-motion</title>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000;
+    caret-color: transparent; cursor: none; user-select: none; -webkit-user-select: none; }
+  * { animation: none !important; transition: none !important; scrollbar-width: none; }
+  *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  #wall { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  #grid { position: absolute; left: 80px; top: 120px; display: grid;
+    grid-template-columns: repeat(3, 280px); grid-template-rows: repeat(3, 160px); gap: 24px; }
+  #grid img { width: 280px; height: 160px; object-fit: cover; display: block; border-radius: 8px; }
+  #sprite { position: absolute; right: 80px; bottom: 80px; width: 320px; height: 180px;
+    object-fit: cover; display: block; border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.45); }
+  #cursor { position: absolute; left: 0; top: 0; width: 24px; height: 24px;
+    background: #ff2d55; border-radius: 50%; border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5); transform: translate(-50%, -50%);
+    will-change: left, top; pointer-events: none; z-index: 10; }
+  #marker { position: absolute; left: 1840px; top: 20px; width: 32px; height: 32px;
+    z-index: 20; pointer-events: none; image-rendering: pixelated; display: block; }
+</style>
+</head>
+<body>
+<div id="root">
+  <img id="wall" alt="" />
+  <div id="grid"></div>
+  <img id="sprite" alt="" />
+  <div id="cursor"></div>
+  <canvas id="marker" width="32" height="32"></canvas>
+</div>
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const assetBase = params.get("assets") || "./assets";
+  const letters = "abcdefghi";
+  const wall = document.getElementById("wall");
+  const sprite = document.getElementById("sprite");
+  const grid = document.getElementById("grid");
+  const cursor = document.getElementById("cursor");
+  const marker = document.getElementById("marker");
+  const mctx = marker.getContext("2d", { alpha: false, colorSpace: "srgb" });
+  wall.src = assetBase + "/macos-wallpaper-sonoma.jpg";
+  sprite.src = assetBase + "/yt-watch-sprite.jpg";
+  for (const L of letters) {
+    const img = document.createElement("img");
+    img.src = assetBase + "/yt-thumb-" + L + ".jpg";
+    img.alt = "";
+    grid.appendChild(img);
+  }
+
+  window.__spikeSetCursor = function (x, y, frameId) {
+    cursor.style.left = x + "px";
+    cursor.style.top = y + "px";
+    const id = frameId >>> 0;
+    // Bright unique color: R=255, G=id&255, B=128 — never near-black.
+    const r = 255;
+    const g = id & 255;
+    const b = 128;
+    const img = mctx.createImageData(32, 32);
+    for (let i = 0; i < 32 * 32; i++) {
+      img.data[i * 4] = r;
+      img.data[i * 4 + 1] = g;
+      img.data[i * 4 + 2] = b;
+      img.data[i * 4 + 3] = 255;
+    }
+    mctx.putImageData(img, 0, 0);
+    void cursor.offsetLeft;
+    return { x, y, frameId: id, marker: { r, g, b } };
+  };
+
+  window.__spikeReady = false;
+  const imgs = [wall, sprite, ...grid.querySelectorAll("img")];
+  Promise.all(imgs.map((img) => img.decode().catch(() => null))).then(() => {
+    window.__spikeSetCursor(960, 540, 0);
+    window.__spikeReady = true;
+  });
+})();
+</script>
+</body>
+</html>
