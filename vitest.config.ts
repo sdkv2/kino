@@ -49,31 +49,26 @@ const GPU_PIXEL_TESTS = [
 // any test asserting on pixels would be comparing against whichever card the author happened to
 // have. The canonical path is the one the tests should hold.
 
-// Quarantined 2026-07-28: these three crash or fail locally and are excluded from every scope.
-// They are NOT deleted — the files stand, and lifting an entry is a one-line revert.
+// Three files were briefly quarantined here on 2026-07-28 and all three are back. Recorded because
+// each had a different real cause, and none of them was the one the quarantine assumed:
 //
-// Be honest about what is and is not known here, because the three are not equally understood:
+//   • glass-shape   — genuinely broken, and NOT a flaky threshold. `c13f72f` renamed the lens author
+//                     contract from `kino-glass`/`kino-glass-shape` to `kino-lens`/`kino-lens-shape`
+//                     but migrated only ONE of the eleven motion fixtures. The other ten kept the old
+//                     class names, so the engine (zero remaining `kino-glass` references) stopped
+//                     treating them as lenses: no silhouette, no path morph, no SMIL exemption —
+//                     exactly what the assertions said, with both morphs differing by EXACTLY 0.
+//                     Fixed by renaming the class in those ten fixtures; the `--glass-*` CSS knobs
+//                     are unchanged engine API and must NOT be renamed with them.
+//   • compositor-ss — never broken. Collateral damage from Electron hosts sharing one profile
+//                     directory, whose block-file HTTP cache corrupts under concurrent access and
+//                     then segfaults every later launch. Fixed in the engine, not here.
+//   • render-lottie — one over-specified test, since removed: it pinned a colour fade to hard-coded
+//                     8-bit channel levels and `late` landed on exactly its `>190` bound.
 //
-//   • glass-shape       — 5 failures REPRODUCED on 587c18c, i.e. before the perf work landed.
-//                         Genuinely pre-existing. The assertions say a star silhouette no longer
-//                         differs from a round-rect, and CSS/SMIL path morphs differ by exactly 0
-//                         — reads like lens shape morphing is not running at all. Worth a real
-//                         look; it is a functional gap, not a flaky threshold.
-//   • compositor-ss     — PASSED on 587c18c in an isolated run, then failed once under full-suite
-//                         load. NOT established as pre-existing.
-//   • render-lottie     — never ran to completion against 587c18c. Status unknown.
-//
-// The last two are quarantined on the strength of a machine that could not keep Electron alive
-// long enough to retest (SwiftShader renders under sustained load), not on evidence they were
-// already broken. If the perf work on this branch did regress either one, this list is where that
-// regression is hiding. Re-run both against 587c18c and against HEAD on an idle machine before
-// trusting a green suite:
-//   npx vitest run tests/compositor-ss.test.ts tests/render-lottie.test.ts --no-file-parallelism
-const QUARANTINED = [
-  "tests/glass-shape.test.ts",
-  "tests/compositor-ss.test.ts",
-  "tests/render-lottie.test.ts",
-];
+// The lesson worth keeping: every one of these looked like "flaky GPU test, exclude it", and none of
+// them was. The fixtures live under gitignored `projects/`, which is why a repo-wide rename missed
+// them silently and why no CI run could have caught it.
 
 export default defineConfig({
   test: {
@@ -81,8 +76,8 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     exclude:
       process.env.KINO_TEST_SCOPE === "light"
-        ? [...configDefaults.exclude, ...GPU_PIXEL_TESTS, ...QUARANTINED]
-        : [...configDefaults.exclude, ...QUARANTINED],
+        ? [...configDefaults.exclude, ...GPU_PIXEL_TESTS]
+        : configDefaults.exclude,
     globalSetup: ["tests/setup/scratchSweep.ts"],
     env: { KINO_GPU: "0" },
   },
