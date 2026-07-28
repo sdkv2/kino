@@ -163,24 +163,9 @@ export function resolveCaptureSource(env: NodeJS.ProcessEnv = process.env): Capt
   return "bitmap";
 }
 
-// Electron: one shared GPU host, N offscreen windows (parallel encode). Raise with
-// KINO_CONCURRENCY when the box has headroom (VRAM, NVENC sessions, cores); that override bypasses
-// this cap entirely (see below), which is how to explore past it without a code change.
-//
-// 4 -> 6 on 2026-07-28. The old sweep on the macOS-desktop demo read 26 / 38 / 46 / 52 fps at
-// c=1..4 — still gaining 13% from c3 to c4 when it ran out of room, because 4 was this constant,
-// not a measured knee. The perf work on this branch (font-CSS memo, one full-payload URL encode per
-// frame instead of three, display:none layout skipping on hidden out-of-flow roots) removed mostly
-// CPU per frame, which is exactly the resource spare cores can absorb.
-//
-// NOT swept before changing — this is a considered default, not a measured optimum. Two things
-// could still make 6 the wrong number, and both show up as regressions rather than errors:
-//   • the c1->c4 sublinearity was per-seek page time inflating ~1.9x from shared-GPU contention,
-//     and none of the above reduced GPU work (hoisted quads slightly increase blits);
-//   • memory, not cores, is the likelier ceiling — each worker holds full-frame canvases, and this
-//     pathway has driven a 10-core/16GB Mac into swap, where Electron workers start dying.
-// If renders get slower or Electron begins crashing, put this back to 4 first.
-const MAX_WORKERS_ELECTRON = 6;
+// Electron: one shared GPU host, N offscreen windows (parallel encode). Default cap is conservative;
+// raise with KINO_CONCURRENCY when the box has headroom (VRAM, NVENC sessions, cores).
+const MAX_WORKERS_ELECTRON = 4;
 export function concurrency(
   totalFrames: number,
   env: NodeJS.ProcessEnv = process.env,
