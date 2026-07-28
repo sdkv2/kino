@@ -4,6 +4,7 @@
 // resolved per machine by resolveGL — hardware ANGLE on macOS, SwiftShader elsewhere, either one
 // forced with KINO_GPU=1/0.
 import puppeteer, { type Browser } from "puppeteer";
+import type { ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -165,20 +166,53 @@ function usePipeTransport(env: NodeJS.ProcessEnv = process.env): boolean {
 const liveBrowsers = new Set<Browser>();
 let killHookInstalled = false;
 
+/**
+ * SIGKILL a Chrome process tree, synchronously and in full.
+ *
+ * Signalling the pid alone is not enough: that is only the browser process, and Chrome runs a whole
+ * tree (zygote, GPU, renderers, utility) beside it — six processes for a bare launch here. Those
+ * descendants do die on their own once the browser process goes, because their mojo IPC channel
+ * breaks, but they die ASYNCHRONOUSLY, and the scratch sweep that follows is synchronous. Measured
+ * at the instant the sweep began removing the profile dir: 6 of 6 processes still alive. Every one
+ * of them can still write into the dir being deleted, which is how an interrupted render left a
+ * residual `kino-chrome-profile-*` behind.
+ *
+ * puppeteer spawns Chrome `detached` on POSIX, so the browser process is its own process-group
+ * leader and the negated pid addresses the entire tree in one syscall — the same mechanism
+ * puppeteer's own kill path uses. After it returns, no process in the tree can execute another
+ * instruction, so nothing can recreate what the sweep is about to remove.
+ */
+export function killBrowserTree(proc: ChildProcess | null | undefined): void {
+  const pid = proc?.pid;
+  if (proc == null || pid == null) return;
+  // SIGKILL, not close(): close() is async and cannot complete inside an exit handler, and SIGKILL
+  // gives Chrome no chance to rewrite the profile files we are about to delete.
+  if (process.platform !== "win32") {
+    try {
+      // Negated pid = the process group led by Chrome's browser process, i.e. the whole tree.
+      process.kill(-pid, "SIGKILL");
+      return;
+    } catch {
+      // Not a group leader (a browser we connected to rather than spawned), the group is already
+      // gone, or we may not signal it. Fall through and at least take the process we do own.
+    }
+  }
+  try {
+    // Windows has no process groups to signal; Node maps this onto TerminateProcess. Chrome's
+    // children are left to the pipe-close teardown, and the sweep there runs from `exit` — after
+    // a normal unwind — rather than from a signal, so it is not racing an interrupt.
+    proc.kill("SIGKILL");
+  } catch {
+    // already gone
+  }
+}
+
 /** SIGKILL every Chrome we launched, so nothing is writing into a profile dir during the sweep. */
 function installKillHook(): void {
   if (killHookInstalled) return;
   killHookInstalled = true;
   onBeforeSweep(() => {
-    for (const b of liveBrowsers) {
-      try {
-        // SIGKILL, not close(): close() is async and cannot complete inside an exit handler, and
-        // SIGKILL gives Chrome no chance to rewrite the profile files we are about to delete.
-        b.process()?.kill("SIGKILL");
-      } catch {
-        // already gone
-      }
-    }
+    for (const b of liveBrowsers) killBrowserTree(b.process());
     liveBrowsers.clear();
   });
 }
