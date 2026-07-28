@@ -19,6 +19,9 @@ describe("validateSegmentFx", () => {
 
   it("accepts the built-in effects", () => {
     expect(validateSegmentFx({ effects: [{ kind: "blur", params: { radius: 8 } }] }, 0)).toEqual([]);
+    expect(
+      validateSegmentFx({ effects: [{ kind: "motionBlur", params: { angle: 0, distance: 8 } }] }, 0),
+    ).toEqual([]);
   });
 
   it("rejects an effect with missing params", () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { glowPass } from "../src/render/native/page/compositor/effects/glow.js";
 import { bloomPass } from "../src/render/native/page/compositor/effects/bloom.js";
+import { motionBlurPass } from "../src/render/native/page/compositor/effects/motionBlur.js";
 
 // probeEffect's fixture is white on the left half, and white is 1.0 in both sRGB and linear — so
 // no pixel probe through that harness can tell the thresholds apart. Assert the defaults directly.
@@ -13,7 +14,7 @@ function capture() {
   const gl = {
     uniform1f: (name: string, v: number) => { got[name] = v; },
     uniform2f: () => {},
-    uniform1i: () => {},
+    uniform1i: (name: string, v: number) => { got[name] = v; },
     activeTexture: () => {},
     bindTexture: () => {},
   } as unknown as WebGL2RenderingContext;
@@ -38,5 +39,28 @@ describe("bright-pass defaults are linear-light luminance", () => {
     const { gl, loc, got } = capture();
     glowPass.uniforms(gl, loc, { threshold: 0.9 }, 0);
     expect(got.uThreshold).toBeCloseTo(0.9, 5);
+  });
+});
+
+describe("motionBlur param clamps", () => {
+  it("defaults distance 0, angle 0, samples 8", () => {
+    const { gl, loc, got } = capture();
+    motionBlurPass.uniforms(gl, loc, {}, 0);
+    expect(got.uDistance).toBe(0);
+    expect(got.uAngle).toBe(0);
+    expect(got.uSamples).toBe(8);
+  });
+
+  it("clamps distance to 256 and samples to 32", () => {
+    const { gl, loc, got } = capture();
+    motionBlurPass.uniforms(gl, loc, { distance: 9999, samples: 100 }, 0);
+    expect(got.uDistance).toBe(256);
+    expect(got.uSamples).toBe(32);
+  });
+
+  it("floors samples at 1", () => {
+    const { gl, loc, got } = capture();
+    motionBlurPass.uniforms(gl, loc, { distance: 8, samples: 0 }, 0);
+    expect(got.uSamples).toBe(1);
   });
 });

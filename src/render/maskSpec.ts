@@ -64,7 +64,7 @@ export function validateMask(m: unknown): string[] {
 
 /** Effect kinds the compositor can run. Kept as a literal list rather than read from the pass
  *  registry: validation runs node-side in the CLI, where the page's registry is not loaded. */
-export const EFFECT_KINDS = ["blur", "glow", "grade"] as const;
+export const EFFECT_KINDS = ["blur", "glow", "grade", "motionBlur"] as const;
 export type EffectKind = (typeof EFFECT_KINDS)[number];
 
 export interface LayerEffect {
