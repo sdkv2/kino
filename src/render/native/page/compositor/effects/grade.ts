@@ -1,7 +1,7 @@
 // Brightness / contrast / saturation. NONE of these are linear in alpha, so the pass
 // un-premultiplies first and re-premultiplies after — skipping that gives every soft edge a
 // dark rim, which is the bug tests/compositor-effects.test.ts's edge assertion catches.
-import type { EffectPass } from "./pass.js";
+import { numParam, type EffectPass } from "./pass.js";
 
 export const gradePass: EffectPass = {
   name: "grade",
@@ -19,8 +19,8 @@ void main() {
   kino_frag = kinoPremul(vec4(clamp(c, 0.0, 1.0), src.a));
 }`,
   uniforms(gl, loc, params) {
-    gl.uniform1f(loc.uBrightness, Number(params.brightness ?? 1));
-    gl.uniform1f(loc.uContrast, Number(params.contrast ?? 1));
-    gl.uniform1f(loc.uSaturation, Number(params.saturation ?? 1));
+    gl.uniform1f(loc.uBrightness, numParam(params, "brightness", 1, 0, 8));
+    gl.uniform1f(loc.uContrast, numParam(params, "contrast", 1, 0, 8));
+    gl.uniform1f(loc.uSaturation, numParam(params, "saturation", 1, 0, 8));
   },
 };

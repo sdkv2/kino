@@ -1,5 +1,5 @@
 // Barrel/pincushion distortion with per-channel chromatic aberration.
-import type { EffectPass } from "./pass.js";
+import { numParam, type EffectPass } from "./pass.js";
 
 export const lensPass: EffectPass = {
   name: "lens",
@@ -27,7 +27,7 @@ void main() {
     1.0);
 }`,
   uniforms(gl, loc, params) {
-    gl.uniform1f(loc.uDistortion, Number(params.distortion ?? 0));
-    gl.uniform1f(loc.uChroma, Number(params.chroma ?? 0));
+    gl.uniform1f(loc.uDistortion, numParam(params, "distortion", 0, -1, 1));
+    gl.uniform1f(loc.uChroma, numParam(params, "chroma", 0, 0, 1));
   },
 };

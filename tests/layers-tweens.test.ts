@@ -202,3 +202,53 @@ describe("logo geometry", () => {
     expect(layer(p, 0, "logo").opacity).toBe(1);
   });
 });
+
+describe("auto motion blur", () => {
+  // Opt-in: the author asks for motionBlur with `auto`, and layersAt fills in angle/distance/
+  // radial from how far this layer actually moved since the previous frame. Static params can't
+  // express a punch — they would smear the whole beat instead of just the fast frames.
+  const punch = [
+    { at: 0, params: { scale: 1.0 } },
+    { at: 0.45, params: { scale: 1.0 }, ease: "hold" },
+    { at: 0.68, params: { scale: 1.18 }, ease: "overshoot" },
+  ];
+  const auto = [{ kind: "motionBlur", params: { auto: 1 } }];
+  const mb = (p: KinoProps, frame: number) =>
+    layer(p, frame, "seg0").effects.find((e) => e.kind === "motionBlur")!.params as Record<string, number>;
+
+  it("smears outward while a push-in is growing", () => {
+    const p = mk([vid({ startSec: 0, endSec: 4, zoomKeyframes: punch, effects: auto as any })]);
+    expect(mb(p, 15).radial).toBeGreaterThan(0); // frame 15 = 0.5s, early in the 0.45→0.68 punch
+  });
+
+  it("reverses the smear as an overshoot settles back", () => {
+    // easeOutBack sails past the target and returns. On the way back the camera is genuinely
+    // moving inward, so the smear has to invert — a blur that stayed outward would fight the move.
+    const p = mk([vid({ startSec: 0, endSec: 4, zoomKeyframes: punch, effects: auto as any })]);
+    expect(mb(p, 20).radial).toBeLessThan(0);
+  });
+
+  it("leaves the frame clean while the camera is parked", () => {
+    const p = mk([vid({ startSec: 0, endSec: 4, zoomKeyframes: punch, effects: auto as any })]);
+    const still = mb(p, 5); // inside the flat hold before the punch
+    expect(still.radial).toBe(0);
+    expect(still.distance).toBe(0);
+  });
+
+  it("derives a directional smear from a pan, not a radial one", () => {
+    const pan = [{ at: 0, params: { scale: 1, x: 0 } }, { at: 1, params: { scale: 1, x: 20 } }];
+    const p = mk([vid({ startSec: 0, endSec: 4, zoomKeyframes: pan, effects: auto as any })]);
+    const m = mb(p, 15);
+    expect(m.distance).toBeGreaterThan(0);
+    expect(m.radial).toBe(0);
+    expect(m.angle).toBeCloseTo(0, 1); // +x pan → 0 degrees
+  });
+
+  it("leaves a hand-authored motionBlur alone", () => {
+    const manual = [{ kind: "motionBlur", params: { angle: 45, distance: 12 } }];
+    const p = mk([vid({ startSec: 0, endSec: 4, zoomKeyframes: punch, effects: manual as any })]);
+    const m = mb(p, 20);
+    expect(m.angle).toBe(45);
+    expect(m.distance).toBe(12);
+  });
+});

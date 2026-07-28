@@ -1,5 +1,5 @@
 // Bright-pass, blur, add back. Additive light around the bright parts of a layer.
-import type { EffectPass } from "./pass.js";
+import { numParam, type EffectPass } from "./pass.js";
 
 export const glowPass: EffectPass = {
   name: "glow",
@@ -34,11 +34,11 @@ void main() {
   kino_frag = vec4(src.rgb + bloom, max(src.a, min(1.0, dot(bloom, vec3(0.333)))));
 }`,
   uniforms(gl, loc, params) {
-    gl.uniform1f(loc.uRadius, Number(params.radius ?? 8));
-    gl.uniform1f(loc.uIntensity, Number(params.intensity ?? 1));
+    gl.uniform1f(loc.uRadius, numParam(params, "radius", 8, 0, 256));
+    gl.uniform1f(loc.uIntensity, numParam(params, "intensity", 1, 0, 8));
     // 0.32 linear == 0.60 sRGB: the perceptual cut this pass had before compositing moved to
     // linear light. Thresholds are luminance in the working space, so the number had to move
     // even though the intent did not.
-    gl.uniform1f(loc.uThreshold, Number(params.threshold ?? 0.32));
+    gl.uniform1f(loc.uThreshold, numParam(params, "threshold", 0.32, 0, 1));
   },
 };

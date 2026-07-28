@@ -1,5 +1,5 @@
 // Cinematic finish as a post pass: edge vignette plus grain, both scaled by `intensity`.
-import type { EffectPass } from "./pass.js";
+import { numParam, type EffectPass } from "./pass.js";
 import { luminance } from "../../../../filmFinish.js";
 
 export const filmPass: EffectPass = {
@@ -39,7 +39,7 @@ void main() {
   kino_frag = vec4(kinoToLinear(clamp(c + g, 0.0, 1.0)), 1.0);
 }`,
   uniforms(gl, loc, params) {
-    const intensity = Number(params.intensity ?? 1);
+    const intensity = numParam(params, "intensity", 1, 0, 1);
     const night = String(params.night ?? "#0b1020");
     const light = luminance(night) > 0.5;
     gl.uniform1f(loc.uIntensity, intensity);

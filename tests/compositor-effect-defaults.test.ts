@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { glowPass } from "../src/render/native/page/compositor/effects/glow.js";
 import { bloomPass } from "../src/render/native/page/compositor/effects/bloom.js";
 import { motionBlurPass } from "../src/render/native/page/compositor/effects/motionBlur.js";
+import { blurPass } from "../src/render/native/page/compositor/effects/blur.js";
+import { gradePass } from "../src/render/native/page/compositor/effects/grade.js";
+import { lensPass } from "../src/render/native/page/compositor/effects/lens.js";
+import type { EffectPass } from "../src/render/native/page/compositor/effects/pass.js";
 
 // probeEffect's fixture is white on the left half, and white is 1.0 in both sRGB and linear — so
 // no pixel probe through that harness can tell the thresholds apart. Assert the defaults directly.
@@ -62,5 +66,57 @@ describe("motionBlur param clamps", () => {
     const { gl, loc, got } = capture();
     motionBlurPass.uniforms(gl, loc, { distance: 8, samples: 0 }, 0);
     expect(got.uSamples).toBe(1);
+  });
+});
+
+// Effect params reach a pass straight off the spec: validateSegmentFx checks the effect KIND and
+// that `params` is an object, but never the type of an individual value. So `{ radius: "wide" }`
+// arrives as a string, Number() turns it into NaN, and NaN flows to the GPU — where cos(NaN) or a
+// NaN radius paints undefined garbage instead of falling back to the documented default.
+describe("non-numeric params fall back to the default instead of reaching the GPU as NaN", () => {
+  const cases: Array<[string, EffectPass, Record<string, number | string>, string, number]> = [
+    ["blur radius", blurPass, { radius: "wide" }, "uRadius", 0],
+    ["glow radius", glowPass, { radius: "big" }, "uRadius", 8],
+    ["glow intensity", glowPass, { intensity: "loud" }, "uIntensity", 1],
+    ["grade brightness", gradePass, { brightness: "up" }, "uBrightness", 1],
+    ["grade contrast", gradePass, { contrast: "punchy" }, "uContrast", 1],
+    ["lens distortion", lensPass, { distortion: "warp" }, "uDistortion", 0],
+    ["motionBlur angle", motionBlurPass, { angle: "sideways", distance: 10 }, "uAngle", 0],
+    ["motionBlur distance", motionBlurPass, { distance: "far" }, "uDistance", 0],
+  ];
+
+  for (const [label, pass, params, uniform, expected] of cases) {
+    it(`${label} survives a non-numeric value`, () => {
+      const { gl, loc, got } = capture();
+      pass.uniforms(gl, loc, params, 0);
+      expect(got[uniform]).not.toBeNaN();
+      expect(got[uniform]).toBeCloseTo(expected, 5);
+    });
+  }
+});
+
+// A push-in is a SCALE change, so the pixels move radially outward from the zoom centre — not
+// along one fixed axis. Directional taps are right for a pan and wrong for a punch, so the pass
+// carries both and layersAt drives them from the layer's own frame-to-frame motion.
+describe("motionBlur radial term", () => {
+  it("defaults to 0 so a pure pan is unaffected", () => {
+    const { gl, loc, got } = capture();
+    motionBlurPass.uniforms(gl, loc, { distance: 8 }, 0);
+    expect(got.uRadial).toBe(0);
+  });
+
+  it("carries an authored radial amount", () => {
+    const { gl, loc, got } = capture();
+    motionBlurPass.uniforms(gl, loc, { radial: 0.04 }, 0);
+    expect(got.uRadial).toBeCloseTo(0.04, 5);
+  });
+
+  it("clamps radial and survives a non-numeric value", () => {
+    const { gl, loc, got } = capture();
+    motionBlurPass.uniforms(gl, loc, { radial: 99 }, 0);
+    expect(got.uRadial).toBe(1);
+    const b = capture();
+    motionBlurPass.uniforms(b.gl, b.loc, { radial: "lots" }, 0);
+    expect(b.got.uRadial).toBe(0);
   });
 });
