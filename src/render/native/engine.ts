@@ -22,7 +22,7 @@ import { extractDense, extractMaxDim, extractSparse, planMediaJobs, planMaskJobs
 import type { WorkerHandle } from "./workerHandle.js";
 import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.js";
 import { loadGpuCapture, resolveElectronCapture, useSharedTextureCapture, type CaptureKind } from "./electron/gpuCapture.js";
-import { FORMAT_DIMS, formatFileTag, maxOutputDim, type FormatId } from "../formats.js";
+import { DRAFT_SHORT_EDGE, FORMAT_DIMS, formatFileTag, maxOutputDim, scaledDims, type FormatId } from "../formats.js";
 import { capWorkers, bytesPerWorker } from "./workerCap.js";
 
 export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
@@ -89,6 +89,22 @@ function resolveShaderSS(
   if (Number.isFinite(e) && e >= 1 && e <= 4) return Math.round(e);
   if (opts?.mock || env.KINO_SHADER_DRAFT === "1") return 1;
   return opts?.quality === "very-high" ? 2 : 1;
+}
+
+/**
+ * Draft output resolution — the short edge, in px. A draft is a preview, so it renders the full
+ * composition onto a 720p-class surface: same layout, ~2.25× fewer pixels to shade, capture and
+ * encode. `KINO_DRAFT_EDGE=off` renders a draft at full size; a number sets a different edge.
+ */
+export function resolveDraftEdge(env: NodeJS.ProcessEnv = process.env): number | null {
+  const raw = env.KINO_DRAFT_EDGE;
+  if (raw == null || raw === "") return DRAFT_SHORT_EDGE;
+  if (/^(off|full|none|0)$/i.test(raw.trim())) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 64) {
+    throw new Error(`KINO_DRAFT_EDGE must be a pixel count >= 64, or "off" (got "${raw}")`);
+  }
+  return Math.round(n);
 }
 
 /** FXAA edge post-pass on every shader background — cheap analytic AA on top of SS, so silhouettes
@@ -403,6 +419,9 @@ async function pointServerAt(opts: {
   media: Record<string, MediaEntryNode>;
   width: number;
   height: number;
+  /** Output canvas, when it differs from the composition (draft). */
+  outWidth?: number;
+  outHeight?: number;
   total: number;
   shaderSS: number;
   shaderFXAA: boolean;
@@ -420,6 +439,8 @@ async function pointServerAt(opts: {
       props: opts.props,
       width: opts.width,
       height: opts.height,
+      outWidth: opts.outWidth ?? opts.width,
+      outHeight: opts.outHeight ?? opts.height,
       durationInFrames: opts.total,
       media: opts.media,
       shaderSS: opts.shaderSS,
@@ -441,13 +462,16 @@ export interface NativeRenderOpts {
   preset?: EncodePreset; // veryfast for mock/preview builds; medium (default) for finals
   /** Supersampling is opt-in — see resolveShaderSS. */
   quality?: QualityPreset;
+  /** Fast preview: SS=1 and a 720p-class output canvas (see resolveDraftEdge). Defaults to
+   *  `preset === "veryfast"`, which is how build.ts has always signalled a draft. */
+  draft?: boolean;
 }
 
 export function renderVideoNative(opts: NativeRenderOpts): Promise<string[]> {
   return withRenderLock(() => renderVideoLocked(opts));
 }
 
-async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium", quality }: NativeRenderOpts): Promise<string[]> {
+async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium", quality, draft }: NativeRenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = scratchDir("kino-native-");
   const t0 = Date.now();
@@ -481,8 +505,13 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     }
   }
   const slots = Array.from({ length: n }, (_, i) => i);
+  const isDraft = draft ?? preset === "veryfast";
   // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
-  const ss = resolveShaderSS(process.env, { mock: preset === "veryfast", quality });
+  const ss = resolveShaderSS(process.env, { mock: isDraft, quality });
+  // A draft also renders onto a smaller canvas — the composition is unchanged, it just lands on
+  // fewer pixels (`out`), so shading, capture and encode all shrink with it.
+  const draftEdge = isDraft ? resolveDraftEdge(process.env) : null;
+  const outDimsOf = (fmt: FormatId) => (draftEdge ? scaledDims(fmt, draftEdge) : DIMS[fmt]);
   const foMin = resolveMotionFoMin(process.env, quality);
   const fx = resolveShaderFXAA(process.env);
   // The electron host forces its own ANGLE backend (angle.ts). Report the real one: gpu and sw
@@ -490,8 +519,11 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   log.step(`gl: electron ANGLE/${angleBackend()} (forced)`);
   try {
     const endSec = total / props.fps;
+    // Footage only ever has to serve the largest surface it lands on — which is the draft canvas
+    // on a draft, so previews stop extracting (and decoding) 4K frames to paint 720p ones.
+    const maxOut = Math.max(...formats.map((f) => Math.max(outDimsOf(f).width, outDimsOf(f).height)));
     const [{ framesDir, media }, audio] = await Promise.all([
-      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOutputDim(formats), ss)),
+      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOut, ss)),
       buildAudioTrack(props, publicDir, endSec, scratch),
     ]);
     lap("media+audio");
@@ -499,11 +531,24 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     const outputs: string[] = [];
     try {
       for (const fmt of formats) {
+        // `width`/`height` are the composition; `canvas` is the surface it is rasterised onto.
+        // They differ only for a draft — everything downstream of the page (window, capture,
+        // encode, cache key) follows the canvas.
         const { width, height } = DIMS[fmt];
+        const canvas = outDimsOf(fmt);
+        // The motion raster deliberately does NOT follow the canvas. Measured on this spec,
+        // rasterising the FO at 0.667 was 17-33% SLOWER than at 1x: the downscale it saves
+        // (motion:normalize) costs 0.01ms/frame, while a fractional SVG raster scale drops
+        // Chromium onto a slower path. It would also cost the sub-pixel motion the 1x floor
+        // exists to protect. Fewer pixels is not automatically less work here.
+        if (canvas.width !== width || canvas.height !== height) {
+          log.step(`draft canvas: ${width}x${height} composition → ${canvas.width}x${canvas.height} output`);
+        }
         const requestedSource = resolveCaptureSource(process.env);
         const electronShared = useSharedTextureCapture();
         const server = await pointServerAt({
-          props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
+          props, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
+          total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
           captureCodec: electronShared ? "h264" : "jpeg",
           captureSource: requestedSource,
         });
@@ -515,7 +560,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
 
         const handles: WorkerHandle[] = await Promise.all(
           slots.map(async (i) => {
-            const h = await acquireElectronWorker(i, server.url, width, height, props.fps);
+            const h = await acquireElectronWorker(i, server.url, canvas.width, canvas.height, props.fps);
             electronKind ??= h.captureKind;
             return {
               seekAndCapture: async (frame: number) => {
@@ -550,8 +595,8 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           props,
           publicDir,
           pageJsHash: await getPageBundleHash(),
-          width,
-          height,
+          width: canvas.width,
+          height: canvas.height,
           total,
           fps: props.fps,
           shaderSS: ss,

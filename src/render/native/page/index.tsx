@@ -22,8 +22,13 @@ import type { CaptureSource } from "../captureSource.js";
 
 interface RenderConfig {
   props: KinoProps;
+  /** Composition size — what the frame is laid out in (captions, motion-graphic px, layer rects). */
   width: number;
   height: number;
+  /** Output canvas size. Absent → same as the composition. A draft sets it smaller: the frame is
+   *  still composed at width×height, then rasterised onto this surface. */
+  outWidth?: number;
+  outHeight?: number;
   durationInFrames: number;
   media: MediaMap;
   shaderSS?: number;
@@ -106,10 +111,15 @@ async function kinoLoad(): Promise<void> {
   document.documentElement.style.background = "#000";
   document.body.style.margin = "0";
   const container = document.getElementById("root")!;
+  const outW = cfg.outWidth ?? cfg.width;
+  const outH = cfg.outHeight ?? cfg.height;
+  // The container frames the CANVAS, not the composition: OSR paint capture grabs a window sized
+  // to the output, so a container at composition size would crop it. The staging DOM the rasters
+  // lay out in carries its own composition-sized box (Stage).
   Object.assign(container.style, {
     position: "relative",
-    width: `${cfg.width}px`,
-    height: `${cfg.height}px`,
+    width: `${outW}px`,
+    height: `${outH}px`,
     overflow: "hidden",
   });
   await syncFonts(cfg.props);
@@ -130,6 +140,7 @@ async function kinoLoad(): Promise<void> {
         <Stage
           props={cfg.props}
           dims={{ width: cfg.width, height: cfg.height }}
+          out={{ width: outW, height: outH }}
           media={cfg.media}
           scale={cfg.shaderSS ?? 2}
           onReady={(h) => {
@@ -144,8 +155,8 @@ async function kinoLoad(): Promise<void> {
   const cap = await initCapture({
     codec: cfg.captureCodec ?? "h264",
     captureSource: cfg.captureSource ?? "bitmap",
-    width: cfg.width,
-    height: cfg.height,
+    width: outW,
+    height: outH,
     fps: cfg.props.fps,
   });
   window.__kinoCaptureCodec = cap.codec;

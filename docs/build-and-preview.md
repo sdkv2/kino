@@ -74,6 +74,7 @@ WebGL2 on any backend, so run under `xvfb-run` on a headless box. `kino doctor` 
 | `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
 | `KINO_SHADER_FXAA=0` | Disable the default FXAA edge post-pass on shader backgrounds. |
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
+| `KINO_DRAFT_EDGE=<px>\|off` | Draft output short edge (default **720**). The composition is unchanged — a draft is the same frame on fewer pixels. `off` renders drafts at full size. |
 | `KINO_ELECTRON_CAPTURE=…` | Pin the capture backend: `shared`, `readback`, `direct`, `page` (default `auto`). |
 | `KINO_ELECTRON_ARGS="…"` | Extra Chromium flags for the render host. A `--use-angle` here overrides the platform default. |
 | `KINO_CONCURRENCY=N` | Render worker count. Auto default caps at 4; override for more VRAM/compute. Linux also bounds by probed VRAM and NVENC sessions (`KINO_VRAM_PER_WORKER`, `KINO_NVENC_SESSIONS`). |

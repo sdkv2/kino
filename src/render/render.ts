@@ -26,6 +26,9 @@ export interface RenderOpts {
   preset?: "medium" | "veryfast";
   /** Supersampling is opt-in: "very-high" renders the composite at 2×. Default "standard" (1×). */
   quality?: QualityPreset;
+  /** Fast preview: SS=1 plus a 720p-class output canvas. The composition is unchanged — it is the
+   *  same frame on fewer pixels. `KINO_DRAFT_EDGE=off` keeps a draft at full size. */
+  draft?: boolean;
 }
 
 export interface StillsOpts {

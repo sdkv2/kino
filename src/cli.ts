@@ -14,7 +14,7 @@ program.name("kino").description("Spec driven video development").version(KINO_V
 program
   .command("build <spec>")
   .description("Generate a video from a spec (vo → avatar → render)")
-  .option("--draft", "fast, free preview: silent VO + placeholder avatar + low-quality encode")
+  .option("--draft", "fast, free preview: silent VO + placeholder avatar + 720p canvas + low-quality encode")
   .option("--no-tts", "skip voiceover — full-quality SILENT render (music/SFX still play)")
   .option("--no-avatar", "skip the presenter — full-quality FACELESS render")
   .option("--mock", "alias of --draft (deprecated)")

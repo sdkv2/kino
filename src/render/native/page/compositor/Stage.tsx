@@ -28,12 +28,16 @@ export function createStage(
   dims: Dims,
   media: MediaMap,
   ss: number,
+  /** Output canvas. Defaults to the composition size; a draft passes a smaller surface, which
+   *  shrinks the pixels the whole stage is rasterised onto without touching the layout. */
+  out: Dims = dims,
 ): StageHandle {
-  const renderer = new StageRenderer(canvas, { width: dims.width, height: dims.height, ss });
-  const renderDims = { width: dims.width * ss, height: dims.height * ss };
+  const renderer = new StageRenderer(canvas, { width: out.width, height: out.height, ss, comp: dims });
+  const renderDims = { width: out.width * ss, height: out.height * ss };
   // Markup rasters lay out at composition size (see buildRegistry), so the supersample has to
   // come from the raster scale — an SS=2 composite wants its caption/motion SVGs drawn at 2×.
-  const rasterScale = ss;
+  // A draft rides the same lever the other way: comp px → fewer target px.
+  const rasterScale = (out.width * ss) / dims.width;
   const sources: Map<string, TextureSource> = buildRegistry(props, renderDims, dims, media, rasterScale);
   let prefetch: Promise<void> = Promise.resolve();
 
@@ -83,25 +87,28 @@ export const Stage: React.FC<{
   dims: Dims;
   media: MediaMap;
   scale: number;
+  /** Output canvas size; defaults to the composition size. */
+  out?: Dims;
   onReady: (handle: StageHandle) => void;
-}> = ({ props, dims, media, scale, onReady }) => {
+}> = ({ props, dims, media, scale, out, onReady }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stagingRef = useRef<HTMLDivElement>(null);
+  const outDims = out ?? dims;
 
   useLayoutEffect(() => {
     if (!canvasRef.current) return;
-    const handle = createStage(canvasRef.current, props, dims, media, scale);
+    const handle = createStage(canvasRef.current, props, dims, media, scale, outDims);
     onReady(handle);
     return () => handle.dispose();
-  }, [props, dims, media, scale, onReady]);
+  }, [props, dims, media, scale, outDims, onReady]);
 
   return (
     <>
       <canvas
         ref={canvasRef}
         id="kino-stage"
-        width={dims.width}
-        height={dims.height}
+        width={outDims.width}
+        height={outDims.height}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
       />
       <div
