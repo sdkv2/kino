@@ -50,10 +50,14 @@ export const lensPostEffect: MotionPostEffect = {
 
     const s = width > 0 ? sample.width / width : 1;
     const hr = host?.texRoot.getBoundingClientRect();
-    // Everything hoisted out of the raster, replayed in draw order beneath the plate.
     const hoisted = manifest.quads ?? [];
-    const paintHoisted = (c: CanvasRenderingContext2D, w: number, h: number) => {
+    const paintUnderlay = (c: CanvasRenderingContext2D, w: number, h: number) => {
       if (underlay) c.drawImage(underlay.img, 0, 0, w, h);
+    };
+    // Same order as the GPU node: quads paint ABOVE the sample plate (a quad nested in an opaque
+    // page can never show through from below), with the measured clip crop + corner radius. The
+    // two paths used to disagree here, so stills (CPU) QA'd a different z-order than videos (GPU).
+    const paintQuads = (c: CanvasRenderingContext2D) => {
       for (const q of hoisted) {
         const plate = quadPlates?.get(q.src);
         if (!plate) continue;
@@ -61,12 +65,36 @@ export const lensPostEffect: MotionPostEffect = {
         const ch = q.cell ? plate.img.naturalHeight / q.cell.rows : plate.img.naturalHeight;
         const sx = q.cell ? q.cell.col * cw : 0;
         const sy = q.cell ? q.cell.row * ch : 0;
-        c.drawImage(plate.img, sx, sy, cw, ch, q.relLeft * s, q.relTop * s, q.w * s, q.h * s);
+        const cr = q.crop;
+        const dx = q.relLeft * s;
+        const dy = q.relTop * s;
+        const dw = q.w * s;
+        const dh = q.h * s;
+        const r = (q.radius ?? 0) * s;
+        if (r > 0) {
+          c.save();
+          c.beginPath();
+          c.roundRect(dx, dy, dw, dh, r);
+          c.clip();
+        }
+        c.drawImage(
+          plate.img,
+          sx + (cr ? cr.u0 * cw : 0),
+          sy + (cr ? cr.v0 * ch : 0),
+          cr ? (cr.u1 - cr.u0) * cw : cw,
+          cr ? (cr.v1 - cr.v0) * ch : ch,
+          dx,
+          dy,
+          dw,
+          dh,
+        );
+        if (r > 0) c.restore();
       }
     };
 
-    paintHoisted(ctx, out.width, out.height);
+    paintUnderlay(ctx, out.width, out.height);
     ctx.drawImage(sample, 0, 0);
+    paintQuads(ctx);
     // The first lens refracts `sample`; with imagery hoisted out of the raster, `sample` alone is
     // a hole where it used to be, so refract the composited stack instead.
     let sampleForLens: HTMLCanvasElement = sample;
@@ -76,8 +104,9 @@ export const lensPostEffect: MotionPostEffect = {
       merged.height = out.height;
       const mc = merged.getContext("2d");
       if (mc) {
-        paintHoisted(mc, merged.width, merged.height);
+        paintUnderlay(mc, merged.width, merged.height);
         mc.drawImage(sample, 0, 0);
+        paintQuads(mc);
         sampleForLens = merged;
       }
     }

@@ -45,10 +45,13 @@ function blitQuads(
     const tex = quadTex(q.src);
     if (!tex) continue;
     // No cell → the whole bitmap; a cell selects one tile of a sprite sheet as the source rect.
+    // An ancestor-clip crop then windows WITHIN that source (q.relLeft/w already hold the
+    // clipped rect, so without the matching source crop a half-clipped quad would squash).
     const cw = q.cell ? tex.width / q.cell.cols : tex.width;
     const ch = q.cell ? tex.height / q.cell.rows : tex.height;
     const sx = q.cell ? q.cell.col * cw : 0;
     const sy = q.cell ? q.cell.row * ch : 0;
+    const c = q.crop;
     blitTexture(
       gl,
       dst,
@@ -58,12 +61,15 @@ function blitQuads(
       q.relTop * s,
       q.w * s,
       q.h * s,
-      sx,
-      sy,
-      cw,
-      ch,
+      sx + (c ? c.u0 * cw : 0),
+      sy + (c ? c.v0 * ch : 0),
+      c ? (c.u1 - c.u0) * cw : cw,
+      c ? (c.v1 - c.v0) * ch : ch,
       tex.width,
       tex.height,
+      1,
+      0,
+      (q.radius ?? 0) * s,
     );
   }
 }

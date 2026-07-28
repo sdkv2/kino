@@ -19,16 +19,26 @@ void main() {
 const BLIT_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uTex;
+uniform vec4 uDst;
 uniform vec4 uSrc;
 uniform float uFlipY;
 uniform float uOpacity;
 uniform float uAlphaCut;
+uniform float uCornerR;
 in vec2 vUv;
 out vec4 kino_frag;
 void main() {
   if (vUv.x > 1.001 || vUv.y > 1.001) discard;
   vec2 uv = uSrc.xy + vec2(vUv.x, uFlipY > 0.5 ? 1.0 - vUv.y : vUv.y) * uSrc.zw;
   vec4 s = texture(uTex, uv) * uOpacity;
+  // Rounded-rect coverage (hoisted quads carry the border-radius the raster used to clip with).
+  // SDF in dst px, ~1px AA edge; premultiplied source, so scaling all channels is correct.
+  if (uCornerR > 0.0) {
+    vec2 pc = (vUv - 0.5) * uDst.zw;
+    vec2 q = abs(pc) - (uDst.zw * 0.5 - vec2(uCornerR));
+    float d = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - uCornerR;
+    s *= clamp(0.5 - d, 0.0, 1.0);
+  }
   // Chrome over glass: FO AA fringe is partial-alpha dark. Discard it (keep glass);
   // force near-opaque texels to a=1 so they don't darken the mirror underneath.
   if (uAlphaCut > 0.0) {
@@ -48,11 +58,12 @@ interface BlitProgram {
   uFlipY: WebGLUniformLocation | null;
   uOpacity: WebGLUniformLocation | null;
   uAlphaCut: WebGLUniformLocation | null;
+  uCornerR: WebGLUniformLocation | null;
 }
 
 const programs = new WeakMap<WebGL2RenderingContext, BlitProgram | null>();
 // Bump when BLIT_FRAG/VERT changes — WeakMap otherwise keeps a stale linked program on reused GL.
-const BLIT_PROG_VER = 13;
+const BLIT_PROG_VER = 14;
 const programVer = new WeakMap<WebGL2RenderingContext, number>();
 
 function blitProgram(gl: WebGL2RenderingContext): BlitProgram | null {
@@ -82,6 +93,7 @@ function blitProgram(gl: WebGL2RenderingContext): BlitProgram | null {
         uFlipY: gl.getUniformLocation(prog, "uFlipY"),
         uOpacity: gl.getUniformLocation(prog, "uOpacity"),
         uAlphaCut: gl.getUniformLocation(prog, "uAlphaCut"),
+        uCornerR: gl.getUniformLocation(prog, "uCornerR"),
       };
     }
   }
@@ -143,7 +155,9 @@ export function uploadCanvas(gl: WebGL2RenderingContext, src: CanvasImageSource)
 }
 
 /** Blit a texture sub-rect into a destination FBO rect. `flipY`: 0 = uploaded, 1 = rendered target.
- *  `alphaCut` > 0: discard low-alpha FO fringe (kills black seams on glass) and force opaque. */
+ *  `alphaCut` > 0: discard low-alpha FO fringe (kills black seams on glass) and force opaque.
+ *  `cornerRadius` > 0 (dst px): rounded-rect coverage mask — hoisted quads carry the radius the
+ *  raster's overflow clip used to apply. */
 export function blitTexture(
   gl: WebGL2RenderingContext,
   dst: GpuFbo,
@@ -161,6 +175,7 @@ export function blitTexture(
   texH: number,
   opacity = 1,
   alphaCut = 0,
+  cornerRadius = 0,
 ): void {
   const p = blitProgram(gl);
   if (!p || dstW < 1 || dstH < 1) return;
@@ -185,6 +200,7 @@ export function blitTexture(
   gl.uniform1f(p.uFlipY, flipY);
   gl.uniform1f(p.uOpacity, opacity);
   gl.uniform1f(p.uAlphaCut, alphaCut);
+  gl.uniform1f(p.uCornerR, cornerRadius);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, srcTex);
   gl.uniform1i(p.uTex, 0);

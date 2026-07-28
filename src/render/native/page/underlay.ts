@@ -112,12 +112,21 @@ export const QUAD_SELECTOR = ".kino-quad";
 
 export interface HoistedQuad {
   src: string;
-  /** Composition-px rect relative to the tex root — scaled to layer px at composite time. */
+  /** VISIBLE composition-px rect relative to the tex root — already intersected with every
+   *  overflow-clipping ancestor, scaled to layer px at composite time. */
   relLeft: number;
   relTop: number;
   w: number;
   h: number;
   cell?: { col: number; row: number; cols: number; rows: number };
+  /** Normalized sub-window of the element's source that the visible rect shows. Present only
+   *  when an ancestor clip cut the element — composes with `cell` (crop within the cell). */
+  crop?: { u0: number; v0: number; u1: number; v1: number };
+  /** Corner radius in composition px: the element's own border-radius, or a clipping ancestor's
+   *  when the element fills it edge-to-edge (the `.thumb > .kino-quad{inset:0}` pattern). A quad
+   *  partially covering a rounded clip ancestor keeps square corners — one radius cannot express
+   *  that; give the quad element the radius itself if it matters. */
+  radius?: number;
 }
 
 function parseCell(raw: string | null): HoistedQuad["cell"] {
@@ -129,6 +138,17 @@ function parseCell(raw: string | null): HoistedQuad["cell"] {
   return { col, row, cols, rows };
 }
 
+function ownRadiusPx(el: HTMLElement): number {
+  const r = parseFloat(getComputedStyle(el).borderTopLeftRadius);
+  return Number.isFinite(r) && r > 0 ? r : 0;
+}
+
+const clips = (v: string) => v !== "visible";
+
+/** Rects equal within a px — "the quad fills its rounded clip parent" detector. */
+const rectsMatch = (a: DOMRect, b: DOMRect) =>
+  Math.abs(a.left - b.left) <= 1 && Math.abs(a.top - b.top) <= 1 && Math.abs(a.right - b.right) <= 1 && Math.abs(a.bottom - b.bottom) <= 1;
+
 export function measureHoistedQuads(texRoot: HTMLElement, hostRect: DOMRect): HoistedQuad[] {
   const out: HoistedQuad[] = [];
   for (const el of Array.from(texRoot.querySelectorAll<HTMLElement>(QUAD_SELECTOR))) {
@@ -137,13 +157,55 @@ export function measureHoistedQuads(texRoot: HTMLElement, hostRect: DOMRect): Ho
     const r = el.getBoundingClientRect();
     // A collapsed or display:none quad measures 0 — skip rather than blit a degenerate rect.
     if (r.width < 1 || r.height < 1) continue;
+
+    // The raster clipped hoisted imagery via ancestor overflow (a thumbnail row scrolled past a
+    // window edge); the GPU blit has no idea, so the clip has to be baked into the measured rect
+    // — and mirrored into a source crop, or a half-clipped quad would squash its full bitmap
+    // into the remaining sliver. Rect intersection only: axis-aligned motion contract, ancestor
+    // border-radius is honoured just for the fills-it-exactly case (see HoistedQuad.radius).
+    let radius = ownRadiusPx(el);
+    let left = r.left;
+    let top = r.top;
+    let right = r.right;
+    let bottom = r.bottom;
+    for (let a = el.parentElement; a && a !== texRoot.parentElement; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (clips(cs.overflowX) || clips(cs.overflowY)) {
+        const ar = a.getBoundingClientRect();
+        if (clips(cs.overflowX)) {
+          left = Math.max(left, ar.left);
+          right = Math.min(right, ar.right);
+        }
+        if (clips(cs.overflowY)) {
+          top = Math.max(top, ar.top);
+          bottom = Math.min(bottom, ar.bottom);
+        }
+        const ra = ownRadiusPx(a);
+        if (ra > radius && rectsMatch(ar, r)) radius = ra;
+      }
+      if (a === texRoot) break;
+    }
+    const w = right - left;
+    const h = bottom - top;
+    if (w < 1 || h < 1) continue;
+
+    const fullyVisible = left === r.left && top === r.top && right === r.right && bottom === r.bottom;
     out.push({
       src,
-      relLeft: r.left - hostRect.left,
-      relTop: r.top - hostRect.top,
-      w: r.width,
-      h: r.height,
+      relLeft: left - hostRect.left,
+      relTop: top - hostRect.top,
+      w,
+      h,
       cell: parseCell(el.getAttribute("data-cell")),
+      crop: fullyVisible
+        ? undefined
+        : {
+            u0: (left - r.left) / r.width,
+            v0: (top - r.top) / r.height,
+            u1: (right - r.left) / r.width,
+            v1: (bottom - r.top) / r.height,
+          },
+      radius: radius > 0 ? radius : undefined,
     });
   }
   return out;
