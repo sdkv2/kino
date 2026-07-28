@@ -49,27 +49,34 @@ describe("film pass", () => {
   }, 240000);
 });
 
-async function probeGrain(night: string, intensity: number, level: number, ss = 1) {
-  return glProbe<[string, number, number, number], { spread: number; adjacentDiff: number }>({
+async function probeGrain(night: string, intensity: number, level: number, ss = 1, extra: Record<string, number> = {}) {
+  return glProbe<[string, number, number, number, Record<string, number>], { spread: number; adjacentDiff: number }>({
     entry: "src/render/native/page/compositor/effects/index.ts",
     globalName: "KinoFx",
     html: `<!doctype html><body><canvas id="c" width="128" height="128"></canvas></body>`,
-    fn: (night, intensity, level, ss) =>
-      (window as any).KinoFx.probeGrain(document.getElementById("c") as HTMLCanvasElement, night, intensity, level, ss),
-    args: [night, intensity, level, ss],
+    fn: (night, intensity, level, ss, extra) =>
+      (window as any).KinoFx.probeGrain(document.getElementById("c") as HTMLCanvasElement, night, intensity, level, ss, extra),
+    args: [night, intensity, level, ss, extra],
   });
 }
 
-// Grain that is an independent random value per pixel is not film grain — it is the signature of
-// sensor noise and compression. Real grain has a clump size and is a function of exposure, so it
-// lives in the midtones and thins out toward both flat black and blown white.
-describe("film grain reads as grain, not as digital noise", () => {
-  it("has a clump size — neighbouring pixels are correlated, not independent", async () => {
+// Calibrated against a real 35mm ProRes plate (4096x2160, area-scaled to our delivery size).
+// Measured on that reference: autocorrelation collapses at lag 1, so grain is per-pixel at this
+// resolution; a flat midtone measures a spread of ~3.2 at 8-bit; and it is a function of exposure,
+// so it lives in the midtones and thins toward both flat black and blown white.
+describe("film grain matches the measured 35mm reference", () => {
+  it("is per-pixel by default, as real grain is at 1080-class delivery", async () => {
     const { spread, adjacentDiff } = await probeGrain("#0b1020", 1, 0.5);
     expect(spread).toBeGreaterThan(1); // grain is actually present to measure
-    // Independent per-pixel noise steps as far between neighbours as its overall spread.
-    expect(adjacentDiff / spread).toBeLessThan(0.8);
+    // The reference collapses at lag 1; independent neighbours put this ratio near 1, not below it.
+    expect(adjacentDiff / spread).toBeGreaterThan(0.9);
   }, 120000);
+
+  it("grainSize clumps the field when a codec-friendly grain is wanted", async () => {
+    const fine = await probeGrain("#0b1020", 1, 0.5, 1, {});
+    const coarse = await probeGrain("#0b1020", 1, 0.5, 1, { grainSize: 3 });
+    expect(coarse.adjacentDiff / coarse.spread).toBeLessThan(fine.adjacentDiff / fine.spread * 0.7);
+  }, 240000);
 
   it("thins out in flat blacks, where uniform noise reads as compression", async () => {
     const shadow = await probeGrain("#0b1020", 1, 0.02);
@@ -86,8 +93,8 @@ describe("film grain reads as grain, not as digital noise", () => {
   it("keeps the same clump size when the stage is supersampled", async () => {
     // film runs BEFORE the ss resolve, so without compensation a 2x render halves the grain size
     // and the finish silently changes with --quality.
-    const one = await probeGrain("#0b1020", 1, 0.5, 1);
-    const two = await probeGrain("#0b1020", 1, 0.5, 2);
+    const one = await probeGrain("#0b1020", 1, 0.5, 1, { grainSize: 3 });
+    const two = await probeGrain("#0b1020", 1, 0.5, 2, { grainSize: 3 });
     expect(two.adjacentDiff / two.spread).toBeCloseTo(one.adjacentDiff / one.spread, 1);
   }, 240000);
 });

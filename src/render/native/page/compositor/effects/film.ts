@@ -2,17 +2,24 @@
 import { numParam, type EffectPass } from "./pass.js";
 import { luminance } from "../../../../filmFinish.js";
 
-// Grain clump size in OUTPUT pixels. Around two is the sweet spot at 1080-class delivery: big
-// enough to survive a codec as texture rather than being smeared into mush, small enough to stay
-// grain rather than becoming visible speckle.
-const GRAIN_PX = 2.2;
-// Midtone amplitude. Deliberately below the level the old flat-noise finish sat at: once grain
-// has structure and lands only where film puts it, far less of it reads as far more. `grain`
-// scales this for anyone who wants a heavier stock.
-const GRAIN_GAIN = 1.15;
-// Frames a grain field persists. A fresh field every frame at 30fps boils — real stock does
-// change per frame, but it was shot at 24 and through a lens, so the eye reads per-frame digital
-// noise as buzz. Holding two frames settles it without freezing it.
+// Grain size in OUTPUT pixels. 1 means one grain per pixel.
+//
+// Measured against a real 35mm ProRes plate (4096x2160, area-scaled to our delivery size): the
+// horizontal autocorrelation of real grain collapses at lag 1 — correlation -0.03 — so at
+// 1080-class delivery film grain IS per-pixel. An earlier guess at 2.2 here was wrong; what made
+// the old finish read as compression was its AMOUNT and its presence in flat blacks, not its
+// fineness. Above 1 the field is interpolated on a coarser lattice, which trades accuracy for
+// surviving a low-bitrate codec — grain this fine is the first thing H.264 destroys.
+const GRAIN_SIZE = 1.0;
+// Midtone amplitude, tuned so a flat midtone measures the same spread as the real 35mm plate
+// (~3.2 at 8-bit). The old finish sat at ~6.9 — a bit over twice real film, which is most of why
+// it read as noise. `grain` scales this for anyone who wants a heavier stock.
+const GRAIN_GAIN = 0.545;
+// Frames a grain field persists. NOTE this is a deliberate stylistic departure: the real plate
+// measures a frame-to-frame correlation of 0.002, i.e. a completely fresh field every frame, as
+// you would expect from a different piece of stock each time. Holding two frames halves that
+// rate, which calms the boil at 30fps at the cost of accuracy. Set grainHold: 1 for what film
+// actually does.
 const GRAIN_HOLD = 2;
 
 export const filmPass: EffectPass = {
@@ -71,7 +78,13 @@ void main() {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   float density = smoothstep(0.02, 0.45, l) * (1.0 - smoothstep(0.72, 1.0, l));
 
-  float g = (kinoGrainField(gl_FragCoord.xy / uGrainScale, floor(uFrame / uGrainHold)) - 0.5) * uGrain * density;
+  // At size 1 the lattice IS the pixel grid, so sample the hash directly — going through the
+  // interpolator would blend four taps and correlate neighbours that real grain does not.
+  float seed = floor(uFrame / uGrainHold);
+  float n = uGrainScale <= 1.0
+    ? kinoGrain(floor(gl_FragCoord.xy), seed)
+    : kinoGrainField(gl_FragCoord.xy / uGrainScale, seed);
+  float g = (n - 0.5) * uGrain * density;
   kino_frag = vec4(kinoToLinear(clamp(c + g, 0.0, 1.0)), 1.0);
 }`,
   uniforms(gl, loc, params) {
@@ -88,7 +101,7 @@ void main() {
     // GRAIN_GAIN puts the midtone amplitude back where the flat-noise version had it, so the
     // finish is as present as before — just structured, and in the right tones.
     gl.uniform1f(loc.uGrain, (light ? 0.05 : 0.09) * intensity * GRAIN_GAIN * numParam(params, "grain", 1, 0, 4));
-    gl.uniform1f(loc.uGrainScale, GRAIN_PX * ss);
+    gl.uniform1f(loc.uGrainScale, numParam(params, "grainSize", GRAIN_SIZE, 1, 8) * ss);
     gl.uniform1f(loc.uGrainHold, numParam(params, "grainHold", GRAIN_HOLD, 1, 8));
   },
 };
