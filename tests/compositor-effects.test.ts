@@ -57,3 +57,26 @@ describe("glow", () => {
     expect(outside).toBe(0);
   }, 300000);
 });
+
+describe("motionBlur", () => {
+  it("spreads a hard edge along the smear axis — the pixel beside the edge gains value", async () => {
+    const [atEdge] = await probe("motionBlur", { angle: 0, distance: 8, samples: 8 });
+    expect(atEdge).toBeGreaterThan(10);
+    expect(atEdge).toBeLessThan(245);
+  }, 300000);
+
+  it("angle 90 smears vertically — a vertical hard edge stays hard", async () => {
+    const [atEdge] = await probe("motionBlur", { angle: 90, distance: 8, samples: 8 });
+    expect(atEdge === 0 || atEdge === 255).toBe(true);
+  }, 300000);
+
+  it("distance 0 leaves the edge hard", async () => {
+    const [atEdge] = await probe("motionBlur", { angle: 0, distance: 0, samples: 8 });
+    expect(atEdge === 0 || atEdge === 255).toBe(true);
+  }, 300000);
+
+  it("does not darken the edge of a soft shape — premultiply handled correctly", async () => {
+    const [, , , edgeDelta] = await probe("motionBlur", { angle: 0, distance: 8, samples: 8 });
+    expect(edgeDelta).toBeLessThan(6);
+  }, 300000);
+});

@@ -7,6 +7,7 @@ import { glowPass } from "./glow.js";
 import { bloomPass } from "./bloom.js";
 import { lensPass } from "./lens.js";
 import { filmPass } from "./film.js";
+import { motionBlurPass } from "./motionBlur.js";
 
 registerPass(blurPass);
 registerPass(gradePass);
@@ -14,10 +15,11 @@ registerPass(glowPass);
 registerPass(bloomPass);
 registerPass(lensPass);
 registerPass(filmPass);
+registerPass(motionBlurPass);
 
 export { registerPass, runChain, getPass };
 export type { EffectPass };
-export { blurPass, gradePass, glowPass, bloomPass, lensPass, filmPass };
+export { blurPass, gradePass, glowPass, bloomPass, lensPass, filmPass, motionBlurPass };
 
 /** Test hook. Renders a half-white / half-transparent source with a soft-edged coloured band,
  *  runs one effect, and reads back four numbers:
