@@ -103,7 +103,7 @@ jobs:
             & $exe.FullName -version
           }
       # prepare script runs tsc + page bundle during npm ci, so dist/ is built here
-      - run: npm ci
+      - run: npm ci --allow-git=all
       # One render worker per render call, not cpus-1. vitest runs test files in parallel and each
       # render call otherwise claims its own pool of workers — on a 4-core runner that is a dozen
       # offscreen windows at once, every one of them rasterising WebGL in software (SwiftShader,

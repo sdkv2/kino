@@ -20,6 +20,6 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest # trusted publishing needs npm >= 11.5.1
-      - run: npm ci
+      - run: npm ci --allow-git=all
       - run: npm run build
       - run: npm publish --access public --loglevel http # auth via OIDC, provenance automatic
