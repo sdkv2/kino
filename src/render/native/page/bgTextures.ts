@@ -105,7 +105,15 @@ export function seekVideo(vid: HTMLVideoElement, t: number): Promise<void> {
   });
 }
 
-async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
+// ponytail: one @font-face block per theme per process — font bytes never change mid-render.
+const fontFaceCache = new Map<string, string>();
+
+/** Pure cache key: theme font paths determine the inlined @font-face CSS bytes. */
+export function fontFaceCacheKey(theme: Pick<KinoProps["theme"], "fontUrl" | "labelFontUrl">): string {
+  return `${theme.fontUrl ?? ""}\0${theme.labelFontUrl ?? ""}`;
+}
+
+async function buildFontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   const faces: string[] = [];
   const inline = async (family: string, rel: string | null | undefined) => {
     if (!rel) return;
@@ -124,6 +132,24 @@ async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   await inline("KinoBrandFont", theme.fontUrl);
   await inline("KinoLabelFont", theme.labelFontUrl);
   return faces.join("");
+}
+
+async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
+  const key = fontFaceCacheKey(theme);
+  const hit = fontFaceCache.get(key);
+  if (hit !== undefined) {
+    prof.addSample("tpl:fontCssHit", 1);
+    return hit;
+  }
+  prof.addSample("tpl:fontCssMiss", 1);
+  const css = await buildFontFaceCss(theme);
+  fontFaceCache.set(key, css);
+  return css;
+}
+
+/** Unit tests only — clears the process-lifetime font CSS cache. */
+export function resetFontFaceCacheForTests(): void {
+  fontFaceCache.clear();
 }
 
 export function paletteVars(theme: KinoProps["theme"]): string {
