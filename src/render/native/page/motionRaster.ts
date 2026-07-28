@@ -234,16 +234,17 @@ async function rasterMotionPlates(
       scale: foScale,
       defs,
     }));
-  const sampleScrub = LENS_SAMPLE_SCRUB + (scrubs?.sampleExtra ?? "");
+  const sampleScrub = LENS_SAMPLE_SCRUB + (scrubs?.sampleExtra ?? "") + (scrubs?.sampleNoLayout ?? "");
+  const chromeScrub = LENS_CHROME_SCRUB + (scrubs?.chromeNoLayout ?? "");
   // No `full` raster here: this is the lens-post path, and both lens composites (GPU node and
   // CPU mirror fallback) rebuild the frame from sample+chrome(+foreground). A full-scene pass
   // would re-decode the same image payload a fourth time for pixels nothing samples.
   const [sample, chrome, foreground] = await prof.awaited("motion:plates", () =>
     Promise.all([
       rasterAt(tpl, "sample", motionCss(vars, sampleScrub), null),
-      rasterAt(tpl, "chrome", motionCss(vars, LENS_CHROME_SCRUB), null),
+      rasterAt(tpl, "chrome", motionCss(vars, chromeScrub), null),
       scrubs?.hasForeground
-        ? rasterAt(tpl, "foreground", motionCss(vars, scrubs.foregroundScrub), null)
+        ? rasterAt(tpl, "foreground", motionCss(vars, scrubs.foregroundScrub + scrubs.foregroundNoLayout), null)
         : Promise.resolve(null),
     ]),
   );
@@ -308,6 +309,11 @@ export async function prepareMotionFrameBundle(
   const scrubs = lensHost
     ? prof.sync("motion:scrubs", () => buildLensPlateScrubs(lensHost.texRoot, lensHost.stack))
     : undefined;
+  if (scrubs) {
+    prof.addSample("motion:nolayout:sample", scrubs.noLayoutCounts.sample);
+    prof.addSample("motion:nolayout:chrome", scrubs.noLayoutCounts.chrome);
+    prof.addSample("motion:nolayout:foreground", scrubs.noLayoutCounts.foreground);
+  }
   // After the manifest and scrubs (which need the intact tree), before serialisation: an
   // SVG-as-image decodes every referenced image regardless of visibility, so anything that
   // produces no boxes is pure decode cost. Engine-side because a proc author cannot see it.
