@@ -76,7 +76,7 @@ WebGL2 on any backend, so run under `xvfb-run` on a headless box. `kino doctor` 
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
 | `KINO_ELECTRON_CAPTURE=…` | Pin the capture backend: `shared`, `readback`, `direct`, `page` (default `auto`). |
 | `KINO_ELECTRON_ARGS="…"` | Extra Chromium flags for the render host. A `--use-angle` here overrides the platform default. |
-| `KINO_CONCURRENCY=N` | Render worker count (default cap 4, further bounded by VRAM on Linux). |
+| `KINO_CONCURRENCY=N` | Render worker count. Auto default caps at 4; override for more VRAM/compute. Linux also bounds by probed VRAM and NVENC sessions (`KINO_VRAM_PER_WORKER`, `KINO_NVENC_SESSIONS`). |
 
 Example: `KINO_ELECTRON_ARGS="--use-angle=swiftshader-webgl --enable-unsafe-swiftshader" kino build specs/foo.json --mock`
 pins SwiftShader, the bit-stable path to use when output must match byte-for-byte across machines.

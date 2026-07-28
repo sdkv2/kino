@@ -32,7 +32,7 @@ export function resolveFilmPass(post: PostFx | undefined, theme: Theme, ss = 1):
   const intensity = params?.intensity ?? theme.film ?? 1;
   if (intensity <= 0) return [];
   const pass = getPass("film");
-  return pass ? [{ pass, params: { intensity, night: theme.night, ss } }] : [];
+  return pass ? [{ pass, params: { ...params, intensity, night: theme.night, ss } }] : [];
 }
 
 /**

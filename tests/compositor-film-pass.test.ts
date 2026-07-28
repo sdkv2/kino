@@ -91,3 +91,43 @@ describe("film grain reads as grain, not as digital noise", () => {
     expect(two.adjacentDiff / two.spread).toBeCloseTo(one.adjacentDiff / one.spread, 1);
   }, 240000);
 });
+
+async function probeGrainAt(extra: Record<string, number>, frame: number) {
+  return glProbe<[Record<string, number>, number], { spread: number; adjacentDiff: number; samples: number[] }>({
+    entry: "src/render/native/page/compositor/effects/index.ts",
+    globalName: "KinoFx",
+    html: `<!doctype html><body><canvas id="c" width="128" height="128"></canvas></body>`,
+    fn: (extra, frame) =>
+      (window as any).KinoFx.probeGrain(document.getElementById("c") as HTMLCanvasElement, "#0b1020", 1, 0.5, 1, extra, frame),
+    args: [extra, frame],
+  });
+}
+
+// Grain that re-randomises completely every frame boils. Real stock does change per frame, but at
+// 30fps an independent field each time reads as buzz, so the default holds the field for a couple
+// of frames and the author can speed it back up.
+describe("grain moves slowly by default and is dialable", () => {
+  it("holds the same field across consecutive frames by default", async () => {
+    const a = await probeGrainAt({}, 0);
+    const b = await probeGrainAt({}, 1);
+    expect(b.samples).toEqual(a.samples);
+  }, 240000);
+
+  it("still advances — it holds, it does not freeze", async () => {
+    const a = await probeGrainAt({}, 0);
+    const c = await probeGrainAt({}, 2);
+    expect(c.samples).not.toEqual(a.samples);
+  }, 240000);
+
+  it("grainHold 1 restores a fresh field every frame", async () => {
+    const a = await probeGrainAt({ grainHold: 1 }, 0);
+    const b = await probeGrainAt({ grainHold: 1 }, 1);
+    expect(b.samples).not.toEqual(a.samples);
+  }, 240000);
+
+  it("grain scales the amount, so a heavier finish is one number", async () => {
+    const base = await probeGrainAt({}, 3);
+    const heavy = await probeGrainAt({ grain: 2.5 }, 3);
+    expect(heavy.spread).toBeGreaterThan(base.spread * 2);
+  }, 240000);
+});

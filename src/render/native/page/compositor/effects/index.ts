@@ -88,7 +88,9 @@ export function probeGrain(
   intensity: number,
   level: number,
   ss = 1,
-): { spread: number; adjacentDiff: number } {
+  extra: Record<string, number> = {},
+  frame = 7,
+): { spread: number; adjacentDiff: number; samples: number[] } {
   const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true })!;
   const pool = new TargetPool();
   // film runs before the supersample resolve, so the pass sees RENDER pixels. Reproduce that here
@@ -101,7 +103,7 @@ export function probeGrain(
   gl.viewport(0, 0, src.w, src.h);
   gl.clearColor(level, level, level, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  const out = runChain(gl, pool, src, [{ pass: getPass("film")!, params: { intensity, night, ss } }], 7);
+  const out = runChain(gl, pool, src, [{ pass: getPass("film")!, params: { ...extra, intensity, night, ss } }], frame);
 
   const n = 48;
   const y0 = Math.floor(rh / 2);
@@ -125,7 +127,7 @@ export function probeGrain(
 
   pool.release(src);
   if (out !== src) pool.release(out);
-  return { spread, adjacentDiff };
+  return { spread, adjacentDiff, samples: v };
 }
 
 /** Test hook: white source through the film pass — centre, corner, grain spread on a flat patch. */

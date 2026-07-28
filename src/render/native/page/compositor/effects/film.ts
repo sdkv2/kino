@@ -6,17 +6,24 @@ import { luminance } from "../../../../filmFinish.js";
 // enough to survive a codec as texture rather than being smeared into mush, small enough to stay
 // grain rather than becoming visible speckle.
 const GRAIN_PX = 2.2;
-// Interpolating the lattice costs roughly half the spread of raw per-pixel noise; this restores it.
-const GRAIN_GAIN = 2.0;
+// Midtone amplitude. Deliberately below the level the old flat-noise finish sat at: once grain
+// has structure and lands only where film puts it, far less of it reads as far more. `grain`
+// scales this for anyone who wants a heavier stock.
+const GRAIN_GAIN = 1.15;
+// Frames a grain field persists. A fresh field every frame at 30fps boils — real stock does
+// change per frame, but it was shot at 24 and through a lens, so the eye reads per-frame digital
+// noise as buzz. Holding two frames settles it without freezing it.
+const GRAIN_HOLD = 2;
 
 export const filmPass: EffectPass = {
   name: "film",
-  uniformNames: ["uIntensity", "uLight", "uGrain", "uGrainScale"],
+  uniformNames: ["uIntensity", "uLight", "uGrain", "uGrainScale", "uGrainHold"],
   frag: `
 uniform float uIntensity;
 uniform float uLight;
 uniform float uGrain;
 uniform float uGrainScale;
+uniform float uGrainHold;
 
 float kinoGrain(vec2 p, float f) {
   return fract(sin(dot(p + f * 17.0, vec2(127.1, 311.7))) * 43758.5453123);
@@ -64,7 +71,7 @@ void main() {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   float density = smoothstep(0.02, 0.45, l) * (1.0 - smoothstep(0.72, 1.0, l));
 
-  float g = (kinoGrainField(gl_FragCoord.xy / uGrainScale, uFrame) - 0.5) * uGrain * density;
+  float g = (kinoGrainField(gl_FragCoord.xy / uGrainScale, floor(uFrame / uGrainHold)) - 0.5) * uGrain * density;
   kino_frag = vec4(kinoToLinear(clamp(c + g, 0.0, 1.0)), 1.0);
 }`,
   uniforms(gl, loc, params) {
@@ -80,7 +87,8 @@ void main() {
     // Interpolating the lattice halves the noise's spread, and the density curve removes more.
     // GRAIN_GAIN puts the midtone amplitude back where the flat-noise version had it, so the
     // finish is as present as before — just structured, and in the right tones.
-    gl.uniform1f(loc.uGrain, (light ? 0.05 : 0.09) * intensity * GRAIN_GAIN);
+    gl.uniform1f(loc.uGrain, (light ? 0.05 : 0.09) * intensity * GRAIN_GAIN * numParam(params, "grain", 1, 0, 4));
     gl.uniform1f(loc.uGrainScale, GRAIN_PX * ss);
+    gl.uniform1f(loc.uGrainHold, numParam(params, "grainHold", GRAIN_HOLD, 1, 8));
   },
 };

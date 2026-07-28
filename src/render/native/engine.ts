@@ -147,18 +147,8 @@ export function resolveCaptureSource(env: NodeJS.ProcessEnv = process.env): Capt
   return "bitmap";
 }
 
-// Binding resource is GPU memory / Metal, not CPU cores, so the ceiling is per-renderer.
-//
-// Puppeteer: each worker = own Chrome GPU process — peaks at 2; 3+ regresses.
-//
-// Electron: one shared host, N offscreen windows, each with its own VT session (parallel encode),
-// so it scales further. Measured knee is 4 (bench4k 4K, 291 frames, M4 4P/6E, median render):
-// c=2 2910ms, c=4 2229ms (1.31x), c=6 2169ms. c=6 is not a real gain — the c=4 and c=6 ranges
-// overlap (2195-2274 vs 2156-2305) for +28% RAM, and run-to-run spread grows 21 -> 79 -> 149ms
-// across c=2/4/6, so oversubscribing past the performance-core count just adds jitter.
-//
-// Override either with KINO_CONCURRENCY after measuring on the target machine.
-const MAX_WORKERS_PUPPETEER = 2;
+// Electron: one shared GPU host, N offscreen windows (parallel encode). Default cap is conservative;
+// raise with KINO_CONCURRENCY when the box has headroom (VRAM, NVENC sessions, cores).
 const MAX_WORKERS_ELECTRON = 4;
 export function concurrency(
   totalFrames: number,
@@ -467,11 +457,9 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   // One Electron host, N offscreen windows — the GPU process is shared, so worker count is bound
   // by GPU memory rather than by cores.
   const total = durationInFrames(props);
-  // On Linux, GPU memory binds before CPU cores do: at the default 2.6GB/worker estimate an 8GB
-  // card fits fewer workers than the electron default of 4. capWorkers is pure arithmetic (see
-  // workerCap.ts); this is the one call site that feeds it real probed VRAM and an env override.
-  // An explicit KINO_CONCURRENCY over the cap is a hard error, not a silent reduction — the user
-  // asked for something this GPU cannot do and should be told, not handed fewer workers quietly.
+  // Linux: capWorkers may lower n from probed VRAM and KINO_NVENC_SESSIONS (see workerCap.ts).
+  // An explicit KINO_CONCURRENCY above that cap is a hard error — raise KINO_VRAM_PER_WORKER
+  // if the estimate is wrong for your card.
   let n = concurrency(total);
   if (process.platform === "linux") {
     const probe = loadGpuCapture()?.gpuLimits?.();
