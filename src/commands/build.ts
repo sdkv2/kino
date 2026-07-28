@@ -23,7 +23,7 @@ import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntens
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
 import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
-import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
+import { probeDuration, probeImageAspect, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { parseQuality } from "../render/native/engine.js";
@@ -336,6 +336,8 @@ export async function prepare(
     ? {
         src: "logo.png",
         sizePx: resolveLogoSize(spec.logoSize ?? brand.logoSize),
+        // Measured here because layersAt is pure — without it the mark has no shape to size to.
+        aspect: await probeImageAspect(logoAbs),
         x: logoPos.x,
         y: logoPos.y,
         keyframes: spec.logoKeyframes ?? [],

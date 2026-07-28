@@ -210,6 +210,9 @@ export interface MotionEnv {
 export interface LogoProps {
   src: string; // staticFile-relative
   sizePx: number;
+  /** Natural w/h of the source image, measured node-side at build. `layersAt` is pure and cannot
+   *  decode the file, so it has to be told the shape to size the rect without stretching. */
+  aspect: number;
   x: number; // % of frame (anchored at centre)
   y: number;
   keyframes: BgKeyframe[]; // tween x/y/scale/opacity over time
