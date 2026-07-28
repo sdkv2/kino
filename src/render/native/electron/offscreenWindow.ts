@@ -67,27 +67,33 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
-/** Seek without gl.finish — present fence is readPixels or OSR paint. */
-async function seekFrame(wc: WebContents, frame: number): Promise<string | null> {
+/** seekFrame result with in-page Date.now() stamps for cross-process attribution. */
+type SeekResult = { fatal: string | null; tEnter: number; tExit: number };
+
+/** Seek without gl.finish — present fence is readPixels or OSR paint. tEnter/tExit are Date.now()
+ *  taken inside the renderer (same wall clock as main, 1ms grain) so the caller can split the
+ *  executeJavaScript round trip into dispatch / in-page / return legs. */
+async function seekFrame(wc: WebContents, frame: number): Promise<SeekResult> {
   const result = (await withTimeout(
     wc.executeJavaScript(`
       (async () => {
         const errText = ${ERR_TEXT_JS};
+        const tEnter = Date.now();
         try {
           const fatal = await window.kinoSeek(${frame}).then(() => window.__kinoFatal ?? null);
-          if (fatal) return { fatal: String(fatal) };
-          return { fatal: null };
+          if (fatal) return { fatal: String(fatal), tEnter, tExit: Date.now() };
+          return { fatal: null, tEnter, tExit: Date.now() };
         } catch (e) {
           // Reject-in-page would reach the caller as a prototype-stripped clone ("[object
           // Object]"). Stringify here, where the Error is still an Error.
-          return { fatal: "in-page seek threw: " + errText(e) };
+          return { fatal: "in-page seek threw: " + errText(e), tEnter, tExit: Date.now() };
         }
       })()
-    `) as Promise<{ fatal: string | null }>,
+    `) as Promise<SeekResult>,
     SEEK_TIMEOUT_MS,
     `kinoSeek(${frame})`,
-  )) as { fatal: string | null };
-  return result.fatal;
+  )) as SeekResult;
+  return result;
 }
 
 function preloadPath(): string {
@@ -361,6 +367,22 @@ export class OffscreenRenderWindow {
     return this.win.webContents;
   }
 
+  /** seekFrame + attribution: `seek` is the full executeJavaScript round trip; `seek:dispatch`
+   *  (main send → page script start), `seek:page` (in-page wall) and `seek:return` (page done →
+   *  main resolve) split it. The return leg is where renderer main-thread busyness — e.g. the
+   *  compositor commit the early invalidate just queued — shows up. */
+  private async seekTimed(wc: WebContents, frame: number): Promise<string | null> {
+    const t0 = performance.now();
+    const tSend = Date.now();
+    const r = await seekFrame(wc, frame);
+    const tBack = Date.now();
+    this.capProf.add("seek", performance.now() - t0);
+    this.capProf.add("seek:dispatch", r.tEnter - tSend);
+    this.capProf.add("seek:page", r.tExit - r.tEnter);
+    this.capProf.add("seek:return", tBack - r.tExit);
+    return r.fatal;
+  }
+
   private armPaintWait(): Promise<PaintFrame> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -393,9 +415,7 @@ export class OffscreenRenderWindow {
     this.earlyInvalidated = false;
     const paintPromise = this.armPaintWait();
     const tAll = performance.now();
-    const tSeek = performance.now();
-    const fatal = await seekFrame(wc, frame);
-    this.capProf.add("seek", performance.now() - tSeek);
+    const fatal = await this.seekTimed(wc, frame);
     if (fatal) {
       if (this.paintWait) {
         clearTimeout(this.paintWait.timer);
@@ -423,31 +443,38 @@ export class OffscreenRenderWindow {
   private async seekDirect(wc: WebContents, frame: number): Promise<Buffer> {
     this.lastH264 = null;
     const tAll = performance.now();
+    const tSend = Date.now();
     const result = (await withTimeout(
       wc.executeJavaScript(`
         (async () => {
           const errText = ${ERR_TEXT_JS};
+          const tEnter = Date.now();
           try {
             const fatal = await window.kinoSeek(${frame}).then(() => window.__kinoFatal ?? null);
-            if (fatal) return { fatal: String(fatal) };
+            if (fatal) return { fatal: String(fatal), tEnter, tExit: Date.now() };
             if (typeof window.kinoCaptureH264Bytes !== "function") {
-              return { fatal: "kinoCaptureH264Bytes missing — rebuild page bundle" };
+              return { fatal: "kinoCaptureH264Bytes missing — rebuild page bundle", tEnter, tExit: Date.now() };
             }
-            if (!window.kinoElectron?.pushH264) return { fatal: "kinoElectron.pushH264 missing" };
+            if (!window.kinoElectron?.pushH264) return { fatal: "kinoElectron.pushH264 missing", tEnter, tExit: Date.now() };
             const t0 = performance.now();
             const bytes = await window.kinoCaptureH264Bytes();
             await window.kinoElectron.pushH264(bytes);
-            return { fatal: null, encMs: performance.now() - t0, n: bytes.byteLength };
+            return { fatal: null, encMs: performance.now() - t0, n: bytes.byteLength, tEnter, tExit: Date.now() };
           } catch (e) {
             // Reject-in-page would reach the worker as a prototype-stripped clone ("[object
             // Object]"). Stringify here, where the Error is still an Error.
-            return { fatal: "in-page direct capture threw: " + errText(e) };
+            return { fatal: "in-page direct capture threw: " + errText(e), tEnter, tExit: Date.now() };
           }
         })()
-      `) as Promise<{ fatal: string | null; encMs?: number; n?: number }>,
+      `) as Promise<{ fatal: string | null; encMs?: number; n?: number; tEnter: number; tExit: number }>,
       SEEK_TIMEOUT_MS,
       `seekDirect(${frame})`,
-    )) as { fatal: string | null; encMs?: number; n?: number };
+    )) as { fatal: string | null; encMs?: number; n?: number; tEnter: number; tExit: number };
+    const tBack = Date.now();
+    // Same three legs as seekTimed — here `seek:page` includes the in-page WebCodecs encode+push.
+    this.capProf.add("seek:dispatch", result.tEnter - tSend);
+    this.capProf.add("seek:page", result.tExit - result.tEnter);
+    this.capProf.add("seek:return", tBack - result.tExit);
 
     if (result.fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${result.fatal}`);
     const buf = this.lastH264 as Buffer | null;
@@ -540,9 +567,7 @@ export class OffscreenRenderWindow {
       // the GMB/IOSurface pool and single paintWait slot stay coherent.
       if (process.env.KINO_ELECTRON_PAINT_LAG === "1") {
         const prev = this.paintInflight;
-        const tSeek = performance.now();
-        const fatal = await seekFrame(wc, frame);
-        this.capProf.add("seek", performance.now() - tSeek);
+        const fatal = await this.seekTimed(wc, frame);
         if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
         const out = prev ? await prev : null;
         this.paintInflight = (async () => {
@@ -566,9 +591,7 @@ export class OffscreenRenderWindow {
     }
 
     const prevEncode = this.encodeInflight;
-    const tSeek = performance.now();
-    const fatal = await seekFrame(wc, frame);
-    this.capProf.add("seek", performance.now() - tSeek);
+    const fatal = await this.seekTimed(wc, frame);
     if (fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${fatal}`);
     this.encodeInflight = this.captureJpeg(wc);
     return prevEncode ? await prevEncode : null;

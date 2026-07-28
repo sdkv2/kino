@@ -382,7 +382,9 @@ async function dumpElectronProfile(
   if (pageRows.length) {
     console.error("  page (GL-flushed seek phases):");
     for (const r of pageRows) {
-      if (r.ms >= 1) {
+      // prefetch-wait prints even at ~0 — a missing row here has been misread as "unmeasured"
+      // when it actually meant "never waited".
+      if (r.ms >= 1 || r.key === "prefetch-wait") {
         const share = pageTotal > 0 ? ((r.ms / pageTotal) * 100).toFixed(1).padStart(5) : "    -";
         console.error(
           `    ${r.key.padEnd(22)} ${(r.ms / Math.max(1, r.n)).toFixed(2).padStart(7)} ms/call  ×${String(r.n).padStart(4)}  ${share}%`,

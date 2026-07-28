@@ -52,7 +52,7 @@ export function createStage(
   return {
     async seek(frame: number): Promise<void> {
       await awaited("prefetch-wait", () => prefetch);
-      const layers = layersAt(props, frame, dims);
+      const layers = sync("layersAt", () => layersAt(props, frame, dims));
       await awaited("prep:backdrop", () => sources.get("backdrop")?.prepare(frame));
       await awaited("prep:scrim", () => sources.get("scrim")?.prepare(frame));
       await Promise.all([
@@ -71,7 +71,7 @@ export function createStage(
           }),
       ]);
       sync("draw", () => renderer.draw(layers, sources, frame, { theme: props.theme, postFx: props.postFx, props }));
-      const next = layersAt(props, frame + 1, dims);
+      const next = sync("layersAt", () => layersAt(props, frame + 1, dims));
       prefetch = prepareKeys(nextFrameKeys(layers, next), frame + 1);
     },
     dispose(): void {

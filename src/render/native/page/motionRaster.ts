@@ -101,6 +101,54 @@ function motionCss(vars: Record<string, string>, extra = ""): string {
   return motionHostCss(vars, extra);
 }
 
+/** KINO_MOTION_DUPE_PROBE=1 (plus KINO_PROFILE=1 for the dump): ground truth for plate-level
+ *  raster reuse. Hashes each plate's pixels and counts frames identical to an earlier raster —
+ *  `motion:plateDupe:sample` mean 0.62 = 62% of sample plates were pixel-exact repeats. This is
+ *  the ceiling any plate-cache design can reach, independent of how a key would be computed.
+ *  Costs ~5-10ms/plate/frame (getImageData readback + hash), which is why it is its own flag:
+ *  under KINO_PROFILE alone it would pollute every timing row it sits inside. */
+const plateDupes = new Map<string, Set<string>>();
+
+export function resetPlateDupeProbe(): void {
+  plateDupes.clear();
+}
+
+function probePlateDupes(plates: MotionPaintPlates): void {
+  if (!(globalThis as { __kinoMotionDupeProbe?: boolean }).__kinoMotionDupeProbe) return;
+  const named: Record<string, HTMLCanvasElement | undefined> = {
+    sample: plates.sample,
+    chrome: plates.chrome,
+    foreground: plates.foreground,
+    full: plates.full,
+  };
+  for (const [name, canvas] of Object.entries(named)) {
+    if (!canvas) continue;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+    let key: string;
+    try {
+      const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const words = new Uint32Array(px.buffer, px.byteOffset, px.byteLength >>> 2);
+      let h1 = 0x811c9dc5;
+      let h2 = 0x01000193;
+      for (let i = 0; i < words.length; i++) {
+        h1 = Math.imul(h1 ^ words[i], 0x01000193) >>> 0;
+        h2 = (Math.imul(h2 + words[i], 0x85ebca6b) ^ (h2 >>> 13)) >>> 0;
+      }
+      key = `${h1}:${h2}:${words.length}`;
+    } catch {
+      // Tainted canvas — cannot read pixels; count it so the dump says why rates are missing.
+      prof.addSample(`motion:plateDupe:${name}:tainted`, 1);
+      continue;
+    }
+    let seen = plateDupes.get(name);
+    if (!seen) plateDupes.set(name, (seen = new Set()));
+    const dup = seen.has(key);
+    if (!dup) seen.add(key);
+    prof.addSample(`motion:plateDupe:${name}`, dup ? 1 : 0);
+  }
+}
+
 function needsMotionDefs(html: string): boolean {
   return /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html);
 }
@@ -200,7 +248,7 @@ async function rasterMotionPlates(
     ]),
   );
   if (!sample || !chrome) return null;
-  return prof.sync("motion:normalize", () =>
+  const out = prof.sync("motion:normalize", () =>
     normalizeMotionPlates(
       { sample, chrome, foreground: foreground ?? undefined },
       width,
@@ -208,6 +256,8 @@ async function rasterMotionPlates(
       outScale,
     ),
   );
+  probePlateDupes(out);
+  return out;
 }
 
 /**

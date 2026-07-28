@@ -447,6 +447,10 @@ async function pointServerAt(opts: {
       shaderFXAA: opts.shaderFXAA,
       motionFoMin: opts.motionFoMin,
       profile: process.env.KINO_PROFILE === "1",
+      // Counts per-plate pixel-identical motion rasters (see motionRaster.ts). Hashing every
+      // plate costs real ms/frame, so it is its own flag — never folded into KINO_PROFILE,
+      // whose timing rows it would pollute.
+      motionDupeProbe: process.env.KINO_MOTION_DUPE_PROBE === "1",
       captureCodec: opts.captureCodec,
       captureSource: opts.captureSource,
     }),

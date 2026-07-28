@@ -9,7 +9,8 @@ import { loadBgTextures } from "./bgTextures";
 import { clearUnderlays } from "./underlay";
 import type { KinoProps } from "../../props.js";
 import { Stage, type StageHandle } from "./compositor/Stage.js";
-import { enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
+import { resetPlateDupeProbe } from "./motionRaster.js";
+import { awaited, enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
 import {
   captureH264Bytes,
   capturePipelined,
@@ -37,6 +38,9 @@ interface RenderConfig {
   shaderFXAA?: boolean;
   motionFoMin?: number;
   profile?: boolean;
+  /** KINO_MOTION_DUPE_PROBE=1 — per-plate pixel-dupe counters, separate from `profile` because
+   *  the hashing is heavy enough to distort its timing rows. */
+  motionDupeProbe?: boolean;
   captureCodec?: CaptureCodec;
   captureSource?: CaptureSource;
 }
@@ -100,7 +104,10 @@ let stageHandle: StageHandle | null = null;
 
 async function kinoSeek(frame: number): Promise<void> {
   if (!current || !stageHandle) throw new Error("kinoSeek before kinoLoad");
-  await stageHandle.seek(frame);
+  // `seek:stage` is the whole stage seek wall — the phase timers inside it (prep:*, draw) are
+  // component costs; the difference is page work none of them cover (layersAt, await plumbing).
+  const h = stageHandle;
+  await awaited("seek:stage", () => h.seek(frame));
   // Electron shared capture: nudge OSR invalidate before executeJavaScript returns to main.
   window.kinoElectron?.frameReady?.(frame);
 }
@@ -128,9 +135,11 @@ async function kinoLoad(): Promise<void> {
   await loadBgTextures(cfg.props);
   window.__kinoShaderSS = cfg.shaderSS ?? 2;
   (globalThis as { __kinoMotionFoMin?: number }).__kinoMotionFoMin = cfg.motionFoMin;
+  (globalThis as { __kinoMotionDupeProbe?: boolean }).__kinoMotionDupeProbe = cfg.motionDupeProbe === true;
   window.__kinoShaderFXAA = cfg.shaderFXAA !== false;
   enableProfile(cfg.profile === true);
   resetProfile();
+  resetPlateDupeProbe();
 
   current = cfg;
   root ??= createRoot(container);
