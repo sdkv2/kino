@@ -23,7 +23,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `title` | string (kebab-case) | ✅ | Output basename; must match `^[a-z0-9-]+$`. |
 | `segments` | [Segment](#segments)[] | ✅ | The beats, in order (≥ 1). |
 | `brand` | string | — | Brand name; falls back to the project's `project.json` brand. |
-| `format` | `("9:16"\|"3:4"\|"16:9")[]` | — | Output formats. Default `["9:16"]`. Motion layouts adapt via `--kino-aspect`. |
+| `format` | `("9:16"\|"3:4"\|"16:9"\|"9:16-4k"\|"3:4-4k"\|"16:9-4k")[]` | — | Output formats. Default `["9:16"]` (1080-class). `*-4k` = UHD canvas (e.g. `9:16-4k` → 2160×3840). Motion layouts adapt via `--kino-aspect`. |
 | `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
 | `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. |
 | `voiceModel` | string | — | ElevenLabs TTS model. Default is v3 (inline audio tags `[excited]`, `[whispers]`, `[short pause]`, … work in segment `text`; tags are stripped from word-synced captions). Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads. |
@@ -112,7 +112,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 Long source recordings: see [Importing footage](importing-footage.md) for clipping, chrome frames, and retiming.
 
 ### `motion` segment
-A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CSS variables. See [Motion graphics](motion-graphics.md) for the authoring contract.
+A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CSS variables. See [Motion graphics](motion-graphics.md) for the authoring contract; [multi-element choreography](motion-graphics.md#multi-element-choreography) for stacked layers and shared `params` drivers.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|

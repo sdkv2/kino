@@ -26,7 +26,9 @@ import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from ".
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
+import { parseQuality } from "../render/native/engine.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
+import { parseFormatList, type FormatId } from "../render/formats.js";
 import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
 import type { PostFx } from "../render/postSpec.js";
 import { readManifest } from "../segment/manifest.js";
@@ -175,7 +177,7 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
 export interface PrepareResult {
   props: KinoProps;
   publicDir: string;
-  formats: Array<"9:16" | "3:4" | "16:9">;
+  formats: FormatId[];
   project: Project;
   spec: Spec;
   labelFont: string | null; // absolute TTF path for storyboard/montage labels, if resolved
@@ -235,7 +237,7 @@ export async function prepare(
   if (tts && needsTts && !voiceId) {
     throw new Error("No voice for a speaking build — set spec.voice or the brand's defaultVoice (or use --no-tts / --draft).");
   }
-  const formats = (opts.format ? opts.format.split(",") : spec.format) as Array<"9:16" | "3:4" | "16:9">;
+  const formats: FormatId[] = opts.format ? parseFormatList(opts.format) : (spec.format as FormatId[]);
   const cache = new Cache(project.cache);
 
   const modeNote = draft ? " · draft (fast preview, no API spend)" : tts ? "" : " · no VO (silent, full quality)";
@@ -524,6 +526,7 @@ export async function prepare(
     // motion segment: resolve the full-screen graphic; VO drives its duration like other beats.
     return {
       ...base,
+      transition: seg.transition,
       motion: {
         ...resolveMotionGraphic(
           anchorMotion({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, `segment[${i}]`),
@@ -584,12 +587,14 @@ export async function build(
     tag?: string;
     project?: string;
     beat?: string; // 1-indexed — render only this segment as its own standalone clip
+    quality?: string;
   },
 ): Promise<string[]> {
   let { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
   // Only a draft is low-quality; a full render — even a silent (--no-tts) or presenter-less (--no-avatar)
   // one — keeps final quality and a clean, untagged filename.
   const draft = !!(opts.draft || opts.mock);
+  const quality = parseQuality(opts.quality);
 
   // --beat: reduce to a single-segment spec and re-run prepare() on it, so the isolated clip gets
   // its own from-scratch VO/timing pass (segment starts at t=0). Only backgroundKeyframes/
@@ -672,7 +677,7 @@ export async function build(
     (draft ? "draft" : undefined);
   const outName = variantName(spec.title, autoTag);
   // Drafts are previews — take the fast encode preset; full renders keep the final quality.
-  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: draft ? "veryfast" : "medium" });
+  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: draft ? "veryfast" : "medium", quality });
   for (const o of outs) {
     // AAC pad past the last video frame → players flash black at EOF (and break seamless loops).
     try {

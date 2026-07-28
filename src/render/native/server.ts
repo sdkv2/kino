@@ -8,6 +8,19 @@ import { createServer, type Server } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 
+/** Raw JPEG bytes from the page's capture POST — one slot per worker page. */
+const captureSlots = new Map<number, Buffer>();
+
+export function takeCaptureBuffer(slot: number): Buffer | undefined {
+  const buf = captureSlots.get(slot);
+  if (buf) captureSlots.delete(slot);
+  return buf;
+}
+
+export function clearCaptureBuffers(): void {
+  captureSlots.clear();
+}
+
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -68,6 +81,26 @@ export async function ensureRenderServer(state: ServerState): Promise<{ url: str
     if (url === "/render-config.json") {
       res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" });
       res.end(s.renderConfigJson);
+      return;
+    }
+    if (req.method === "POST" && url.startsWith("/__capture/")) {
+      const slot = Number(url.slice("/__capture/".length));
+      if (!Number.isInteger(slot) || slot < 0) {
+        res.writeHead(400);
+        res.end("bad slot");
+        return;
+      }
+      const chunks: Buffer[] = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        captureSlots.set(slot, Buffer.concat(chunks));
+        res.writeHead(204);
+        res.end();
+      });
+      req.on("error", () => {
+        res.writeHead(500);
+        res.end();
+      });
       return;
     }
     const roots: Array<[string, string]> = [

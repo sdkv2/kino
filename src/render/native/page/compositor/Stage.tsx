@@ -13,6 +13,7 @@ import { StageRenderer } from "./renderer.js";
 import { buildRegistry, type Dims } from "./registry.js";
 import type { LayerDraw, TextureSource } from "./graph.js";
 import { nextFrameKeys } from "./prefetch.js";
+import { awaited, sync } from "./profile.js";
 
 export { nextFrameKeys } from "./prefetch.js";
 
@@ -46,23 +47,26 @@ export function createStage(
 
   return {
     async seek(frame: number): Promise<void> {
-      await prefetch;
+      await awaited("prefetch-wait", () => prefetch);
       const layers = layersAt(props, frame, dims);
-      await sources.get("backdrop")?.prepare(frame);
-      await sources.get("scrim")?.prepare(frame);
+      await awaited("prep:backdrop", () => sources.get("backdrop")?.prepare(frame));
+      await awaited("prep:scrim", () => sources.get("scrim")?.prepare(frame));
       await Promise.all([
         ...layers
           .filter((l) => l.source.providerId !== "backdrop" && l.source.providerId !== "scrim")
-          .map((l) => sources.get(l.source.providerId)?.prepare(frame, l.source.key) ?? Promise.resolve()),
+          .map((l) =>
+            awaited(`prep:${l.source.providerId}`, () => sources.get(l.source.providerId)?.prepare(frame, l.source.key)),
+          ),
         ...layers
           .map((l) => (l.mask as { source?: { kind?: string; layerId?: string } } | undefined)?.source)
           .filter((s): s is { kind: "layer"; layerId: string } => s?.kind === "layer")
           .map((ref) => {
-            const mLayer = layers.find((l) => l.id === ref.layerId);
-            return mLayer ? sources.get(mLayer.source.providerId)?.prepare(frame, mLayer.source.key) : undefined;
+            const mLayer = layers.find((l) => l.id === ref.layerId || l.source.providerId === ref.layerId);
+            const providerId = mLayer ? mLayer.source.providerId : ref.layerId;
+            return sources.get(providerId)?.prepare(frame, mLayer?.source.key);
           }),
       ]);
-      renderer.draw(layers, sources, frame, { theme: props.theme, postFx: props.postFx, props });
+      sync("draw", () => renderer.draw(layers, sources, frame, { theme: props.theme, postFx: props.postFx, props }));
       const next = layersAt(props, frame + 1, dims);
       prefetch = prepareKeys(nextFrameKeys(layers, next), frame + 1);
     },

@@ -1,7 +1,7 @@
 // Builds one TextureSource per layer id that `layersAt` can emit. The ids here and the
 // providerIds in layers.ts are the same namespace — a mismatch means a silently missing
 // layer, so both sides are exercised by the parity harness.
-import type { BackgroundProps, KinoProps } from "../../../props.js";
+import type { BackgroundProps, BgParamValue, KinoProps } from "../../../props.js";
 import type { MediaMap } from "../media.js";
 import type { Dims, TextureSource } from "./graph.js";
 
@@ -17,6 +17,7 @@ import { createRegionCompositorSource } from "./regionHost.js";
 import { createShaderDraw } from "./shaderHost.js";
 import { getPreset, type DrawFn } from "../../../backgrounds/presets.js";
 import { glowDraw, scrimDraw } from "../../../backgrounds/glow.js";
+import { gridDraw, platformGuideDraw } from "../../../backgrounds/guides.js";
 
 /**
  * Which draw function paints this background — mirroring FacelessBackdrop's resolution order.
@@ -119,6 +120,25 @@ export function buildRegistry(
     );
   }
 
+  // Still/storyboard QA overlays. Never registered on `kino build` — the props that gate them
+  // are set only by `kino still` and `kino storyboard`. They sit above everything and must not
+  // publish themselves as the glass backdrop.
+  const qaOverlay = (draw: DrawFn, params: Record<string, BgParamValue> = {}) =>
+    createCanvas2dSource({
+      draw,
+      params,
+      keyframes: [],
+      triggers: [],
+      theme: props.theme,
+      width: dims.width,
+      height: dims.height,
+      fps: props.fps,
+      clearNight: false,
+      publishBackdrop: false,
+    });
+  if (props.platformGuide) sources.set("platformGuide", qaOverlay(platformGuideDraw, { kind: props.platformGuide }));
+  if (props.grid) sources.set("grid", qaOverlay(gridDraw));
+
   props.avatarWindows.forEach((w, i) => {
     const entry = media[`av${i}`];
     if (entry) sources.set(`av${i}`, createFramesSource(entry, f(w.fromSec)));
@@ -147,7 +167,11 @@ export function buildRegistry(
         );
       } else {
         const entry = media[`seg${i}`];
-        if (entry) sources.set(`seg${i}`, createFramesSource(entry, f(s.startSec)));
+        if (entry) {
+          sources.set(`seg${i}`, createFramesSource(entry, f(s.startSec)));
+        } else if (s.source && /\.(jpe?g|png|webp)$/i.test(s.source)) {
+          sources.set(`seg${i}`, createImageSource("/public/" + s.source));
+        }
       }
       if (s.frame) sources.set(`frame${i}`, createImageSource("/public/" + s.frame.src));
     }

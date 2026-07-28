@@ -80,4 +80,73 @@ describe("layer-as-mask", () => {
       delete process.env.KINO_COMPOSITOR;
     }
   }, 300000);
+
+  it("clips a text layer behind a subject layer using inverted layer mask", async () => {
+    process.env.KINO_COMPOSITOR = "1";
+    try {
+      // Presenter / subject covering left half of screen (0..540)
+      const subjectMotion = {
+        html: `<div style="position:absolute;left:0;top:0;width:50%;height:100%;background:#fff"></div>`,
+        params: {}, keyframes: [], triggers: [],
+      };
+      // Fullscreen text overlay, masked by inverted subject layer (so text only shows where subject is NOT)
+      const textBehindProps: KinoProps = {
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        background: blackBg, disclosure: "",
+        segments: [{
+          kind: "motion", caption: "TITLE BEHIND SUBJECT", startSec: 0, endSec: 2,
+          motion: subjectMotion,
+          mask: { source: { kind: "layer", layerId: "motion0", channel: "a" }, invert: true },
+        } as never],
+      };
+      const outDir = mkdtempSync(join(tmpdir(), "kino-lmask-text-"));
+      const [png] = await renderStills({
+        props: textBehindProps,
+        publicDir: mkdtempSync(join(tmpdir(), "lmask-pub-text-")),
+        format: "9:16", frames: [{ frame: 10, name: "text_behind" }], outDir,
+      });
+      const left = parseFloat(magick([png, "-crop", "540x1920+0+0", "+repage", "-format", "%[fx:mean]", "info:"]).trim());
+      const right = parseFloat(magick([png, "-crop", "540x1920+540+0", "+repage", "-format", "%[fx:mean]", "info:"]).trim());
+      console.log("TEXT BEHIND TEST OUTPUT - left:", left, "right:", right);
+      // Left side is subject (white, unmasked). Right side has title text on black bg (> 0).
+      expect(left).toBeGreaterThan(0.9);
+      expect(right).toBeGreaterThan(0.01);
+    } finally {
+      delete process.env.KINO_COMPOSITOR;
+    }
+  }, 300000);
+
+  it("correctly samples right-half layer mask at supersample SS=2", async () => {
+    process.env.KINO_COMPOSITOR = "1";
+    try {
+      // Right-half white graphic (540..1080)
+      const rightHalfMotion = {
+        html: `<div style="position:absolute;left:50%;top:0;width:50%;height:100%;background:#fff"></div>`,
+        params: {}, keyframes: [], triggers: [],
+      };
+      const layerProps: KinoProps = {
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        background: blackBg, disclosure: "",
+        segments: [{
+          kind: "motion", caption: "", startSec: 0, endSec: 2,
+          motion: rightHalfMotion,
+          motionOverlay: fullMotion,
+          mask: { source: { kind: "layer", layerId: "motion0", channel: "a" } },
+        } as never],
+      };
+      const outDir = mkdtempSync(join(tmpdir(), "kino-lmask-ss-"));
+      const [png] = await renderStills({
+        props: layerProps,
+        publicDir: mkdtempSync(join(tmpdir(), "lmask-pub-ss-")),
+        format: "9:16", frames: [{ frame: 10, name: "right_mask" }], outDir,
+      });
+      const left = parseFloat(magick([png, "-crop", "540x1920+0+0", "+repage", "-format", "%[fx:mean]", "info:"]).trim());
+      const right = parseFloat(magick([png, "-crop", "540x1920+540+0", "+repage", "-format", "%[fx:mean]", "info:"]).trim());
+      console.log("RIGHT MASK TEST OUTPUT - left:", left, "right:", right);
+      expect(left).toBeLessThan(0.1);
+      expect(right).toBeGreaterThan(0.9);
+    } finally {
+      delete process.env.KINO_COMPOSITOR;
+    }
+  }, 300000);
 });

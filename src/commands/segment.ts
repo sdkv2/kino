@@ -12,6 +12,8 @@ export async function segment(
     track?: boolean; // Commander --no-track flips this to false; default true
     backend?: string;
     format?: string;
+    cutout?: boolean;
+    noMask?: boolean;
   },
 ): Promise<void> {
   if (!opts.prompt) throw new Error("kino segment requires --prompt <text>");
@@ -31,6 +33,8 @@ export async function segment(
       out: opts.out,
       backend: opts.backend as SegmentBackend | undefined,
       projectRoot: project.projectRoot,
+      cutout: opts.cutout,
+      noMask: opts.noMask,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -49,5 +53,6 @@ export async function segment(
   } else {
     log.ok(result.outDir);
     log.step(`${result.manifest.kind}, ${result.manifest.objects.length} object(s), backend=${result.manifest.backend}, tracked=${result.manifest.tracked}`);
+    if (result.manifest.cutout) log.step(`cutout → assets/${result.manifest.cutout}`);
   }
 }

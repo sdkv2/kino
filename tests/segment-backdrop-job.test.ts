@@ -2,7 +2,7 @@
 // clipFrom/speed/pauseAt describe the beat's source and mean nothing on an unrelated clip — seeking
 // a different file to the same second is arbitrary rather than useful — so the backdrop plays from
 // its own frame 0 at the beat's start, one backdrop frame per composition frame. This pins that
-// rule (the timing contract in docs/superpowers/specs/2026-07-25-cutout-compositing-design.md) and
+// rule (the timing contract) and
 // that an image backdrop is not extracted at all.
 import { describe, it, expect } from "vitest";
 import { planMediaJobs } from "../src/render/native/videoFrames.js";

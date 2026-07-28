@@ -11,7 +11,7 @@
 // coverage gradient; if the gate lets that through, the analytic branch answers 0.5/g instead, and
 // every isoline of the distance field — every rim, erode and glow — moves. Measured here as the
 // position of the |d| = radius/2 isoline: 551x554 at the shipped gate, 596x598 at the old 0.01
-// (~22px of erode error). See docs/superpowers/specs/2026-07-24-maskdist-gate-measurement.md.
+// (~22px of erode error).
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";

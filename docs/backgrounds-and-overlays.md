@@ -89,7 +89,7 @@ Run `kino backgrounds` for the picker + library ids.
 
 For richer full-screen UI (typed terminals, pipelines), prefer [motion graphics](motion-graphics.md)
 and paint a full-bleed `.bg` inside the graphic — that occludes the background layer entirely.
-Pair `kino-glass` with a **structured** shader field (not a flat night), not frosted CSS blur.
+Pair `kino-lens` with a **structured** shader field (not a flat night), not frosted CSS blur.
 
 | When | Use |
 |---|---|

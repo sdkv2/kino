@@ -15,6 +15,7 @@ export function createFramesSource(entry: MediaEntry, fromFrame: number): Textur
   const decoded = new Map<string, HTMLImageElement>();
   let tex: WebGLTexture | null = null;
   let current: string | null = null;
+  let uploaded: string | null = null;
 
   return {
     async prepare(frame: number): Promise<void> {
@@ -28,7 +29,9 @@ export function createFramesSource(entry: MediaEntry, fromFrame: number): Textur
       if (!current) return null;
       const img = decoded.get(current);
       if (!img) return null;
+      if (uploaded === current && tex) return tex;
       tex = uploadCanvasOrImage(gl, tex, img);
+      uploaded = current;
       return tex;
     },
     size(): { w: number; h: number } | null {

@@ -19,6 +19,8 @@ export interface MotionVarDynamics {
   wordCount?: number; // total spoken words in this beat (0 when no VO words)
   width?: number; // composition px (for aspect-aware layout)
   height?: number;
+  /** Beat length in frames — pairs with `frame` for exact rational `--progress-num/den`. */
+  durationFrames?: number;
 }
 
 /** Rebase absolute-timeline VO word spans to beat-relative (env.t / --progress are beat-relative,
@@ -121,7 +123,9 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
   const vars: Record<string, string> = {
     "--frame": String(dyn.frame),
     "--t": dyn.t.toFixed(4),
-    "--progress": dyn.progress.toFixed(4),
+    "--progress": dyn.progress.toFixed(6),
+    "--progress-num": String(dyn.frame),
+    "--progress-den": String(Math.max(1, dyn.durationFrames ?? 1)),
     // Eased progress (same curves as keyframe ease). Prefer these over linear --progress for
     // entrances/camera. overshoot/spring may briefly exceed 1 — fine for scale; clamp for opacity.
     "--kino-in": curves.in.toFixed(4),

@@ -192,7 +192,6 @@ describe("kinoBackground (cross-region sampling)", () => {
 // The backdrop rides the already-declared-but-unbound uTex1/uTexSize1 (region shaders bind only
 // uTex0), so the feature adds no uniform and — emitted conditionally, exactly as kinoBackground is —
 // costs a spec that doesn't use it nothing at all, byte for byte.
-// See docs/superpowers/specs/2026-07-25-cutout-compositing-design.md.
 describe("backdrop binding", () => {
   it("emits byte-identical GLSL when there is no backdrop", () => {
     expect(assembleRegionShaderSource(SUBJ, BG, [], [], false)).toBe(assembleRegionShaderSource(SUBJ, BG, []));

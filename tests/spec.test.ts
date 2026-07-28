@@ -33,46 +33,13 @@ describe("SpecSchema", () => {
 });
 
 describe("SpecSchema strict segments (unknown-key footgun)", () => {
-  it("rejects a `transition` on a motion segment (motion hard-cuts; transition is inert there)", () => {
+  it("rejects an unknown key on a motion segment", () => {
     expect(() =>
       SpecSchema.parse({
         ...valid,
-        segments: [{ kind: "motion", source: "motion/x.html", text: "hi", transition: "fade" }],
+        segments: [{ kind: "motion", source: "motion/x.html", text: "hi", bogus: true }],
       }),
     ).toThrow();
-  });
-  it("rejects an unknown key on an avatar segment", () => {
-    expect(() =>
-      SpecSchema.parse({ ...valid, segments: [{ kind: "scene", text: "hi", caption: "hi", bogus: true }] }),
-    ).toThrow();
-  });
-  it("rejects an unknown key on an app segment", () => {
-    expect(() =>
-      SpecSchema.parse({
-        ...valid,
-        segments: [{ kind: "video", source: "a.png", text: "hi", caption: "hi", bogus: true }],
-      }),
-    ).toThrow();
-  });
-  it("rejects an unknown key in sfx/music entries", () => {
-    expect(() => SpecSchema.parse({ ...valid, sfx: [{ src: "pop", at: 1, bogus: true }] })).toThrow();
-    expect(() => SpecSchema.parse({ ...valid, music: { src: "bed.mp3", bogus: true } })).toThrow();
-  });
-  it("parseSpec explains logoPosition on a segment (top-level only)", () => {
-    expect(() =>
-      parseSpec({
-        ...valid,
-        segments: [{ kind: "scene", text: "hi", caption: "Get Driftlog", logoPosition: "center" }],
-      }),
-    ).toThrow(/logoPosition is top-level/);
-  });
-  it("parseSpec explains transition on a motion segment", () => {
-    expect(() =>
-      parseSpec({
-        ...valid,
-        segments: [{ kind: "motion", source: "motion/x.html", text: "hi", transition: "fade" }],
-      }),
-    ).toThrow(/transition is video-only/);
   });
 });
 

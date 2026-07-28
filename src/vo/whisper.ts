@@ -40,12 +40,22 @@ export function pickSttEngine(opts: { hasKey: boolean; hasWhisper: boolean; over
   );
 }
 
-/** whisper-cli binary: KINO_WHISPER override, else first of whisper-cli / whisper-cpp on PATH. */
+let cachedWhisperBin: string | null | undefined;
+
+/** whisper-cli binary: KINO_WHISPER override, else first of whisper-cli / whisper-cpp on PATH. Memoized. */
 export function resolveWhisper(): string | null {
-  if (process.env.KINO_WHISPER) return process.env.KINO_WHISPER;
-  for (const cmd of ["whisper-cli", "whisper-cpp"]) {
-    if (spawnSync(cmd, ["--help"], { stdio: "ignore" }).status != null) return cmd;
+  if (cachedWhisperBin !== undefined) return cachedWhisperBin;
+  if (process.env.KINO_WHISPER) {
+    cachedWhisperBin = process.env.KINO_WHISPER;
+    return cachedWhisperBin;
   }
+  for (const cmd of ["whisper-cli", "whisper-cpp"]) {
+    if (spawnSync(cmd, ["--help"], { stdio: "ignore" }).status != null) {
+      cachedWhisperBin = cmd;
+      return cachedWhisperBin;
+    }
+  }
+  cachedWhisperBin = null;
   return null;
 }
 

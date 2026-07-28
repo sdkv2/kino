@@ -1,26 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { build } from "esbuild";
-import puppeteer from "puppeteer";
+import { describe, it, expect, afterAll } from "vitest";
+import { glProbe, closeGlHost } from "./helpers/glHost.js";
 
-const GL_ARGS = ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader"];
+afterAll(closeGlHost);
 
 async function mixAt(kind: string, p: number): Promise<number> {
-  const bundle = await build({
-    entryPoints: ["src/render/native/page/compositor/transitions/index.ts"],
-    bundle: true, write: false, format: "iife", globalName: "KinoTx",
-    platform: "browser", target: "chrome120", logLevel: "silent",
+  return glProbe<[string, number], number>({
+    entry: "src/render/native/page/compositor/transitions/index.ts",
+    globalName: "KinoTx",
+    html: `<!doctype html><body><canvas id="c" width="64" height="64"></canvas></body>`,
+    fn: (kind, p) =>
+      (window as any).KinoTx.probeMix(document.getElementById("c") as HTMLCanvasElement, kind, p),
+    args: [kind, p],
   });
-  const browser = await puppeteer.launch({ headless: true, args: GL_ARGS });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(`<!doctype html><body><canvas id="c" width="64" height="64"></canvas></body>`);
-    await page.addScriptTag({ content: bundle.outputFiles[0].text });
-    return await page.evaluate((kind, p) => (window as any).KinoTx.probeMix(
-      document.getElementById("c") as HTMLCanvasElement, kind, p,
-    ), kind, p);
-  } finally {
-    await browser.close();
-  }
 }
 
 describe("transition shaders", () => {

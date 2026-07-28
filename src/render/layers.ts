@@ -6,7 +6,7 @@
 import type { KinoProps } from "./props.js";
 import { interpolate } from "./interpolate.js";
 import { normalizeLayer, type Dims, type LayerDraw, type LayerSpec } from "./native/page/compositor/graph.js";
-import { MOTION_XFADE_FRAMES } from "./motion.js";
+import { motionHandoff, motionXfadeFrames } from "./motion.js";
 import { hasCaptionContent } from "./captionLayout.js";
 
 import { kenBurnsScale } from "./backgrounds/glow.js";
@@ -19,11 +19,27 @@ const AVATAR_PUSH_IN = 1.08;
 /** Chained-cutaway hold: a held clip extends this many frames into its successor. */
 const CHAIN_HOLD_FRAMES = 12;
 
-/** Layer-as-mask clips overlays; the source motion layer stays unmasked (KinoVideo parity). */
-function motionMask(mask: unknown): LayerSpec["mask"] {
-  const m = mask as { source?: { kind?: string } } | undefined;
-  if (!m || m.source?.kind === "layer") return undefined;
+/** Layer-as-mask clips overlays; the source motion layer stays unmasked when it is the mask source itself. */
+function motionMask(mask: unknown, currentLayerId?: string): LayerSpec["mask"] {
+  const m = mask as { source?: { kind?: string; layerId?: string } } | undefined;
+  if (!m) return undefined;
+  if (m.source?.kind === "layer" && m.source.layerId === currentLayerId) return undefined;
   return m as LayerSpec["mask"];
+}
+
+/** Inverted layer mask on motion{i} + motionOverlay = title under the subject cutout (expensive-edit z-order). */
+function isTextBehindSubject(mask: unknown, motionIndex: number): boolean {
+  const m = mask as { source?: { kind?: string; layerId?: string }; invert?: boolean } | undefined;
+  return m?.source?.kind === "layer" && m.source.layerId === `motion${motionIndex}` && m.invert === true;
+}
+
+/** File cutout mask + motionOverlay on a video beat = title under the segmented subject. */
+function isVideoTextBehind(mask: unknown, motionOverlay: unknown, source?: string): boolean {
+  const m = mask as { source?: { kind?: string } } | undefined;
+  if (!motionOverlay) return false;
+  if (m?.source?.kind === "file") return true;
+  if (!m && source && /^cutouts\/.+\.png$/i.test(source)) return true;
+  return false;
 }
 
 export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw[] {
@@ -87,30 +103,65 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
 
     const footageProvider = s.regionShader ? `region${i}` : `seg${i}`;
     const beat = `beat${i}`;
-    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity, mask: (s as any).mask, effects: s.effects, group: beat });
+    const segMask = (s as any).mask;
+    const behind = isVideoTextBehind(segMask, s.motionOverlay, s.kind === "video" ? s.source : undefined);
+    if (behind) {
+      out.push({
+        id: `overlay${i}`,
+        source: { providerId: `overlay${i}`, key: String(local) },
+        rect: full,
+        opacity,
+        effects: s.effects,
+        group: beat,
+      });
+    }
+    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity, mask: segMask, effects: s.effects, group: beat, aboveFilm: behind });
     if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity, group: beat });
     if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity, group: beat });
   });
 
-  // 5. Full-screen motion beats. A motion beat that follows another dissolves in over the
-  // overlap; the first one stays opaque so a looping open has no seam.
+  // 5. Full-screen motion beats. Hold the outgoing graphic through the next beat's xfade so the
+  // dissolve never drops onto the backdrop; `transition: "cut"` abuts with no overlap.
   props.segments.forEach((s, i) => {
     if (s.kind !== "motion" || !s.motion) return;
-    const from = f(s.startSec);
-    const dur = f(s.endSec) - from;
-    const local = frame - from;
-    if (local < 0 || local >= dur) return;
-    const fadeIn = props.segments[i - 1]?.kind === "motion";
-    const opacity = fadeIn
-      ? interpolate(local, [0, MOTION_XFADE_FRAMES], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+    const prev = props.segments[i - 1];
+    const next = props.segments[i + 1];
+    const nextMotion = next?.kind === "motion" ? next : null;
+    const h = motionHandoff({
+      startSec: s.startSec,
+      endSec: s.endSec,
+      nextMotionStartSec: nextMotion ? nextMotion.startSec : null,
+      prevIsMotion: prev?.kind === "motion",
+      fps: props.fps,
+      // Outgoing hold length follows the *incoming* beat's transition.
+      xfadeFrames: nextMotion ? motionXfadeFrames(nextMotion.transition) : 0,
+      fadeIn: prev?.kind === "motion" && motionXfadeFrames(s.transition) > 0,
+    });
+    const local = frame - h.from;
+    if (local < 0 || local >= h.seqDur) return;
+    const opacity = h.fadeIn
+      ? interpolate(local, [0, h.xfade], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
       : 1;
+    // Freeze --progress at end of authored beat while held into the handoff.
+    const beatLocal = Math.min(local, h.beatDur - 1);
     const beat = `beat${i}`;
+    const segMask = (s as any).mask;
+    if (isTextBehindSubject(segMask, i) && s.motionOverlay) {
+      out.push({
+        id: `overlay${i}`,
+        source: { providerId: `overlay${i}`, key: String(beatLocal) },
+        rect: full,
+        opacity,
+        effects: s.effects,
+        group: beat,
+      });
+    }
     out.push({
       id: `motion${i}`,
-      source: { providerId: `motion${i}`, key: String(local) },
+      source: { providerId: `motion${i}`, key: String(beatLocal) },
       rect: full,
       opacity,
-      mask: motionMask((s as any).mask),
+      mask: motionMask(segMask, `motion${i}`),
       effects: s.effects,
       group: beat,
     });
@@ -119,6 +170,8 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   // 6. Motion overlays: layered above whatever their beat drew.
   props.segments.forEach((s, i) => {
     if (!s.motionOverlay) return;
+    if (isTextBehindSubject((s as any).mask, i)) return;
+    if (isVideoTextBehind((s as any).mask, s.motionOverlay, s.kind === "video" ? s.source : undefined)) return;
     const from = f(s.startSec);
     const dur = f(s.endSec) - from;
     const local = frame - from;
@@ -140,7 +193,14 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       const from = f(t.fromSec);
       const to = "durSec" in t ? f(t.fromSec + (t as any).durSec) : f((t as any).toSec);
       if (frame < from || frame >= to) return;
-      out.push({ id: `text${i}_${j}`, source: { providerId: `text${i}_${j}` }, rect: full, group: `beat${i}` });
+      out.push({
+        id: `text${i}_${j}`,
+        source: { providerId: `text${i}_${j}` },
+        rect: full,
+        mask: (t as any).mask ?? (s as any).mask,
+        effects: (t as any).effects ?? s.effects,
+        group: `beat${i}`,
+      });
     });
   });
 
@@ -179,7 +239,12 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     out.push({ id: "disclosure", source: { providerId: "disclosure" }, rect: full });
   }
 
-  // 11. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
+  // 11. Still/storyboard QA overlays, above every content layer so nothing hides a safe-zone
+  // breach. `kino build` never sets these props.
+  if (props.platformGuide) out.push({ id: "platformGuide", source: { providerId: "platformGuide" }, rect: full });
+  if (props.grid) out.push({ id: "grid", source: { providerId: "grid" }, rect: full });
+
+  // 12. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
   // Under the compositor the post stage owns film; the DOM path still uses the html layer.
   return out.map(normalizeLayer);
 }

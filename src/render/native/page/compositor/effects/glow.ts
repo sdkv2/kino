@@ -36,6 +36,9 @@ void main() {
   uniforms(gl, loc, params) {
     gl.uniform1f(loc.uRadius, Number(params.radius ?? 8));
     gl.uniform1f(loc.uIntensity, Number(params.intensity ?? 1));
-    gl.uniform1f(loc.uThreshold, Number(params.threshold ?? 0.6));
+    // 0.32 linear == 0.60 sRGB: the perceptual cut this pass had before compositing moved to
+    // linear light. Thresholds are luminance in the working space, so the number had to move
+    // even though the intent did not.
+    gl.uniform1f(loc.uThreshold, Number(params.threshold ?? 0.32));
   },
 };

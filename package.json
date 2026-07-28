@@ -40,32 +40,40 @@
   },
   "scripts": {
     "build": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
-    "prepare": "tsc && tsc -p tsconfig.page.json && node scripts/build-page.mjs",
+    "build:native": "node scripts/build-gpu-capture.mjs",
+    "prepare": "npm run build",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
+    "test:light": "KINO_TEST_SCOPE=light vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "commander": "^12.1.0",
+    "electron": "^40.10.6",
     "execa": "^9.3.0",
     "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0",
     "isomorphic-dompurify": "^2.36.0",
-    "puppeteer": "^25.3.0",
     "yaml": "^2.9.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "@types/ffprobe-static": "^2.0.3",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "esbuild": "^0.28.1",
     "lottie-web": "^5.13.0",
+    "node-addon-api": "^8.3.0",
+    "node-gyp": "^11.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
     "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "electron@40.10.6": true
   }
 }

@@ -15,7 +15,11 @@ precision highp float;
 uniform sampler2D uSrc;
 uniform vec2 uInvRes;
 out vec4 kino_frag;
-float lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }
+// Edge DETECTION runs in gamma space: the thresholds below are perceptual constants, and feeding
+// them linear samples under-detects shadow edges and over-detects highlight ones. sqrt is a close
+// enough gamma approximation for a heuristic. The filtering taps stay linear — that averaging is
+// exactly what linear light gets right.
+float lum(vec3 c){ return dot(sqrt(max(c, 0.0)), vec3(0.299, 0.587, 0.114)); }
 void main(){
   vec2 uv = gl_FragCoord.xy * uInvRes;
   vec3 m  = texture(uSrc, uv).rgb;
@@ -96,10 +100,18 @@ export class CompositeResolve {
     }
   }
 
-  /** Downsample (+ optional FXAA) from `src` into the default framebuffer at `outW`×`outH`. */
-  present(src: WebGLTexture, outW: number, outH: number, useFxaa: boolean): void {
+  /**
+   * Same resolve, into an offscreen FBO instead of the canvas — lets the tail post chain run at
+   * output resolution. Orientation matches `present`: both map gl_FragCoord to uv with no y-flip,
+   * so the result reads back as an ordinary RENDERED target.
+   */
+  resolveTo(dst: WebGLFramebuffer, src: WebGLTexture, outW: number, outH: number, useFxaa: boolean): void {
+    this.blit(dst, src, outW, outH, useFxaa);
+  }
+
+  private blit(dst: WebGLFramebuffer | null, src: WebGLTexture, outW: number, outH: number, useFxaa: boolean): void {
     const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst);
     gl.viewport(0, 0, outW, outH);
     gl.disable(gl.BLEND);
     gl.activeTexture(gl.TEXTURE0);

@@ -85,8 +85,7 @@ void main() {
     coverage = uFeather > 0.0 ? 1.0 - smoothstep(-uFeather * 0.5, uFeather * 0.5, d)
                               : 1.0 - step(0.0, d);
   } else {
-    // Layer masks are rasterized at composition resolution; sample in comp space when SS>1.
-    vec2 maskUv = (uSourceKind == 1 && uCoordScale > 1.0) ? gl_FragCoord.xy / (uRes / uCoordScale) : uv;
+    vec2 maskUv = uv;
     float c = channelOf(texture(uMask, maskUv));
     coverage = uFeather > 0.0 ? smoothstep(0.5 - uFeather / 255.0, 0.5 + uFeather / 255.0, c) : step(0.5, c);
   }

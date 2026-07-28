@@ -4,7 +4,7 @@
 // authored transition window: that keeps every existing spec's timing byte-identical and
 // confines shader transitions to frames that were already crossfading by opacity.
 import type { KinoProps } from "./props.js";
-import { MOTION_XFADE_FRAMES, motionHandoff, pickTransition, type Transition } from "./motion.js";
+import { motionHandoff, motionXfadeFrames, pickTransition, type Transition } from "./motion.js";
 
 const CHAIN_HOLD_FRAMES = 12;
 
@@ -53,13 +53,15 @@ export function groupSpans(props: KinoProps): GroupSpan[] {
     if (s.kind === "motion" && s.motion) {
       const prev = props.segments[i - 1];
       const next = props.segments[i + 1];
+      const nextMotion = next?.kind === "motion" ? next : null;
       const h = motionHandoff({
         startSec: s.startSec,
         endSec: s.endSec,
-        nextMotionStartSec: next?.kind === "motion" ? next.startSec : null,
+        nextMotionStartSec: nextMotion ? nextMotion.startSec : null,
         prevIsMotion: prev?.kind === "motion",
         fps: props.fps,
-        xfadeFrames: MOTION_XFADE_FRAMES,
+        xfadeFrames: nextMotion ? motionXfadeFrames(nextMotion.transition) : 0,
+        fadeIn: prev?.kind === "motion" && motionXfadeFrames(s.transition) > 0,
       });
       return { id: `beat${i}`, from: h.from, to: h.from + h.seqDur };
     }

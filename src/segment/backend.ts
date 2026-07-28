@@ -8,6 +8,10 @@ export interface SegmentRequest {
   objects: number;
   track: boolean;
   outDir: string;
+  /** Image inputs: also write a transparent RGBA subject to assets/cutouts/. */
+  cutout?: boolean;
+  /** Write mask.png / mask.mp4 (default true). Pair with cutout + noMask for cutout-only. */
+  writeMask?: boolean;
 }
 
 export interface SegmentResult {

@@ -1,7 +1,15 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, unlinkSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { containedPath } from "../config/project.js";
 import { pickBackend, type Backend, type SegmentBackend, type SegmentRequest, type SegmentResult } from "./backend.js";
+import {
+  cutoutAssetPath,
+  cutoutRelPath,
+  isImageSegmentInput,
+  resolveSegmentInput,
+  writeImageCutout,
+} from "./cutout.js";
+import { writeManifest } from "./manifest.js";
 import { mockBackend } from "./mock.js";
 
 export interface RunSegmentOpts {
@@ -13,6 +21,8 @@ export interface RunSegmentOpts {
   backend?: SegmentBackend;
   projectRoot: string;
   platform?: NodeJS.Platform;
+  cutout?: boolean;
+  noMask?: boolean;
 }
 
 // Lazy-import coreml so mock-only builds/tests/CI never touch the python-runner path, and any
@@ -36,6 +46,13 @@ async function loadCudaBackend(): Promise<Backend> {
 }
 
 export async function runSegment(opts: RunSegmentOpts): Promise<SegmentResult> {
+  const cutout = opts.cutout === true;
+  const writeMask = opts.noMask ? false : true;
+  if (!writeMask && !cutout) throw new Error("segment needs a mask or --cutout (use --no-mask only with --cutout)");
+  if (cutout && !isImageSegmentInput(opts.input)) {
+    throw new Error("--cutout is image-only (jpg/png/webp); video masks stay mask-only for now");
+  }
+
   const backendName = pickBackend({ requested: opts.backend, platform: opts.platform ?? process.platform });
   const outName = opts.out ?? basename(opts.input, extname(opts.input));
   const outDir = containedPath(join(opts.projectRoot, "assets", "masks"), outName);
@@ -47,11 +64,34 @@ export async function runSegment(opts: RunSegmentOpts): Promise<SegmentResult> {
     objects: opts.objects ?? 1,
     track: opts.track ?? true,
     outDir,
+    cutout,
+    writeMask,
   };
 
   const backend: Backend =
     backendName === "mock" ? mockBackend
     : backendName === "cuda" ? await loadCudaBackend()
     : await loadCoremlBackend();
-  return backend.run(req);
+  const result = await backend.run(req);
+
+  if (cutout) {
+    const inputAbs = resolveSegmentInput(opts.input, opts.projectRoot);
+    const maskPath = join(result.outDir, "mask.png");
+    const dest = cutoutAssetPath(opts.projectRoot, outName);
+    writeImageCutout({
+      input: inputAbs,
+      maskPath,
+      dest,
+      width: result.manifest.width,
+      height: result.manifest.height,
+    });
+    result.manifest.cutout = cutoutRelPath(outName);
+    writeManifest(result.outDir, result.manifest);
+  }
+
+  if (!writeMask) {
+    unlinkSync(join(result.outDir, "mask.png"));
+  }
+
+  return result;
 }

@@ -48,18 +48,26 @@ export async function inlineExternalRefs(
   return html.replace(IMG_SRC, swap).replace(CSS_URL, swap);
 }
 
+// ponytail: global — motion proc re-inlines the same /public assets every frame; without this
+// each prepare duplicates multi-MB base64 strings until GC catches up on long lens builds.
+const dataUrlCache = new Map<string, string>();
+
 /** Fetch a same-origin asset as a data URL. Returns null on any failure. */
 export async function fetchAsDataUrl(url: string): Promise<string | null> {
+  const hit = dataUrlCache.get(url);
+  if (hit) return hit;
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
-    return await new Promise<string | null>((resolve) => {
+    const dataUrl = await new Promise<string | null>((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
+    if (dataUrl) dataUrlCache.set(url, dataUrl);
+    return dataUrl;
   } catch {
     return null;
   }

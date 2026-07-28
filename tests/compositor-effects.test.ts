@@ -1,26 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { build } from "esbuild";
-import puppeteer from "puppeteer";
+import { describe, it, expect, afterAll } from "vitest";
+import { glProbe, closeGlHost } from "./helpers/glHost.js";
 
-const GL_ARGS = ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader"];
+afterAll(closeGlHost);
 
 async function probe(effect: string, params: Record<string, number>): Promise<number[]> {
-  const bundle = await build({
-    entryPoints: ["src/render/native/page/compositor/effects/index.ts"],
-    bundle: true, write: false, format: "iife", globalName: "KinoFx",
-    platform: "browser", target: "chrome120", logLevel: "silent",
+  return glProbe<[string, Record<string, number>], number[]>({
+    entry: "src/render/native/page/compositor/effects/index.ts",
+    globalName: "KinoFx",
+    html: `<!doctype html><body><canvas id="c" width="64" height="64"></canvas></body>`,
+    fn: (effect, params) =>
+      (window as any).KinoFx.probeEffect(document.getElementById("c") as HTMLCanvasElement, effect, params),
+    args: [effect, params],
   });
-  const browser = await puppeteer.launch({ headless: true, args: GL_ARGS });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(`<!doctype html><body><canvas id="c" width="64" height="64"></canvas></body>`);
-    await page.addScriptTag({ content: bundle.outputFiles[0].text });
-    return await page.evaluate((effect, params) => (window as any).KinoFx.probeEffect(
-      document.getElementById("c") as HTMLCanvasElement, effect, params,
-    ), effect, params);
-  } finally {
-    await browser.close();
-  }
 }
 
 describe("blur", () => {

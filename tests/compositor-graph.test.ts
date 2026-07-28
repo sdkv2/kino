@@ -11,6 +11,23 @@ describe("normalizeLayer", () => {
     expect(l.mask).toBeUndefined();
   });
 
+  it("defaults textGamma to the display gamma for text-class layers, 1 for everything else", () => {
+    const base = { source: { providerId: "p" }, rect: { x: 0, y: 0, w: 10, h: 10 } };
+    expect(normalizeLayer({ id: "caption3", ...base }).textGamma).toBe(2.2);
+    expect(normalizeLayer({ id: "text1_0", ...base }).textGamma).toBe(2.2);
+    expect(normalizeLayer({ id: "disclosure", ...base }).textGamma).toBe(2.2);
+    expect(normalizeLayer({ id: "bg", ...base }).textGamma).toBe(1);
+    expect(normalizeLayer({ id: "motion2", ...base }).textGamma).toBe(1);
+  });
+
+  it("lets a spec override textGamma on any layer, clamped to 0.1..4", () => {
+    const base = { source: { providerId: "p" }, rect: { x: 0, y: 0, w: 10, h: 10 } };
+    expect(normalizeLayer({ id: "motion2", textGamma: 1.8, ...base }).textGamma).toBe(1.8);
+    expect(normalizeLayer({ id: "caption0", textGamma: 1, ...base }).textGamma).toBe(1);
+    expect(normalizeLayer({ id: "bg", textGamma: 99, ...base }).textGamma).toBe(4);
+    expect(normalizeLayer({ id: "bg", textGamma: 0, ...base }).textGamma).toBe(0.1);
+  });
+
   it("preserves explicit values", () => {
     const l = normalizeLayer({
       id: "cap", source: { providerId: "cap", key: "word-3" },

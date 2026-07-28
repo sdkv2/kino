@@ -169,28 +169,43 @@ interface VideoInfo {
   transfer: string;
 }
 
+const probeVideoCache = new Map<string, Promise<VideoInfo>>();
+const probeSizeCache = new Map<string, Promise<{ width: number; height: number }>>();
+
+export function clearVideoProbeCache(): void {
+  probeVideoCache.clear();
+  probeSizeCache.clear();
+}
+
 async function probeVideo(abs: string): Promise<VideoInfo> {
-  const [{ stdout: meta }, { stdout: packets }] = await Promise.all([
-    execa(FFPROBE_PATH, [
-      "-v", "error", "-select_streams", "v:0",
-      "-show_entries", "stream=color_transfer",
-      "-of", "default=noprint_wrappers=1", abs,
-    ]),
-    // Packet pts only — no decode, fast even on long clips. Sorting yields display order
-    // regardless of B-frame reordering.
-    execa(FFPROBE_PATH, [
-      "-v", "error", "-select_streams", "v:0",
-      "-show_entries", "packet=pts_time",
-      "-of", "csv=p=0", abs,
-    ]),
-  ]);
-  const transfer = /color_transfer=([\w-]+)/.exec(meta)?.[1] ?? "";
-  const pts = packets
-    .split("\n")
-    .map((l) => parseFloat(l))
-    .filter((v) => Number.isFinite(v))
-    .sort((a, b) => a - b);
-  return { pts, transfer };
+  let cached = probeVideoCache.get(abs);
+  if (!cached) {
+    cached = (async () => {
+      const [{ stdout: meta }, { stdout: packets }] = await Promise.all([
+        execa(FFPROBE_PATH, [
+          "-v", "error", "-select_streams", "v:0",
+          "-show_entries", "stream=color_transfer",
+          "-of", "default=noprint_wrappers=1", abs,
+        ]),
+        // Packet pts only — no decode, fast even on long clips. Sorting yields display order
+        // regardless of B-frame reordering.
+        execa(FFPROBE_PATH, [
+          "-v", "error", "-select_streams", "v:0",
+          "-show_entries", "packet=pts_time",
+          "-of", "csv=p=0", abs,
+        ]),
+      ]);
+      const transfer = /color_transfer=([\w-]+)/.exec(meta)?.[1] ?? "";
+      const pts = packets
+        .split("\n")
+        .map((l) => parseFloat(l))
+        .filter((v) => Number.isFinite(v))
+        .sort((a, b) => a - b);
+      return { pts, transfer };
+    })();
+    probeVideoCache.set(abs, cached);
+  }
+  return cached;
 }
 
 /** Display-order index of the frame whose pts is nearest `t` (ties → the later frame). */
@@ -239,6 +254,7 @@ async function extractIndices(
   assetAbs: string,
   framesRoot: string,
   localFrames: number[],
+  maxDim?: number,
 ): Promise<MediaEntryNode> {
   const dir = join(framesRoot, job.key);
   mkdirSync(dir, { recursive: true });
@@ -273,7 +289,6 @@ async function extractIndices(
   // puts ~25k px/frame of a packed multi-object mask over the 0.05 gate. PNG is also SMALLER than
   // JPEG for binary masks (0.33MB vs 1.12MB per 24 frames @1080x1920), so exactness costs no disk
   // here. Footage keeps JPEG q2: visually lossless, and far cheaper on real photographic frames.
-  // See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
   const isMask = job.key.startsWith("rsmask");
   const ext = isMask ? "png" : "jpg";
   const quality = isMask ? [] : ["-q:v", "2"];
@@ -281,7 +296,10 @@ async function extractIndices(
     const part = uniq.slice(c, c + CHUNK);
     const terms = part.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
     const select = `select='${terms.join("+")}'`;
-    const vf = hdr ? `${select},${hdr}` : select;
+    // Masks are never downscaled: writeSdfSequence below builds its distance field against
+    // probeSize(assetAbs), i.e. the source dimensions, so a resized frame would mismatch.
+    const fit = maxDim && !isMask ? scaleFilter(maxDim) : "";
+    const vf = [select, hdr, fit].filter(Boolean).join(",");
     const firstPts = pts[part[0]];
     const preseek = firstPts > 2 ? ["-ss", Math.max(0, firstPts - 1).toFixed(3), "-noaccurate_seek", "-copyts"] : [];
     await execa(FFMPEG_PATH, [
@@ -335,23 +353,58 @@ async function extractIndices(
 
 /** Pixel dimensions of a decoded asset — the SDF transform needs them to frame the raw stream. */
 async function probeSize(assetAbs: string): Promise<{ width: number; height: number }> {
-  const { stdout } = await execa(FFPROBE_PATH, [
-    "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
-    "-of", "csv=p=0:s=x", assetAbs,
-  ]);
-  const [w, h] = stdout.trim().split("x").map(Number);
-  return { width: w, height: h };
+  let cached = probeSizeCache.get(assetAbs);
+  if (!cached) {
+    cached = (async () => {
+      const { stdout } = await execa(FFPROBE_PATH, [
+        "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x", assetAbs,
+      ]);
+      const [w, h] = stdout.trim().split("x").map(Number);
+      return { width: w, height: h };
+    })();
+    probeSizeCache.set(assetAbs, cached);
+  }
+  return cached;
+}
+
+// Deepest crop any shot applies to its source (push-in / pull-out peak — see shotTransform).
+// Source pixels beyond output * this * ss are decoded and uploaded only to be thrown away.
+const MAX_SHOT_ZOOM = 1.2;
+
+/** Longest source edge worth extracting, given the largest output edge and the supersample
+ *  factor. The whole compositor canvas is supersampled (renderer.ts: width = outW * ss), so the
+ *  budget has to scale with it or SS=2 renders would lose real detail. */
+export function extractMaxDim(outputMaxDim: number, ss: number): number {
+  return Math.ceil(outputMaxDim * MAX_SHOT_ZOOM * Math.max(1, ss));
+}
+
+/** Fit-within filter: downscales only when the source exceeds the budget, preserves aspect, and
+ *  keeps both edges even so the yuv420p paths stay legal. */
+export function scaleFilter(maxDim: number): string {
+  return `scale=w='min(iw,${maxDim})':h='min(ih,${maxDim})':force_original_aspect_ratio=decrease:force_divisible_by=2`;
 }
 
 // Dense extraction (video renders): every local frame of the usage.
-export async function extractDense(job: MediaJob, assetAbs: string, framesRoot: string): Promise<MediaEntryNode> {
+export async function extractDense(
+  job: MediaJob,
+  assetAbs: string,
+  framesRoot: string,
+  maxDim?: number,
+): Promise<MediaEntryNode> {
   if (!existsSync(assetAbs)) return { dir: job.key, byFrame: {}, maxFrame: 0 };
   const locals = Array.from({ length: job.seqDurFrames }, (_, n) => n);
-  return extractIndices(job, assetAbs, framesRoot, locals);
+  return extractIndices(job, assetAbs, framesRoot, locals, maxDim);
 }
 
 // Sparse extraction (stills): only the requested local frames.
-export async function extractSparse(job: MediaJob, assetAbs: string, framesRoot: string, localFrames: number[]): Promise<MediaEntryNode> {
+export async function extractSparse(
+  job: MediaJob,
+  assetAbs: string,
+  framesRoot: string,
+  localFrames: number[],
+  maxDim?: number,
+): Promise<MediaEntryNode> {
   if (!existsSync(assetAbs)) return { dir: job.key, byFrame: {}, maxFrame: 0 };
-  return extractIndices(job, assetAbs, framesRoot, localFrames);
+  return extractIndices(job, assetAbs, framesRoot, localFrames, maxDim);
 }

@@ -3,7 +3,7 @@ name: shader-backgrounds
 description: >
   Use when authoring or debugging kino WebGL shader backgrounds (.frag/.glsl
   ShaderToy mainImage) — custom raymarch/plasma stages, texture channels,
-  u_* param aliases, and pairing with kino-glass liquid refraction. Not for
+  u_* param aliases, and pairing with kino-lens liquid refraction. Not for
   Canvas2D brand-wash, Blender, or ordinary motion HTML chrome.
 ---
 
@@ -11,7 +11,7 @@ description: >
 
 Kino's "3D" look on this branch is **deterministic WebGL2 fragment shaders**
 (ShaderToy `mainImage`) as custom backgrounds, optionally paired with
-**`kino-glass`** liquid refraction in motion HTML. Not Blender. Not `.scene.js`.
+**`kino-lens`** liquid refraction in motion HTML. Not Blender. Not `.scene.js`.
 
 **Craft bar:** `projects/old-light/` (raymarched crystal + galaxy `uTex0` refraction)
 and `projects/vesper/` (`ink-bloom.frag` + dual textures + liquid-glass motion).
@@ -28,7 +28,7 @@ Contract details: `docs/spec-reference.md` (Shader backgrounds). Quality env:
 | Cheap brand horizon wash, no GPU | Canvas2D `brand-wash` (or presets) |
 | Typed UI, chrome, camera choreography | Motion HTML (`kind:"motion"`) — shader stays *behind* as field |
 | Frosted UI panel fog | CSS `backdrop-filter: blur()` — **not** a shader substitute for liquid glass |
-| True bent-rim glass over a stage | Motion `class="kino-glass"` **over** a structured colorful shader (vesper) |
+| True bent-rim glass over a stage | Motion `class="kino-lens"` **over** a structured colorful shader (vesper) |
 
 Hand off: beat job / hierarchy → `motion-design`. Trailer structure → `video-production`.
 Overlap QA → `adversarial-critique`.
@@ -123,16 +123,17 @@ vec3 refrR = kinoBackdropOffset(uTex0, uTexSize0, fragCoord, rr.xy * throwR).rgb
 
 - Motion = `iTime` / `uPulse` / keyframed params only.
 - Never `Date.now`, wall-clock uniforms, or unseeded noise that depends on wall time.
-- Same frame index → same pixels (SwiftShader default). `KINO_GPU=1` is faster, not
-  bit-identical across machines — cache keys separate.
+- Same frame index → same pixels. The GL backend is fixed per platform, so frames are stable on a
+  given machine; pin SwiftShader via `KINO_ELECTRON_ARGS` when they must match across machines.
 
-## Pairing with `kino-glass` (vesper pattern)
+## Pairing with `kino-lens` / `kino-lens` (vesper pattern)
 
-Liquid glass **refracts the background canvas**. Flat night fields make the lens invisible.
+Lens materials **refract the under-composite**. Flat night fields make the lens invisible.
 
 1. Shader stage: structured + colorful (filaments, caustics, photo plates) —
    `ink-bloom.frag` / `liquid-orb` / custom.
-2. Motion HTML: `class="kino-glass"` on the hero mass; keep element background transparent.
+2. Motion HTML: `class="kino-lens"` or `class="kino-lens"` on the hero mass; keep background
+   transparent. Optional `data-lens="liquid-glass"` (default) or another `assets-lib/effects/*.frag`.
 3. Drive knobs via CSS vars (tween with motion params/keyframes):
 
 | Var | Role |
@@ -140,12 +141,13 @@ Liquid glass **refracts the background canvas**. Flat night fields make the lens
 | `--glass-strength` / `--glass-band` / `--glass-chroma` / `--glass-profile` | bend + dispersion |
 | `--glass-frost` / `--glass-edge-blur` | body / rim blur (keep low for "liquid") |
 | `--glass-film` / `--glass-saturate` / `--glass-brightness` | film grade |
-| `--glass-morph` / `--glass-from` / `--glass-to` | SDF shape continuum |
-| **`--glass-tilt`** | degrees — rotate **in-shader**; never CSS-`rotate` the glass node |
-| **`--glass-fit`** | override SDF fit (default: untilted → `1`, any tilt → `0.7`) for known-static tilted cards |
+
+Silhouette: `border-radius`, child `svg.kino-lens-shape`, or `--glass-path*`. Keep the lens node
+axis-aligned (no CSS `rotate`/`skew`).
 
 Stress-test: rim must **bend** structured lines, not shear/ghost. Copyable motion:
-`assets-lib/motion/liquid-glass.html`. Full glass craft: `motion-design` → Liquid glass.
+`assets-lib/motion/liquid-glass.html`. Material: `assets-lib/effects/liquid-glass.frag`.
+Full glass craft: `motion-design` → Liquid glass.
 
 ## Quality: draft vs final
 
@@ -156,17 +158,16 @@ Stress-test: rim must **bend** structured lines, not shear/ghost. Copyable motio
 | FXAA | **on** by default | `KINO_SHADER_FXAA=0` to disable |
 
 FXAA is a whole-frame edge pass after the shader — free silhouette cleanup. Use `aastep`
-where you want an edge extra-crisp (masks, rings). Heavy raymarch + glass → prefer
-`KINO_GPU=1` for wall-clock speed when iterating.
+where you want an edge extra-crisp (masks, rings).
 
 ## Anti-patterns
 
 - Centre-slice texture zoom (`0.5 + rd.xy * k`) instead of cover-fit local uv
 - Relying on CLAMP edges without `kinoMirrorUV` / `kinoBackdrop*`
-- CSS-rotating a `.kino-glass` element (breaks backdrop sampling) — use `--glass-tilt`
+- CSS-rotating or skewing a `.kino-lens` / `.kino-lens` element (breaks backdrop sampling)
 - Frosted `backdrop-filter: blur()` pretending to be liquid glass
 - `Date.now` / wall clock / non-deterministic noise in the frag
-- Flat single-color field under `kino-glass` (nothing to refract)
+- Flat single-color field under `kino-lens` / `kino-lens` (nothing to refract)
 - More than four numeric extras (silently truncated)
 - Stock `mesh` left as the hero stage when the brand should feel authored
 
@@ -200,8 +201,8 @@ pulses land on triggers, stills match encode (determinism).
 
 - `docs/spec-reference.md` — Shader backgrounds uniforms / textures
 - `docs/backgrounds-and-overlays.md` — background presets + custom
-- `docs/build-and-preview.md` — `KINO_SHADER_*` / `KINO_GPU`
-- `skills/motion-design` — composition + `kino-glass` knobs
+- `docs/build-and-preview.md` — `KINO_SHADER_*` / render-host env
+- `skills/motion-design` — composition + `kino-lens` knobs
 - `src/render/shaderSource.ts` — assemble / helpers / aliases (source of truth)
 
 ## Exemplar lessons
@@ -217,9 +218,8 @@ pulses land on triggers, stills match encode (determinism).
 - **Drift offsets need mirror.** Even a tiny parallax (`±0.02`) on a full-bleed sample leaves
   `[0,1]` at the frame edge; without `kinoMirrorUV` / `kinoBackdropOffset`, CLAMP smears streaks.
   Drop hand-rolled `uv*0.92+0.04` insets once edges mirror — that inset was a streak workaround.
-- **`kino-glass` doubled-card:** untilted lens fit is `1.0` (matches element); any tilt falls
-  back to `0.7` AABB (spin-safe, no pulse). Known-static tilted cards → set `--glass-fit`.
-  Never CSS-`rotate` the glass node — use `--glass-tilt`.
+- **Glass lens matches `border-radius`.** Keep the glass node axis-aligned — no CSS `rotate`/`skew`.
+  Pair with a bright border + diagonal sheen for the lit edge.
 - **Preserve look while hardening.** Swap sampling helpers; do not redesign the SDF, palette,
   or motion curve. Prove with `kino still … --at` / `--around` before calling it done.
 
@@ -238,8 +238,6 @@ Hardening footguns (WebGL runtime, not Blender):
 - **FXAA FBO must not stay bound for sampling** while the shader draws into it (undefined /
   feedback). Runtime unbinds unit 4 every frame before pass 1; don’t “optimize” that away.
 - **FXAA is opaque RGB.** Fine for fullscreen backgrounds; not for intentional alpha mattes.
-- **Glass fit:** untilted → `uFit=1`; `|tilt|≥~0.57°` → `0.70`. Static tilted cards →
-  `--glass-fit`. No per-frame angle-exact fit (pulses on spin; breaks still/video match).
 
 ## Hero reel lessons
 

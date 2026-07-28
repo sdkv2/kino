@@ -59,29 +59,27 @@ So the second build after a small edit is fast and cheap — only the changed be
 
 ## Render speed (shader / glass)
 
-Heavy WebGL backgrounds (raymarch) + `kino-glass` are the slow path. Every frame is composited on a single WebGL stage (layers are textures; motion HTML is rasterized per frame). Env levers:
+Heavy WebGL backgrounds (raymarch) + `kino-lens` are the slow path. Every frame is composited on a single WebGL stage (layers are textures; motion HTML is rasterized per frame). Env levers:
 
-The GL backend is **auto-detected per machine**: hardware ANGLE (Metal) on macOS, software
-SwiftShader everywhere else. The detection is a platform rule rather than a runtime probe on
-purpose — macOS always ships Metal, while a Linux/Windows box may equally be a workstation with a
-discrete card or a CI runner with no usable GL, and a wrong guess there fails *silently* (a dead
-GL context renders a flat wash, not an error). Every render prints which backend it used.
+Rendering runs on an **Electron offscreen host**: one Chromium GPU process serving N offscreen
+windows. The GL backend is fixed per platform — ANGLE over Metal on macOS, D3D11 on Windows, Vulkan
+on Linux — rather than probed, because a wrong guess fails *silently* (a dead GL context renders a
+flat wash, not an error). Every render prints which backend it used.
 
-**gpu and sw frames are not bit-identical**, so two machines on auto can legitimately differ. The
-frame cache keys the two apart so they never cross-serve. Pin `KINO_GPU=0` wherever output must
-match byte-for-byte across machines — golden frames, cross-platform CI comparisons.
+On Linux this needs a **real X/Wayland display**: `--ozone-platform=headless` boots but yields no
+WebGL2 on any backend, so run under `xvfb-run` on a headless box. `kino doctor` checks for it.
 
 | Env | Effect |
 |---|---|
-| `KINO_GPU=1` | Force hardware ANGLE (Metal on macOS, bare ANGLE elsewhere). Faster on raymarch/SSAA. |
-| `KINO_GPU=0` | Force SwiftShader CPU GL — the bit-stable canonical path. |
 | `KINO_SHADER_SSAA=1..4` | Override supersample. Mock builds default to **1** (~4× cheaper fill); finals default to **2**. |
 | `KINO_SHADER_FXAA=0` | Disable the default FXAA edge post-pass on shader backgrounds. |
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
-| `KINO_CAPTURE=cdp` | Use Chromium CDP JPEG screenshot instead of the default canvas `toDataURL` capture. |
-| `KINO_CONCURRENCY=N` | Chrome worker count (default cap 8 short / 12 long). |
+| `KINO_ELECTRON_CAPTURE=…` | Pin the capture backend: `shared`, `readback`, `direct`, `page` (default `auto`). |
+| `KINO_ELECTRON_ARGS="…"` | Extra Chromium flags for the render host. A `--use-angle` here overrides the platform default. |
+| `KINO_CONCURRENCY=N` | Render worker count (default cap 4, further bounded by VRAM on Linux). |
 
-Example: `KINO_GPU=0 kino build specs/foo.json --mock` (force the deterministic software path)
+Example: `KINO_ELECTRON_ARGS="--use-angle=swiftshader-webgl --enable-unsafe-swiftshader" kino build specs/foo.json --mock`
+pins SwiftShader, the bit-stable path to use when output must match byte-for-byte across machines.
 
 ## Variants & batch
 

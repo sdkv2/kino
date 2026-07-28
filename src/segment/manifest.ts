@@ -18,6 +18,8 @@ export interface MaskManifest {
   objects: MaskObject[];
   backend: string;
   tracked: boolean;
+  /** Project-relative transparent subject PNG (assets/cutouts/…) when --cutout was used. */
+  cutout?: string;
 }
 
 const FILE = "manifest.json";

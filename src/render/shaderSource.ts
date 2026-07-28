@@ -93,7 +93,7 @@ vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset
 //    the real-edge population outright, which no gate value can separate. Masks are now encoded
 //    -pix_fmt yuv444p -qp 0, and flat g on the packed channels is 0.0055 (zero px/frame even over
 //    0.01). Note it took BOTH: 4:2:0 alone still reads 0.69 when coded losslessly, and lossy 4:4:4
-//    alone still reads 0.62. See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+//    alone still reads 0.62.
 // The gate stays at 0.05, deliberately, now that the floor is 80x below it. Masks generated BEFORE
 // that change are still subsampled and still read up to 0.84, and they must keep rendering —
 // lowering the gate to buy analytic reach would newly break every mask already on disk, to fix no
@@ -101,7 +101,7 @@ vec4 kinoBackdropOffset(sampler2D tex, vec2 texSize, vec2 fragCoord, vec2 offset
 // What a leaky gate actually costs is NOT deep-region speckle — a flat pixel answers 0.5/g, which
 // still clamps to ±radius unless 0.5/g < radius. It is the annulus within one radius of the edge,
 // where ringing is strongest: there the wrong branch drags the field to ±radius and moves every
-// isoline. tests/render-maskdist-video.test.ts measures it (erode lands ~22px off at 0.01).
+// isoline.
 // 0.05 leaves ~10px of analytic reach (the branch resolves 0.5/g px), which covers the transition
 // band any real effect reads.
 // Reads only the texture, the coordinate and derivatives, so determinism holds.
@@ -254,12 +254,11 @@ const BACKDROP_ALIASES = "#define uBackdrop uTex1\n#define uBackdropSize uTexSiz
  *  Per-object (any entry of `maskBodies` non-null): each mask gets its own body, falling back to
  *  `subjectBody` where its entry is null, composited onto the background in ARRAY ORDER — later
  *  entries paint over earlier ones where masks overlap. `maskBodies` is index-aligned with
- *  RegionShaderProps.masks. See docs/superpowers/specs/2026-07-24-per-object-regions-design.md.
+ *  RegionShaderProps.masks.
  *
  *  `hasBackdrop`: the beat binds a SECOND source (regionShader.backdrop) to uTex1 — a cutout over
  *  footage that isn't the beat's own. Adds the uBackdrop/uBackdropSize aliases and makes a
- *  passthrough BACKGROUND that backdrop, cover-fit. False emits exactly the bytes it always did.
- *  See docs/superpowers/specs/2026-07-25-cutout-compositing-design.md. */
+ *  passthrough BACKGROUND that backdrop, cover-fit. False emits exactly the bytes it always did. */
 export function assembleRegionShaderSource(
   subjectBody: string | null,
   backgroundBody: string | null,
@@ -304,9 +303,6 @@ export function assembleRegionShaderSource(
 //
 // Emitted ONLY when a subject-side body actually names it, so a spec that doesn't use the feature
 // gets byte-identical GLSL — the bar phases 2 and 3 held.
-// ponytail: substring test, not a GLSL parse. A body naming it in a comment gets an unused
-// declaration and an unused macro (harmless); one that builds the name through its own macro doesn't
-// match and gets the compile error above. Parse the source if that ever costs anyone anything.
 //
 // Cost is one evaluation of the background body per call — measured +0.019 s/frame for a light body
 // and +0.112 for one 10x heavier (1080x1920, 12 stills, SwiftShader). That is ~5% of what the three
@@ -314,7 +310,6 @@ export function assembleRegionShaderSource(
 // FBO. Cost is taps x body weight and nothing else, so the one shape that gets dear is a WIDE kernel
 // over an EXPENSIVE background (8 taps heavy = +0.47 s/frame). That is where a real two-pass
 // framebuffer becomes the right answer; this signature does not change when it lands.
-// See docs/superpowers/specs/2026-07-25-cross-region-design.md.
 const BG_FORWARD_DECL = "void regionBg(out vec4 fragColor, in vec2 fragCoord);\n";
 const usesBackground = (bodies: (string | null)[]): boolean => bodies.some((b) => b?.includes("kinoBackground"));
 

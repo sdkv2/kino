@@ -41,7 +41,8 @@ export const bloomPass: EffectPass = {
   uniformNames: ["uThreshold", "uIntensity", "uRadius", "uAxis", "uComposite", "uOriginal"],
   frag: BLOOM_FRAG,
   uniforms(gl, loc, params) {
-    gl.uniform1f(loc.uThreshold, Number(params.threshold ?? 0.7));
+    // 0.45 linear == 0.70 sRGB — see the note in glow.ts.
+    gl.uniform1f(loc.uThreshold, Number(params.threshold ?? 0.45));
     gl.uniform1f(loc.uIntensity, Number(params.intensity ?? 0.4));
     gl.uniform1f(loc.uRadius, Number(params.radius ?? 24));
     const axis = String(params.axis ?? "x");

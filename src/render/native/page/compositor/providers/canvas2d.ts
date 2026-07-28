@@ -4,7 +4,7 @@
 import type { BgKeyframe, BgParamValue, BgTrigger, Theme } from "../../../../props.js";
 import { paramsAt, pulseAt } from "../../../../bgparams.js";
 import type { DrawFn } from "../../../../backgrounds/presets.js";
-import { registerBackdrop } from "../../liquidGlass.js";
+import { registerBackdrop } from "../../backdrop.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
 
@@ -18,6 +18,8 @@ export function createCanvas2dSource(opts: {
   height: number;
   fps: number;
   clearNight?: boolean;
+  /** Backdrop layers publish themselves for glass to sample; QA overlays must not clobber that. */
+  publishBackdrop?: boolean;
 }): TextureSource & { canvasForTest(): HTMLCanvasElement } {
   const canvas = document.createElement("canvas");
   canvas.width = opts.width;
@@ -43,7 +45,7 @@ export function createCanvas2dSource(opts: {
         params: paramsAt(opts.params, opts.keyframes, t),
         pulse: pulseAt(opts.triggers, t),
       });
-      registerBackdrop(canvas, opts.width, opts.height);
+      if (opts.publishBackdrop ?? true) registerBackdrop(canvas, opts.width, opts.height);
     },
     texture(gl: WebGL2RenderingContext): WebGLTexture | null {
       tex = uploadCanvasOrImage(gl, tex, canvas);

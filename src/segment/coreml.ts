@@ -15,7 +15,7 @@ import type { Backend, SegmentRequest, SegmentResult } from "./backend.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // dist/segment/coreml.js (and src/segment/coreml.ts) sit two levels under the package root.
-const RUNNER = resolve(here, "../../scripts/sam_runner.py");
+const RUNNER = resolve(here, "../../scripts/sam/sam_runner.py");
 
 const VIDEO_EXT = /\.(mp4|mov|webm|mkv)$/i;
 

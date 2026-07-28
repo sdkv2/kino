@@ -18,13 +18,14 @@ program
   .option("--no-tts", "skip voiceover — full-quality SILENT render (music/SFX still play)")
   .option("--no-avatar", "skip the presenter — full-quality FACELESS render")
   .option("--mock", "alias of --draft (deprecated)")
-  .option("--format <list>", "comma-separated formats, e.g. 9:16,3:4,16:9")
+  .option("--format <list>", "comma-separated formats, e.g. 9:16,16:9-4k (add -4k for UHD)")
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
   .option("--background <kind>", "override the background: glow|image|mesh|aurora|particles|grid|custom")
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
   .option("--beat <n>", "render only beat n (1-indexed) as its own standalone clip — needs --draft or --no-tts")
+  .option("--quality <preset>", "standard (default) | very-high — very-high supersamples the composite 2× (4× fill)")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
   });
@@ -56,9 +57,10 @@ program
   .option("--span <sec>", "window width for --around (default 1)")
   .option("--count <n>", "frames in the --around window (default 5)")
   .option("--montage", "tile multiple stills into one contact sheet")
+  .option("--quality <preset>", "standard (default) | very-high — very-high supersamples the composite 2× (4× fill)")
   .option("--segment <n>", "render the midpoint of segment n")
   .option("--word <word>", "center the sheet on a spoken word's start (with --segment; implies montage)")
-  .option("--format <fmt>", "9:16 | 3:4 | 16:9")
+  .option("--format <fmt>", "9:16 | 3:4 | 16:9 | 9:16-4k | 3:4-4k | 16:9-4k")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--real", "real VO/avatar + true timing (default: mock, free)")
@@ -70,7 +72,7 @@ program
 program
   .command("storyboard <spec>")
   .description("Render per-beat stills (composition + full reveal), tiled into a labeled contact sheet")
-  .option("--format <fmt>", "9:16 | 3:4 | 16:9")
+  .option("--format <fmt>", "9:16 | 3:4 | 16:9 | 9:16-4k | 3:4-4k | 16:9-4k")
   .option("--frames <n>", "frames per beat (default 2: composition + fully-revealed end-state; the ·full tile shows overflow/overlaps)")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
@@ -106,6 +108,8 @@ program
   .option("--prompt <text>", "text prompt naming the object(s) to segment (required)")
   .option("--objects <n>", "number of objects to track (max 4, default 1)")
   .option("--out <name>", "output subdir name under assets/masks/ (default: input's basename)")
+  .option("--cutout", "image only: also write a transparent RGBA subject to assets/cutouts/<out>.png")
+  .option("--no-mask", "skip mask.png (image only; use with --cutout for cutout-only)")
   .option("--no-track", "image-style per-frame segmentation instead of video object tracking")
   .option("--backend <name>", "coreml | cuda | mock (default: coreml on macOS, cuda on Linux/Windows+NVIDIA)")
   .option("--format <fmt>", "json (default: human summary, or JSON when stdout isn't a TTY)")
@@ -234,8 +238,8 @@ program
 program
   .parseAsync(process.argv)
   .then(() => {
-    // Exit explicitly instead of waiting for the event loop to drain: puppeteer's CDP
-    // WebSocket transport isn't reliably unref'd across versions/platforms, so a render
+    // Exit explicitly instead of waiting for the event loop to drain: the render host's
+    // stdio/socket transport isn't reliably unref'd across versions/platforms, so a render
     // command can finish writing its output and then hang forever with no visible work
     // left to do.
     process.exit(0);

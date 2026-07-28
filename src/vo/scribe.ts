@@ -1,8 +1,8 @@
 // ElevenLabs Scribe speech-to-text. Verified shape:
 //   POST /v1/speech-to-text  (multipart: file, model_id=scribe_v1)  → { text, language_code, words[] }
 //   each word: { text, start, end, type: "word" | "spacing" | "audio_event" }
-// Used ONLY to analyse external reference videos (see commands/transcribe.ts header).
-import { filePart, fileName } from "../media/net.js";
+// Used to analyse external reference videos (kino transcribe) and transcribe imported voFile audio clips in buildVO.
+import { fetchWithRetry, filePart, fileName } from "../media/net.js";
 import type { WordTiming } from "../render/props.js";
 
 const BASE = "https://api.elevenlabs.io/v1";
@@ -21,7 +21,7 @@ export async function transcribeAudio(apiKey: string, audioPath: string): Promis
   const fd = new FormData();
   fd.append("file", await filePart(audioPath), fileName(audioPath));
   fd.append("model_id", "scribe_v1");
-  const r = await fetch(`${BASE}/speech-to-text`, { method: "POST", headers: { "xi-api-key": apiKey }, body: fd });
+  const r = await fetchWithRetry(`${BASE}/speech-to-text`, { method: "POST", headers: { "xi-api-key": apiKey }, body: fd });
   if (!r.ok) throw new Error(`Scribe ${r.status}: ${await r.text()}`);
   return (await r.json()) as RawScribe;
 }

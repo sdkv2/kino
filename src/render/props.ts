@@ -66,15 +66,14 @@ export interface RegionShaderProps {
   // publicDir-relative SECOND source for the background region (image or video), bound to
   // uTex1/uTexSize1 and aliased uBackdrop/uBackdropSize. With backgroundCode null it becomes the
   // background passthrough, cover-fit — the cutout. Video backdrops animate through the per-beat
-  // /vframes job `rsbd<i>`. See docs/superpowers/specs/2026-07-25-cutout-compositing-design.md.
+  // /vframes job `rsbd<i>`.
   backdrop?: string;
   // Author params + tweens shared by EVERY body in this beat's program (subjectCode, backgroundCode
   // and each masks[].subjectCode) — there is ONE uParam0..3 bank in the one program they share, so
   // per-entry sets would need per-entry banks and blow the 4-slot ceiling immediately. Numeric
   // non-reserved names pack into uParam slots as `u_<name>`; colorA/B/C + intensity drive their own
   // uniforms. `keyframes[].at` is BEAT-RELATIVE seconds (0 = beat start) — RegionShader sits inside
-  // the beat's Sequence, so its clock is already beat-local and iTime agrees with it. See
-  // docs/superpowers/specs/2026-07-25-region-params-design.md.
+  // the beat's Sequence, so its clock is already beat-local and iTime agrees with it.
   params?: Record<string, BgParamValue>;
   keyframes?: BgKeyframe[];
   // Extra sampler channels for every body in this beat: textures[i] → uTex{i+1}, up to 3. Unbound
@@ -94,7 +93,7 @@ export interface KinoSegment {
   cta?: boolean;
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
-  transition?: string; // resolved in/out transition for video cut-ins
+  transition?: string; // video cut-ins + motion handoffs (`cut` = hard abut)
   clipFrom?: number; // seconds into source asset
   clipTo?: number;
   speed?: number; // playbackRate; default 1
@@ -172,6 +171,8 @@ export interface MotionGraphicProps {
   keyframes: BgKeyframe[]; // tween params over time (--<name>)
   triggers: BgTrigger[]; // one-shot pulses (--pulse)
   words?: WordTiming[]; // beat-relative spoken-word spans, for typed-in-sync graphics (env.words + --kino-words-shown)
+  /** Lens material GLSL keyed by `data-lens` id (default `liquid-glass`). Filled at resolve/hydrate. */
+  lensShaders?: Record<string, string>;
 }
 
 // The argument passed to a Tier-2 procedural graphic's render(env) every frame.

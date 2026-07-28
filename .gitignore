@@ -37,3 +37,9 @@ kino-meta.mp4
 
 # demo workspace (GIFs served from git history via raw URLs)
 demos/
+.worktrees/
+
+# Superpowers specs & plans
+.superpowers/
+superpowers/
+docs/superpowers/

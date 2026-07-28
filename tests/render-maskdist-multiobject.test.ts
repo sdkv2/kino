@@ -7,7 +7,7 @@
 //
 // Three independent lossy stages had to go, each individually enough to break the gate: 4:2:0
 // subsampling (survives even lossless coding), lossy 4:4:4 coding, and JPEG re-extraction at
-// -q:v 2. See docs/superpowers/specs/2026-07-24-multi-object-chroma.md for the distributions.
+// -q:v 2.
 //
 // This rims OBJECT 1, the G channel — the per-object-regions feature's most natural use, and the
 // channel that lives in subsampled chroma.

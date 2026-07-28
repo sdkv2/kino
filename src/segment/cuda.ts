@@ -19,7 +19,7 @@ import type { Backend, SegmentRequest, SegmentResult } from "./backend.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // dist/segment/cuda.js (and src/segment/cuda.ts) sit two levels under the package root.
-const RUNNER = resolve(here, "../../scripts/sam_runner_cuda.py");
+const RUNNER = resolve(here, "../../scripts/sam/sam_runner_cuda.py");
 
 const VIDEO_EXT = /\.(mp4|mov|webm|mkv)$/i;
 
@@ -33,7 +33,7 @@ function resolvePython(): string | null {
 }
 
 const SETUP_HINT =
-  "no usable SAM Python — run scripts/setup_sam_cuda.sh to build ~/.kino/sam/venv, or point " +
+  "no usable SAM Python — run scripts/sam/setup_sam_cuda.sh to build ~/.kino/sam/venv, or point " +
   "KINO_SAM_PYTHON at your own venv with a CUDA-enabled torch + the sam3 package. " +
   "See docs/segmentation.md.";
 

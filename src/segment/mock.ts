@@ -42,7 +42,7 @@ async function writeMaskMp4(out: string): Promise<void> {
     "-vf", `geq=lum='${ellipseExpr()}':cb='128':cr='128'`,
     // Lossless 4:4:4, matching the real runners: 4:2:0 puts a multi-object mask's G/B channels at
     // half resolution and breaks kinoMaskDist's analytic gate. Free — binary masks code losslessly
-    // smaller than crf 16. See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
+    // smaller than crf 16.
     "-pix_fmt", "yuv444p", "-c:v", "libx264", "-qp", "0",
     out,
   ]);

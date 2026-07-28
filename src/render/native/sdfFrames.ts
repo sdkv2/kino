@@ -189,8 +189,14 @@ export async function writeSdfSequence(opts: {
       while (carry.length >= frameBytes) {
         const frame = Uint8Array.from(carry.subarray(0, frameBytes));
         carry = Buffer.from(carry.subarray(frameBytes));
-        const full = fieldsOf(frame, width, height, chans);
-        perFrame.push(full.map((f) => (f ? reduceField(f, width, height, red.width, red.height) : null)));
+        const fields: (Float32Array | null)[] = [null, null, null, null];
+        for (const c of chans) {
+          const cov = reduceChannel(frame, width, height, c, red.width, red.height);
+          const d = signedDistance(cov, red.width, red.height);
+          for (let i = 0; i < d.length; i++) d[i] *= SDF_SCALE;
+          fields[c] = d;
+        }
+        perFrame.push(fields);
       }
     },
   );

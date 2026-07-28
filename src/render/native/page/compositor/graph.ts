@@ -36,10 +36,17 @@ export interface LayerDraw {
   transform: LayerTransform;
   opacity: number;
   blend: BlendMode;
+  /** Coverage-gamma correction for this layer's alpha, applied before premultiply. Font rasters
+   *  are hinted for sRGB compositing and read thin when their coverage is blended in linear light;
+   *  a' = pow(a, 1/textGamma) restores the apparent stroke weight. 1 disables it. Perceptual knob,
+   *  not a correctness one. */
+  textGamma: number;
   effects: EffectRef[];
   mask?: MaskRef;
   /** Beat this layer belongs to, for transitions. Absent = the base group. */
   group?: string;
+  /** Composite after the cinematic-finish pass (motion/overlay tier). Text-behind seg cutouts need this. */
+  aboveFilm?: boolean;
 }
 
 /** What `layersAt` may omit; `normalizeLayer` fills the rest. */
@@ -55,6 +62,15 @@ export interface Dims {
 
 export const IDENTITY_TRANSFORM: LayerTransform = { scale: 1, rotate: 0, translate: [0, 0] };
 
+/** Layers whose pixels are glyph coverage, by the same id convention isAboveFilmLayer uses. */
+const TEXT_CLASS = /^(text|caption|disclosure)/;
+// 2.2 is the display gamma, and that is the principled value rather than a fitted one: correcting
+// coverage by it makes linear-light blending of a glyph edge reproduce what sRGB blending gave,
+// which is the whole point — font hinting and stem weights were tuned for that space.
+// Measured against the caption goldens, diff-to-sRGB-baseline falls monotonically up to here
+// (phrase-caption 0.01026 -> under threshold, words-caption 0.01009 -> under threshold).
+const TEXT_GAMMA_DEFAULT = 2.2;
+
 export function normalizeLayer(spec: LayerSpec): LayerDraw {
   return {
     id: spec.id,
@@ -63,9 +79,11 @@ export function normalizeLayer(spec: LayerSpec): LayerDraw {
     transform: spec.transform ?? IDENTITY_TRANSFORM,
     opacity: Math.min(1, Math.max(0, spec.opacity ?? 1)),
     blend: spec.blend ?? "normal",
+    textGamma: Math.min(4, Math.max(0.1, spec.textGamma ?? (TEXT_CLASS.test(spec.id) ? TEXT_GAMMA_DEFAULT : 1))),
     effects: spec.effects ?? [],
     mask: spec.mask,
     group: spec.group,
+    aboveFilm: spec.aboveFilm,
   };
 }
 
@@ -78,5 +96,9 @@ export interface TextureSource {
   texture(gl: WebGL2RenderingContext, frame: number, key?: string): WebGLTexture | null;
   /** Natural pixel size when the source knows it; null means "use the layer rect". */
   size(): { w: number; h: number } | null;
+  /** True when `texture()` samples the compositor backdrop (post-raster effects). */
+  needsCompositorBackdrop?(frame: number, key?: string): boolean;
+  /** When true, compositor samples with SAMPLE_RENDERED (FBO output) instead of SAMPLE_UPLOADED. */
+  textureIsRendered?(frame?: number, key?: string): boolean;
   dispose?(): void;
 }

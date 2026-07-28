@@ -14,6 +14,7 @@ export interface PostFx {
   film?: { intensity?: number };
 }
 
+// threshold of 0.45 cuts at roughly sRGB 0.70.
 interface Range {
   min: number;
   max: number;

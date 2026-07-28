@@ -4,27 +4,34 @@ import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderFrameRange, type PageHandle } from "../src/render/native/engine.js";
+import { renderFrameRange } from "../src/render/native/engine.js";
+import type { WorkerHandle } from "../src/render/native/workerHandle.js";
 import { frameSignatures } from "../src/render/native/frameCache.js";
 import { extractDense, type MediaJob } from "../src/render/native/videoFrames.js";
 import type { KinoProps } from "../src/render/props.js";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Pipeline capture returns the previous frame's JPEG; fake handles model synchronous capture.
+beforeAll(() => {
+  process.env.KINO_CAPTURE_PIPELINE = "0";
+});
+afterAll(() => {
+  delete process.env.KINO_CAPTURE_PIPELINE;
+});
+
 // Fake capture handle: shot() returns the last-sought frame index as bytes, with an optional
 // per-frame delay so worker/drain wait patterns can be forced.
-function fakeHandle(delayFor: (frame: number) => number): PageHandle {
+function fakeHandle(delayFor: (frame: number) => number): WorkerHandle {
   let at = -1;
   return {
-    page: null as never,
-    seek: async (frame) => {
+    seekAndCapture: async (frame) => {
       at = frame;
-    },
-    shot: async () => {
       const d = delayFor(at);
       if (d > 0) await sleep(d);
       return Buffer.from(String(at));
     },
+    flush: async () => null,
   };
 }
 
@@ -38,9 +45,9 @@ describe("renderFrameRange", () => {
     const handles = Array.from({ length: 8 }, () => fakeHandle((f) => (f % 40 === 0 ? 25 : 0)));
     const written: number[] = [];
     const stdin = {
-      write(buf: Buffer, cb: (err?: Error | null) => void) {
+      write(buf: Buffer, cb?: (err?: Error | null) => void) {
         written.push(Number(buf.toString()));
-        setTimeout(() => cb(null), 1);
+        if (typeof cb === "function") setTimeout(() => cb(null), 1);
         return true;
       },
     } as unknown as NodeJS.WritableStream;
@@ -50,12 +57,11 @@ describe("renderFrameRange", () => {
   }, 30000);
 
   it("propagates a worker failure instead of hanging", async () => {
-    const bad: PageHandle = {
-      page: null as never,
-      seek: async () => {},
-      shot: async () => {
+    const bad: WorkerHandle = {
+      seekAndCapture: async () => {
         throw new Error("boom");
       },
+      flush: async () => null,
     };
     const stdin = {
       write(_buf: Buffer, cb: (err?: Error | null) => void) {
@@ -65,6 +71,40 @@ describe("renderFrameRange", () => {
     } as unknown as NodeJS.WritableStream;
     await expect(renderFrameRange([bad], 10, stdin)).rejects.toThrow("boom");
   });
+
+  // Regression: the worker's terminal branch (next >= total) stored the final lagging frame via
+  // storeLag but returned without notify(), so a drain parked in waitTick() never woke — deadlock
+  // only in pipeline mode, where flush is the sole producer of the last frame. Force that race:
+  // one worker, last seek + flush slow enough that drain parks before the final store lands.
+  it("completes when final pipelined flush lands while drain is parked (no lost-wakeup deadlock)", async () => {
+    const total = 20;
+    let pending: Buffer | null = null;
+    const handle: WorkerHandle = {
+      seekAndCapture: async (frame) => {
+        if (frame === total - 1) await sleep(40);
+        const prev = pending;
+        pending = Buffer.from(String(frame));
+        return prev;
+      },
+      flush: async () => {
+        await sleep(40);
+        const last = pending;
+        pending = null;
+        return last;
+      },
+    };
+    const written: number[] = [];
+    const stdin = {
+      write(buf: Buffer, cb?: (err?: Error | null) => void) {
+        written.push(Number(buf.toString()));
+        if (typeof cb === "function") cb(null);
+        return true;
+      },
+    } as unknown as NodeJS.WritableStream;
+
+    await renderFrameRange([handle], total, stdin, undefined, { pipeline: true });
+    expect(written).toEqual(Array.from({ length: total }, (_, i) => i));
+  }, 5000);
 });
 
 describe("frame cache", () => {
@@ -93,29 +133,27 @@ describe("frame cache", () => {
     for (let n = 0; n < 300; n++) expect(b[n]).not.toBe(a[n]);
   });
 
-  it("gpu vs sw and shaderSS split the global signature", () => {
+  // The gpu/sw axis is gone with puppeteer: the Electron host forces its own ANGLE backend per
+  // platform and there is no longer a knob that changes it mid-install. shaderSS remains a real
+  // pixel axis and still has to split the key.
+  it("shaderSS splits the global signature", () => {
     const segs = [{ kind: "motion", startSec: 0, endSec: 10, proc: "one" }];
     const base = { ...sigOpts, props: props(segs) };
-    const sw = frameSignatures({ ...base, mode: "sw", shaderSS: 2 });
-    const gpu = frameSignatures({ ...base, mode: "gpu", shaderSS: 2 });
-    const draft = frameSignatures({ ...base, mode: "sw", shaderSS: 1 });
-    for (let n = 0; n < 300; n++) {
-      expect(gpu[n]).not.toBe(sw[n]);
-      expect(draft[n]).not.toBe(sw[n]);
-    }
-    const sw2 = frameSignatures({ ...base, mode: "sw", shaderSS: 2 });
-    expect(sw2[0]).toBe(sw[0]);
+    const full = frameSignatures({ ...base, shaderSS: 2 });
+    const draft = frameSignatures({ ...base, shaderSS: 1 });
+    for (let n = 0; n < 300; n++) expect(draft[n]).not.toBe(full[n]);
+    expect(frameSignatures({ ...base, shaderSS: 2 })[0]).toBe(full[0]);
   });
 
   it("renderFrameRange serves cached frames without touching the page and stores misses", async () => {
     const total = 60;
     const seeks: number[] = [];
-    const handle: PageHandle = {
-      page: null as never,
-      seek: async (f) => {
+    const handle: WorkerHandle = {
+      seekAndCapture: async (f) => {
         seeks.push(f);
+        return Buffer.from("fresh");
       },
-      shot: async () => Buffer.from("fresh"),
+      flush: async () => null,
     };
     const stored = new Map<number, Buffer>();
     for (let n = 0; n < 30; n++) stored.set(n, Buffer.from("cached"));
@@ -127,9 +165,9 @@ describe("frame cache", () => {
     };
     const written: string[] = [];
     const stdin = {
-      write(buf: Buffer, cb: (err?: Error | null) => void) {
+      write(buf: Buffer, cb?: (err?: Error | null) => void) {
         written.push(buf.toString());
-        cb(null);
+        if (typeof cb === "function") cb(null);
         return true;
       },
     } as unknown as NodeJS.WritableStream;
@@ -181,9 +219,6 @@ describe("extractDense chunking", () => {
   // and JPEG quantization perturbs the rendered distance field on the rim — 166 px of a 1080x1920
   // frame moved by up to 0.208 in a measured A/B render. Footage stays on JPEG q2, which the test
   // above pins. The two halves are one `job.key.startsWith("rsmask")` branch, so pin both sides:
-  // a stale readback filter that still looked for .jpg would find zero files and silently freeze
-  // every mask at "hold last frame" rather than fail.
-  // See docs/superpowers/specs/2026-07-24-multi-object-chroma.md.
   it("extracts mask jobs to png and leaves footage on jpg", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-maskext-"));
     const video = join(dir, "src.mp4");

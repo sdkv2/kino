@@ -29,4 +29,15 @@ out vec4 kino_frag;
 
 vec4 kinoUnpremul(vec4 c) { return c.a > 0.0 ? vec4(c.rgb / c.a, c.a) : c; }
 vec4 kinoPremul(vec4 c) { return vec4(c.rgb * c.a, c.a); }
+
+// Values in uSrc are LINEAR — the pool targets are SRGB8_ALPHA8, so GL decoded them on sample.
+// Most passes want that. A pass whose parameters are perceptual by construction (a "darken by
+// 46%", a fixed-amplitude grain) does not: applied to linear values those constants collapse in
+// the highlights and explode in the shadows. Such a pass encodes, operates, and decodes back.
+vec3 kinoToLinear(vec3 c) {
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 kinoToSRGB(vec3 c) {
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
 `;

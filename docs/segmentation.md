@@ -32,6 +32,8 @@ kino segment <input> --prompt "<text>" [options]
 | `--prompt <text>` | concept to segment ("the car", "the dog"). Required. |
 | `--objects <n>` | cap objects (default 1, max 4 — packed into mask R/G/B/A). |
 | `--out <name>` | artifact dir name under `assets/masks/` (default: input basename). |
+| `--cutout` | **image only:** also write a transparent RGBA subject to `assets/cutouts/<out>.png` (mask still written unless `--no-mask`). |
+| `--no-mask` | **image only:** skip `mask.png` — pair with `--cutout` for cutout-only. |
 | `--no-track` | video: force per-frame (no temporal tracking). |
 | `--backend <coreml\|cuda\|mock>` | default: `coreml` on macOS, `cuda` elsewhere. `mock` runs anywhere. |
 | `--format json` | machine-readable manifest to stdout (auto when non-TTY). |
@@ -125,7 +127,7 @@ Three consumption paths, cheapest to richest.
 
 ### 1. Mask as a shader texture channel
 
-Any mask file is a `backgroundTextures` channel (`uTex0..uTex3`). Image mask = static. **Note:** a *video* source in this generic `backgroundTextures` channel currently renders **frozen at frame 0** (it still uses the `<video>`-seek path). For animated video masks use **region shaders** (below), which route video through the `/vframes` frame pipeline. Routing this generic channel the same way is queued in `docs/segmentation-tracking-todo.md`.
+Any mask file is a `backgroundTextures` channel (`uTex0..uTex3`). Image mask = static. **Note:** a *video* source in this generic `backgroundTextures` channel currently renders **frozen at frame 0** (it still uses the `<video>`-seek path). For animated video masks use **region shaders** (below), which route video through the `/vframes` frame pipeline.
 
 ```json
 "background": "custom",

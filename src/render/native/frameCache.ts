@@ -10,12 +10,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { promises as fsp } from "node:fs";
 import { join } from "node:path";
 import type { KinoProps } from "../props.js";
-import { resolveGL } from "./browser.js";
+import { resolveMotionFoMin } from "./engine.js";
+import type { CaptureKind } from "./electron/gpuCapture.js";
 
 // Longest pixel bleed across a beat boundary: 24-frame dissolve entry / 15-frame motion xfade /
 // 12-frame chained-app extension — 30 covers all with margin.
 const PAD = 30;
-const VERSION = 4;
+const VERSION = 8; // 8: the motion FO supersample floor is opt-in too
 
 const sha1 = (s: string) => createHash("sha1").update(s).digest("hex");
 
@@ -40,19 +41,24 @@ export function frameSignatures(opts: {
   height: number;
   total: number;
   fps: number;
-  /** GL backend — gpu/sw frames must not cross-serve (default: resolveGL for this machine). */
-  mode?: "gpu" | "sw";
+  /** Electron's resolved capture backend. NVENC/VideoToolbox/WebCodecs are different encoders
+   *  producing different bytes, so `readback` frames must not serve a `direct` render. */
+  captureKind?: CaptureKind;
   /** Shader/glass supersample factor — SS=1 vs 2 are different pixels. */
   shaderSS?: number;
   /** FXAA edge post-pass on/off — different pixels. */
   shaderFXAA?: boolean;
+  /** h264 vs jpeg capture — different cached bytes. */
+  captureCodec?: "jpeg" | "h264";
+  /** Resolved FO supersample floor. Depends on the quality preset, so callers pass it in. */
+  motionFoMin?: number;
   /** @deprecated single render path — retained for signature stability during cache migration */
   compositor?: boolean;
 }): string[] {
   const { props, publicDir, pageJsHash, width, height, total, fps } = opts;
-  const mode = opts.mode ?? resolveGL();
-  const shaderSS = opts.shaderSS ?? 2;
+  const shaderSS = opts.shaderSS ?? 1;
   const shaderFXAA = opts.shaderFXAA ?? true;
+  const captureCodec = opts.captureCodec ?? "jpeg";
   const f = (s: number) => Math.round(s * fps);
   const globalSig = sha1(
     JSON.stringify({
@@ -62,9 +68,20 @@ export function frameSignatures(opts: {
       fps,
       total,
       pageJsHash,
-      mode,
+      // `mode` (the old puppeteer gpu/sw axis) is deliberately still emitted as undefined rather
+      // than deleted. JSON.stringify drops undefined keys, so the hashed object stays BYTE-IDENTICAL
+      // to what the electron path already wrote — existing .frame-cache directories keep serving
+      // instead of cold-starting on a change that alters no pixels. Same reason `renderer` below is
+      // pinned to the literal instead of removed. Do not "tidy" these away.
+      mode: undefined,
       shaderSS,
       shaderFXAA,
+      // Motion FO supersample floor: a KINO_MOTION_FO_SCALE=1 preview must never serve (or be
+      // served by) 2× frames. Undefined keeps the key identical to pre-knob runs.
+      motionFoMin: opts.motionFoMin ?? resolveMotionFoMin(),
+      captureCodec,
+      renderer: "electron",
+      captureKind: opts.captureKind,
       avatar: props.avatar ? statSig(join(publicDir, props.avatar)) : "none",
       props: { ...props, segments: undefined, music: undefined },
     }),
@@ -93,10 +110,10 @@ export interface FrameCache {
 
 interface Manifest {
   version: number;
-  sigs: Record<string, string>; // frame index → signature of the stored JPEG
+  sigs: Record<string, string>; // frame index → signature of the stored capture blob
 }
 
-const frameFile = (n: number) => `f${String(n).padStart(6, "0")}.jpg`;
+const frameFile = (n: number) => `f${String(n).padStart(6, "0")}.cap`;
 
 /**
  * Open the on-disk cache for one format. `sigs` are this build's per-frame signatures; a stored
@@ -136,7 +153,7 @@ export function openFrameCache(dir: string, sigs: string[]): FrameCache {
       writeFileSync(join(dir, "manifest.json"), JSON.stringify(next));
       const keep = new Set(Object.keys(next.sigs).map((n) => frameFile(Number(n))));
       for (const f of readdirSync(dir)) {
-        if (f.startsWith("f") && f.endsWith(".jpg") && !keep.has(f)) rmSync(join(dir, f), { force: true });
+        if (f.startsWith("f") && (f.endsWith(".cap") || f.endsWith(".jpg")) && !keep.has(f)) rmSync(join(dir, f), { force: true });
       }
     },
   };

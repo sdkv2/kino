@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { MotionGraphicProps, BgKeyframe, BgTrigger, BgParamValue } from "./props.js";
 import { resolveMotionSource } from "../media/motionLib.js";
+import { attachLensShaders, type EffectResolveProject } from "../media/effectsLib.js";
 import { sanitizeMotionHtml } from "./sanitizeMotion.js";
 import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
 
@@ -30,7 +31,12 @@ const BANNED: { re: RegExp; msg: string }[] = [
 
 // Returns a list of human-readable violations (empty = clean). Pure; no DOMPurify needed.
 export function lintMotionHtml(html: string): string[] {
-  return BANNED.filter((b) => b.re.test(html)).map((b) => b.msg);
+  // SMIL is allowed inside `.kino-lens-shape` (scrubbed via svg.setCurrentTime + --progress).
+  const forLint = html.replace(
+    /<svg\b[^>]*\bkino-lens-shape\b[^>]*>[\s\S]*?<\/svg>/gi,
+    '<svg class="kino-lens-shape"></svg>',
+  );
+  return BANNED.filter((b) => b.re.test(forLint)).map((b) => b.msg);
 }
 
 // Determinism + safety denylist for Tier-2 procedural sources (JS). The function must be a pure
@@ -235,7 +241,7 @@ export interface MotionGraphicRefInput {
 // params/keyframes/triggers. `project` is narrowed to just the asset resolver for easy testing.
 export function resolveMotionGraphic(
   ref: MotionGraphicRefInput,
-  project: { assetPath(rel: string): string },
+  project: EffectResolveProject,
 ): MotionGraphicProps {
   const { abs, display, fileName } = resolveMotionSource(ref.source, project);
   const raw = readFileSync(abs, "utf8");
@@ -251,7 +257,7 @@ export function resolveMotionGraphic(
     // it's code, not markup; its per-frame output is trusted like the custom-background draw fn).
     const violations = lintMotionJs(raw);
     if (violations.length) throw new Error(`Motion graphic ${display}: ${violations.join("; ")}`);
-    return { html: "", proc: raw, ...base };
+    return attachLensShaders({ html: "", proc: raw, ...base }, project);
   }
   if (ext.endsWith(".json")) {
     // Tier 3: Lottie. Parse + validate + lint (throw), then warn (non-fatal).
@@ -264,7 +270,7 @@ export function resolveMotionGraphic(
   if (ext.endsWith(".html")) {
     const violations = lintMotionHtml(raw);
     if (violations.length) throw new Error(`Motion graphic ${display}: ${violations.join("; ")}`);
-    return { html: sanitizeMotionHtml(raw), ...base };
+    return attachLensShaders({ html: sanitizeMotionHtml(raw), ...base }, project);
   }
   throw new Error(`Motion graphic ${display}: motion source must be .html, .js, or .json`);
 }

@@ -1,6 +1,7 @@
 // The stage renderer: an ordered list of textured quads drawn into one WebGL2 surface.
-// Blending is sRGB with premultiplied alpha, matching CSS compositing semantics — linear
-// blending would shift every existing spec.
+// Blending is LINEAR LIGHT with premultiplied alpha. The mechanism is the target format, not any
+// blendFunc: TargetPool hands out SRGB8_ALPHA8, which WebGL2 decodes on sample and encodes on
+// write.
 //
 // Everything here runs in the SYNCHRONOUS draw phase. No awaits, no decodes, no layout:
 // sources have already been prepared by the time draw() is called.
@@ -13,7 +14,7 @@ import { getPass, runChain, type EffectPass } from "./effects/index.js";
 import { resolveFilmPass, resolveTailPostChain, runPost } from "./post.js";
 import type { PostFx } from "../../../postSpec.js";
 import type { Theme } from "../../../props.js";
-import { registerBackdropTexture, clearBackdropTexture } from "../liquidGlass.js";
+import { clearBackdrop, registerBackdropTexture } from "../backdrop.js";
 import { mixGroups } from "./transitions/index.js";
 import {
   groupSpans,
@@ -23,6 +24,7 @@ import {
 import type { KinoProps } from "../../../props.js";
 import { CompositeResolve } from "./resolve.js";
 import { shaderFXAA } from "../../shaderQuality.js";
+import * as prof from "./profile.js";
 
 // Two texture origins meet in this file, and mixing them up mirrors the frame.
 //
@@ -37,6 +39,20 @@ import { shaderFXAA } from "../../shaderQuality.js";
 // texture must set uFlipY=0. Use SAMPLE_RENDERED / SAMPLE_UPLOADED rather than bare literals.
 const SAMPLE_UPLOADED = 0;
 const SAMPLE_RENDERED = 1;
+
+// What a bound texture needs on the way into the linear-light blend. Which one applies depends
+// on who produced the texture, not on what it depicts:
+//
+//   DECODE_NONE        a compositor TargetPool target — SRGB8_ALPHA8, so GL already decoded it,
+//                      and its contents are premultiplied linear. Nothing to do.
+//   DECODE_PREMUL      an uploadCanvasOrImage texture — SRGB8_ALPHA8 with STRAIGHT alpha, so GL
+//                      decoded the colour and the shader still owes the premultiply.
+//   DECODE_SRGB_PREMUL a provider-rendered RGBA8 texture (motion.ts on its gpuRendered path),
+//                      holding sRGB values already premultiplied in sRGB. The premultiply has to
+//                      be undone before the decode, because decode(c*a) != decode(c)*a.
+const DECODE_NONE = 0;
+const DECODE_PREMUL = 1;
+const DECODE_SRGB_PREMUL = 2;
 
 const VERT = `#version 300 es
 // Unit quad from gl_VertexID, positioned by a 3x3 model matrix in pixel space.
@@ -57,11 +73,35 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uTex;
 uniform float uOpacity;
+uniform int uDecode;
+uniform float uEncode;
+uniform float uTextGamma;
 in vec2 vUv;
 out vec4 kino_frag;
+
+vec3 kinoToLinear(vec3 c) {
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 kinoToSRGB(vec3 c) {
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+
 void main() {
   vec4 c = texture(uTex, vUv);
-  kino_frag = c * uOpacity;   // premultiplied — scaling the whole texel is correct
+  if (uDecode == 1) {
+    // Coverage gamma first: glyph rasters are hinted for sRGB compositing and read thin when
+    // their coverage is blended in linear light. 1.0 is the no-op path for everything else.
+    float a = uTextGamma == 1.0 ? c.a : pow(c.a, 1.0 / uTextGamma);
+    c = vec4(c.rgb * a, a);                      // GL decoded; premultiply in linear
+  } else if (uDecode == 2) {
+    vec3 straight = c.a > 0.0 ? c.rgb / c.a : c.rgb;
+    c = vec4(kinoToLinear(straight) * c.a, c.a); // undo sRGB premultiply, decode, redo in linear
+  }
+  c *= uOpacity;                                 // premultiplied — scaling the whole texel is correct
+  // Present only. The composite is opaque there (the frame clears to opaque black and the context
+  // is alpha:false), so encoding the premultiplied rgb needs no unpremultiply.
+  if (uEncode > 0.5) c = vec4(kinoToSRGB(c.rgb), c.a);
+  kino_frag = c;
 }`;
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
@@ -111,6 +151,7 @@ function modelMatrix(layer: LayerDraw): Float32Array {
 
 /** Motion, overlays, type, and logo sit above the cinematic finish — same stack as KinoVideo. */
 function isAboveFilmLayer(layer: LayerDraw): boolean {
+  if (layer.aboveFilm) return true;
   const id = layer.id;
   return (
     id.startsWith("motion") ||
@@ -130,6 +171,9 @@ export class StageRenderer {
   private uOpacity: WebGLUniformLocation;
   private uTex: WebGLUniformLocation;
   private uFlipY: WebGLUniformLocation;
+  private uDecode: WebGLUniformLocation;
+  private uEncode: WebGLUniformLocation;
+  private uTextGamma: WebGLUniformLocation;
   readonly width: number;
   readonly height: number;
   readonly outW: number;
@@ -167,7 +211,25 @@ export class StageRenderer {
     this.uOpacity = gl.getUniformLocation(prog, "uOpacity")!;
     this.uTex = gl.getUniformLocation(prog, "uTex")!;
     this.uFlipY = gl.getUniformLocation(prog, "uFlipY")!;
+    this.uDecode = gl.getUniformLocation(prog, "uDecode")!;
+    this.uEncode = gl.getUniformLocation(prog, "uEncode")!;
+    this.uTextGamma = gl.getUniformLocation(prog, "uTextGamma")!;
     this.resolve = new CompositeResolve(gl);
+  }
+
+  /**
+   * Time one GL phase. GL commands are queued, not executed, so a bare timer would credit every
+   * phase's real cost to the trailing gl.finish(). When profiling is on this flushes after each
+   * phase to attribute it correctly — which serializes the pipeline, so profiled runs are SLOWER
+   * than real ones. Use the shares, not the absolute totals.
+   */
+  private glPhase<T>(key: string, fn: () => T): T {
+    if (!prof.profileOn()) return fn();
+    return prof.sync(key, () => {
+      const r = fn();
+      this.gl.finish();
+      return r;
+    });
   }
 
   private scaled(layer: LayerDraw): LayerDraw {
@@ -216,10 +278,21 @@ export class StageRenderer {
     // compositing, so pool reuse cannot scribble over a held mask source (SS=2 pressure).
     const ensureLayerMaskTarget = (layerId: string): void => {
       if (maskTargets.has(layerId)) return;
-      const maskLayer = layers.find((l) => l.id === layerId);
-      const maskSource = maskLayer && sources.get(maskLayer.source.providerId);
-      if (!maskLayer || !maskSource) return;
-      const t = this.drawMaskSource(maskLayer, maskSource, frame);
+      const maskLayer = layers.find((l) => l.id === layerId || l.source.providerId === layerId);
+      const providerId = maskLayer ? maskLayer.source.providerId : layerId;
+      const maskSource = sources.get(providerId);
+      if (!maskSource) return;
+      const targetLayer: LayerDraw = maskLayer ?? {
+        id: layerId,
+        source: { providerId },
+        rect: { x: 0, y: 0, w: this.outW, h: this.outH },
+        transform: IDENTITY_TRANSFORM,
+        opacity: 1,
+        blend: "normal",
+        textGamma: 1,
+        effects: [],
+      };
+      const t = this.drawMaskSource(targetLayer, maskSource, frame);
       if (t) {
         maskTargets.set(layerId, t);
         this.pool.hold(t);
@@ -229,15 +302,22 @@ export class StageRenderer {
     const belowFilm = layers.filter((l) => !isAboveFilmLayer(l));
     const aboveFilm = layers.filter((l) => isAboveFilmLayer(l));
 
-    for (const run of groupRuns(belowFilm)) {
-      const gid = run[0].group ?? BASE_GROUP;
-      if (skipGroups?.has(gid)) continue;
-      this.compositeRun(accum, run, sources, frame, maskTargets);
+    for (const layer of belowFilm) {
+      const ref = (layer.mask as { source?: { kind?: string; layerId?: string } })?.source;
+      if (ref?.kind === "layer" && ref.layerId) ensureLayerMaskTarget(ref.layerId);
     }
+
+    this.glPhase("draw:composite-below", () => {
+      for (const run of groupRuns(belowFilm)) {
+        const gid = run[0].group ?? BASE_GROUP;
+        if (skipGroups?.has(gid)) continue;
+        this.compositeRun(accum, run, sources, frame, maskTargets);
+      }
+    });
 
     const filmChain = resolveFilmPass(opts.postFx, opts.theme);
     if (filmChain.length) {
-      const filmed = runPost(gl, this.pool, accum, filmChain, frame);
+      const filmed = this.glPhase("draw:film", () => runPost(gl, this.pool, accum, filmChain, frame));
       if (filmed !== accum) {
         this.pool.release(accum);
         accum = filmed;
@@ -249,11 +329,13 @@ export class StageRenderer {
       if (ref?.kind === "layer" && ref.layerId) ensureLayerMaskTarget(ref.layerId);
     }
 
-    for (const run of groupRuns(aboveFilm)) {
-      const gid = run[0].group ?? BASE_GROUP;
-      if (skipGroups?.has(gid)) continue;
-      this.compositeRun(accum, run, sources, frame, maskTargets);
-    }
+    this.glPhase("draw:composite-above", () => {
+      for (const run of groupRuns(aboveFilm)) {
+        const gid = run[0].group ?? BASE_GROUP;
+        if (skipGroups?.has(gid)) continue;
+        this.compositeRun(accum, run, sources, frame, maskTargets);
+      }
+    });
 
     if (transition) {
       const byGroup = groupsOf(layers);
@@ -272,39 +354,69 @@ export class StageRenderer {
     }
     for (const t of maskTargets.values()) this.pool.unhold(t);
 
+    // Resolve to OUTPUT resolution BEFORE the tail post chain. grade/bloom/lens are full-frame
+    // passes, so at SS=2 they each burn 4× the fill for no anti-aliasing benefit — the AA comes
+    // from compositing the layers at SS, which is finished by here. Bloom's pixel radius is
+    // compensated in resolveTailPostChain so the visible result is unchanged.
+    if (this.ss > 1) {
+      const resolved = this.pool.acquire(gl, this.outW, this.outH);
+      // No FXAA here, ever. It is a luma-gradient blur with no subpixel data, so applied to the
+      // whole composite it smears glyph edges — measured at 0.0148 deviation on menubar text
+      // versus 0.0073 with it off, and obvious at 5x. The one layer class that wants FXAA (shader
+      // backgrounds) already runs its own, layer-local, in shaderHost. This pass only downsamples.
+      this.glPhase("draw:resolve", () =>
+        this.resolve.resolveTo(resolved.fbo, accum.tex, this.outW, this.outH, false),
+      );
+      this.pool.release(accum);
+      accum = resolved;
+    }
+
     let composite = accum;
-    const posted = runPost(gl, this.pool, accum, resolveTailPostChain(opts.postFx, opts.theme), frame);
+    const posted = this.glPhase("draw:post-tail", () =>
+      runPost(gl, this.pool, accum, resolveTailPostChain(opts.postFx, opts.theme, this.ss), frame),
+    );
     if (posted !== accum) {
       this.pool.release(accum);
       composite = posted;
     }
 
-    // Blit accumulated composite to the display canvas (FXAA downsample when SS>1).
-    if (this.ss > 1) {
-      this.resolve.present(composite.tex, this.outW, this.outH, shaderFXAA());
-    } else {
+    // Composite is at output resolution either way now — straight 1:1 blit to the canvas.
+    this.glPhase("draw:present", () => {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, this.width, this.height);
+      gl.viewport(0, 0, this.outW, this.outH);
       gl.useProgram(this.prog);
       gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
-      gl.uniform2f(this.uRes, this.width, this.height);
+      gl.uniform1i(this.uDecode, DECODE_NONE);
+      // The only encode in the pipeline: the default drawing buffer is plain RGBA8, so unlike a
+      // pool target it will not encode on write. Everything else stays linear.
+      gl.uniform1f(this.uEncode, 1);
+      gl.uniform1f(this.uTextGamma, 1); // already applied when the layer was drawn into this target
+      gl.uniform2f(this.uRes, this.outW, this.outH);
       gl.disable(gl.BLEND);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, composite.tex);
       gl.uniformMatrix3fv(
         this.uModel,
         false,
-        modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.width, h: this.height }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", effects: [] }),
+        modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.outW, h: this.outH }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", textGamma: 1, effects: [] }),
       );
       gl.uniform1f(this.uOpacity, 1.0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
+    });
     this.pool.release(composite);
-    clearBackdropTexture();
-    gl.finish();
+    clearBackdrop();
+    prof.sync("draw:finish", () => gl.finish());
   }
 
   private pool = new TargetPool();
+
+  // The backdrop published to lens/glass consumers is RGBA8 holding sRGB BYTES, not a pool target.
+  // Those consumers are user-authored shaders that expect the sRGB values the compositor used to
+  // blend in; publishing a pool target would hand them linear values.
+  private snapTex: WebGLTexture | null = null;
+  private snapFbo: WebGLFramebuffer | null = null;
+  private snapW = 0;
+  private snapH = 0;
 
   private compositeLayersToTarget(
     layers: LayerDraw[],
@@ -348,6 +460,9 @@ export class StageRenderer {
     gl.viewport(0, 0, this.width, this.height);
     gl.useProgram(this.prog);
     gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
+    gl.uniform1i(this.uDecode, DECODE_NONE);
+    gl.uniform1f(this.uEncode, 0);
+    gl.uniform1f(this.uTextGamma, 1); // already applied when the layer was drawn into this target
     gl.uniform2f(this.uRes, this.width, this.height);
     applyBlend(gl, blend);
     gl.activeTexture(gl.TEXTURE0);
@@ -362,6 +477,7 @@ export class StageRenderer {
         source: { providerId: "" },
         opacity: 1,
         blend: "normal",
+        textGamma: 1,
         effects: [],
       }),
     );
@@ -376,11 +492,119 @@ export class StageRenderer {
     frame: number,
     maskTargets: Map<string, RenderTarget>,
   ): void {
+    if (!prof.profileOn()) {
+      this.compositeLayerInner(dest, layer, sources, frame, maskTargets);
+      return;
+    }
+    // Offscreen path (mask or effect chain) costs several FULL-FRAME passes; the direct path is
+    // one quad over the layer rect. Label them apart so the profile says which is eating the frame.
+    const path = layer.mask || layer.effects.length ? "target" : "direct";
+    this.glPhase(`layer:${layer.id}:${path}`, () =>
+      this.compositeLayerInner(dest, layer, sources, frame, maskTargets),
+    );
+  }
+
+  private sampleFlip(source: TextureSource, frame: number, key?: string): number {
+    return source.textureIsRendered?.(frame, key) ? SAMPLE_RENDERED : SAMPLE_UPLOADED;
+  }
+
+  /** Companion to sampleFlip: which colour-space fixup this source's texture needs. */
+  private sampleDecode(source: TextureSource, frame: number, key?: string): number {
+    return source.textureIsRendered?.(frame, key) ? DECODE_SRGB_PREMUL : DECODE_PREMUL;
+  }
+
+  /**
+   * Snapshot `dest` for backdrop consumers, re-encoded to sRGB BYTES.
+   *
+   * Not a blitFramebuffer any more: the source is SRGB8_ALPHA8 and the destination must hold the
+   * ENCODED values, so this goes through the quad program with uEncode set. The consumers are
+   * user-authored shaders — drawLensLayerPassEntry resolves fragment source through
+   * fragForId(entry.lensId, lensShaders) and binds this texture as uBg — so there is no single
+   * shader to patch, and handing them linear values would silently darken every refraction.
+   */
+  private publishCompositorBackdrop(dest: RenderTarget): void {
     const gl = this.gl;
+    if (!this.snapTex || this.snapW !== dest.w || this.snapH !== dest.h) {
+      if (this.snapTex) gl.deleteTexture(this.snapTex);
+      if (this.snapFbo) gl.deleteFramebuffer(this.snapFbo);
+      this.snapTex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, this.snapTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, dest.w, dest.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      this.snapFbo = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.snapFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.snapTex, 0);
+      this.snapW = dest.w;
+      this.snapH = dest.h;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.snapFbo);
+    gl.viewport(0, 0, dest.w, dest.h);
+    gl.useProgram(this.prog);
+    gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
+    gl.uniform1i(this.uDecode, DECODE_NONE);
+    gl.uniform1f(this.uTextGamma, 1);
+    gl.uniform1f(this.uEncode, 1);
+    gl.uniform2f(this.uRes, dest.w, dest.h);
+    gl.disable(gl.BLEND);
+    gl.uniform1i(this.uTex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, dest.tex);
+    gl.uniformMatrix3fv(
+      this.uModel,
+      false,
+      modelMatrix({
+        id: "_snap",
+        rect: { x: 0, y: 0, w: dest.w, h: dest.h },
+        transform: IDENTITY_TRANSFORM,
+        source: { providerId: "" },
+        opacity: 1,
+        blend: "normal",
+        textGamma: 1,
+        effects: [],
+      }),
+    );
+    gl.uniform1f(this.uOpacity, 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    registerBackdropTexture(this.snapTex, dest.w, dest.h);
+  }
+
+  private compositeLayerInner(
+    dest: RenderTarget,
+    layer: LayerDraw,
+    sources: Map<string, TextureSource>,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): void {
     const source = sources.get(layer.source.providerId);
     if (!source) return;
 
-    registerBackdropTexture(dest.tex, this.width, this.height);
+    // The snapshot is owned by the renderer and reused across frames, so there is nothing to
+    // release here — only the registration to clear, which keeps the published backdrop scoped
+    // to the layer that asked for it.
+    let backdropSnap = false;
+    if (source.needsCompositorBackdrop?.(frame, layer.source.key)) {
+      this.publishCompositorBackdrop(dest);
+      backdropSnap = true;
+    }
+    try {
+      this.compositeLayerInnerWithBackdrop(dest, layer, source, frame, maskTargets);
+    } finally {
+      if (backdropSnap) clearBackdrop();
+    }
+  }
+
+  private compositeLayerInnerWithBackdrop(
+    dest: RenderTarget,
+    layer: LayerDraw,
+    source: TextureSource,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): void {
+    const gl = this.gl;
 
     const chain = layer.effects
       .map((e) => ({ pass: getPass(e.kind), params: e.params }))
@@ -425,6 +649,9 @@ export class StageRenderer {
       gl.viewport(0, 0, this.width, this.height);
       gl.useProgram(this.prog);
       gl.uniform1f(this.uFlipY, SAMPLE_RENDERED);
+      gl.uniform1i(this.uDecode, DECODE_NONE);
+      gl.uniform1f(this.uEncode, 0);
+      gl.uniform1f(this.uTextGamma, 1); // already applied when the layer was drawn into this target
       gl.uniform2f(this.uRes, this.width, this.height);
       applyBlend(gl, layer.blend);
       gl.activeTexture(gl.TEXTURE0);
@@ -442,12 +669,15 @@ export class StageRenderer {
       return;
     }
 
-    const tex = source.texture(gl, frame, layer.source.key);
+    const tex = this.glPhase(`texture:${layer.id}`, () => source.texture(gl, frame, layer.source.key));
     if (!tex) return;
     gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
     gl.viewport(0, 0, this.width, this.height);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
+    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source.key));
+    gl.uniform1f(this.uEncode, 0);
+    gl.uniform1f(this.uTextGamma, layer.textGamma);
     gl.uniform2f(this.uRes, this.width, this.height);
     applyBlend(gl, layer.blend);
     gl.activeTexture(gl.TEXTURE0);
@@ -469,7 +699,10 @@ export class StageRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, w, h);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
+    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source.key));
+    gl.uniform1f(this.uEncode, 0);
+    gl.uniform1f(this.uTextGamma, layer.textGamma);
     gl.uniform2f(this.uRes, w, h);
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
@@ -491,7 +724,10 @@ export class StageRenderer {
     const target = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, target);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, SAMPLE_UPLOADED);
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
+    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source.key));
+    gl.uniform1f(this.uEncode, 0);
+    gl.uniform1f(this.uTextGamma, layer.textGamma);
     gl.uniform2f(this.uRes, this.width, this.height);
     gl.uniform1i(this.uTex, 0);
     gl.activeTexture(gl.TEXTURE0);
@@ -510,6 +746,8 @@ export class StageRenderer {
 
   dispose(): void {
     this.resolve.dispose();
+    if (this.snapTex) this.gl.deleteTexture(this.snapTex);
+    if (this.snapFbo) this.gl.deleteFramebuffer(this.snapFbo);
     this.pool.dispose(this.gl);
     this.gl.deleteProgram(this.prog);
   }

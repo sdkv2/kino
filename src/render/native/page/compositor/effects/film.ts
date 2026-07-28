@@ -19,6 +19,13 @@ void main() {
   vec3 c = texture(uSrc, uv).rgb;
   if (uIntensity <= 0.0) { kino_frag = vec4(c, 1.0); return; }
 
+  // Both operations below are perceptual: the vignette is "mix this far toward black" and the
+  // grain is a fixed-amplitude texture. On linear values the vignette all but disappears and the
+  // grain turns into visible cross-hatch in the shadows, because the encode curve is steep near
+  // black. No single constant fixes both — the error depends on the underlying pixel — so the
+  // pass works in gamma space and converts back on the way out.
+  c = kinoToSRGB(c);
+
   vec2 d = (uv - vec2(0.5, 0.45));
   vec2 radii = uLight > 0.5 ? vec2(0.88, 0.76) : vec2(0.92, 0.80);
   float r = length(d / radii) * 2.0;
@@ -29,7 +36,7 @@ void main() {
   c = mix(c, tint, a);
 
   float g = (kinoGrain(gl_FragCoord.xy, uFrame) - 0.5) * uGrain;
-  kino_frag = vec4(clamp(c + g, 0.0, 1.0), 1.0);
+  kino_frag = vec4(kinoToLinear(clamp(c + g, 0.0, 1.0)), 1.0);
 }`,
   uniforms(gl, loc, params) {
     const intensity = Number(params.intensity ?? 1);

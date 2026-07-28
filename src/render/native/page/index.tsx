@@ -6,8 +6,19 @@ import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MediaProvider, type MediaMap } from "./media";
 import { loadBgTextures } from "./bgTextures";
+import { clearUnderlays } from "./underlay";
 import type { KinoProps } from "../../props.js";
 import { Stage, type StageHandle } from "./compositor/Stage.js";
+import { enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
+import {
+  captureH264Bytes,
+  capturePipelined,
+  captureSync,
+  flushCapturePipeline,
+  initCapture,
+} from "./capturePipeline.js";
+import type { CaptureCodec } from "../captureCodec.js";
+import type { CaptureSource } from "../captureSource.js";
 
 interface RenderConfig {
   props: KinoProps;
@@ -16,16 +27,36 @@ interface RenderConfig {
   durationInFrames: number;
   media: MediaMap;
   shaderSS?: number;
+  /** engine.ts has always serialised this; the page just never declared it, so the value was
+   *  dropped and FXAA hardcoded on. KINO_SHADER_FXAA=0 did nothing until this was wired up. */
+  shaderFXAA?: boolean;
+  motionFoMin?: number;
+  profile?: boolean;
+  captureCodec?: CaptureCodec;
+  captureSource?: CaptureSource;
 }
 
 declare global {
   interface Window {
     kinoLoad: () => Promise<void>;
     kinoSeek: (frame: number) => Promise<void>;
+    kinoCapturePipelined: (slot: number) => Promise<void>;
+    kinoCaptureSync: (slot: number) => Promise<void>;
+    kinoFlushCapture: () => Promise<void>;
+    /** Electron present-bypass: WebCodecs annex-B from the stage canvas. */
+    kinoCaptureH264Bytes: () => Promise<Uint8Array>;
+    kinoElectron?: {
+      pushFrame?: (rgba: Uint8Array, width: number, height: number) => Promise<boolean>;
+      pushH264?: (annexB: Uint8Array) => Promise<boolean>;
+      frameReady?: (frame: number) => void;
+    };
+    __kinoCaptureCodec?: CaptureCodec;
+    __kinoCaptureSource?: CaptureSource;
     __kinoReady: boolean;
     __kinoError?: string;
     __kinoShaderSS?: number;
     __kinoShaderFXAA?: boolean;
+    __kinoProf?: () => Array<{ key: string; ms: number; n: number }>;
   }
 }
 
@@ -65,6 +96,8 @@ let stageHandle: StageHandle | null = null;
 async function kinoSeek(frame: number): Promise<void> {
   if (!current || !stageHandle) throw new Error("kinoSeek before kinoLoad");
   await stageHandle.seek(frame);
+  // Electron shared capture: nudge OSR invalidate before executeJavaScript returns to main.
+  window.kinoElectron?.frameReady?.(frame);
 }
 
 async function kinoLoad(): Promise<void> {
@@ -80,9 +113,14 @@ async function kinoLoad(): Promise<void> {
     overflow: "hidden",
   });
   await syncFonts(cfg.props);
+  // Underlay textures belong to the previous render's GL context — drop them with the bg textures.
+  clearUnderlays();
   await loadBgTextures(cfg.props);
   window.__kinoShaderSS = cfg.shaderSS ?? 2;
-  window.__kinoShaderFXAA = true;
+  (globalThis as { __kinoMotionFoMin?: number }).__kinoMotionFoMin = cfg.motionFoMin;
+  window.__kinoShaderFXAA = cfg.shaderFXAA !== false;
+  enableProfile(cfg.profile === true);
+  resetProfile();
 
   current = cfg;
   root ??= createRoot(container);
@@ -103,10 +141,24 @@ async function kinoLoad(): Promise<void> {
     );
   });
   await kinoSeek(0);
+  const cap = await initCapture({
+    codec: cfg.captureCodec ?? "h264",
+    captureSource: cfg.captureSource ?? "bitmap",
+    width: cfg.width,
+    height: cfg.height,
+    fps: cfg.props.fps,
+  });
+  window.__kinoCaptureCodec = cap.codec;
+  window.__kinoCaptureSource = cap.source;
 }
 
 window.kinoLoad = kinoLoad;
 window.kinoSeek = kinoSeek;
+window.kinoCapturePipelined = capturePipelined;
+window.kinoCaptureSync = captureSync;
+window.kinoFlushCapture = flushCapturePipeline;
+window.kinoCaptureH264Bytes = captureH264Bytes;
+window.__kinoProf = snapshot;
 
 kinoLoad()
   .then(() => {

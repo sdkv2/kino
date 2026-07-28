@@ -16,7 +16,7 @@ const std = (p: string) =>
   parseFloat(magick([p, "-crop", "400x400+340+760", "+repage", "-format", "%[fx:standard_deviation]", "info:"]).trim());
 
 describe("liquid-glass showcase", () => {
-  it("kino-glass refracts a busy field (stripe control)", async () => {
+  it("kino-lens refracts a busy field (stripe control)", async () => {
     const theme = {
       font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64",
       gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9, film: 0,
@@ -31,7 +31,7 @@ describe("liquid-glass showcase", () => {
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion: { html: h, params: {}, keyframes: [], triggers: [] } }],
     });
     const outDir = mkdtempSync(join(tmpdir(), "lg-"));
-    const noGlass = html.replace(" kino-glass", "");
+    const noGlass = html.replace(" kino-lens", "");
     const [plain, glass] = await Promise.all([
       renderStills({ props: mk(noGlass), publicDir: mkdtempSync(join(tmpdir(), "p1-")), format: "9:16", frames: [{ frame: 30, name: "plain" }], outDir }),
       renderStills({ props: mk(html), publicDir: mkdtempSync(join(tmpdir(), "p2-")), format: "9:16", frames: [{ frame: 30, name: "glass" }], outDir }),

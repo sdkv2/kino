@@ -255,39 +255,29 @@ desperate punctuation. Chrome labels must use the **same nouns the VO speaks** o
 
 `backdrop-filter: blur()` is *frosted* glass (glassmorphism) — a uniform fog. Apple **Liquid Glass**
 *refracts*: it bends/magnifies the background at the edges, disperses color, and catches light on
-a lit rim. In kino this is an engine material: add **`class="kino-glass"`** to a positioned
-element and the engine renders a true per-pixel refraction mirror behind it (WebGL SDF lens —
-default rounded-rect, morphable to circle/triangle — over the frame's background canvas: warp at
-the rim, clear center, chromatic dispersion, luminous film). Copyable reference:
-**`assets-lib/motion/liquid-glass.html`** (bare id `liquid-glass`).
+a lit rim. In kino this is an engine material: add **`class="kino-lens"`** to a positioned
+element and the engine renders a true per-pixel refraction mirror behind it (WebGL rounded-rect
+SDF lens over the frame's background canvas: warp at the rim, clear center, chromatic dispersion,
+luminous film). Copyable reference: **`assets-lib/motion/liquid-glass.html`** (bare id `liquid-glass`).
 
 Do NOT hand-roll it with backdrop-filter: Chromium's compositor cannot run `feImage` displacement
 maps in backdrop chains (they silently degrade to a uniform shift with mirror-fold artifacts), and
-feOffset strip approximations ghost on hard edges. `kino-glass` is the only correct path.
+feOffset strip approximations ghost on hard edges. `kino-lens` is the only correct path.
 
 Craft rules:
 - Element background stays transparent — the film lives in the mirror (`--glass-film`); content at
-  `z-index ≥ 1`; for quiet rect cards pair with a bright ~`0.55` border + diagonal sheen
-  (`::before`). Morphing shapes get an SDF lit rim from the engine — skip CSS `::after` borders
-  that only fit rects.
+  `z-index ≥ 1`; pair with a bright ~`0.55` border + diagonal sheen (`::before`) for the lit edge.
 - Knobs (per-frame CSS vars, tweenable via params/keyframes): `--glass-strength` (px, 26),
   `--glass-band` (px, max(radius,48)), `--glass-chroma` (0.07), `--glass-profile` (2.2),
   `--glass-frost` (px, 0 — body frost), `--glass-edge-blur` (px, 0 — extra rim blur),
-  `--glass-film`, `--glass-saturate` (1.25), `--glass-brightness` (1.06),
-  **`--glass-morph`** (`0` triangle → `1` circle → `2` round-rect continuum, default `2`),
-  **`--glass-from` / `--glass-to`** (optional shape ids `0\|1\|2` — when `from` ≥ 0, morph is a
-  `0..1` blend **directly** between those two shapes, so rect↔triangle does not travel through
-  circle),
-  **`--glass-tilt`** (degrees, default `0` — rotate the SDF in-shader; never CSS-rotate the
-  glass element, that breaks backdrop sampling).
-- Morph demos: square container with room for tilt; set `border-radius` for the rect corner size.
+  `--glass-film`, `--glass-saturate` (1.25), `--glass-brightness` (1.06).
+- Silhouette follows `border-radius` — keep the glass node axis-aligned (no CSS `rotate`/`skew`).
 - Needs a STRUCTURED, colorful background (shader like `liquid-orb`, or a Canvas2D draw fn) —
   refraction of a flat field is invisible. Over avatar/app footage the mirror skips gracefully.
   Authoring the stage itself → `skills/shader-backgrounds` (vesper / old-light craft bar).
 - Stress-test with a straight-line background (grid/stripes shader): rim must BEND lines into
   curves, not shear or ghost them.
-- **`--glass-fit`** (0.3..1, optional) — override SDF fit when a *known-static* tilted card
-  should fill tighter than the default tilt→0.7 AABB; untilted shapes already fit `1.0`.
+- Mask-shaped refraction on footage → `region-glass.frag` (`docs/segmentation.md`), not motion morph knobs.
 
 Deterministic (synchronous WebGL inside the seek), sanitizer-clean (it's just a class). It's a
 statement material — don't reach for it on every panel; frosted `blur()` is still right for quiet,

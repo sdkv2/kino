@@ -1,6 +1,8 @@
 import { join } from "node:path";
+import { existsSync, rmSync } from "node:fs";
 import { prepare } from "./build.js";
 import { renderStills, type FrameMeasure } from "../render/render.js";
+import { parseQuality } from "../render/native/engine.js";
 import { pickFrames, parseTimes, timesAround, inspectPlan } from "../render/preview.js";
 import { montage } from "../media/montage.js";
 import { parsePlatform } from "../render/platform.js";
@@ -24,6 +26,7 @@ export type StillOpts = {
   word?: string;
   grid?: boolean;
   measure?: boolean;
+  quality?: string;
 };
 
 // Render one (or a few) still frames — fast preview, no video encode.
@@ -65,11 +68,13 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
 
   const sel = at ? { at } : opts.segment != null ? { segment: Number(opts.segment) } : {};
   const picks = pickFrames(r.props.segments, r.props.fps, sel);
-  const format = r.formats[0] as "9:16" | "3:4" | "16:9";
+  const format = r.formats[0];
   const frames = picks.map((p) => ({ frame: p.frame, name: slug(p.label) || "frame" }));
   const outDir = join(r.project.outDir(r.spec.title), "stills");
+  // Always cold-render: wipe prior PNGs so agents and QA never read a stale still by path.
+  if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
   const measurements: FrameMeasure[] = [];
-  const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir, measureSink: opts.measure ? measurements : undefined });
+  const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir, measureSink: opts.measure ? measurements : undefined, quality: parseQuality(opts.quality) });
   outs.forEach((o) => log.ok(o));
 
   // --measure: deterministic element geometry so alignment is read as numbers, not eyeballed.

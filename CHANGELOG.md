@@ -4,6 +4,23 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **Linux `auto` capture now resolves to `direct`, not `readback`.** Benchmarked on an RTX 3060 Ti,
+  the NVENC `readback` path measured 2.0x slower than software `direct` at every concurrency
+  tested (c=1: 18.4 vs 23.3fps; c=4: 34.0 vs 68.6fps; c=8: 34.4 vs 69.9fps) — the round trip of
+  pixels out of VRAM and back via `gl.readPixels` + IPC dominates, not the encoder. Linux hardware
+  capture is still available, opt-in via `KINO_ELECTRON_CAPTURE=readback`, until the zero-copy
+  (phase 2) path removes that round trip.
+- **Linux renders now use the Electron offscreen renderer by default** (macOS and Windows are
+  unchanged). Electron is the only supported Linux GPU pathway — it is what the NVENC hardware
+  capture path is being built on — and puppeteer gets no further Linux investment. Consequences on
+  a Linux box: a different browser and process model (one Electron host with N offscreen windows
+  instead of N Chromes), a forced ANGLE/vulkan backend that ignores `KINO_GPU`, `--no-sandbox`
+  passed under root/containers, and a worker ceiling of 4 instead of 2 (measured knee; override
+  with `KINO_CONCURRENCY`). CPU-only Linux boxes still get the same in-page WebCodecs capture they
+  had. `KINO_RENDERER=puppeteer` restores the previous renderer wholesale, and `kino doctor` now
+  reports which renderer this machine resolves to.
+- Frame caches are keyed by renderer and capture backend, so the renderer flip re-renders instead
+  of serving puppeteer frames into an Electron render. Existing puppeteer caches stay warm.
 
 ## [2.0.0] — node 22 minimum
 - **Node ≥22 required**: `engines` bumped to `>=22`; `doctor`, `setup.sh`, `setup.mjs`, docs, and badge updated.

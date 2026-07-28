@@ -1,20 +1,29 @@
-// Motion-graphic layers: beat-relative vars, Tier-2 proc, kino-glass mirrors.
+// Motion-graphic layers: beat-relative vars, Tier-2 proc, post-raster backdrop lenses.
 import type { MotionEnv, MotionGraphicProps, Theme } from "../../../../props.js";
 import { paramsAt, pulseAt, progressCurves } from "../../../../bgparams.js";
 import { buildMotionVars, cameraBlurVars } from "../../../../motionVars.js";
 import { sanitizeMotionHtml } from "../../../../sanitizeMotion.js";
-import { buildTemplate, rasterAt, TEX_ROOT } from "../../bgTextures.js";
-import { KINO_DEFS, motionScrubCss } from "../../motionCss.js";
-import { applyLiquidGlass } from "../../liquidGlass.js";
+import {
+  disposeMotionFrameBundle,
+  motionNeedsLensLayers,
+  prepareMotionFrameBundle,
+  rasterMotionFull,
+  type MotionFrameBundle,
+} from "../../motionRaster.js";
+import { applyMotionPostEffects, isGpuMotionPostResult } from "../../motionPostEffects/index.js";
+import { extractUnderlay, loadUnderlay, type UnderlayPlate } from "../../underlay.js";
+import { fetchAsDataUrl, inlineExternalRefs } from "../inline.js";
 import type { TextureSource } from "../graph.js";
 import { uploadCanvasOrImage } from "./upload.js";
+import * as prof from "../profile.js";
 
-const CACHE_MAX = 24;
-const GLASS_RE = /\bkino-glass\b/;
-
-function varsCss(vars: Record<string, string>): string {
-  return `.${TEX_ROOT}{${Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(";")}}`;
+/** Lens motion at SS≥2 holds 4 full plates per entry — keep cache shallow on finals. */
+function motionCacheMax(scale: number, hasLenses: boolean): number {
+  if (!hasLenses) return 24;
+  return scale >= 2 ? 8 : 16;
 }
+
+const inlineForFo = (html: string): Promise<string> => inlineExternalRefs(html, fetchAsDataUrl);
 
 async function rasterMotion(
   html: string,
@@ -23,56 +32,18 @@ async function rasterMotion(
   width: number,
   height: number,
   scale: number,
-): Promise<HTMLCanvasElement | null> {
-  const css = motionScrubCss(TEX_ROOT) + varsCss(vars);
-  const tpl = await buildTemplate(html, theme, {
-    size: { w: width, h: height },
-    scale,
-    defs: /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html) ? KINO_DEFS : undefined,
-  });
-  return rasterAt(tpl, "x", css, null);
-}
-
-/** Glass mirrors need the true composite beneath — only available when the compositor calls
- *  texture() after registerBackdropTexture(). */
-function rasterGlassMirrors(
-  base: HTMLCanvasElement,
-  html: string,
-  vars: Record<string, string>,
-  width: number,
-  height: number,
-): HTMLCanvasElement {
-  if (!GLASS_RE.test(html)) return base;
-
-  const host = document.createElement("div");
-  host.style.cssText = `position:absolute;left:-99999px;top:0;width:${width}px;height:${height}px;visibility:hidden`;
-  for (const [k, v] of Object.entries(vars)) host.style.setProperty(k, v);
-  const shadow = host.attachShadow({ mode: "open" });
-  shadow.innerHTML = `<style>${motionScrubCss(":host")}</style>${KINO_DEFS}${html}`;
-  document.body.appendChild(host);
-  applyLiquidGlass(shadow);
-  // `base` is rasterized at layout size × the raster supersample, so the output canvas has to
-  // match BASE's pixel size while element rects stay in layout px — hence the `s` conversion.
-  // Sizing `out` to the layout box instead would crop the raster to its top-left corner.
-  const out = document.createElement("canvas");
-  out.width = base.width;
-  out.height = base.height;
-  const s = width > 0 ? base.width / width : 1;
-  const ctx = out.getContext("2d");
-  if (!ctx) {
-    host.remove();
-    return base;
+): Promise<MotionFrameBundle | null> {
+  if (motionNeedsLensLayers(html)) {
+    return prepareMotionFrameBundle(html, vars, theme, width, height, scale, inlineForFo);
   }
-  const hr = host.getBoundingClientRect();
-  ctx.drawImage(base, 0, 0);
-  shadow.querySelectorAll<HTMLElement>(".kino-glass").forEach((el) => {
-    const mirror = el.querySelector("canvas");
-    if (!mirror) return;
-    const r = el.getBoundingClientRect();
-    ctx.drawImage(mirror, (r.left - hr.left) * s, (r.top - hr.top) * s, r.width * s, r.height * s);
-  });
-  host.remove();
-  return out;
+  const full = await rasterMotionFull(html, vars, theme, width, height, scale, inlineForFo);
+  if (!full) return null;
+  return {
+    manifest: { pageW: width, pageH: height, rasterScale: scale, lenses: [], quads: [] },
+    plates: { full, sample: full, chrome: full },
+    needsLensPost: false,
+    vars,
+  };
 }
 
 export function createMotionSource(opts: {
@@ -86,7 +57,9 @@ export function createMotionSource(opts: {
   beatDur: number;
   captionBottom?: number;
 }): TextureSource {
-  const cache = new Map<string, { base: HTMLCanvasElement; html: string; vars: Record<string, string> }>();
+  const hasLenses = motionNeedsLensLayers(opts.data.html);
+  const cacheMax = motionCacheMax(opts.scale, hasLenses);
+  const cache = new Map<string, MotionFrameBundle>();
   const procFn =
     opts.data.proc && !opts.data.lottie
       ? // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -95,13 +68,27 @@ export function createMotionSource(opts: {
   let tex: WebGLTexture | null = null;
   let uploaded: string | null = null;
   let current: string | null = null;
+  let gpuRendered = false;
+  // Hoisted static backplate: same src every frame, so decoded and uploaded exactly once.
+  let underlay: UnderlayPlate | null = null;
+  const quadPlates = new Map<string, UnderlayPlate>();
+  const contentKeys = new Set<string>(); // profile-only; see the cacheHit probe in prepare()
 
   return {
     async prepare(frame: number, key?: string): Promise<void> {
       const local = frame - opts.beatFrom;
       const cacheKey = key ?? `f:${local}`;
       current = cacheKey;
-      if (cache.has(cacheKey)) return;
+      if (cache.has(cacheKey)) {
+        // Lens samples compositor backdrop published per draw. Invalidate from the baked
+        // manifest — proc tiers emit kino-lens in generated html, not opts.data.html.
+        const entry = cache.get(cacheKey)!;
+        if (entry.manifest.lenses.length > 0) {
+          uploaded = null;
+          gpuRendered = false;
+        }
+        return;
+      }
 
       const tt = opts.fps > 0 ? local / opts.fps : 0;
       const durationFrames = opts.beatDur;
@@ -132,6 +119,7 @@ export function createMotionSource(opts: {
         wordCount: opts.data.words?.length ?? 0,
         width: opts.width,
         height: opts.height,
+        durationFrames,
       });
 
       let html = opts.data.html;
@@ -164,17 +152,68 @@ export function createMotionSource(opts: {
           durationFrames,
           duration: opts.fps > 0 ? durationFrames / opts.fps : 0,
         };
-        try {
-          html = sanitizeMotionHtml(String(procFn(env) ?? ""));
-        } catch {
-          html = "";
-        }
+        prof.sync("motion:proc", () => {
+          try {
+            html = sanitizeMotionHtml(String(procFn(env) ?? ""));
+          } catch {
+            html = "";
+          }
+        });
       }
 
-      const base = await rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale);
-      if (!base) return;
-      cache.set(cacheKey, { base, html, vars });
-      if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
+      // Strip the underlay marker BEFORE inlining: the whole point is that this asset never
+      // reaches the foreignObject, so it is never re-resampled per plate per frame.
+      const hoisted = extractUnderlay(html);
+      html = hoisted.html;
+      if (hoisted.src && !underlay) underlay = await loadUnderlay(hoisted.src);
+
+      // MEASUREMENT ONLY (KINO_PROFILE=1): what a content-addressed cache key WOULD hit. The
+      // cache is keyed `f:${local}` today, so it never hits on a long beat even though most of
+      // the scene is identical frame to frame. `motion:cacheHit` mean = the hit rate a content
+      // key would achieve; `motion:cacheDistinct` counts unique rasters. Nothing is cached here.
+      if (prof.profileOn()) {
+        let h = 5381;
+        for (let i = 0; i < html.length; i++) h = ((h * 33) ^ html.charCodeAt(i)) >>> 0;
+        const varsStr = JSON.stringify(vars);
+        for (let i = 0; i < varsStr.length; i++) h = ((h * 33) ^ varsStr.charCodeAt(i)) >>> 0;
+        const key = `${h}:${html.length}`;
+        const seen = contentKeys.has(key);
+        if (!seen) contentKeys.add(key);
+        prof.addSample("motion:cacheHit", seen ? 1 : 0);
+        prof.addSample("motion:cacheDistinct", seen ? 0 : 1);
+      }
+
+      // NOT inlined here any more — rasterMotion inlines only the serialized markup that feeds
+      // the foreignObject, so the live measure host stays at proc size instead of ~1MB.
+      prof.addSample("motion:htmlKB", html.length / 1024);
+
+      const bundle = await prof.awaited("motion:raster", () =>
+        rasterMotion(html, vars, opts.theme, opts.width, opts.height, opts.scale),
+      );
+      if (!bundle) return;
+      // Hoisted quads: one decode + upload per distinct src for the whole render, not per frame.
+      for (const q of bundle.manifest.quads ?? []) {
+        if (quadPlates.has(q.src)) continue;
+        const plate = await loadUnderlay(q.src);
+        if (plate) quadPlates.set(q.src, plate);
+      }
+      cache.set(cacheKey, bundle);
+      if (bundle.manifest.lenses.length > 0) {
+        uploaded = null;
+        gpuRendered = false;
+      }
+      if (cache.size > cacheMax) {
+        const oldest = cache.keys().next().value!;
+        disposeMotionFrameBundle(cache.get(oldest)!);
+        cache.delete(oldest);
+      }
+    },
+    needsCompositorBackdrop(frame?: number, key?: string): boolean {
+      const local = frame !== undefined ? frame - opts.beatFrom : undefined;
+      const cacheKey = key ?? current ?? (local !== undefined ? `f:${local}` : null);
+      if (!cacheKey) return false;
+      const entry = cache.get(cacheKey);
+      return entry?.needsLensPost ?? false;
     },
     texture(gl: WebGL2RenderingContext, frame?: number, key?: string): WebGLTexture | null {
       const local = frame !== undefined ? frame - opts.beatFrom : undefined;
@@ -183,17 +222,50 @@ export function createMotionSource(opts: {
       const entry = cache.get(cacheKey);
       if (!entry) return null;
       if (uploaded !== cacheKey || !tex) {
-        const finalCanvas = rasterGlassMirrors(entry.base, entry.html, entry.vars, opts.width, opts.height);
-        tex = uploadCanvasOrImage(gl, tex, finalCanvas);
+        const { plates, manifest } = entry;
+        const result = applyMotionPostEffects({
+          // Lens bundles carry no `full` plate; the lens effect always fires for them (same
+          // LENS_CLASS_RE gate) and rebuilds the frame, so `base` is only ever read on the
+          // non-lens path — where full is set (and aliases sample).
+          base: plates.full ?? plates.sample,
+          sample: plates.sample,
+          manifest,
+          plates,
+          lensHost: entry.lensHost,
+          chrome: plates.chrome,
+          html: entry.needsLensPost ? '<span class="kino-lens"></span>' : "",
+          vars: entry.vars,
+          width: opts.width,
+          height: opts.height,
+          theme: opts.theme,
+          gl,
+          underlay,
+          quadPlates,
+          lensShaders: opts.data.lensShaders,
+        });
+        if (isGpuMotionPostResult(result)) {
+          tex = result.tex;
+          uploaded = cacheKey;
+          // blit-dst FBO stores visual top at v=1 (RENDERED), same as compositor targets.
+          gpuRendered = true;
+          return tex;
+        }
+        tex = uploadCanvasOrImage(gl, tex, result);
         uploaded = cacheKey;
+        gpuRendered = false;
       }
       return tex;
+    },
+    textureIsRendered(_frame?: number, _key?: string): boolean {
+      return gpuRendered;
     },
     size(): { w: number; h: number } {
       return { w: opts.width, h: opts.height };
     },
     dispose(): void {
+      for (const bundle of cache.values()) disposeMotionFrameBundle(bundle);
       cache.clear();
+      gpuRendered = false;
     },
   };
 }

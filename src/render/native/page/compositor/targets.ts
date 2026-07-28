@@ -1,9 +1,13 @@
 // Offscreen render targets. A layer that carries a mask or an effect chain cannot draw
 // straight to the frame — it renders here first, gets operated on, then composites.
 //
-// Pooled by size: a 1080x1920 RGBA target is ~8MB, and allocating one per layer per frame
+// Pooled by size: a 1080x1920 SRGB8_ALPHA8 target is ~8MB, and allocating one per layer per frame
 // would thrash the driver. Targets are handed out for the duration of one layer's draw and
 // returned immediately after.
+//
+// The format is what makes blending linear. WebGL2 decodes an SRGB8_ALPHA8 texture to linear on
+// sample and encodes on write, and ES 3.0 has no FRAMEBUFFER_SRGB toggle to defeat it — so the
+// fixed-function blender operates on light-linear values with no change to any blendFunc.
 export interface RenderTarget {
   fbo: WebGLFramebuffer;
   tex: WebGLTexture;
@@ -30,7 +34,7 @@ export class TargetPool {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.SRGB8_ALPHA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     const fbo = gl.createFramebuffer()!;
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);

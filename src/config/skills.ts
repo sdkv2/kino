@@ -124,7 +124,7 @@ export function installAllSkills(
   return results;
 }
 
-/** True when workspace <agent>/.skills/<name>/SKILL.md resolves (default agent: agents). */
+/** True when workspace .<agent>/skills/<name>/SKILL.md resolves (default agent: agents). */
 export function skillInstalled(
   workspaceRoot: string,
   name: string,

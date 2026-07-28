@@ -1,27 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import { filmFinishParams, luminance } from "../src/render/filmFinish.js";
-import { build } from "esbuild";
-import puppeteer from "puppeteer";
+import { glProbe, closeGlHost } from "./helpers/glHost.js";
 
-const GL_ARGS = ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader"];
+afterAll(closeGlHost);
 
 async function probeFilm(night: string, intensity: number): Promise<{ centre: number; corner: number; grainSpread: number }> {
-  const bundle = await build({
-    entryPoints: ["src/render/native/page/compositor/effects/index.ts"],
-    bundle: true, write: false, format: "iife", globalName: "KinoFx",
-    platform: "browser", target: "chrome120", logLevel: "silent",
+  return glProbe<[string, number], { centre: number; corner: number; grainSpread: number }>({
+    entry: "src/render/native/page/compositor/effects/index.ts",
+    globalName: "KinoFx",
+    html: `<!doctype html><body><canvas id="c" width="128" height="128"></canvas></body>`,
+    fn: (night, intensity) =>
+      (window as any).KinoFx.probeFilm(document.getElementById("c") as HTMLCanvasElement, night, intensity),
+    args: [night, intensity],
   });
-  const browser = await puppeteer.launch({ headless: true, args: GL_ARGS });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(`<!doctype html><body><canvas id="c" width="128" height="128"></canvas></body>`);
-    await page.addScriptTag({ content: bundle.outputFiles[0].text });
-    return await page.evaluate((night, intensity) => (window as any).KinoFx.probeFilm(
-      document.getElementById("c") as HTMLCanvasElement, night, intensity,
-    ), night, intensity);
-  } finally {
-    await browser.close();
-  }
 }
 
 describe("film pass", () => {

@@ -38,10 +38,60 @@ describe("layersAt — motion beats", () => {
     expect(op(60 + MOTION_XFADE_FRAMES)).toBeCloseTo(1, 2);
   });
 
+  it("holds the outgoing motion through the dissolve so the backdrop never shows", () => {
+    const p = mk([
+      { kind: "motion", caption: "", startSec: 0, endSec: 2, motion },
+      { kind: "motion", caption: "", startSec: 2, endSec: 4, motion },
+    ]);
+    const ids = layersAt(p, 60 + 5, DIMS).map((l) => l.id);
+    expect(ids).toContain("motion0");
+    expect(ids).toContain("motion1");
+  });
+
+  it("hard-cuts when the incoming beat sets transition cut", () => {
+    const p = mk([
+      { kind: "motion", caption: "", startSec: 0, endSec: 2, motion },
+      { kind: "motion", caption: "", startSec: 2, endSec: 4, motion, transition: "cut" },
+    ]);
+    expect(layersAt(p, 59, DIMS).some((l) => l.id === "motion0")).toBe(true);
+    expect(layersAt(p, 60, DIMS).some((l) => l.id === "motion0")).toBe(false);
+    expect(layersAt(p, 60, DIMS).find((l) => l.id === "motion1")!.opacity).toBe(1);
+  });
+
   it("emits an overlay layer above the beat's own content", () => {
     const p = mk([{ kind: "video", caption: "", startSec: 0, endSec: 2, source: "c.mp4", motionOverlay: motion }]);
     const ids = layersAt(p, 15, DIMS).map((l) => l.id);
     expect(ids.indexOf("overlay0")).toBeGreaterThan(ids.indexOf("seg0"));
+  });
+
+  it("draws a text-behind overlay under its motion subject", () => {
+    const mask = { source: { kind: "layer" as const, layerId: "motion0", channel: "a" as const }, invert: true };
+    const p = mk([{
+      kind: "motion", caption: "", startSec: 0, endSec: 2, motion, motionOverlay: motion, mask,
+    } as KinoSegment]);
+    const ids = layersAt(p, 15, DIMS).map((l) => l.id);
+    expect(ids.indexOf("overlay0")).toBeLessThan(ids.indexOf("motion0"));
+    expect(layersAt(p, 15, DIMS).find((l) => l.id === "overlay0")!.mask).toBeUndefined();
+  });
+
+  it("draws a segmented photo subject over its title overlay", () => {
+    const mask = { source: { kind: "file" as const, src: "masks/presenter/mask.png", channel: "r" as const } };
+    const p = mk([{
+      kind: "video", caption: "", startSec: 0, endSec: 2, source: "pexels/8365066.jpg", motionOverlay: motion, mask,
+    } as KinoSegment]);
+    const ids = layersAt(p, 15, DIMS).map((l) => l.id);
+    expect(ids.indexOf("overlay0")).toBeLessThan(ids.indexOf("seg0"));
+    expect(layersAt(p, 15, DIMS).find((l) => l.id === "overlay0")!.mask).toBeUndefined();
+    expect(layersAt(p, 15, DIMS).find((l) => l.id === "seg0")!.mask).toEqual(mask);
+  });
+
+  it("draws title under a transparent cutout PNG without a file mask", () => {
+    const p = mk([{
+      kind: "video", caption: "", startSec: 0, endSec: 2, source: "cutouts/presenter.png", motionOverlay: motion,
+    } as KinoSegment]);
+    const ids = layersAt(p, 15, DIMS).map((l) => l.id);
+    expect(ids.indexOf("overlay0")).toBeLessThan(ids.indexOf("seg0"));
+    expect(layersAt(p, 15, DIMS).find((l) => l.id === "seg0")!.aboveFilm).toBe(true);
   });
 
   it("passes the beat-local frame as the source key so the raster scrubs per beat", () => {
