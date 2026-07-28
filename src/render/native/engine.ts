@@ -165,6 +165,19 @@ export function resolveCaptureSource(env: NodeJS.ProcessEnv = process.env): Capt
 
 // Electron: one shared GPU host, N offscreen windows (parallel encode). Default cap is conservative;
 // raise with KINO_CONCURRENCY when the box has headroom (VRAM, NVENC sessions, cores).
+//
+// 4 is measured, not assumed. Tried 6 on 2026-07-28 and reverted it: on the macOS-desktop motion
+// spec (10-core M-series, idle) c=2 ran 20619 ms vs c=4 at 12020/13728 ms — ~1.6× SLOWER, worse
+// than the pre-optimisation baseline — while c=6 won one rep by 1% and lost the next by 13%, i.e.
+// indistinguishable from 4 but costing ~28% more RAM. Consistent with the independent c=4 knee in
+// the 4K footage bench.
+//
+// The reason is the shape of the pipeline, so expect it to hold until that shape changes: after the
+// perf work the dominant per-frame cost is `texture:motion0` — GPU lens composite + plate upload —
+// at 19.8 ms of a 31.7 ms seek (62%), while the 3-plate FO raster is fully hidden behind it
+// (prefetch-wait is 1.28 ms). Every worker contends for the one GPU, so added workers multiply the
+// dominant cost; too few (c=2) stop hiding the ~14 ms/plate raster. Raising this ceiling needs LESS
+// GPU work per frame, not more workers.
 const MAX_WORKERS_ELECTRON = 4;
 export function concurrency(
   totalFrames: number,
