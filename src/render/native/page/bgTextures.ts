@@ -209,7 +209,10 @@ function makeSvgFromXhtml(
   defs: string,
 ): (css: string) => string {
   return (css: string) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}">` +
+    // Rounded: a fractional scale (a draft rasterising 1920 comp px onto 1280) otherwise lands on
+    // 1279.9999999999998 and the plate comes back one pixel off its target, buying a full-frame
+    // resample per frame in normalizeMotionPlates. Exact at scale 1 and 2, so nothing else moves.
+    `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${Math.round(w * scale)}" height="${Math.round(h * scale)}" viewBox="0 0 ${w} ${h}">` +
     // Palette vars live in a <style> block, NOT a style attribute: font families contain double
     // quotes, which would terminate the XML attribute and invalidate the whole SVG.
     `<style>${fonts} html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
