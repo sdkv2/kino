@@ -13,7 +13,8 @@ import { mountMotionRasterProbe } from "./motionRaster.js";
 import { buildLensPlateScrubs, type LensPlateScrubs } from "./lensPaintOrder.js";
 import { measureHoistedQuads, type HoistedQuad } from "./underlay.js";
 
-export type { HoistedQuad } from "./underlay.js";
+export type { HoistedQuad, QuadLayer } from "./underlay.js";
+export { parseQuadLayer, quadsForLayer } from "./underlay.js";
 export type { LensMaterial } from "./lensMirror.js";
 export type { LensPlateScrubs } from "./lensPaintOrder.js";
 export { buildLensPlateScrubs } from "./lensPaintOrder.js";

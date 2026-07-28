@@ -108,10 +108,27 @@ export function clearUnderlays(): void {
 // Quads composite BETWEEN the underlay and the plates: the proc leaves a transparent hole where
 // the image was, so anything painting over it (video gradients, controls, chrome) still lands on
 // top from the plate itself and z-order is preserved.
+//
+// Paint-order contract (both GPU lens composite and CPU mirror fallback):
+//   underlay → sample plate → quads[sample] → lens mirrors → quads[chrome] → chrome → foreground
+//
+// `data-layer` on the quad element selects the batch (default = sample):
+//   • sample (default) — blitted above the sample plate, included in the lens refract backdrop.
+//     Use for imagery optically behind glass (thumbnails, video sprites).
+//   • chrome — blitted after lens mirrors, before the chrome plate. Use for imagery that lives
+//     inside a kino-lens subtree (dock icons behind the glass film) but must sit above the mirror.
+//
+//   <div class="dock-q kino-quad" data-layer="chrome" data-src="/public/motion/dock-finder.png"></div>
 export const QUAD_SELECTOR = ".kino-quad";
+export const QUAD_LAYER_ATTR = "data-layer";
+
+/** Batches a hoisted quad into the lens composite stack. */
+export type QuadLayer = "sample" | "chrome";
 
 export interface HoistedQuad {
   src: string;
+  /** Composite batch — see paint-order contract above. Absent means `sample`. */
+  layer?: QuadLayer;
   /** VISIBLE composition-px rect relative to the tex root — already intersected with every
    *  overflow-clipping ancestor, scaled to layer px at composite time. */
   relLeft: number;
@@ -127,6 +144,16 @@ export interface HoistedQuad {
    *  partially covering a rounded clip ancestor keeps square corners — one radius cannot express
    *  that; give the quad element the radius itself if it matters. */
   radius?: number;
+}
+
+export function parseQuadLayer(raw: string | null): QuadLayer {
+  const v = raw?.trim().toLowerCase();
+  return v === "chrome" ? "chrome" : "sample";
+}
+
+/** Route quads into their composite batch. Default layer is `sample`. */
+export function quadsForLayer(quads: HoistedQuad[], layer: QuadLayer): HoistedQuad[] {
+  return quads.filter((q) => (q.layer ?? "sample") === layer);
 }
 
 function parseCell(raw: string | null): HoistedQuad["cell"] {
@@ -190,8 +217,10 @@ export function measureHoistedQuads(texRoot: HTMLElement, hostRect: DOMRect): Ho
     if (w < 1 || h < 1) continue;
 
     const fullyVisible = left === r.left && top === r.top && right === r.right && bottom === r.bottom;
+    const layer = parseQuadLayer(el.getAttribute(QUAD_LAYER_ATTR));
     out.push({
       src,
+      layer: layer === "sample" ? undefined : layer,
       relLeft: left - hostRect.left,
       relTop: top - hostRect.top,
       w,

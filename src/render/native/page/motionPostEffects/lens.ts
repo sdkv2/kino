@@ -5,6 +5,7 @@ import type { MotionFrameBundle, MotionLensHost } from "../lensLayout.js";
 import { executeLensCompositeNode } from "../lensCompositeNode.js";
 import type { MotionPostEffect, MotionPostResult } from "./types.js";
 import { LENS_CLASS_RE } from "../../../lensContract.js";
+import { quadsForLayer, type HoistedQuad } from "../underlay.js";
 
 export const lensPostEffect: MotionPostEffect = {
   test: (html) => LENS_CLASS_RE.test(html),
@@ -51,14 +52,16 @@ export const lensPostEffect: MotionPostEffect = {
     const s = width > 0 ? sample.width / width : 1;
     const hr = host?.texRoot.getBoundingClientRect();
     const hoisted = manifest.quads ?? [];
+    const sampleQuads = quadsForLayer(hoisted, "sample");
+    const chromeQuads = quadsForLayer(hoisted, "chrome");
     const paintUnderlay = (c: CanvasRenderingContext2D, w: number, h: number) => {
       if (underlay) c.drawImage(underlay.img, 0, 0, w, h);
     };
     // Same order as the GPU node: quads paint ABOVE the sample plate (a quad nested in an opaque
     // page can never show through from below), with the measured clip crop + corner radius. The
     // two paths used to disagree here, so stills (CPU) QA'd a different z-order than videos (GPU).
-    const paintQuads = (c: CanvasRenderingContext2D) => {
-      for (const q of hoisted) {
+    const paintQuads = (c: CanvasRenderingContext2D, list: HoistedQuad[]) => {
+      for (const q of list) {
         const plate = quadPlates?.get(q.src);
         if (!plate) continue;
         const cw = q.cell ? plate.img.naturalWidth / q.cell.cols : plate.img.naturalWidth;
@@ -94,11 +97,11 @@ export const lensPostEffect: MotionPostEffect = {
 
     paintUnderlay(ctx, out.width, out.height);
     ctx.drawImage(sample, 0, 0);
-    paintQuads(ctx);
+    paintQuads(ctx, sampleQuads);
     // The first lens refracts `sample`; with imagery hoisted out of the raster, `sample` alone is
     // a hole where it used to be, so refract the composited stack instead.
     let sampleForLens: HTMLCanvasElement = sample;
-    if (underlay || hoisted.length) {
+    if (underlay || sampleQuads.length) {
       const merged = document.createElement("canvas");
       merged.width = out.width;
       merged.height = out.height;
@@ -106,7 +109,7 @@ export const lensPostEffect: MotionPostEffect = {
       if (mc) {
         paintUnderlay(mc, merged.width, merged.height);
         mc.drawImage(sample, 0, 0);
-        paintQuads(mc);
+        paintQuads(mc, sampleQuads);
         sampleForLens = merged;
       }
     }
@@ -138,6 +141,7 @@ export const lensPostEffect: MotionPostEffect = {
         ctx.drawImage(mirror, x, y, w, h);
       }
     }
+    paintQuads(ctx, chromeQuads);
     ctx.drawImage(chrome, 0, 0);
     if (plates.foreground) ctx.drawImage(plates.foreground, 0, 0);
     return out;
