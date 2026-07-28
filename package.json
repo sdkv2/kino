@@ -58,7 +58,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.1",
+    "@electron/rebuild": "^4.2.0",
     "@types/ffprobe-static": "^2.0.3",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
