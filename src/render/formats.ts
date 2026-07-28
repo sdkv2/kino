@@ -30,6 +30,21 @@ export function formatFileTag(fmt: FormatId): string {
   return fmt.replace(/:/g, "x");
 }
 
+/** The 1080-class twin a `*-4k` format is authored in. Identity for 1080-class ids. */
+export function baseFormat(fmt: FormatId): FormatId {
+  return (fmt.endsWith("-4k") ? fmt.slice(0, -3) : fmt) as FormatId;
+}
+
+/**
+ * Composition canvas — the space specs are authored in. Always the 1080-class dims: captions,
+ * CAPTION_BOTTOM, absolute-px motion graphics are all written against it, so a `*-4k` render
+ * composes here too and gains its pixels as an output scale (same frame, 4× the pixels), the
+ * same comp/out split a draft uses in the other direction.
+ */
+export function compDims(fmt: FormatId): { width: number; height: number } {
+  return FORMAT_DIMS[baseFormat(fmt)];
+}
+
 /** Draft output: short edge in px. 720p — 16:9 → 1280x720, 9:16 → 720x1280. */
 export const DRAFT_SHORT_EDGE = 720;
 

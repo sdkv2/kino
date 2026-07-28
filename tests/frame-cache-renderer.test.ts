@@ -30,9 +30,11 @@ describe("frameSignatures capture identity", () => {
   // This hash was captured by running the PRE-removal frameSignatures on the same input, in a
   // detached worktree at the parent commit. A diff here means the key moved: either put it back, or
   // bump VERSION deliberately and regenerate this value.
+  // Regenerated at VERSION 9 (*-4k composes at the 1080-class canvas — same key inputs, different
+  // pixels, so the version had to move).
   it("keeps the key byte-identical to what the electron path already wrote", () => {
     expect(frameSignatures({ ...base, captureKind: "readback" })[0]).toBe(
-      "6415b731e312ecd6f1cdb67961dfe3ac232777e1",
+      "e7ee2021dbf234ffef061036c48c99753e79fbf9",
     );
   });
 });

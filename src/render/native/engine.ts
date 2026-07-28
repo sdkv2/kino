@@ -22,7 +22,7 @@ import { extractDense, extractMaxDim, extractSparse, planMediaJobs, planMaskJobs
 import type { WorkerHandle } from "./workerHandle.js";
 import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.js";
 import { loadGpuCapture, resolveElectronCapture, useSharedTextureCapture, type CaptureKind } from "./electron/gpuCapture.js";
-import { DRAFT_SHORT_EDGE, FORMAT_DIMS, formatFileTag, maxOutputDim, scaledDims, type FormatId } from "../formats.js";
+import { compDims, DRAFT_SHORT_EDGE, FORMAT_DIMS, formatFileTag, maxOutputDim, scaledDims, type FormatId } from "../formats.js";
 import { capWorkers, bytesPerWorker } from "./workerCap.js";
 
 export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
@@ -531,18 +531,20 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     const outputs: string[] = [];
     try {
       for (const fmt of formats) {
-        // `width`/`height` are the composition; `canvas` is the surface it is rasterised onto.
-        // They differ only for a draft — everything downstream of the page (window, capture,
-        // encode, cache key) follows the canvas.
-        const { width, height } = DIMS[fmt];
+        // `width`/`height` are the composition (always 1080-class — the space specs are
+        // authored in); `canvas` is the surface it is rasterised onto. A draft shrinks the
+        // canvas below the composition, a `*-4k` format doubles it — same frame either way,
+        // and everything downstream of the page (window, capture, encode, cache key) follows
+        // the canvas.
+        const { width, height } = compDims(fmt);
         const canvas = outDimsOf(fmt);
-        // The motion raster deliberately does NOT follow the canvas. Measured on this spec,
-        // rasterising the FO at 0.667 was 17-33% SLOWER than at 1x: the downscale it saves
-        // (motion:normalize) costs 0.01ms/frame, while a fractional SVG raster scale drops
-        // Chromium onto a slower path. It would also cost the sub-pixel motion the 1x floor
-        // exists to protect. Fewer pixels is not automatically less work here.
+        // The motion raster deliberately does NOT follow a shrunken canvas. Measured on the
+        // macos-desktop-youtube spec, rasterising the FO at 0.667 was 17-33% SLOWER than at 1x:
+        // the downscale it saves (motion:normalize) costs 0.01ms/frame, while a fractional SVG
+        // raster scale drops Chromium onto a slower path. It would also cost the sub-pixel
+        // motion the 1x floor exists to protect. Fewer pixels is not automatically less work.
         if (canvas.width !== width || canvas.height !== height) {
-          log.step(`draft canvas: ${width}x${height} composition → ${canvas.width}x${canvas.height} output`);
+          log.step(`canvas: ${width}x${height} composition → ${canvas.width}x${canvas.height} output`);
         }
         const requestedSource = resolveCaptureSource(process.env);
         const electronShared = useSharedTextureCapture();
@@ -684,20 +686,24 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
       media[job.key] = await extractSparse(job, join(publicDir, job.assetRel), framesDir, locals, extractMaxDim(maxOutputDim([format]), resolveShaderSS(process.env, { quality })));
     }
 
-    const { width, height } = DIMS[format];
+    // Same comp/out split as the video path: stills of a `*-4k` format compose at the
+    // 1080-class canvas and rasterise onto the UHD surface.
+    const { width, height } = compDims(format);
+    const canvas = DIMS[format];
     try {
       const ss = resolveShaderSS(process.env, { quality });
       const foMin = resolveMotionFoMin(process.env, quality);
       const fx = resolveShaderFXAA(process.env);
       const server = await pointServerAt({
-        props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
+        props, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
+        total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
         captureCodec: "jpeg",
         captureSource: "bitmap",
       });
       // captureMode "page" is load-bearing, not a default: shared/readback/direct all emit annex-B
       // H.264, and a still needs an image. Pinning it here also stops `auto` from resolving to a
       // hardware encoder on a machine that has one.
-      const handle = await acquireElectronWorker(0, server.url, width, height, props.fps, {
+      const handle = await acquireElectronWorker(0, server.url, canvas.width, canvas.height, props.fps, {
         captureMode: "page",
       });
       const outs: string[] = [];

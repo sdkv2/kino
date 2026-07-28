@@ -16,7 +16,7 @@ import type { CaptureKind } from "./electron/gpuCapture.js";
 // Longest pixel bleed across a beat boundary: 24-frame dissolve entry / 15-frame motion xfade /
 // 12-frame chained-app extension — 30 covers all with margin.
 const PAD = 30;
-const VERSION = 8; // 8: the motion FO supersample floor is opt-in too
+const VERSION = 9; // 9: *-4k composes at the 1080-class canvas (same width/height key, different pixels)
 
 const sha1 = (s: string) => createHash("sha1").update(s).digest("hex");
 
