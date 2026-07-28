@@ -724,6 +724,22 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
         captureMode: "page",
       });
       const outs: string[] = [];
+      // Prime the capture pipeline before the first real still, and throw the result away.
+      //
+      // Without this the FIRST still of every batch comes back with `kino-lens` glass missing —
+      // correct field, correct geometry, correct chrome, but no refraction, no film, no dispersion.
+      // It is positional, not content-dependent: rendering three near-identical frames breaks
+      // whichever is requested first, and reordering moves the defect with it. Video is immune
+      // because its encode loop is continuously pipelined; only the first drain of a cold pipeline
+      // hands back a paint captured before the compositor's GPU lens layer has landed.
+      //
+      // Cost is one discarded frame per `kino still` / `kino storyboard` invocation. That is worth
+      // paying: those two commands are what visual QA looks at, so the untreated bug quietly showed
+      // reviewers a glassless frame and invited the wrong conclusion about the render.
+      if (wanted.length > 0) {
+        await handle.seekAndCapture(wanted[0]!.frame);
+        await handle.flush();
+      }
       for (const { frame, name } of wanted) {
         // NOTE: JPEG bytes in a `.png` file. That mislabel predates the electron port and is
         // preserved deliberately — consumers pass these paths to tools that sniff magic bytes, and
