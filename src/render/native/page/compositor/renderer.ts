@@ -315,7 +315,7 @@ export class StageRenderer {
       }
     });
 
-    const filmChain = resolveFilmPass(opts.postFx, opts.theme);
+    const filmChain = resolveFilmPass(opts.postFx, opts.theme, this.ss);
     if (filmChain.length) {
       const filmed = this.glPhase("draw:film", () => runPost(gl, this.pool, accum, filmChain, frame));
       if (filmed !== accum) {

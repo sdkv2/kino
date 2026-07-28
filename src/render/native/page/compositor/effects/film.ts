@@ -2,16 +2,38 @@
 import { numParam, type EffectPass } from "./pass.js";
 import { luminance } from "../../../../filmFinish.js";
 
+// Grain clump size in OUTPUT pixels. Around two is the sweet spot at 1080-class delivery: big
+// enough to survive a codec as texture rather than being smeared into mush, small enough to stay
+// grain rather than becoming visible speckle.
+const GRAIN_PX = 2.2;
+// Interpolating the lattice costs roughly half the spread of raw per-pixel noise; this restores it.
+const GRAIN_GAIN = 2.0;
+
 export const filmPass: EffectPass = {
   name: "film",
-  uniformNames: ["uIntensity", "uLight", "uGrain"],
+  uniformNames: ["uIntensity", "uLight", "uGrain", "uGrainScale"],
   frag: `
 uniform float uIntensity;
 uniform float uLight;
 uniform float uGrain;
+uniform float uGrainScale;
 
 float kinoGrain(vec2 p, float f) {
   return fract(sin(dot(p + f * 17.0, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+// Grain has a CLUMP SIZE. Hashing per pixel gives every pixel an independent value, which is the
+// signature of sensor noise and compression — not film. Interpolating a coarser lattice gives the
+// noise a grain size, so neighbours are correlated the way developed silver actually is.
+float kinoGrainField(vec2 p, float f) {
+  vec2 i = floor(p);
+  vec2 fr = fract(p);
+  fr = fr * fr * (3.0 - 2.0 * fr);
+  float a = kinoGrain(i, f);
+  float b = kinoGrain(i + vec2(1.0, 0.0), f);
+  float c = kinoGrain(i + vec2(0.0, 1.0), f);
+  float d = kinoGrain(i + vec2(1.0, 1.0), f);
+  return mix(mix(a, b, fr.x), mix(c, d, fr.x), fr.y);
 }
 
 void main() {
@@ -35,15 +57,30 @@ void main() {
   float a = (uLight > 0.5 ? 0.18 : 0.46) * uIntensity * t;
   c = mix(c, tint, a);
 
-  float g = (kinoGrain(gl_FragCoord.xy, uFrame) - 0.5) * uGrain;
+  // Grain is a function of exposure: densest through the midtones, thinning toward the toe and
+  // the shoulder. Constant-amplitude noise across the whole tonal range is the other half of why
+  // this read as compression — a flat dark backdrop is exactly where a codec's noise lives, and
+  // exactly where film has almost none.
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float density = smoothstep(0.02, 0.45, l) * (1.0 - smoothstep(0.72, 1.0, l));
+
+  float g = (kinoGrainField(gl_FragCoord.xy / uGrainScale, uFrame) - 0.5) * uGrain * density;
   kino_frag = vec4(kinoToLinear(clamp(c + g, 0.0, 1.0)), 1.0);
 }`,
   uniforms(gl, loc, params) {
     const intensity = numParam(params, "intensity", 1, 0, 1);
     const night = String(params.night ?? "#0b1020");
     const light = luminance(night) > 0.5;
+    // The film pass runs BEFORE the supersample resolve, so its coordinates are render pixels.
+    // Scaling the lattice by ss keeps the clump size fixed in OUTPUT pixels — otherwise the
+    // finish silently changes character with --quality.
+    const ss = numParam(params, "ss", 1, 1, 8);
     gl.uniform1f(loc.uIntensity, intensity);
     gl.uniform1f(loc.uLight, light ? 1 : 0);
-    gl.uniform1f(loc.uGrain, (light ? 0.05 : 0.09) * intensity);
+    // Interpolating the lattice halves the noise's spread, and the density curve removes more.
+    // GRAIN_GAIN puts the midtone amplitude back where the flat-noise version had it, so the
+    // finish is as present as before — just structured, and in the right tones.
+    gl.uniform1f(loc.uGrain, (light ? 0.05 : 0.09) * intensity * GRAIN_GAIN);
+    gl.uniform1f(loc.uGrainScale, GRAIN_PX * ss);
   },
 };
