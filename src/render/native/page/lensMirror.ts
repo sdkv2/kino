@@ -221,15 +221,40 @@ function uploadShapeMask(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement):
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 }
 
+/**
+ * Corner radii in px, capped at half the short edge.
+ *
+ * Percentages must be resolved here, not parsed as px. `getComputedStyle` does NOT resolve
+ * `border-radius` percentages — the computed value keeps the unit — so a bare `parseFloat` turned
+ * `border-radius: 50%` into `50px`, and a 365px-wide lens came back with 50px corners. The visible
+ * symptom is that circular lenses were impossible: they rendered as barely-rounded squares while the
+ * CSS box drawn on top was a true circle, so the mirror and its own border disagreed.
+ *
+ * Resolved against the SHORT edge. Each corner really has separate horizontal/vertical radii (CSS
+ * would make `50%` on a non-square box an ellipse), but the mirror carries one number per corner, and
+ * the short edge is the choice that makes the common case — `50%` on a square — an exact circle.
+ */
 function cssCornerRadii(cs: CSSStyleDeclaration, w: number, h: number): [number, number, number, number] {
   const cap = Math.min(w, h) / 2;
-  const read = (raw: string) => Math.min(Math.max(0, parseFloat(raw) || 0), cap);
+  const read = (raw: string) => {
+    const n = parseFloat(raw) || 0;
+    const px = raw.trimEnd().endsWith("%") ? (n / 100) * Math.min(w, h) : n;
+    return Math.min(Math.max(0, px), cap);
+  };
   return [
     read(cs.borderTopLeftRadius),
     read(cs.borderTopRightRadius),
     read(cs.borderBottomRightRadius),
     read(cs.borderBottomLeftRadius),
   ];
+}
+
+/** Exported for unit test: the percentage-vs-px rule above is easy to regress and hard to see. */
+export function cornerRadiusPx(raw: string, w: number, h: number): number {
+  const cap = Math.min(w, h) / 2;
+  const n = parseFloat(raw) || 0;
+  const px = raw.trimEnd().endsWith("%") ? (n / 100) * Math.min(w, h) : n;
+  return Math.min(Math.max(0, px), cap);
 }
 
 export interface LensMaterial {
