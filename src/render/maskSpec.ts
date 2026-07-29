@@ -72,14 +72,24 @@ export interface LayerEffect {
   params: Record<string, number | string>;
 }
 
-/** Validate the mask and effects on one beat. `index` is the beat's position, so a message
- *  points at the thing the author has to edit. */
+// Mirrors BLEND_MODES in layerSpec.ts (segment `blend` and declared-layer `blend` share one
+// vocabulary). Not imported: layerSpec.ts value-imports EFFECT_KINDS/validateMask from THIS
+// module, so importing BLEND_MODES back from layerSpec.ts would be a cycle. Duplicated on
+// purpose — keep the two lists in sync if a blend mode is ever added.
+const SEGMENT_BLEND_MODES = ["normal", "screen", "multiply", "add"] as const;
+
+/** Validate the mask, effects and blend on one beat. `index` is the beat's position, so a
+ *  message points at the thing the author has to edit. */
 export function validateSegmentFx(seg: unknown, index: number): string[] {
-  const s = (seg ?? {}) as { mask?: unknown; effects?: unknown };
+  const s = (seg ?? {}) as { mask?: unknown; effects?: unknown; blend?: unknown };
   const errs: string[] = [];
   const at = (msg: string) => `beat ${index}: ${msg}`;
 
   if (s.mask !== undefined) errs.push(...validateMask(s.mask).map(at));
+
+  if (s.blend !== undefined && !(SEGMENT_BLEND_MODES as readonly string[]).includes(s.blend as string)) {
+    errs.push(at(`blend must be one of ${SEGMENT_BLEND_MODES.join(", ")}`));
+  }
 
   if (s.effects !== undefined) {
     if (!Array.isArray(s.effects)) {

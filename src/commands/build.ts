@@ -31,6 +31,7 @@ import { renderVideo, renderStills, variantName } from "../render/render.js";
 import { parseFormatList, type FormatId } from "../render/formats.js";
 import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
 import type { PostFx } from "../render/postSpec.js";
+import type { DeclaredLayer } from "../render/layerSpec.js";
 import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
@@ -569,6 +570,7 @@ export async function prepare(
     sfx,
     music,
     segments: renderSegments,
+    layers: spec.layers as DeclaredLayer[] | undefined,
     ...(spec.postFx ? { postFx: spec.postFx as PostFx } : {}),
   };
 

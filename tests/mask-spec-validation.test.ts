@@ -33,4 +33,14 @@ describe("validateSegmentFx", () => {
   it("rejects effects that is not an array", () => {
     expect(validateSegmentFx({ effects: { kind: "blur" } }, 0)[0]).toMatch(/array/i);
   });
+
+  it("rejects an unknown blend mode, naming the beat", () => {
+    const errs = validateSegmentFx({ blend: "burn" }, 4);
+    expect(errs[0]).toMatch(/beat 4/);
+    expect(errs[0]).toMatch(/blend/);
+  });
+
+  it("accepts a known blend mode", () => {
+    expect(validateSegmentFx({ blend: "screen" }, 0)).toEqual([]);
+  });
 });

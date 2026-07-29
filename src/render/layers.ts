@@ -260,7 +260,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     // of the beat's chain, which was authored for the footage.
     const chromeEffects = segEffects?.filter((e) => e.kind === "motionBlur");
 
-    out.push({ id: `seg${i}`, z: behind ? Z.segBehind : Z.seg, source: { providerId: footageProvider }, rect, opacity: groupOpacity, transform: segTransform, mask: segMask, effects: segEffects, group: beat });
+    out.push({ id: `seg${i}`, z: behind ? Z.segBehind : Z.seg, source: { providerId: footageProvider }, rect, opacity: groupOpacity, transform: segTransform, mask: segMask, effects: segEffects, blend: s.blend, group: beat });
     if (s.frame) out.push({ id: `frame${i}`, z: Z.frame, source: { providerId: `frame${i}` }, rect: full, opacity: groupOpacity, transform: zoom?.transform, effects: chromeEffects?.length ? chromeEffects : undefined, group: beat });
     if (s.kicker) {
       const kt = tweenAt(s.kickerKeyframes, local / props.fps, dims);
@@ -322,6 +322,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       opacity,
       mask: motionMask(segMask, `motion${i}`),
       effects: s.effects,
+      blend: s.blend,
       group: beat,
     });
   });
@@ -440,6 +441,42 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   // breach. `kino build` never sets these props.
   if (props.platformGuide) out.push({ id: "platformGuide", z: Z.qa, source: { providerId: "platformGuide" }, rect: full });
   if (props.grid) out.push({ id: "grid", z: Z.qa, source: { providerId: "grid" }, rect: full });
+
+  // 11b. Author-declared layers. They carry their own z, so where they land is decided by the
+  // sort rather than by this position in the function.
+  for (const d of props.layers ?? []) {
+    if (d.adjust?.length) {
+      out.push({ id: d.id, z: d.z, source: null, rect: full, adjust: d.adjust });
+      continue;
+    }
+    // A segment binding borrows that beat's window; `hold` keeps the layer out of the beat's
+    // group so the crossfade happens beneath it instead of taking it along.
+    const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
+    const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
+    const toSec = bound ? bound.endSec : d.toSec;
+    if (frame < f(fromSec)) continue;
+    if (toSec !== undefined && frame >= f(toSec)) continue;
+
+    const r = d.rect;
+    const rect = r
+      ? { x: (r.x / 100) * width, y: (r.y / 100) * height, w: (r.w / 100) * width, h: (r.h / 100) * height }
+      : full;
+    // Keyframes read from the layer's own start, so a track authored against a beat-bound layer
+    // does not shift when the beat does.
+    const tween = tweenAt(d.keyframes, (frame - f(fromSec)) / props.fps, dims);
+    out.push({
+      id: d.id,
+      z: d.z,
+      source: { providerId: d.id },
+      rect,
+      blend: d.blend,
+      opacity: (d.opacity ?? 1) * (tween?.opacity ?? 1),
+      transform: tween?.transform,
+      mask: d.mask as LayerSpec["mask"],
+      effects: d.effects,
+      group: bound && !d.hold ? `beat${d.segment}` : undefined,
+    });
+  }
 
   // 12. Cinematic finish — an ADJUSTMENT layer over everything beneath it: no texture source of
   // its own, just a chain the renderer runs over whatever has composited by the time it is
