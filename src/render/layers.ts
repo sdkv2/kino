@@ -63,7 +63,8 @@ const num = (v: unknown, d: number): number => (typeof v === "number" ? v : Numb
  *
  * Ported from the retired DOM composition's TweenOverlay, which applied
  * `translate(x%, y%) scale(s)` to a full-frame box: x/y are PERCENT OF FRAME, and the scale is
- * about the rect centre — which is exactly the order `modelMatrix` composes, so the mapping is
+ * about the layer's anchor — [0.5, 0.5] by default, which is the rect centre and what this did
+ * before the anchor existed. That is exactly the order `modelMatrix` composes, so the mapping is
  * exact rather than approximate. `opacity` is returned separately because some layers already
  * carry one (a chained video fade) and the two multiply.
  */
@@ -73,12 +74,28 @@ function tweenAt(
   dims: Dims,
 ): { transform: LayerSpec["transform"]; opacity: number } | null {
   if (!keyframes?.length) return null;
-  const p = paramsAt({ x: 0, y: 0, scale: 1, opacity: 1 }, keyframes, tSec);
+  const p = paramsAt(
+    { x: 0, y: 0, scale: 1, opacity: 1, rotate: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5 },
+    keyframes,
+    tSec,
+  );
+  // Emit the new channels ONLY when a track actually moves them. modelMatrix reads them as
+  // `?? 1` / `?? 0.5`, so omitting a default is identical in pixels — and it keeps the transform
+  // object shape-identical to the inline literals cameraAt builds, which layers-tweens.test.ts
+  // compares against directly. It also avoids allocating an anchor pair per layer per frame for
+  // the overwhelmingly common case where nobody set one.
+  const scaleX = num(p.scaleX, 1);
+  const scaleY = num(p.scaleY, 1);
+  const anchorX = num(p.anchorX, 0.5);
+  const anchorY = num(p.anchorY, 0.5);
   return {
     transform: {
       scale: num(p.scale, 1),
-      rotate: 0,
+      rotate: num(p.rotate, 0),
       translate: [(num(p.x, 0) / 100) * dims.width, (num(p.y, 0) / 100) * dims.height],
+      ...(scaleX !== 1 ? { scaleX } : {}),
+      ...(scaleY !== 1 ? { scaleY } : {}),
+      ...(anchorX !== 0.5 || anchorY !== 0.5 ? { anchor: [anchorX, anchorY] as [number, number] } : {}),
     },
     opacity: num(p.opacity, 1),
   };
