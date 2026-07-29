@@ -1,9 +1,9 @@
 # Build & preview
 
-`kino build` turns a spec into a finished MP4. But most of your time is spent in the **preview loop** — cheap, mock renders that check structure and timing before you spend a cent on real voiceover or an avatar. This page covers the pipeline, the loop, and how caching keeps rebuilds fast. Command flags live in the [CLI reference](cli-reference.md#build--preview).
+`kino build` turns a spec into a finished MP4. Nothing it does costs money unless you pass `--tts` — a plain build is silent and full quality, so most of your time is spent iterating for free. This page covers the pipeline, the loop, and how caching keeps rebuilds fast. Command flags live in the [CLI reference](cli-reference.md#build--preview).
 
 - [The pipeline](#the-pipeline)
-- [Mock vs real](#mock-vs-real)
+- [What costs money](#what-costs-money)
 - [The iterate loop](#the-iterate-loop)
 - [Caching](#caching)
 - [Variants & batch](#variants--batch)
@@ -25,14 +25,26 @@ spec → validate → voiceover → avatar plan/trim → stage assets → backgr
 
 `prepare()` is the shared resolver that runs everything **up to** the final encode. The preview commands (`still`, `storyboard`, `inspect`) reuse it, so a preview resolves through the exact same code path as a real build — what you see is what you'll get.
 
-## Mock vs real
+## What costs money
 
-The single most important habit: **mock first**.
+**`--tts` is the only flag that spends.** Everything else is free, including a full-quality render.
 
-- `--mock` (build) and the default for `still`/`storyboard`/`inspect` use a **silent estimated VO** and a placeholder avatar — no API spend. Timing is estimated from word counts.
-- `--real` (preview) / a plain `kino build` (no `--mock`) use **real** ElevenLabs VO and true per-word timings, and generate the avatar.
+| Command | Voice | Quality | Cost |
+|---|---|---|---|
+| `kino build <spec>` | silent | **full** (1080-class) | $0 |
+| `kino build <spec> --draft` | silent | 720p, fast encode | $0 |
+| `kino build <spec> --tts` | real ElevenLabs VO + presenter | full | **ElevenLabs (+ avatar credits)** |
+| `kino build <spec> --tts --no-avatar` | real VO, no presenter | full | ElevenLabs only |
+| `still` / `storyboard` / `inspect` | estimated | — | $0 (add `--real` to use true VO times) |
 
-Get structure, layout, and beat order right on mock. Switch to real only to lock timing (captions/triggers land on the actual words) and to render the final.
+Silent builds and previews estimate timing from word counts; `--tts` produces true per-word
+timings. So the loop is: get structure, layout, and beat order right for free — a silent build is
+already final quality, so it is a real deliverable, not just a preview — and add `--tts` only when
+you want the voiceover, or to lock speech-synced timing so captions and triggers land on the
+actual words.
+
+> Voice used to be **on** by default and `--no-tts` opted out. It is the other way round now: a
+> plain build never bills you, and `--draft` only controls render speed and size.
 
 ## The iterate loop
 
@@ -41,8 +53,9 @@ kino inspect <spec>            # read beats + timings as JSON (add --real for tr
 kino still <spec> --segment 0  # one frame, fast — the quickest visual check
 kino storyboard <spec>         # one still per beat, tiled — catch overlap/overflow at a glance
 # …edit the spec…
-kino build <spec> --mock       # free full render
-kino build <spec>              # real render once it's right
+kino build <spec> --draft      # free 720p preview, fastest
+kino build <spec>              # free FULL-quality silent render
+kino build <spec> --tts        # add the voiceover once it's right (bills ElevenLabs)
 kino retune <spec>             # after a real build: snap trigger times to spoken words
 ```
 

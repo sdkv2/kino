@@ -263,6 +263,39 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
   }
 }
 
+/** The three build axes, resolved from the CLI flags. */
+export interface BuildAxes {
+  /** Fast, cheap preview: 720p canvas + low-quality encode. Never speaks, never has a presenter. */
+  draft: boolean;
+  /** Real ElevenLabs voiceover. THE ONLY AXIS THAT SPENDS MONEY. */
+  tts: boolean;
+  /** Real presenter. Requires `tts` — a lip-synced avatar has nothing to sync to without speech. */
+  avatar: boolean;
+}
+
+/**
+ * Resolve the build axes from CLI flags. Pure, so the cost rules are testable without a project
+ * on disk (`tests/build-axes.test.ts`).
+ *
+ * **Voice is opt-in.** A bare `kino build <spec>` renders SILENT at FULL quality and spends
+ * nothing; `--tts` is the single flag that bills ElevenLabs. This inverts the older `--no-tts`,
+ * which made spend the default and hid "free but full quality" behind a double negative — easy to
+ * miss, and the expensive way to be wrong. `--draft` is now only about render speed and size, so
+ * "how cheap" and "how good" are two separate questions instead of one tangled preset.
+ */
+export function resolveBuildAxes(opts: {
+  draft?: boolean;
+  mock?: boolean;
+  tts?: boolean;
+  avatar?: boolean;
+}): BuildAxes {
+  const draft = !!(opts.draft || opts.mock);
+  // A draft is a structural preview — speaking would defeat its purpose (and cost money).
+  const tts = !draft && !!opts.tts;
+  const avatar = tts && opts.avatar !== false;
+  return { draft, tts, avatar };
+}
+
 export interface PrepareResult {
   props: KinoProps;
   publicDir: string;
@@ -280,8 +313,8 @@ export async function prepare(
   opts: {
     mock?: boolean; // deprecated alias of `draft`
     draft?: boolean;
-    tts?: boolean; // default true on a full render; false = silent (full quality). commander --no-tts.
-    avatar?: boolean; // default true on a full render; false = no presenter. commander --no-avatar.
+    tts?: boolean; // OPT-IN (commander --tts). Absent = silent, full quality, no spend.
+    avatar?: boolean; // default true once tts is on; false = no presenter. commander --no-avatar.
     format?: string;
     provider?: string;
     background?: string;
@@ -306,14 +339,7 @@ export async function prepare(
     captionMode: pc?.captionMode ?? rawBrand.captionMode,
   };
   validateSpec(spec, brand, project);
-  // Three independent build axes (draft/mock is just the all-off, no-spend preset):
-  //   draft  → fast free preview: silent VO + placeholder presenter + veryfast/low-SS encode
-  //   tts    → real voiceover (off = silent, but FULL quality). commander --no-tts.
-  //   avatar → real presenter  (off = no presenter, full quality; forced off whenever tts is off,
-  //            since a lip-synced presenter has nothing to sync to). commander --no-avatar.
-  const draft = !!(opts.draft || opts.mock);
-  const tts = !draft && opts.tts !== false;
-  const wantAvatar = tts && opts.avatar !== false;
+  const { draft, tts, avatar: wantAvatar } = resolveBuildAxes(opts);
   // A beat may pin its provider/look via `source: "heygen:look-id"`; otherwise "avatar:" takes
   // whatever the spec/brand/project configures. --no-avatar (or silent) drops to "none".
   const pin = resolvePresenterPin(spec);
@@ -324,7 +350,7 @@ export async function prepare(
   // A spec whose every beat imports real VO (voFile) needs no TTS voice at all.
   const needsTts = spec.segments.some((s) => !s.voFile);
   if (tts && needsTts && !voiceId) {
-    throw new Error("No voice for a speaking build — set spec.voice or the brand's defaultVoice (or use --no-tts / --draft).");
+    throw new Error("--tts needs a voice — set spec.voice or the brand's defaultVoice (or drop --tts for a silent, full-quality render).");
   }
   const formats: FormatId[] = opts.format ? parseFormatList(opts.format) : (spec.format as FormatId[]);
   const cache = new Cache(project.cache);
@@ -680,9 +706,9 @@ export async function build(
   },
 ): Promise<string[]> {
   let { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
-  // Only a draft is low-quality; a full render — even a silent (--no-tts) or presenter-less (--no-avatar)
-  // one — keeps final quality and a clean, untagged filename.
-  const draft = !!(opts.draft || opts.mock);
+  // Only a draft is low-quality; a full render — silent (the default) or presenter-less
+  // (--no-avatar) — keeps final quality and a clean, untagged filename.
+  const { draft, tts } = resolveBuildAxes(opts);
   const quality = parseQuality(opts.quality);
 
   // --beat: reduce to a single-segment spec and re-run prepare() on it, so the isolated clip gets
@@ -693,8 +719,8 @@ export async function build(
   // crossfade with, so transitions already degrade to a hard cut with no extra work.
   let beatTag: string | undefined;
   if (opts.beat != null) {
-    if (!draft && opts.tts !== false) {
-      throw new Error("--beat needs --draft or --no-tts (isolating one beat isn't supported for a full real-VO build yet)");
+    if (tts) {
+      throw new Error("--beat cannot be combined with --tts (isolating one beat isn't supported for a real-VO build yet)");
     }
     const beatNum = Number(opts.beat);
     if (!Number.isInteger(beatNum) || beatNum < 1) throw new Error(`--beat must be a positive integer (got ${opts.beat})`);

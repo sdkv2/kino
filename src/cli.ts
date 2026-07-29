@@ -14,9 +14,9 @@ program.name("kino").description("Spec driven video development").version(KINO_V
 program
   .command("build <spec>")
   .description("Generate a video from a spec (vo → avatar → render)")
-  .option("--draft", "fast, free preview: silent VO + placeholder avatar + 720p canvas + low-quality encode")
-  .option("--no-tts", "skip voiceover — full-quality SILENT render (music/SFX still play)")
-  .option("--no-avatar", "skip the presenter — full-quality FACELESS render")
+  .option("--draft", "fast, free preview: 720p canvas + low-quality encode (silent, no presenter)")
+  .option("--tts", "add real ElevenLabs voiceover — THE ONLY FLAG THAT SPENDS. Off by default: a plain build is silent, full quality, $0")
+  .option("--no-avatar", "with --tts: keep the voiceover but skip the presenter")
   .option("--mock", "alias of --draft (deprecated)")
   .option("--format <list>", "comma-separated formats, e.g. 9:16,16:9-4k (add -4k for UHD)")
   .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
@@ -24,7 +24,7 @@ program
   .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
   .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
   .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
-  .option("--beat <n>", "render only beat n (1-indexed) as its own standalone clip — needs --draft or --no-tts")
+  .option("--beat <n>", "render only beat n (1-indexed) as its own standalone clip — not supported with --tts")
   .option("--quality <preset>", "standard (default) | very-high — very-high supersamples the composite 2× (4× fill)")
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);

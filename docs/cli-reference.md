@@ -26,7 +26,11 @@ kino build <spec> [options]
 
 | Option | Value | Meaning |
 |---|---|---|
-| `--draft` | — | Fast free preview: silent VO + placeholder avatar, rendered onto a **720p canvas** (same layout, fewer pixels — `KINO_DRAFT_EDGE` overrides). `--mock` is a deprecated alias. |
+| `--tts` | — | **The only flag that spends.** Adds real ElevenLabs voiceover (and a presenter, unless `--no-avatar`). Omit it and the build is silent, full quality, and free. |
+| `--no-avatar` | — | With `--tts`: keep the voiceover, skip the presenter. No effect on a silent build — there was no presenter to drop. |
+| `--draft` | — | Fast free preview rendered onto a **720p canvas** (same layout, fewer pixels — `KINO_DRAFT_EDGE` overrides). Always silent. `--mock` is a deprecated alias. |
+| `--quality <preset>` | `standard\|very-high` | `very-high` supersamples the composite 2× (4× fill). |
+| `--beat <n>` | 1-indexed | Render only beat n as a standalone clip. Not supported with `--tts`. |
 | `--format <list>` | e.g. `9:16,3:4,16:9` | Comma-separated output formats. |
 | `--provider <name>` | `none\|heygen\|hedra\|replicate` | Override the avatar engine for this render. |
 | `--background <kind>` | `glow\|image\|mesh\|aurora\|particles\|grid\|custom` | Override the background. |
@@ -35,8 +39,9 @@ kino build <spec> [options]
 | `--tag <label>` | label | Suffix the output filename so variants are kept (auto-set from `--background`/`--font`). |
 
 ```bash
-kino build specs/lie-test.json --mock                 # free preview, no API spend
-kino build specs/lie-test.json                        # real render → out/lie-test/
+kino build specs/lie-test.json --draft                # free 720p preview
+kino build specs/lie-test.json                        # free FULL-quality silent render → out/lie-test/
+kino build specs/lie-test.json --tts                  # add real voiceover (bills ElevenLabs)
 kino build specs/lie-test.json --background aurora --format 9:16,3:4
 ```
 
@@ -110,7 +115,7 @@ kino retune <spec> [--dry-run] [--project <name>]
 | `--project <name>` | project | Use `projects/<name>`. |
 
 ```bash
-kino build specs/advert.json            # produce real VO + word timings
+kino build specs/advert.json --tts      # produce real VO + word timings
 kino retune specs/advert.json --dry-run # preview: segment[2].triggers[0].at: 1.6 → 1.567
 kino retune specs/advert.json           # write the spec
 ```

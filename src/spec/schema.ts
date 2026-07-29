@@ -154,7 +154,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     source: z.string().min(1).optional(),
     text: z.string().min(1),
     voFile: VoFile.optional(),
-    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
+    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     cta: z.boolean().default(false),
     shot: Shot.optional(),
@@ -177,7 +177,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     source: z.string().min(1),
     text: z.string().min(1),
     voFile: VoFile.optional(),
-    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
+    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
     kicker: Kicker.optional(),
     shot: Shot.optional(),
@@ -286,7 +286,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     ...motionFields,
     text: z.string().min(1),
     voFile: VoFile.optional(),
-    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (silent / --no-tts). Real TTS length wins when the beat speaks.
+    dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(),
     cta: z.boolean().default(false), // semantic end-card marker; a full-screen wordmark motion beat is itself the CTA
     // Motion→motion handoff. Default = dissolve (hold + xfade). `"cut"` abuts with no backdrop gap.
