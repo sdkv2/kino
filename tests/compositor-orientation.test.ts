@@ -45,6 +45,16 @@ const band = (png: string, y: number, channel: "r" | "g") =>
     magick([png, "-crop", `1080x240+0+${y}`, "+repage", "-format", `%[fx:mean.${channel}]`, "info:"]).trim(),
   );
 
+/** Mean channel over a small patch. Two reasons a full-width 240-row `band` cannot see a blur:
+ *  blurring a large solid rectangle only softens its EDGES (the interior stays saturated), and a
+ *  RADIAL focal region is a circle about the frame centre, so the bar's far ends are legitimately
+ *  out of focus however the y axis is oriented. Sampling a narrow patch just outside an edge, in
+ *  the horizontal middle where the focal circle actually sits, isolates the axis under test. */
+const patch = (png: string, x: number, y: number, w: number, h: number, channel: "r" | "g") =>
+  parseFloat(
+    magick([png, "-crop", `${w}x${h}+${x}+${y}`, "+repage", "-format", `%[fx:mean.${channel}]`, "info:"]).trim(),
+  );
+
 const render = async (props: KinoProps, ss: string) => {
   process.env.KINO_SHADER_SSAA = ss;
   const [png] = await renderStills({
@@ -80,5 +90,34 @@ describe("compositor orientation", () => {
       expect(band(png, 480, "g")).toBeGreaterThan(0.8);
       expect(band(png, 1200, "g")).toBeLessThan(0.05);
     }, 180000);
+
+    // focusY must mean "fraction from the TOP", like every other coordinate in the spec. The green
+    // band occupies rows 480–720 of 1920, so its own centre is uv.y ≈ 0.3125 from the top and
+    // ≈ 0.6875 from the bottom. Focusing at 0.3125 therefore keeps it sharp only if the shader
+    // measures downward; the pair below is what makes that claim load-bearing rather than assumed.
+    //
+    // The metric is green bleeding into rows 464–476, just above the bar's top edge, sampled over
+    // the middle 200px where the radial focal circle sits. Measured values at radius 16:
+    // sharp ≈ 0.022 (indistinguishable from no effect), blurred ≈ 0.344.
+    const focusedAt = async (focusY: number) => {
+      const p = propsFor();
+      (p.segments[0] as { effects?: unknown }).effects = [
+        { kind: "blur", params: { radius: 16, focusY, focusRadius: 0.12, focusFeather: 0.05 } },
+      ];
+      return patch(await render(p, ss), 440, 464, 200, 12, "g");
+    };
+
+    // Asserted as a RATIO between the two placements rather than against absolute levels: how far
+    // ink actually bleeds in output pixels depends on the supersample factor (SS=1 measures ~0.34
+    // blurred, SS=2 ~0.10), but "focused on the bar is much sharper than focused away from it" is
+    // the claim under test and holds at either. Both placements are the same distance from the
+    // bar — 0.3125 from the top, 0.6875 from the bottom — so only the axis direction distinguishes
+    // them. gl_FragCoord.y is bottom-up over the layer target, and without the flip in defocus()
+    // these two results swap.
+    it(`measures focusY from the TOP, like every other spec coordinate, at SS=${ss}`, async () => {
+      const onBand = await focusedAt(0.3125);
+      const away = await focusedAt(0.6875);
+      expect(away).toBeGreaterThan(onBand * 3);
+    }, 360000);
   }
 });
