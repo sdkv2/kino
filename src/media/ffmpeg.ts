@@ -12,6 +12,25 @@ export async function probeDuration(file: string): Promise<number> {
   return parseFloat(stdout.trim());
 }
 
+/**
+ * Natural width/height of a still image. The compositor's layer list is a pure function that
+ * cannot decode pixels, so a layer sized to its own artwork (the logo) has to be measured here
+ * and threaded through props. Unprobeable input (a missing file, an SVG) falls back to 1: a
+ * square rect is wrong-but-bounded, and never a full-bleed stretch.
+ */
+export async function probeImageAspect(file: string): Promise<number> {
+  try {
+    const { stdout } = await execa(FFPROBE_PATH, [
+      "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+      "-of", "csv=p=0:s=x", file,
+    ]);
+    const [w, h] = stdout.trim().split("x").map(Number);
+    return w > 0 && h > 0 ? w / h : 1;
+  } catch {
+    return 1;
+  }
+}
+
 // Keep 44100/128k MP3 in sync with elevenlabs.ts mp3_44100_128 (shared format + cache key).
 export async function genSilence(seconds: number, out: string): Promise<void> {
   await execa(FFMPEG_PATH, [

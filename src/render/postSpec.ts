@@ -11,7 +11,9 @@ export interface PostFx {
   bloom?: { threshold?: number; intensity?: number; radius?: number };
   lens?: { distortion?: number; chroma?: number };
   /** Vignette + grain. Defaults to theme.film when the stage is absent entirely. */
-  film?: { intensity?: number };
+  /** `grain` scales the grain amount (1 = default); `grainHold` is how many frames a grain
+   *  field persists — raise it for slower, calmer grain, drop it to 1 for per-frame movement. */
+  film?: { intensity?: number; grain?: number; grainHold?: number; grainSize?: number };
 }
 
 // threshold of 0.45 cuts at roughly sRGB 0.70.
@@ -23,7 +25,7 @@ const RANGES: Record<PostStage, Record<string, Range>> = {
   grade: { brightness: { min: 0, max: 4 }, contrast: { min: 0, max: 4 }, saturation: { min: 0, max: 4 } },
   bloom: { threshold: { min: 0, max: 1 }, intensity: { min: 0, max: 4 }, radius: { min: 0, max: 128 } },
   lens: { distortion: { min: -1, max: 1 }, chroma: { min: 0, max: 0.05 } },
-  film: { intensity: { min: 0, max: 1 } },
+  film: { intensity: { min: 0, max: 1 }, grain: { min: 0, max: 4 }, grainHold: { min: 1, max: 8 }, grainSize: { min: 1, max: 8 } },
 };
 
 export function validatePostFx(p: unknown): string[] {

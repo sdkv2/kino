@@ -171,16 +171,30 @@ export function createMotionSource(opts: {
       // cache is keyed `f:${local}` today, so it never hits on a long beat even though most of
       // the scene is identical frame to frame. `motion:cacheHit` mean = the hit rate a content
       // key would achieve; `motion:cacheDistinct` counts unique rasters. Nothing is cached here.
+      //
+      // Measured 2026-07-28 on macos-desktop-youtube: the EXACT key is distinct on all 1094
+      // frames — vars carry `frame`/`t` and the proc bakes toFixed(4) cursor coords, so raw
+      // strings never repeat. The `:norm1`/`:norm2` variants re-key after rounding every decimal
+      // literal (html + vars) to 1 / 2 places — the "visually distinct" key the raster-reuse
+      // idea actually needs. Whole-frame reuse is bounded by the cursor: it moves ~every frame.
       if (prof.profileOn()) {
-        let h = 5381;
-        for (let i = 0; i < html.length; i++) h = ((h * 33) ^ html.charCodeAt(i)) >>> 0;
+        const djb2 = (seed: number, s: string) => {
+          let h = seed;
+          for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+          return h;
+        };
         const varsStr = JSON.stringify(vars);
-        for (let i = 0; i < varsStr.length; i++) h = ((h * 33) ^ varsStr.charCodeAt(i)) >>> 0;
-        const key = `${h}:${html.length}`;
-        const seen = contentKeys.has(key);
-        if (!seen) contentKeys.add(key);
-        prof.addSample("motion:cacheHit", seen ? 1 : 0);
-        prof.addSample("motion:cacheDistinct", seen ? 0 : 1);
+        const probe = (tag: string, hh: string, vv: string) => {
+          const key = `${tag}:${djb2(djb2(5381, hh), vv)}:${hh.length}`;
+          const seen = contentKeys.has(key);
+          if (!seen) contentKeys.add(key);
+          prof.addSample(`motion:cacheHit${tag}`, seen ? 1 : 0);
+          if (tag === "") prof.addSample("motion:cacheDistinct", seen ? 0 : 1);
+        };
+        const round = (s: string, dp: number) => s.replace(/-?\d+\.\d+/g, (m) => Number(m).toFixed(dp));
+        probe("", html, varsStr);
+        probe(":norm1", round(html, 1), round(varsStr, 1));
+        probe(":norm2", round(html, 2), round(varsStr, 2));
       }
 
       // NOT inlined here any more — rasterMotion inlines only the serialized markup that feeds

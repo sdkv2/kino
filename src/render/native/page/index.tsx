@@ -9,7 +9,8 @@ import { loadBgTextures } from "./bgTextures";
 import { clearUnderlays } from "./underlay";
 import type { KinoProps } from "../../props.js";
 import { Stage, type StageHandle } from "./compositor/Stage.js";
-import { enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
+import { resetPlateDupeProbe } from "./motionRaster.js";
+import { awaited, enableProfile, resetProfile, snapshot } from "./compositor/profile.js";
 import {
   captureH264Bytes,
   capturePipelined,
@@ -22,8 +23,13 @@ import type { CaptureSource } from "../captureSource.js";
 
 interface RenderConfig {
   props: KinoProps;
+  /** Composition size — what the frame is laid out in (captions, motion-graphic px, layer rects). */
   width: number;
   height: number;
+  /** Output canvas size. Absent → same as the composition. A draft sets it smaller: the frame is
+   *  still composed at width×height, then rasterised onto this surface. */
+  outWidth?: number;
+  outHeight?: number;
   durationInFrames: number;
   media: MediaMap;
   shaderSS?: number;
@@ -32,6 +38,9 @@ interface RenderConfig {
   shaderFXAA?: boolean;
   motionFoMin?: number;
   profile?: boolean;
+  /** KINO_MOTION_DUPE_PROBE=1 — per-plate pixel-dupe counters, separate from `profile` because
+   *  the hashing is heavy enough to distort its timing rows. */
+  motionDupeProbe?: boolean;
   captureCodec?: CaptureCodec;
   captureSource?: CaptureSource;
 }
@@ -95,7 +104,10 @@ let stageHandle: StageHandle | null = null;
 
 async function kinoSeek(frame: number): Promise<void> {
   if (!current || !stageHandle) throw new Error("kinoSeek before kinoLoad");
-  await stageHandle.seek(frame);
+  // `seek:stage` is the whole stage seek wall — the phase timers inside it (prep:*, draw) are
+  // component costs; the difference is page work none of them cover (layersAt, await plumbing).
+  const h = stageHandle;
+  await awaited("seek:stage", () => h.seek(frame));
   // Electron shared capture: nudge OSR invalidate before executeJavaScript returns to main.
   window.kinoElectron?.frameReady?.(frame);
 }
@@ -106,10 +118,15 @@ async function kinoLoad(): Promise<void> {
   document.documentElement.style.background = "#000";
   document.body.style.margin = "0";
   const container = document.getElementById("root")!;
+  const outW = cfg.outWidth ?? cfg.width;
+  const outH = cfg.outHeight ?? cfg.height;
+  // The container frames the CANVAS, not the composition: OSR paint capture grabs a window sized
+  // to the output, so a container at composition size would crop it. The staging DOM the rasters
+  // lay out in carries its own composition-sized box (Stage).
   Object.assign(container.style, {
     position: "relative",
-    width: `${cfg.width}px`,
-    height: `${cfg.height}px`,
+    width: `${outW}px`,
+    height: `${outH}px`,
     overflow: "hidden",
   });
   await syncFonts(cfg.props);
@@ -118,9 +135,11 @@ async function kinoLoad(): Promise<void> {
   await loadBgTextures(cfg.props);
   window.__kinoShaderSS = cfg.shaderSS ?? 2;
   (globalThis as { __kinoMotionFoMin?: number }).__kinoMotionFoMin = cfg.motionFoMin;
+  (globalThis as { __kinoMotionDupeProbe?: boolean }).__kinoMotionDupeProbe = cfg.motionDupeProbe === true;
   window.__kinoShaderFXAA = cfg.shaderFXAA !== false;
   enableProfile(cfg.profile === true);
   resetProfile();
+  resetPlateDupeProbe();
 
   current = cfg;
   root ??= createRoot(container);
@@ -130,6 +149,7 @@ async function kinoLoad(): Promise<void> {
         <Stage
           props={cfg.props}
           dims={{ width: cfg.width, height: cfg.height }}
+          out={{ width: outW, height: outH }}
           media={cfg.media}
           scale={cfg.shaderSS ?? 2}
           onReady={(h) => {
@@ -144,8 +164,8 @@ async function kinoLoad(): Promise<void> {
   const cap = await initCapture({
     codec: cfg.captureCodec ?? "h264",
     captureSource: cfg.captureSource ?? "bitmap",
-    width: cfg.width,
-    height: cfg.height,
+    width: outW,
+    height: outH,
     fps: cfg.props.fps,
   });
   window.__kinoCaptureCodec = cap.codec;

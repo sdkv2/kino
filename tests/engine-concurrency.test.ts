@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { concurrency } from "../src/render/native/engine.js";
 
-// Worker count is bound by GPU memory, not CPU cores: at SS=2 every worker allocates its own
-// 2160x3840 render target. One Electron host serves N offscreen windows, and measured throughput
-// peaks at 4 — so the ceiling is flat across platforms rather than per-renderer.
+// Worker count is bound by GPU throughput and memory, not CPU cores: at SS=2 every worker allocates
+// its own 2160x3840 render target. One Electron host serves N offscreen windows, and measured
+// throughput peaks at 4 — so the ceiling is flat across platforms rather than per-renderer.
+//
+// The peak-at-4 claim was re-measured 2026-07-28 (c=2 ~1.6x slower; c=6 indistinguishable but +28%
+// RAM) after the motion-path perf work, and 6 was tried and reverted. See MAX_WORKERS_ELECTRON in
+// src/render/native/engine.ts for the numbers and why the GPU composite makes it hold.
 describe("concurrency", () => {
   it("caps the default well below the core count on a big machine", () => {
     expect(concurrency(1000, {}, 28, "darwin")).toBe(4);

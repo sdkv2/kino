@@ -48,3 +48,93 @@ describe("film pass", () => {
     expect(a.grainSpread).toBe(b.grainSpread);
   }, 240000);
 });
+
+async function probeGrain(night: string, intensity: number, level: number, ss = 1, extra: Record<string, number> = {}) {
+  return glProbe<[string, number, number, number, Record<string, number>], { spread: number; adjacentDiff: number }>({
+    entry: "src/render/native/page/compositor/effects/index.ts",
+    globalName: "KinoFx",
+    html: `<!doctype html><body><canvas id="c" width="128" height="128"></canvas></body>`,
+    fn: (night, intensity, level, ss, extra) =>
+      (window as any).KinoFx.probeGrain(document.getElementById("c") as HTMLCanvasElement, night, intensity, level, ss, extra),
+    args: [night, intensity, level, ss, extra],
+  });
+}
+
+// Calibrated against a real 35mm ProRes plate (4096x2160, area-scaled to our delivery size).
+// Measured on that reference: autocorrelation collapses at lag 1, so grain is per-pixel at this
+// resolution; a flat midtone measures a spread of ~3.2 at 8-bit; and it is a function of exposure,
+// so it lives in the midtones and thins toward both flat black and blown white.
+describe("film grain matches the measured 35mm reference", () => {
+  it("is per-pixel by default, as real grain is at 1080-class delivery", async () => {
+    const { spread, adjacentDiff } = await probeGrain("#0b1020", 1, 0.5);
+    expect(spread).toBeGreaterThan(1); // grain is actually present to measure
+    // The reference collapses at lag 1; independent neighbours put this ratio near 1, not below it.
+    expect(adjacentDiff / spread).toBeGreaterThan(0.9);
+  }, 120000);
+
+  it("grainSize clumps the field when a codec-friendly grain is wanted", async () => {
+    const fine = await probeGrain("#0b1020", 1, 0.5, 1, {});
+    const coarse = await probeGrain("#0b1020", 1, 0.5, 1, { grainSize: 3 });
+    expect(coarse.adjacentDiff / coarse.spread).toBeLessThan(fine.adjacentDiff / fine.spread * 0.7);
+  }, 240000);
+
+  it("thins out in flat blacks, where uniform noise reads as compression", async () => {
+    const shadow = await probeGrain("#0b1020", 1, 0.02);
+    const mid = await probeGrain("#0b1020", 1, 0.5);
+    expect(shadow.spread).toBeLessThan(mid.spread * 0.5);
+  }, 240000);
+
+  it("thins out in blown highlights too", async () => {
+    const hot = await probeGrain("#0b1020", 1, 0.99);
+    const mid = await probeGrain("#0b1020", 1, 0.5);
+    expect(hot.spread).toBeLessThan(mid.spread * 0.5);
+  }, 240000);
+
+  it("keeps the same clump size when the stage is supersampled", async () => {
+    // film runs BEFORE the ss resolve, so without compensation a 2x render halves the grain size
+    // and the finish silently changes with --quality.
+    const one = await probeGrain("#0b1020", 1, 0.5, 1, { grainSize: 3 });
+    const two = await probeGrain("#0b1020", 1, 0.5, 2, { grainSize: 3 });
+    expect(two.adjacentDiff / two.spread).toBeCloseTo(one.adjacentDiff / one.spread, 1);
+  }, 240000);
+});
+
+async function probeGrainAt(extra: Record<string, number>, frame: number) {
+  return glProbe<[Record<string, number>, number], { spread: number; adjacentDiff: number; samples: number[] }>({
+    entry: "src/render/native/page/compositor/effects/index.ts",
+    globalName: "KinoFx",
+    html: `<!doctype html><body><canvas id="c" width="128" height="128"></canvas></body>`,
+    fn: (extra, frame) =>
+      (window as any).KinoFx.probeGrain(document.getElementById("c") as HTMLCanvasElement, "#0b1020", 1, 0.5, 1, extra, frame),
+    args: [extra, frame],
+  });
+}
+
+// Grain that re-randomises completely every frame boils. Real stock does change per frame, but at
+// 30fps an independent field each time reads as buzz, so the default holds the field for a couple
+// of frames and the author can speed it back up.
+describe("grain moves slowly by default and is dialable", () => {
+  it("holds the same field across consecutive frames by default", async () => {
+    const a = await probeGrainAt({}, 0);
+    const b = await probeGrainAt({}, 1);
+    expect(b.samples).toEqual(a.samples);
+  }, 240000);
+
+  it("still advances — it holds, it does not freeze", async () => {
+    const a = await probeGrainAt({}, 0);
+    const c = await probeGrainAt({}, 2);
+    expect(c.samples).not.toEqual(a.samples);
+  }, 240000);
+
+  it("grainHold 1 restores a fresh field every frame", async () => {
+    const a = await probeGrainAt({ grainHold: 1 }, 0);
+    const b = await probeGrainAt({ grainHold: 1 }, 1);
+    expect(b.samples).not.toEqual(a.samples);
+  }, 240000);
+
+  it("grain scales the amount, so a heavier finish is one number", async () => {
+    const base = await probeGrainAt({}, 3);
+    const heavy = await probeGrainAt({ grain: 2.5 }, 3);
+    expect(heavy.spread).toBeGreaterThan(base.spread * 2);
+  }, 240000);
+});

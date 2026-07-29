@@ -46,3 +46,26 @@ describe("electronSpawnArgs", () => {
     expect(a).toEqual([...base, "--ok"]);
   });
 });
+
+// Regression guard for the crash diagnosed 2026-07-28: every spawned Electron shared one default
+// profile, whose block-file HTTP cache is not concurrency-safe. Corruption persisted on disk, so
+// every subsequent launch segfaulted on CacheThread_BlockFile until the directory was deleted.
+describe("electronSpawnArgs user-data-dir", () => {
+  it("passes a private profile through when one is given", () => {
+    const a = electronSpawnArgs({}, "darwin", {}, "/tmp/kino-electron-profile-abc");
+    expect(a).toContain("--user-data-dir=/tmp/kino-electron-profile-abc");
+  });
+
+  it("omits the flag entirely when no profile is given, rather than sending an empty path", () => {
+    const a = electronSpawnArgs({}, "darwin", {});
+    expect(a.some((s) => s.startsWith("--user-data-dir"))).toBe(false);
+  });
+
+  it("keeps the profile flag distinct per host so two hosts never share a cache", () => {
+    const a = electronSpawnArgs({}, "darwin", {}, "/tmp/p1");
+    const b = electronSpawnArgs({}, "darwin", {}, "/tmp/p2");
+    expect(a).toContain("--user-data-dir=/tmp/p1");
+    expect(b).toContain("--user-data-dir=/tmp/p2");
+    expect(a).not.toEqual(b);
+  });
+});

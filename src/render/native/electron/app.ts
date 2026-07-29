@@ -44,10 +44,23 @@ export function electronSpawnArgs(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
   probe: SandboxProbe = {},
+  userDataDir?: string,
 ): string[] {
   const args = gpuSwitches(env, platform, probe).map((s) =>
     Array.isArray(s) ? `--${s[0]}=${s[1]}` : `--${s}`,
   );
+  // Private profile per host. Without this every Electron kino spawns shares ONE default profile
+  // (~/Library/Application Support/Electron on macOS), including its block-file HTTP cache — and
+  // that cache is not safe for concurrent processes. Two hosts at once is enough to corrupt it,
+  // after which the damage is on DISK: every later launch re-reads the bad files and segfaults on
+  // CacheThread_BlockFile, so a transient collision turns into "Electron crashes every time" until
+  // someone manually deletes the directory. Diagnosed 2026-07-28 from an EXC_BAD_ACCESS at 0x4c
+  // whose faulting thread was CacheThread_BlockFile, after running several renders concurrently.
+  //
+  // Concurrent hosts are normal, not exotic: vitest runs test files in parallel and each spawns
+  // its own Electron, which is very likely why the GPU pixel tests have been the flaky ones.
+  // argv, not app.commandLine — Chromium resolves the profile path before any JS runs.
+  if (userDataDir) args.push(`--user-data-dir=${userDataDir}`);
   // Same KINO_ELECTRON_ARGS escape hatch as appendGpuSwitches below — Linux needs it applied here,
   // at the spawn site, not there (see that function's comment); otherwise the debugging hatch is
   // silently ineffective on the platform that most needs it.

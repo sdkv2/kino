@@ -48,6 +48,28 @@ const GPU_PIXEL_TESTS = [
 // exercise a different backend on a Mac than in CI — and gpu/sw frames are not bit-identical, so
 // any test asserting on pixels would be comparing against whichever card the author happened to
 // have. The canonical path is the one the tests should hold.
+
+// Three files were briefly quarantined here on 2026-07-28 and all three are back. Recorded because
+// each had a different real cause, and none of them was the one the quarantine assumed:
+//
+//   • glass-shape   — genuinely broken, and NOT a flaky threshold. `c13f72f` renamed the lens author
+//                     contract from `kino-glass`/`kino-glass-shape` to `kino-lens`/`kino-lens-shape`
+//                     but migrated only ONE of the eleven motion fixtures. The other ten kept the old
+//                     class names, so the engine (zero remaining `kino-glass` references) stopped
+//                     treating them as lenses: no silhouette, no path morph, no SMIL exemption —
+//                     exactly what the assertions said, with both morphs differing by EXACTLY 0.
+//                     Fixed by renaming the class in those ten fixtures; the `--glass-*` CSS knobs
+//                     are unchanged engine API and must NOT be renamed with them.
+//   • compositor-ss — never broken. Collateral damage from Electron hosts sharing one profile
+//                     directory, whose block-file HTTP cache corrupts under concurrent access and
+//                     then segfaults every later launch. Fixed in the engine, not here.
+//   • render-lottie — one over-specified test, since removed: it pinned a colour fade to hard-coded
+//                     8-bit channel levels and `late` landed on exactly its `>190` bound.
+//
+// The lesson worth keeping: every one of these looked like "flaky GPU test, exclude it", and none of
+// them was. The fixtures live under gitignored `projects/`, which is why a repo-wide rename missed
+// them silently and why no CI run could have caught it.
+
 export default defineConfig({
   test: {
     globals: true,

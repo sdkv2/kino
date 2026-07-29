@@ -105,7 +105,15 @@ export function seekVideo(vid: HTMLVideoElement, t: number): Promise<void> {
   });
 }
 
-async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
+// ponytail: one @font-face block per theme per process — font bytes never change mid-render.
+const fontFaceCache = new Map<string, string>();
+
+/** Pure cache key: theme font paths determine the inlined @font-face CSS bytes. */
+export function fontFaceCacheKey(theme: Pick<KinoProps["theme"], "fontUrl" | "labelFontUrl">): string {
+  return `${theme.fontUrl ?? ""}\0${theme.labelFontUrl ?? ""}`;
+}
+
+async function buildFontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   const faces: string[] = [];
   const inline = async (family: string, rel: string | null | undefined) => {
     if (!rel) return;
@@ -126,6 +134,24 @@ async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   return faces.join("");
 }
 
+async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
+  const key = fontFaceCacheKey(theme);
+  const hit = fontFaceCache.get(key);
+  if (hit !== undefined) {
+    prof.addSample("tpl:fontCssHit", 1);
+    return hit;
+  }
+  prof.addSample("tpl:fontCssMiss", 1);
+  const css = await buildFontFaceCss(theme);
+  fontFaceCache.set(key, css);
+  return css;
+}
+
+/** Unit tests only — clears the process-lifetime font CSS cache. */
+export function resetFontFaceCacheForTests(): void {
+  fontFaceCache.clear();
+}
+
 export function paletteVars(theme: KinoProps["theme"]): string {
   return (
     `--kino-mint:${theme.mint};--kino-green:${theme.green};--kino-night:${theme.night};` +
@@ -138,6 +164,26 @@ export interface HtmlTemplate {
   w: number;
   h: number;
   makeSvg: (css: string) => string; // css lands in the raster's <style>, after the fonts + palette
+  makeSvgUrl: (css: string) => string; // data: URL with cached encoded prefix/suffix around css
+  svgByteLength: (css: string) => number; // raw SVG byte length without materialising the full string
+}
+
+const DATA_URL_PREFIX = "data:image/svg+xml;charset=utf-8,";
+
+/** Split-boundary guard: encodeURIComponent throws on a lone UTF-16 surrogate. */
+function assertSplitBoundary(before: string, after: string, label: string): void {
+  if (before.length > 0) {
+    const tail = before.charCodeAt(before.length - 1);
+    if (tail >= 0xd800 && tail <= 0xdbff) {
+      throw new Error(`SVG template split ${label}: high surrogate at end of prefix`);
+    }
+  }
+  if (after.length > 0) {
+    const head = after.charCodeAt(0);
+    if (head >= 0xdc00 && head <= 0xdfff) {
+      throw new Error(`SVG template split ${label}: low surrogate at start of suffix`);
+    }
+  }
 }
 
 /** The wrapper class every rasterized markup sits inside — the raster's stand-in for `:host`. */
@@ -182,7 +228,7 @@ export async function buildTemplate(
   const fonts = await fontFaceCss(theme);
   const scale = opts.scale ?? RASTER_SCALE;
   const defs = opts.defs ?? "";
-  return { w, h, makeSvg: makeSvgFromXhtml(xhtml, theme, w, h, scale, fonts, defs) };
+  return htmlTemplateFromXhtml(xhtml, theme, w, h, scale, fonts, defs);
 }
 
 /** FO template from pre-serialized inner markup — skips a second measure probe when a live host exists. */
@@ -196,10 +242,11 @@ export async function buildTemplateFromXhtml(
   const fonts = await fontFaceCss(theme);
   const scale = opts.scale ?? RASTER_SCALE;
   const defs = opts.defs ?? "";
-  return { w, h, makeSvg: makeSvgFromXhtml(xhtml, theme, w, h, scale, fonts, defs) };
+  return htmlTemplateFromXhtml(xhtml, theme, w, h, scale, fonts, defs);
 }
 
-function makeSvgFromXhtml(
+/** DOM-free template builder — exported for unit tests of the encoded-prefix/suffix path. */
+export function htmlTemplateFromXhtml(
   xhtml: string,
   theme: KinoProps["theme"],
   w: number,
@@ -207,15 +254,48 @@ function makeSvgFromXhtml(
   scale: number,
   fonts: string,
   defs: string,
-): (css: string) => string {
-  return (css: string) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}">` +
-    // Palette vars live in a <style> block, NOT a style attribute: font families contain double
-    // quotes, which would terminate the XML attribute and invalidate the whole SVG.
-    `<style>${fonts} html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} ${css}</style>${defs}` +
-    `<foreignObject width="${w}" height="${h}">` +
-    `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px;background:transparent">${xhtml}</div>` +
-    `</foreignObject></svg>`;
+): HtmlTemplate {
+  // Rounded: a fractional scale (a draft rasterising 1920 comp px onto 1280) otherwise lands on
+  // 1279.9999999999998 and the plate comes back one pixel off its target, buying a full-frame
+  // resample per frame in normalizeMotionPlates. Exact at scale 1 and 2, so nothing else moves.
+  const svgOpen =
+    `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${Math.round(w * scale)}" height="${Math.round(h * scale)}" viewBox="0 0 ${w} ${h}">`;
+  // Palette vars live in a <style> block, NOT a style attribute: font families contain double
+  // quotes, which would terminate the XML attribute and invalidate the whole SVG.
+  const stylePrefix = `<style>${fonts} html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} `;
+  const styleTail = `</style>${defs}`;
+  const foOpen = `<foreignObject width="${w}" height="${h}">`;
+  const divOpen =
+    `<div xmlns="http://www.w3.org/1999/xhtml" class="${TEX_ROOT}" style="width:${w}px;height:${h}px;background:transparent">`;
+  const divClose = `</div>`;
+  const foClose = `</foreignObject></svg>`;
+
+  const rawPrefix = svgOpen + stylePrefix;
+  const rawSuffix = styleTail + foOpen + divOpen + xhtml + divClose + foClose;
+  assertSplitBoundary(rawPrefix, rawSuffix, "before css");
+
+  const fixedSvgBytes = rawPrefix.length + rawSuffix.length;
+  let encodedPrefix: string | undefined;
+  let encodedSuffix: string | undefined;
+
+  const ensureEncodedHalves = () => {
+    if (encodedPrefix === undefined) {
+      encodedPrefix = encodeURIComponent(rawPrefix);
+      encodedSuffix = encodeURIComponent(rawSuffix);
+    }
+  };
+
+  return {
+    w,
+    h,
+    makeSvg: (css: string) => rawPrefix + css + rawSuffix,
+    makeSvgUrl: (css: string) => {
+      assertSplitBoundary(css, rawSuffix, "after css");
+      ensureEncodedHalves();
+      return DATA_URL_PREFIX + encodedPrefix! + encodeURIComponent(css) + encodedSuffix!;
+    },
+    svgByteLength: (css: string) => fixedSvgBytes + css.length,
+  };
 }
 
 /** Scrub CSS: pause + negative delay against the 1s @keyframes convention. */
@@ -244,9 +324,8 @@ export async function rasterAt(
     // data: URL, NOT a blob URL — Chromium taints canvases painted from blob-URL foreignObject
     // SVGs (texImage2D would then throw), while data-URL foreignObject SVGs stay clean.
     const url = prof.sync(`raster:encode:${key}`, () => {
-      const svg = tpl.makeSvg(css);
-      prof.addSample(`raster:svgKB:${key}`, svg.length / 1024);
-      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+      prof.addSample(`raster:svgKB:${key}`, tpl.svgByteLength(css) / 1024);
+      return tpl.makeSvgUrl(css);
     });
     const img = await prof.awaited(`raster:decode:${key}`, () => loadImage(url));
     const canvas = document.createElement("canvas");

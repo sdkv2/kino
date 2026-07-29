@@ -3,10 +3,13 @@
 // so beat windows, crossfades and camera moves are unit-testable numbers.
 //
 // Layer order mirrors the stack documented at the top of native/page/KinoVideo.tsx.
-import type { KinoProps } from "./props.js";
+import type { BgKeyframe, KinoProps } from "./props.js";
+import type { LayerEffect } from "./maskSpec.js";
 import { interpolate } from "./interpolate.js";
-import { normalizeLayer, type Dims, type LayerDraw, type LayerSpec } from "./native/page/compositor/graph.js";
-import { motionHandoff, motionXfadeFrames } from "./motion.js";
+import { paramsAt } from "./bgparams.js";
+import { spring } from "./spring.js";
+import { IDENTITY_TRANSFORM, normalizeLayer, type Dims, type LayerDraw, type LayerSpec, type LayerTransform } from "./native/page/compositor/graph.js";
+import { motionHandoff, motionXfadeFrames, shotTransform, type Shot } from "./motion.js";
 import { hasCaptionContent } from "./captionLayout.js";
 
 import { kenBurnsScale } from "./backgrounds/glow.js";
@@ -18,6 +21,80 @@ const AVATAR_PUSH_IN = 1.08;
 
 /** Chained-cutaway hold: a held clip extends this many frames into its successor. */
 const CHAIN_HOLD_FRAMES = 12;
+
+const num = (v: unknown, d: number): number => (typeof v === "number" ? v : Number(v) || d);
+
+/**
+ * An authored tween track (captionKeyframes / kickerKeyframes / zoomKeyframes / logoKeyframes)
+ * resolved to a layer transform at `tSec`.
+ *
+ * Ported from the retired DOM composition's TweenOverlay, which applied
+ * `translate(x%, y%) scale(s)` to a full-frame box: x/y are PERCENT OF FRAME, and the scale is
+ * about the rect centre — which is exactly the order `modelMatrix` composes, so the mapping is
+ * exact rather than approximate. `opacity` is returned separately because some layers already
+ * carry one (a chained video fade) and the two multiply.
+ */
+function tweenAt(
+  keyframes: BgKeyframe[] | undefined,
+  tSec: number,
+  dims: Dims,
+): { transform: LayerSpec["transform"]; opacity: number } | null {
+  if (!keyframes?.length) return null;
+  const p = paramsAt({ x: 0, y: 0, scale: 1, opacity: 1 }, keyframes, tSec);
+  return {
+    transform: {
+      scale: num(p.scale, 1),
+      rotate: 0,
+      translate: [(num(p.x, 0) / 100) * dims.width, (num(p.y, 0) / 100) * dims.height],
+    },
+    opacity: num(p.opacity, 1),
+  };
+}
+
+/**
+ * Fill in an opt-in `{ kind: "motionBlur", params: { auto: 1 } }` from how far this layer actually
+ * travelled since the previous frame.
+ *
+ * Effect params are static for a whole beat, so a hand-authored blur cannot describe a punch — it
+ * would smear the entire beat instead of the six frames that are moving. Measuring the transform
+ * delta instead means the smear exists only while the camera does, which is the whole reason a
+ * fast move reads as expensive rather than as a jump.
+ *
+ * A pan displaces every pixel by one vector (angle + distance); a scale change displaces each
+ * pixel along its own ray from the centre, proportionally (radial). Both are emitted, so a move
+ * that pans AND pushes blurs correctly. `shutter` is the fraction of the frame interval the
+ * shutter is open — 0.5 is the 180° convention.
+ */
+function autoMotionBlur(
+  effects: LayerEffect[] | undefined,
+  cur: LayerTransform | undefined,
+  prev: LayerTransform | undefined,
+): LayerEffect[] | undefined {
+  if (!effects?.length) return effects;
+  const isAuto = (e: LayerEffect) => e.kind === "motionBlur" && num(e.params?.auto, 0) > 0;
+  if (!effects.some(isAuto)) return effects;
+
+  const c = cur ?? IDENTITY_TRANSFORM;
+  const p = prev ?? IDENTITY_TRANSFORM;
+  const dx = c.translate[0] - p.translate[0];
+  const dy = c.translate[1] - p.translate[1];
+  const growth = p.scale > 0 ? c.scale / p.scale - 1 : 0;
+
+  return effects.map((e) => {
+    if (!isAuto(e)) return e;
+    const shutter = num(e.params?.shutter, 0.5);
+    return {
+      kind: e.kind,
+      params: {
+        ...e.params,
+        angle: (Math.atan2(dy, dx) * 180) / Math.PI,
+        distance: Math.hypot(dx, dy) * shutter,
+        radial: growth * shutter,
+        samples: num(e.params?.samples, 12),
+      },
+    };
+  });
+}
 
 /** Layer-as-mask clips overlays; the source motion layer stays unmasked when it is the mask source itself. */
 function motionMask(mask: unknown, currentLayerId?: string): LayerSpec["mask"] {
@@ -115,9 +192,51 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
         group: beat,
       });
     }
-    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity, mask: segMask, effects: s.effects, group: beat, aboveFilm: behind });
-    if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity, group: beat });
-    if (s.kicker) out.push({ id: `kicker${i}`, source: { providerId: `kicker${i}` }, rect: full, opacity, group: beat });
+    // Two cameras. `shot` moves the footage WITHIN its own rect (tx/ty are % of that rect);
+    // `zoomKeyframes` moves the whole footage+chrome group (x/y are % of the frame). A framed
+    // beat locks the shot — a camera move fights the inset — so the two only ever compose when
+    // the footage fills the frame, where both share the frame centre. One LayerTransform then
+    // holds both exactly: scale = Z·S, translate = Tz + Z·Ts.
+    // Resolved at an arbitrary local frame so the previous frame's camera is available too —
+    // auto motion blur is the delta between the two.
+    const cameraAt = (l: number): LayerTransform | undefined => {
+      const z = tweenAt(s.zoomKeyframes, l / props.fps, dims);
+      const sh = shotTransform(
+        (s.frame ? "static" : s.shot) as Shot,
+        seqDur > 0 ? Math.min(1, Math.max(0, l) / seqDur) : 0,
+      );
+      if (z === null && sh.scale === 1 && sh.tx === 0 && sh.ty === 0) return undefined;
+      const zs = z?.transform?.scale ?? 1;
+      const zt = z?.transform?.translate ?? [0, 0];
+      return {
+        scale: zs * sh.scale,
+        rotate: 0,
+        translate: [zt[0] + zs * (sh.tx / 100) * rect.w, zt[1] + zs * (sh.ty / 100) * rect.h],
+      };
+    };
+    const zoom = tweenAt(s.zoomKeyframes, local / props.fps, dims);
+    const segTransform = cameraAt(local);
+    const groupOpacity = opacity * (zoom?.opacity ?? 1);
+    const segEffects = autoMotionBlur(s.effects, segTransform, cameraAt(local - 1));
+    // The chrome rides the same camera, so it smears with the footage — a sharp bezel around a
+    // blurred screen reads as a compositing mistake. Only the blur carries over, never the rest
+    // of the beat's chain, which was authored for the footage.
+    const chromeEffects = segEffects?.filter((e) => e.kind === "motionBlur");
+
+    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity: groupOpacity, transform: segTransform, mask: segMask, effects: segEffects, group: beat, aboveFilm: behind });
+    if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity: groupOpacity, transform: zoom?.transform, effects: chromeEffects?.length ? chromeEffects : undefined, group: beat });
+    if (s.kicker) {
+      const kt = tweenAt(s.kickerKeyframes, local / props.fps, dims);
+      out.push({
+        id: `kicker${i}`,
+        source: { providerId: `kicker${i}` },
+        rect: full,
+        // The chained-clip fade and the authored track are independent — they multiply.
+        opacity: opacity * (kt?.opacity ?? 1),
+        transform: kt?.transform,
+        group: beat,
+      });
+    }
   });
 
   // 5. Full-screen motion beats. Hold the outgoing graphic through the next beat's xfade so the
@@ -209,9 +328,33 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const onCamera = props.avatar
       ? props.avatarWindows.some((w) => frame >= f(w.fromSec) && frame < f(w.toSec))
       : false;
-    const logoFromSec = (props.logo as any).fromSec ?? 0;
+    const logo = props.logo;
+    const logoFromSec = (logo as any).fromSec ?? 0;
     if (!onCamera && frame >= f(logoFromSec)) {
-      out.push({ id: "logo", source: { providerId: "logo" }, rect: full });
+      // Ported from AnimatedElement: `left/top` are % of frame under a translate(-50%,-50%),
+      // so x/y name the CENTRE, and the mark draws at sizePx wide at its natural aspect —
+      // never full-bleed. The track tweens FROM the configured position and reads ABSOLUTE
+      // time: logoKeyframes span the whole spec, not a beat (build.ts rebases them per cut).
+      // No track → the default entrance: a critically-damped fade-and-settle from 0.9, measured
+      // from the mark's own start frame. An authored track replaces it outright.
+      const entrance = spring({ frame: frame - f(logoFromSec), fps: props.fps, config: { damping: 200 } });
+      const p = logo.keyframes?.length
+        ? paramsAt({ x: logo.x, y: logo.y, scale: 1, opacity: 1 }, logo.keyframes, frame / props.fps)
+        : { x: logo.x, y: logo.y, scale: interpolate(entrance, [0, 1], [0.9, 1]), opacity: entrance };
+      const lw = logo.sizePx;
+      const lh = logo.sizePx / (logo.aspect || 1);
+      out.push({
+        id: "logo",
+        source: { providerId: "logo" },
+        rect: {
+          x: (num(p.x, logo.x) / 100) * width - lw / 2,
+          y: (num(p.y, logo.y) / 100) * height - lh / 2,
+          w: lw,
+          h: lh,
+        },
+        transform: { scale: num(p.scale, 1), rotate: 0, translate: [0, 0] },
+        opacity: num(p.opacity, 1),
+      });
     }
   }
 
@@ -231,7 +374,17 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       for (let w = 0; w < s.words.length; w++) if (tAbs >= s.words[w].start) idx = w;
       key = `w${idx}`;
     }
-    out.push({ id: `caption${i}`, source: { providerId: `caption${i}`, key }, rect: full, mask: (s as any).mask, effects: s.effects, group: `beat${i}` });
+    const tween = tweenAt(s.captionKeyframes, local / props.fps, dims);
+    out.push({
+      id: `caption${i}`,
+      source: { providerId: `caption${i}`, key },
+      rect: full,
+      mask: (s as any).mask,
+      effects: s.effects,
+      group: `beat${i}`,
+      transform: tween?.transform,
+      opacity: tween?.opacity,
+    });
   });
 
   // 10. AI disclosure.

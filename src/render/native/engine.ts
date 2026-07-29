@@ -22,7 +22,7 @@ import { extractDense, extractMaxDim, extractSparse, planMediaJobs, planMaskJobs
 import type { WorkerHandle } from "./workerHandle.js";
 import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.js";
 import { loadGpuCapture, resolveElectronCapture, useSharedTextureCapture, type CaptureKind } from "./electron/gpuCapture.js";
-import { FORMAT_DIMS, formatFileTag, maxOutputDim, type FormatId } from "../formats.js";
+import { compDims, DRAFT_SHORT_EDGE, FORMAT_DIMS, formatFileTag, maxOutputDim, scaledDims, type FormatId } from "../formats.js";
 import { capWorkers, bytesPerWorker } from "./workerCap.js";
 
 export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
@@ -91,6 +91,22 @@ function resolveShaderSS(
   return opts?.quality === "very-high" ? 2 : 1;
 }
 
+/**
+ * Draft output resolution — the short edge, in px. A draft is a preview, so it renders the full
+ * composition onto a 720p-class surface: same layout, ~2.25× fewer pixels to shade, capture and
+ * encode. `KINO_DRAFT_EDGE=off` renders a draft at full size; a number sets a different edge.
+ */
+export function resolveDraftEdge(env: NodeJS.ProcessEnv = process.env): number | null {
+  const raw = env.KINO_DRAFT_EDGE;
+  if (raw == null || raw === "") return DRAFT_SHORT_EDGE;
+  if (/^(off|full|none|0)$/i.test(raw.trim())) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 64) {
+    throw new Error(`KINO_DRAFT_EDGE must be a pixel count >= 64, or "off" (got "${raw}")`);
+  }
+  return Math.round(n);
+}
+
 /** FXAA edge post-pass on every shader background — cheap analytic AA on top of SS, so silhouettes
  *  stay clean without a higher (costlier) SS. On by default; KINO_SHADER_FXAA=0 disables. */
 function resolveShaderFXAA(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -147,18 +163,21 @@ export function resolveCaptureSource(env: NodeJS.ProcessEnv = process.env): Capt
   return "bitmap";
 }
 
-// Binding resource is GPU memory / Metal, not CPU cores, so the ceiling is per-renderer.
+// Electron: one shared GPU host, N offscreen windows (parallel encode). Default cap is conservative;
+// raise with KINO_CONCURRENCY when the box has headroom (VRAM, NVENC sessions, cores).
 //
-// Puppeteer: each worker = own Chrome GPU process — peaks at 2; 3+ regresses.
+// 4 is measured, not assumed. Tried 6 on 2026-07-28 and reverted it: on the macOS-desktop motion
+// spec (10-core M-series, idle) c=2 ran 20619 ms vs c=4 at 12020/13728 ms — ~1.6× SLOWER, worse
+// than the pre-optimisation baseline — while c=6 won one rep by 1% and lost the next by 13%, i.e.
+// indistinguishable from 4 but costing ~28% more RAM. Consistent with the independent c=4 knee in
+// the 4K footage bench.
 //
-// Electron: one shared host, N offscreen windows, each with its own VT session (parallel encode),
-// so it scales further. Measured knee is 4 (bench4k 4K, 291 frames, M4 4P/6E, median render):
-// c=2 2910ms, c=4 2229ms (1.31x), c=6 2169ms. c=6 is not a real gain — the c=4 and c=6 ranges
-// overlap (2195-2274 vs 2156-2305) for +28% RAM, and run-to-run spread grows 21 -> 79 -> 149ms
-// across c=2/4/6, so oversubscribing past the performance-core count just adds jitter.
-//
-// Override either with KINO_CONCURRENCY after measuring on the target machine.
-const MAX_WORKERS_PUPPETEER = 2;
+// The reason is the shape of the pipeline, so expect it to hold until that shape changes: after the
+// perf work the dominant per-frame cost is `texture:motion0` — GPU lens composite + plate upload —
+// at 19.8 ms of a 31.7 ms seek (62%), while the 3-plate FO raster is fully hidden behind it
+// (prefetch-wait is 1.28 ms). Every worker contends for the one GPU, so added workers multiply the
+// dominant cost; too few (c=2) stop hiding the ~14 ms/plate raster. Raising this ceiling needs LESS
+// GPU work per frame, not more workers.
 const MAX_WORKERS_ELECTRON = 4;
 export function concurrency(
   totalFrames: number,
@@ -413,6 +432,9 @@ async function pointServerAt(opts: {
   media: Record<string, MediaEntryNode>;
   width: number;
   height: number;
+  /** Output canvas, when it differs from the composition (draft). */
+  outWidth?: number;
+  outHeight?: number;
   total: number;
   shaderSS: number;
   shaderFXAA: boolean;
@@ -430,12 +452,18 @@ async function pointServerAt(opts: {
       props: opts.props,
       width: opts.width,
       height: opts.height,
+      outWidth: opts.outWidth ?? opts.width,
+      outHeight: opts.outHeight ?? opts.height,
       durationInFrames: opts.total,
       media: opts.media,
       shaderSS: opts.shaderSS,
       shaderFXAA: opts.shaderFXAA,
       motionFoMin: opts.motionFoMin,
       profile: process.env.KINO_PROFILE === "1",
+      // Counts per-plate pixel-identical motion rasters (see motionRaster.ts). Hashing every
+      // plate costs real ms/frame, so it is its own flag — never folded into KINO_PROFILE,
+      // whose timing rows it would pollute.
+      motionDupeProbe: process.env.KINO_MOTION_DUPE_PROBE === "1",
       captureCodec: opts.captureCodec,
       captureSource: opts.captureSource,
     }),
@@ -451,13 +479,16 @@ export interface NativeRenderOpts {
   preset?: EncodePreset; // veryfast for mock/preview builds; medium (default) for finals
   /** Supersampling is opt-in — see resolveShaderSS. */
   quality?: QualityPreset;
+  /** Fast preview: SS=1 and a 720p-class output canvas (see resolveDraftEdge). Defaults to
+   *  `preset === "veryfast"`, which is how build.ts has always signalled a draft. */
+  draft?: boolean;
 }
 
 export function renderVideoNative(opts: NativeRenderOpts): Promise<string[]> {
   return withRenderLock(() => renderVideoLocked(opts));
 }
 
-async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium", quality }: NativeRenderOpts): Promise<string[]> {
+async function renderVideoLocked({ props, publicDir, formats, outDir, title, preset = "medium", quality, draft }: NativeRenderOpts): Promise<string[]> {
   mkdirSync(outDir, { recursive: true });
   const scratch = scratchDir("kino-native-");
   const t0 = Date.now();
@@ -467,11 +498,9 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   // One Electron host, N offscreen windows — the GPU process is shared, so worker count is bound
   // by GPU memory rather than by cores.
   const total = durationInFrames(props);
-  // On Linux, GPU memory binds before CPU cores do: at the default 2.6GB/worker estimate an 8GB
-  // card fits fewer workers than the electron default of 4. capWorkers is pure arithmetic (see
-  // workerCap.ts); this is the one call site that feeds it real probed VRAM and an env override.
-  // An explicit KINO_CONCURRENCY over the cap is a hard error, not a silent reduction — the user
-  // asked for something this GPU cannot do and should be told, not handed fewer workers quietly.
+  // Linux: capWorkers may lower n from probed VRAM and KINO_NVENC_SESSIONS (see workerCap.ts).
+  // An explicit KINO_CONCURRENCY above that cap is a hard error — raise KINO_VRAM_PER_WORKER
+  // if the estimate is wrong for your card.
   let n = concurrency(total);
   if (process.platform === "linux") {
     const probe = loadGpuCapture()?.gpuLimits?.();
@@ -493,8 +522,13 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     }
   }
   const slots = Array.from({ length: n }, (_, i) => i);
+  const isDraft = draft ?? preset === "veryfast";
   // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
-  const ss = resolveShaderSS(process.env, { mock: preset === "veryfast", quality });
+  const ss = resolveShaderSS(process.env, { mock: isDraft, quality });
+  // A draft also renders onto a smaller canvas — the composition is unchanged, it just lands on
+  // fewer pixels (`out`), so shading, capture and encode all shrink with it.
+  const draftEdge = isDraft ? resolveDraftEdge(process.env) : null;
+  const outDimsOf = (fmt: FormatId) => (draftEdge ? scaledDims(fmt, draftEdge) : DIMS[fmt]);
   const foMin = resolveMotionFoMin(process.env, quality);
   const fx = resolveShaderFXAA(process.env);
   // The electron host forces its own ANGLE backend (angle.ts). Report the real one: gpu and sw
@@ -502,8 +536,11 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   log.step(`gl: electron ANGLE/${angleBackend()} (forced)`);
   try {
     const endSec = total / props.fps;
+    // Footage only ever has to serve the largest surface it lands on — which is the draft canvas
+    // on a draft, so previews stop extracting (and decoding) 4K frames to paint 720p ones.
+    const maxOut = Math.max(...formats.map((f) => Math.max(outDimsOf(f).width, outDimsOf(f).height)));
     const [{ framesDir, media }, audio] = await Promise.all([
-      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOutputDim(formats), ss)),
+      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOut, ss)),
       buildAudioTrack(props, publicDir, endSec, scratch),
     ]);
     lap("media+audio");
@@ -511,11 +548,26 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     const outputs: string[] = [];
     try {
       for (const fmt of formats) {
-        const { width, height } = DIMS[fmt];
+        // `width`/`height` are the composition (always 1080-class — the space specs are
+        // authored in); `canvas` is the surface it is rasterised onto. A draft shrinks the
+        // canvas below the composition, a `*-4k` format doubles it — same frame either way,
+        // and everything downstream of the page (window, capture, encode, cache key) follows
+        // the canvas.
+        const { width, height } = compDims(fmt);
+        const canvas = outDimsOf(fmt);
+        // The motion raster deliberately does NOT follow a shrunken canvas. Measured on the
+        // macos-desktop-youtube spec, rasterising the FO at 0.667 was 17-33% SLOWER than at 1x:
+        // the downscale it saves (motion:normalize) costs 0.01ms/frame, while a fractional SVG
+        // raster scale drops Chromium onto a slower path. It would also cost the sub-pixel
+        // motion the 1x floor exists to protect. Fewer pixels is not automatically less work.
+        if (canvas.width !== width || canvas.height !== height) {
+          log.step(`canvas: ${width}x${height} composition → ${canvas.width}x${canvas.height} output`);
+        }
         const requestedSource = resolveCaptureSource(process.env);
         const electronShared = useSharedTextureCapture();
         const server = await pointServerAt({
-          props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
+          props, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
+          total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
           captureCodec: electronShared ? "h264" : "jpeg",
           captureSource: requestedSource,
         });
@@ -527,7 +579,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
 
         const handles: WorkerHandle[] = await Promise.all(
           slots.map(async (i) => {
-            const h = await acquireElectronWorker(i, server.url, width, height, props.fps);
+            const h = await acquireElectronWorker(i, server.url, canvas.width, canvas.height, props.fps);
             electronKind ??= h.captureKind;
             return {
               seekAndCapture: async (frame: number) => {
@@ -562,8 +614,8 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           props,
           publicDir,
           pageJsHash: await getPageBundleHash(),
-          width,
-          height,
+          width: canvas.width,
+          height: canvas.height,
           total,
           fps: props.fps,
           shaderSS: ss,
@@ -651,23 +703,43 @@ async function renderStillsLocked({ props, publicDir, format, frames, outDir, me
       media[job.key] = await extractSparse(job, join(publicDir, job.assetRel), framesDir, locals, extractMaxDim(maxOutputDim([format]), resolveShaderSS(process.env, { quality })));
     }
 
-    const { width, height } = DIMS[format];
+    // Same comp/out split as the video path: stills of a `*-4k` format compose at the
+    // 1080-class canvas and rasterise onto the UHD surface.
+    const { width, height } = compDims(format);
+    const canvas = DIMS[format];
     try {
       const ss = resolveShaderSS(process.env, { quality });
       const foMin = resolveMotionFoMin(process.env, quality);
       const fx = resolveShaderFXAA(process.env);
       const server = await pointServerAt({
-        props, publicDir, framesDir, media, width, height, total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
+        props, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
+        total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
         captureCodec: "jpeg",
         captureSource: "bitmap",
       });
       // captureMode "page" is load-bearing, not a default: shared/readback/direct all emit annex-B
       // H.264, and a still needs an image. Pinning it here also stops `auto` from resolving to a
       // hardware encoder on a machine that has one.
-      const handle = await acquireElectronWorker(0, server.url, width, height, props.fps, {
+      const handle = await acquireElectronWorker(0, server.url, canvas.width, canvas.height, props.fps, {
         captureMode: "page",
       });
       const outs: string[] = [];
+      // Prime the capture pipeline before the first real still, and throw the result away.
+      //
+      // Without this the FIRST still of every batch comes back with `kino-lens` glass missing —
+      // correct field, correct geometry, correct chrome, but no refraction, no film, no dispersion.
+      // It is positional, not content-dependent: rendering three near-identical frames breaks
+      // whichever is requested first, and reordering moves the defect with it. Video is immune
+      // because its encode loop is continuously pipelined; only the first drain of a cold pipeline
+      // hands back a paint captured before the compositor's GPU lens layer has landed.
+      //
+      // Cost is one discarded frame per `kino still` / `kino storyboard` invocation. That is worth
+      // paying: those two commands are what visual QA looks at, so the untreated bug quietly showed
+      // reviewers a glassless frame and invited the wrong conclusion about the render.
+      if (wanted.length > 0) {
+        await handle.seekAndCapture(wanted[0]!.frame);
+        await handle.flush();
+      }
       for (const { frame, name } of wanted) {
         // NOTE: JPEG bytes in a `.png` file. That mislabel predates the electron port and is
         // preserved deliberately — consumers pass these paths to tools that sniff magic bytes, and

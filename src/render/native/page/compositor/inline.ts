@@ -6,6 +6,8 @@
 // data: URLs already survive, and in-document fragment references (filter:url(#kino-glow))
 // resolve inside the SVG itself — neither is rewritten.
 
+import * as prof from "./profile.js";
+
 const IMG_SRC = /(<img\b[^>]*?\bsrc\s*=\s*["'])([^"']+)(["'])/gi;
 const CSS_URL = /(url\(\s*["']?)([^"')]+)(["']?\s*\))/gi;
 
@@ -50,12 +52,29 @@ export async function inlineExternalRefs(
 
 // ponytail: global — motion proc re-inlines the same /public assets every frame; without this
 // each prepare duplicates multi-MB base64 strings until GC catches up on long lens builds.
+// Cap at 128 entries: a long render with many distinct /public refs (dock icons, thumbs, quads)
+// should not retain multi-MB base64 blobs for assets that only appear once. LRU via Map order.
+const DATA_URL_CACHE_MAX = 128;
 const dataUrlCache = new Map<string, string>();
+
+function rememberDataUrl(url: string, dataUrl: string): void {
+  if (dataUrlCache.has(url)) dataUrlCache.delete(url);
+  dataUrlCache.set(url, dataUrl);
+  while (dataUrlCache.size > DATA_URL_CACHE_MAX) {
+    const oldest = dataUrlCache.keys().next().value;
+    if (oldest === undefined) break;
+    dataUrlCache.delete(oldest);
+  }
+}
 
 /** Fetch a same-origin asset as a data URL. Returns null on any failure. */
 export async function fetchAsDataUrl(url: string): Promise<string | null> {
   const hit = dataUrlCache.get(url);
-  if (hit) return hit;
+  if (hit) {
+    prof.addSample("inline:dataUrlHit", 1);
+    return hit;
+  }
+  prof.addSample("inline:dataUrlMiss", 1);
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -66,9 +85,14 @@ export async function fetchAsDataUrl(url: string): Promise<string | null> {
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(blob);
     });
-    if (dataUrl) dataUrlCache.set(url, dataUrl);
+    if (dataUrl) rememberDataUrl(url, dataUrl);
     return dataUrl;
   } catch {
     return null;
   }
+}
+
+/** Unit tests only — clears the process-lifetime asset cache. */
+export function resetDataUrlCacheForTests(): void {
+  dataUrlCache.clear();
 }

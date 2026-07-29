@@ -7,6 +7,7 @@ import { glowPass } from "./glow.js";
 import { bloomPass } from "./bloom.js";
 import { lensPass } from "./lens.js";
 import { filmPass } from "./film.js";
+import { motionBlurPass } from "./motionBlur.js";
 
 registerPass(blurPass);
 registerPass(gradePass);
@@ -14,10 +15,11 @@ registerPass(glowPass);
 registerPass(bloomPass);
 registerPass(lensPass);
 registerPass(filmPass);
+registerPass(motionBlurPass);
 
 export { registerPass, runChain, getPass };
 export type { EffectPass };
-export { blurPass, gradePass, glowPass, bloomPass, lensPass, filmPass };
+export { blurPass, gradePass, glowPass, bloomPass, lensPass, filmPass, motionBlurPass };
 
 /** Test hook. Renders a half-white / half-transparent source with a soft-edged coloured band,
  *  runs one effect, and reads back four numbers:
@@ -69,6 +71,63 @@ export function probeEffect(
   const softTop = read(2, canvas.height - 12)[0];
   const softMid = read(2, canvas.height - 6)[0];
   return [edge, colour[1], colour[2], Math.max(0, softTop - softMid * 2)];
+}
+
+/**
+ * Test hook: grain STRUCTURE on a flat patch of a given level, sampled along the centre row
+ * where the vignette contributes nothing.
+ *
+ * `spread` is how strong the grain is; `adjacentDiff` is the mean step between neighbouring
+ * pixels. Their RATIO is what separates film grain from digital noise: independent per-pixel
+ * noise steps as far between neighbours as it does overall (ratio ≈ 1), while real grain has a
+ * clump size, so neighbours are correlated and the ratio falls well below 1.
+ */
+export function probeGrain(
+  canvas: HTMLCanvasElement,
+  night: string,
+  intensity: number,
+  level: number,
+  ss = 1,
+  extra: Record<string, number> = {},
+  frame = 7,
+): { spread: number; adjacentDiff: number; samples: number[] } {
+  const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true })!;
+  const pool = new TargetPool();
+  // film runs before the supersample resolve, so the pass sees RENDER pixels. Reproduce that here
+  // — render at w*ss and box-average ss x ss blocks back down — or the probe cannot tell whether
+  // the grain's clump size actually survives the resolve at output resolution.
+  const rw = canvas.width * ss;
+  const rh = canvas.height * ss;
+  const src = pool.acquire(gl, rw, rh);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, src.fbo);
+  gl.viewport(0, 0, src.w, src.h);
+  gl.clearColor(level, level, level, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const out = runChain(gl, pool, src, [{ pass: getPass("film")!, params: { ...extra, intensity, night, ss } }], frame);
+
+  const n = 48;
+  const y0 = Math.floor(rh / 2);
+  const x0 = Math.floor(rw / 2 - (n * ss) / 2);
+  const block = new Uint8Array(n * ss * ss * 4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, out.fbo);
+  gl.readPixels(x0, y0, n * ss, ss, gl.RGBA, gl.UNSIGNED_BYTE, block);
+  const v = Array.from({ length: n }, (_, i) => {
+    let sum = 0;
+    for (let dy = 0; dy < ss; dy++) {
+      for (let dx = 0; dx < ss; dx++) sum += block[((dy * n * ss) + i * ss + dx) * 4];
+    }
+    return sum / (ss * ss);
+  });
+
+  const mean = v.reduce((a, b) => a + b, 0) / n;
+  const spread = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+  let steps = 0;
+  for (let i = 1; i < n; i++) steps += Math.abs(v[i] - v[i - 1]);
+  const adjacentDiff = steps / (n - 1);
+
+  pool.release(src);
+  if (out !== src) pool.release(out);
+  return { spread, adjacentDiff, samples: v };
 }
 
 /** Test hook: white source through the film pass — centre, corner, grain spread on a flat patch. */

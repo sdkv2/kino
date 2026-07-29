@@ -23,7 +23,7 @@ import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntens
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
 import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
-import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
+import { probeDuration, probeImageAspect, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { parseQuality } from "../render/native/engine.js";
@@ -336,6 +336,8 @@ export async function prepare(
     ? {
         src: "logo.png",
         sizePx: resolveLogoSize(spec.logoSize ?? brand.logoSize),
+        // Measured here because layersAt is pure — without it the mark has no shape to size to.
+        aspect: await probeImageAspect(logoAbs),
         x: logoPos.x,
         y: logoPos.y,
         keyframes: spec.logoKeyframes ?? [],
@@ -676,8 +678,9 @@ export async function build(
     (opts.font ? opts.font.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : undefined) ??
     (draft ? "draft" : undefined);
   const outName = variantName(spec.title, autoTag);
-  // Drafts are previews — take the fast encode preset; full renders keep the final quality.
-  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: draft ? "veryfast" : "medium", quality });
+  // Drafts are previews — fast encode preset and a 720p-class canvas; full renders keep the
+  // final quality and the format's own resolution.
+  const outs = await renderVideo({ props, publicDir, formats, outDir: project.outDir(spec.title), title: outName, preset: draft ? "veryfast" : "medium", quality, draft });
   for (const o of outs) {
     // AAC pad past the last video frame → players flash black at EOF (and break seamless loops).
     try {

@@ -27,12 +27,12 @@ function copyTarget(gl: WebGL2RenderingContext, pool: TargetPool, src: RenderTar
  * except `film`, which falls back to theme.film so existing specs keep their finish.
  */
 /** Cinematic finish only — applied mid-stack (below motion/caption), matching KinoVideo's FilmFinish. */
-export function resolveFilmPass(post: PostFx | undefined, theme: Theme): ResolvedPass[] {
+export function resolveFilmPass(post: PostFx | undefined, theme: Theme, ss = 1): ResolvedPass[] {
   const params = post?.film as Record<string, number> | undefined;
   const intensity = params?.intensity ?? theme.film ?? 1;
   if (intensity <= 0) return [];
   const pass = getPass("film");
-  return pass ? [{ pass, params: { intensity, night: theme.night } }] : [];
+  return pass ? [{ pass, params: { ...params, intensity, night: theme.night, ss } }] : [];
 }
 
 /**

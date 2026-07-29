@@ -179,14 +179,24 @@ export class StageRenderer {
   readonly outW: number;
   readonly outH: number;
   readonly ss: number;
+  /** Composition size — the space layer geometry, mask shapes and effect radii are authored in.
+   *  Equal to the output size for a normal render; larger than it for a downscaled draft. */
+  readonly compW: number;
+  readonly compH: number;
+  /** Target pixels per composition pixel. `ss` whenever output == composition (every full render),
+   *  so passing it where `ss` used to go is a no-op there and the right factor for a draft. */
+  readonly compScale: number;
   private resolve: CompositeResolve;
 
-  constructor(canvas: HTMLCanvasElement, opts: { width: number; height: number; ss: number }) {
+  constructor(canvas: HTMLCanvasElement, opts: { width: number; height: number; ss: number; comp?: { width: number; height: number } }) {
     this.ss = Math.max(1, opts.ss);
     this.outW = opts.width;
     this.outH = opts.height;
     this.width = this.outW * this.ss;
     this.height = this.outH * this.ss;
+    this.compW = opts.comp?.width ?? this.outW;
+    this.compH = opts.comp?.height ?? this.outH;
+    this.compScale = this.width / this.compW;
     canvas.width = this.outW;
     canvas.height = this.outH;
     const gl = canvas.getContext("webgl2", {
@@ -233,8 +243,8 @@ export class StageRenderer {
   }
 
   private scaled(layer: LayerDraw): LayerDraw {
-    if (this.ss === 1) return layer;
-    const s = this.ss;
+    if (this.compScale === 1) return layer;
+    const s = this.compScale;
     const { x, y, w, h } = layer.rect;
     const { translate, scale, rotate } = layer.transform;
     return {
@@ -315,7 +325,7 @@ export class StageRenderer {
       }
     });
 
-    const filmChain = resolveFilmPass(opts.postFx, opts.theme);
+    const filmChain = resolveFilmPass(opts.postFx, opts.theme, this.compScale);
     if (filmChain.length) {
       const filmed = this.glPhase("draw:film", () => runPost(gl, this.pool, accum, filmChain, frame));
       if (filmed !== accum) {
@@ -373,7 +383,7 @@ export class StageRenderer {
 
     let composite = accum;
     const posted = this.glPhase("draw:post-tail", () =>
-      runPost(gl, this.pool, accum, resolveTailPostChain(opts.postFx, opts.theme, this.ss), frame),
+      runPost(gl, this.pool, accum, resolveTailPostChain(opts.postFx, opts.theme, this.compScale), frame),
     );
     if (posted !== accum) {
       this.pool.release(accum);
@@ -632,12 +642,12 @@ export class StageRenderer {
             current = rendered;
           } else {
             binding = { mask: mt.tex, sdf: null, sdfMax: 0 };
-            const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.ss);
+            const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.compScale);
             this.pool.release(rendered);
             current = masked;
           }
         } else {
-          const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.ss);
+          const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.compScale);
           this.pool.release(rendered);
           current = masked;
         }
@@ -692,8 +702,11 @@ export class StageRenderer {
     const gl = this.gl;
     const tex = source.texture(gl, frame, layer.source.key);
     if (!tex) return null;
-    const w = this.ss > 1 ? this.outW : this.width;
-    const h = this.ss > 1 ? this.outH : this.height;
+    // Composition resolution, always: the geometry below is drawn unscaled (comp px), and
+    // applyMask maps back to target px via compScale. Identical to the old `ss > 1 ? out : width`
+    // whenever output == composition; only a downscaled draft makes the two differ.
+    const w = this.compW;
+    const h = this.compH;
     const target = this.pool.acquire(gl, w, h);
     this.pool.clear(gl, target);
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);

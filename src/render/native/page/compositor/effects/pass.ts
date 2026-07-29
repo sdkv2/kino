@@ -20,6 +20,27 @@ export interface EffectPass {
   uniformNames?: string[];
 }
 
+/**
+ * One numeric effect param, coerced and bounded.
+ *
+ * Effect params come straight off the spec: `validateSegmentFx` checks the effect KIND and that
+ * `params` is an object, but never the type of an individual value. A typo like
+ * `{ radius: "wide" }` therefore reaches a pass as a string, and a bare `Number()` turns it into
+ * NaN — which the GPU happily accepts and paints as undefined garbage. Every pass routes its
+ * numeric params through here so a bad value degrades to the documented default instead.
+ */
+export function numParam(
+  params: Record<string, number | string>,
+  name: string,
+  fallback: number,
+  min = -Infinity,
+  max = Infinity,
+): number {
+  const raw = params[name];
+  const n = raw === undefined || raw === null || raw === "" ? fallback : Number(raw);
+  return Math.min(max, Math.max(min, Number.isFinite(n) ? n : fallback));
+}
+
 export const PASS_PREAMBLE = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc;

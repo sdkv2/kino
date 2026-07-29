@@ -3,6 +3,7 @@ import type { BackdropTexture } from "./backdrop.js";
 import { drawLensLayerPassEntry } from "./lensMirror.js";
 import type { MotionLayoutManifest, MotionPaintPlates } from "./lensLayout.js";
 import { acquireGpuFbo, blitTexture, uploadCanvas, type GpuFbo } from "./gpuBlit.js";
+import { quadsForLayer, type HoistedQuad } from "./underlay.js";
 
 export interface GpuLensLayer {
   kind: "gpu";
@@ -38,17 +39,22 @@ function blitQuads(
   layerW: number,
   layerH: number,
   quadTex?: (src: string) => Readonly<BackdropTexture> | null,
+  quads?: HoistedQuad[],
 ): void {
-  if (!quadTex || !manifest.quads?.length || manifest.pageW < 1) return;
+  const list = quads ?? manifest.quads;
+  if (!quadTex || !list?.length || manifest.pageW < 1) return;
   const s = layerW / manifest.pageW;
-  for (const q of manifest.quads) {
+  for (const q of list) {
     const tex = quadTex(q.src);
     if (!tex) continue;
     // No cell → the whole bitmap; a cell selects one tile of a sprite sheet as the source rect.
+    // An ancestor-clip crop then windows WITHIN that source (q.relLeft/w already hold the
+    // clipped rect, so without the matching source crop a half-clipped quad would squash).
     const cw = q.cell ? tex.width / q.cell.cols : tex.width;
     const ch = q.cell ? tex.height / q.cell.rows : tex.height;
     const sx = q.cell ? q.cell.col * cw : 0;
     const sy = q.cell ? q.cell.row * ch : 0;
+    const c = q.crop;
     blitTexture(
       gl,
       dst,
@@ -58,12 +64,15 @@ function blitQuads(
       q.relTop * s,
       q.w * s,
       q.h * s,
-      sx,
-      sy,
-      cw,
-      ch,
+      sx + (c ? c.u0 * cw : 0),
+      sy + (c ? c.v0 * ch : 0),
+      c ? (c.u1 - c.u0) * cw : cw,
+      c ? (c.v1 - c.v0) * ch : ch,
       tex.width,
       tex.height,
+      1,
+      0,
+      (q.radius ?? 0) * s,
     );
   }
 }
@@ -103,9 +112,11 @@ function mergeBackdropWithBase(
   // it has to reach the lens sample the same way or the glass refracts an empty desktop.
   if (underlay) blitFull(gl, merged, underlay, 0, layerW, layerH);
   blitTexture(gl, merged, sampleTex, 0, 0, 0, layerW, layerH, 0, 0, layerW, layerH, layerW, layerH);
-  // Same order as the visible layer: hoisted quads were part of `sample` before they left the
+  // Same order as the visible layer: sample-layer quads were part of `sample` before they left the
   // raster, so the glass has to keep refracting them or a lens crossing the video shows stale page.
-  if (quads) blitQuads(gl, merged, quads.manifest, layerW, layerH, quads.quadTex);
+  if (quads) {
+    blitQuads(gl, merged, quads.manifest, layerW, layerH, quads.quadTex, quadsForLayer(quads.manifest.quads, "sample"));
+  }
   return { tex: merged.tex, width: layerW, height: layerH };
 }
 
@@ -151,7 +162,7 @@ export function executeLensCompositeNode(opts: {
   // window) can never show through from below — the page's own background is an ancestor in the
   // same raster. Tradeoff: plate content overlapping the quad rect is covered, so anything that
   // must paint over it belongs in the chrome/foreground plate.
-  blitQuads(gl, layer, manifest, layerW, layerH, quadTex);
+  blitQuads(gl, layer, manifest, layerW, layerH, quadTex, quadsForLayer(manifest.quads, "sample"));
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.activeTexture(gl.TEXTURE0);
@@ -169,6 +180,8 @@ export function executeLensCompositeNode(opts: {
       drew++;
     }
   }
+  // Chrome-layer quads: inside a kino-lens subtree but above the mirror (dock icons behind glass).
+  blitQuads(gl, layer, manifest, layerW, layerH, quadTex, quadsForLayer(manifest.quads, "chrome"));
   gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
 
   const chromeTex = uploadCanvas(gl, chrome);

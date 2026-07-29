@@ -4,7 +4,7 @@
 // full-frame target, and the second pass would double the target churn for a quality gain that
 // is invisible at the radii layer effects use. Phase 3's bloom uses the separable form, where
 // the radii are large enough to matter.
-import type { EffectPass } from "./pass.js";
+import { numParam, type EffectPass } from "./pass.js";
 
 export const blurPass: EffectPass = {
   name: "blur",
@@ -30,6 +30,6 @@ void main() {
   kino_frag = sum / max(wsum, 0.0001);
 }`,
   uniforms(gl, loc, params) {
-    gl.uniform1f(loc.uRadius, Number(params.radius ?? 0));
+    gl.uniform1f(loc.uRadius, numParam(params, "radius", 0, 0, 256));
   },
 };

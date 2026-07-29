@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { onBeforeSweep } from "../../../scratch.js";
+import { onBeforeSweep, scratchDir } from "../../../scratch.js";
 import { electronBinaryPath } from "../renderer.js";
 import { hasDisplay } from "../sandbox.js";
 import type { WorkerHandle } from "../workerHandle.js";
@@ -89,7 +89,11 @@ class ElectronHostProc {
           "  xvfb-run -a --server-args='-screen 0 1280x1024x24' kino build <spec>",
       );
     }
-    this.child = spawn(electronBinaryPath(), [...electronSpawnArgs(), workerJs], {
+    // Fresh profile per spawn, not per host: a respawn is usually recovery from a crash, and the
+    // profile is a prime suspect for having caused it. scratchDir tracks it for sweep and already
+    // retries ENOTEMPTY/EBUSY from a closing Chrome flushing its profile.
+    const userDataDir = scratchDir("kino-electron-profile-");
+    this.child = spawn(electronBinaryPath(), [...electronSpawnArgs(process.env, process.platform, {}, userDataDir), workerJs], {
       stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
@@ -382,7 +386,9 @@ async function dumpElectronProfile(
   if (pageRows.length) {
     console.error("  page (GL-flushed seek phases):");
     for (const r of pageRows) {
-      if (r.ms >= 1) {
+      // prefetch-wait prints even at ~0 — a missing row here has been misread as "unmeasured"
+      // when it actually meant "never waited".
+      if (r.ms >= 1 || r.key === "prefetch-wait") {
         const share = pageTotal > 0 ? ((r.ms / pageTotal) * 100).toFixed(1).padStart(5) : "    -";
         console.error(
           `    ${r.key.padEnd(22)} ${(r.ms / Math.max(1, r.n)).toFixed(2).padStart(7)} ms/call  ×${String(r.n).padStart(4)}  ${share}%`,

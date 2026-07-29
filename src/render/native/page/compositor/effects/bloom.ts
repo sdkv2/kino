@@ -1,5 +1,5 @@
 // Frame-level bloom: bright-pass, separable blur, add back.
-import type { EffectPass } from "./pass.js";
+import { numParam, type EffectPass } from "./pass.js";
 
 const BLOOM_FRAG = `
 uniform float uThreshold;
@@ -42,9 +42,9 @@ export const bloomPass: EffectPass = {
   frag: BLOOM_FRAG,
   uniforms(gl, loc, params) {
     // 0.45 linear == 0.70 sRGB — see the note in glow.ts.
-    gl.uniform1f(loc.uThreshold, Number(params.threshold ?? 0.45));
-    gl.uniform1f(loc.uIntensity, Number(params.intensity ?? 0.4));
-    gl.uniform1f(loc.uRadius, Number(params.radius ?? 24));
+    gl.uniform1f(loc.uThreshold, numParam(params, "threshold", 0.45, 0, 1));
+    gl.uniform1f(loc.uIntensity, numParam(params, "intensity", 0.4, 0, 8));
+    gl.uniform1f(loc.uRadius, numParam(params, "radius", 24, 0, 256));
     const axis = String(params.axis ?? "x");
     gl.uniform2f(loc.uAxis, axis === "x" ? 1 : 0, axis === "y" ? 1 : 0);
     gl.uniform1f(loc.uComposite, axis === "composite" ? 1 : 0);

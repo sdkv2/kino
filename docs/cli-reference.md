@@ -26,7 +26,7 @@ kino build <spec> [options]
 
 | Option | Value | Meaning |
 |---|---|---|
-| `--mock` | — | Skip all paid APIs (silent VO + placeholder avatar). Free structural render. |
+| `--draft` | — | Fast free preview: silent VO + placeholder avatar, rendered onto a **720p canvas** (same layout, fewer pixels — `KINO_DRAFT_EDGE` overrides). `--mock` is a deprecated alias. |
 | `--format <list>` | e.g. `9:16,3:4,16:9` | Comma-separated output formats. |
 | `--provider <name>` | `none\|heygen\|hedra\|replicate` | Override the avatar engine for this render. |
 | `--background <kind>` | `glow\|image\|mesh\|aurora\|particles\|grid\|custom` | Override the background. |
