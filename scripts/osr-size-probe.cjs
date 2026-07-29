@@ -126,5 +126,15 @@ app.whenReady().then(async () => {
     setContentSize: true,
   });
 
+  // Exactly what OffscreenRenderWindow.boot() now does — construct at the asked size (which
+  // Windows fits to the work area) and then resize. Run at every format's canvas, on every OS.
+  for (const [w, h] of [
+    [2160, 3840], [3840, 2160], [2160, 2880],
+    [1080, 1920], [1920, 1080], [1080, 1440],
+    [720, 1280],
+  ]) {
+    await probe("ctor-then-setContentSize", w, h, { setContentSize: true });
+  }
+
   setTimeout(() => app.quit(), 100);
 });

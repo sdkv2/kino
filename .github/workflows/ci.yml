@@ -125,13 +125,23 @@ jobs:
   # 1024x720 PNG out of a 2160x3840 render on windows-latest and nowhere else; this reports what
   # size the offscreen window actually ends up at there, and which BrowserWindow config avoids it.
   win-osr-probe:
-    name: probe (windows OSR window size)
-    runs-on: windows-latest
+    name: probe (${{ matrix.os }} OSR window size)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+      - name: Start Xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1280x1024x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
       - run: npm ci --allow-git=all
       - run: node scripts/osr-size-probe.mjs

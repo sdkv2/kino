@@ -304,6 +304,27 @@ export class OffscreenRenderWindow {
         backgroundThrottling: false,
       },
     });
+    // A window's INITIAL bounds are fitted to the display work area — Chromium does this in
+    // views::Widget, so the constructor size above is a request the desktop is allowed to shrink.
+    // Offscreen rendering has no reason to care how big the monitor is, and the shrink is silent:
+    // the page lays out at the capped size and every capture comes back at it. Measured on a
+    // 1024x768 windows-latest runner (work area 1024x720): a 2160x3840 still rendered 1024x720, and
+    // so did 1080x1920 — the whole Windows render path was quietly capped at the desktop, not just
+    // 4k. macOS and X11 honour the constructor, which is why only Windows showed it.
+    //
+    // A resize AFTER construction is not fitted, so ask again here (measured: exact at 2160x3840 on
+    // that same 1024x720 desktop) and refuse to render at a size nobody asked for.
+    this.win.setContentSize(this.width, this.height);
+    const [gotW, gotH] = this.win.getContentSize();
+    if (gotW !== this.width || gotH !== this.height) {
+      const win = this.win;
+      this.win = null;
+      win.destroy();
+      throw new Error(
+        `offscreen window would not size to ${this.width}x${this.height} (got ${gotW}x${gotH}) — ` +
+          "every frame would be captured at the wrong size",
+      );
+    }
     const wc = this.win.webContents;
     OffscreenRenderWindow.byContents.set(wc.id, this);
     wc.setFrameRate(CAPTURE_PAINT_FPS);
