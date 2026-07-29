@@ -78,10 +78,19 @@ say/never-say examples, brand bans. Agents read it via `kino brand <name>` and a
 writing copy. The renderer ignores the body.
 
 Faceless branding (optional):
-- `logo` — transparent brand mark (PNG); shown on presenter-less talking beats.
-- `logoSize` — `small` (100px) / `medium` (150) / `big` (220) / a number. `logoPosition` — `top` /
-  `bottom` / `left` / `right` / `center` / custom `{x,y}` (% of frame). Spec overrides brand; see `kino elements`.
-  Tween it over time with spec `logoKeyframes: [{ at, params: { x, y, scale, opacity }, ease? }]`.
+- A brand mark is an ordinary declared layer — there is no built-in logo field. Put it in
+  `spec.layers[]` with a `z` above the captions, and tween it with the same `keyframes` track
+  every other layer takes:
+  ```json
+  "layers": [{
+    "id": "brandmark", "z": 1000,
+    "source": { "kind": "image", "src": "logo.png" },
+    "rect": { "x": 44, "y": 4, "w": 12, "h": 12 },
+    "keyframes": [{ "at": 0, "params": { "opacity": 0 } }, { "at": 0.4, "params": { "opacity": 1 } }]
+  }]
+  ```
+  `rect` is percent of frame and `fromSec`/`toSec` gate when it is on screen, so a mark that
+  appears only on the CTA beat is `"segment": <n>` rather than a special case.
 - `background` — background engine (see below). Default: `glow`. Set `background: "image"`
   when using a backdrop. Override per-video with spec `background` or `--background <kind>`.
 - `backdrop` — image used when `background: "image"` (required for that kind).
@@ -179,7 +188,7 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   and can diverge from the real VO's pacing (a beat can run longer or shorter for real than its mock
   estimate), so a background pulse or color shift timed to land on a specific beat can drift into the
   wrong beat once real VO timing is in. If a spec times `backgroundKeyframes`/`backgroundTriggers`/
-  `logoKeyframes` to a specific beat boundary, re-check that beat with `kino still --real` (VO is
+  a declared layer's `keyframes` to a specific beat boundary, re-check that beat with `kino still --real` (VO is
   content-hash cached, so this doesn't add spend beyond the real build) before calling it done — don't
   reason your way past a mock/real duration mismatch you already noticed.
 - **Motion layout (short-form):** author stacks mid-frame (`.wrap { top: 38%–42%; }`), not
