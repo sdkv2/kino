@@ -141,7 +141,11 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
         settings: DEFAULT_SETTINGS,
         mock,
         dur: mock ? seg.dur ?? null : null,
-        v: "ts",
+        // Silent clips carry the mock PACING rule in their key. Word timings are baked into the
+        // cached .json, so changing how they're paced has no effect on an already-built project
+        // unless the key moves — the fix would land only for projects nobody had rendered yet.
+        // Scoped to `mock` so real TTS entries keep hitting and nothing is re-billed.
+        v: mock ? "ts-mockpace-natural" : "ts",
         model: resolvedModel,
       });
       let clip = cache.get(key, "mp3");
