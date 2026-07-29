@@ -4,6 +4,7 @@
 import { SDF_MAX_PX } from "./sdf.js";
 import type { ShapeMask } from "./shapes.js";
 import { BLEND_MODES } from "./blendModes.js";
+import type { Keyframe } from "./bgparams.js";
 
 export type MaskChannel = "r" | "g" | "b" | "a" | "luma";
 
@@ -71,6 +72,11 @@ export type EffectKind = (typeof EFFECT_KINDS)[number];
 export interface LayerEffect {
   kind: EffectKind;
   params: Record<string, number | string>;
+  /** Tween this effect's params over time. `at` is relative to the effect's owner — the beat's
+   *  start for a segment's `effects`, the layer's own start for a declared layer's `effects` or
+   *  `adjust`. Resolved by resolveEffects (effectParams.ts) before the compositor sees the layer;
+   *  a resolved effect carries only `kind` + `params`. */
+  keyframes?: Keyframe[];
 }
 
 /** Validate the mask, effects and blend on one beat. `index` is the beat's position, so a
