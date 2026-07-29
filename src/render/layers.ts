@@ -463,11 +463,19 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       : full;
     // Keyframes read from the layer's own start, so a track authored against a beat-bound layer
     // does not shift when the beat does.
-    const tween = tweenAt(d.keyframes, (frame - f(fromSec)) / props.fps, dims);
+    const localFrame = frame - f(fromSec);
+    const tween = tweenAt(d.keyframes, localFrame / props.fps, dims);
     out.push({
       id: d.id,
       z: d.z,
-      source: { providerId: d.id },
+      // Layer-relative content key, exactly as the built-in motion layers pass `String(beatLocal)`.
+      // Two consumers need it and both fail silently without one: providers/motion.ts `texture()`
+      // resolves `key ?? current ?? …` and would otherwise fall through to `current` — a single
+      // mutable field set by whichever prepare() ran last, so the layer can draw another frame's
+      // raster. And prefetch.ts keys on `${providerId}\0${key ?? ""}`, which without a key is
+      // identical every frame, so `nextFrameKeys` treats the layer as already-prepared and never
+      // prefetches it at all. Stateless providers (shader, lottie) ignore the key.
+      source: { providerId: d.id, key: String(localFrame) },
       rect,
       blend: d.blend,
       opacity: (d.opacity ?? 1) * (tween?.opacity ?? 1),
