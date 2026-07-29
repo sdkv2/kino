@@ -1,7 +1,7 @@
 // Builds one TextureSource per layer id that `layersAt` can emit. The ids here and the
 // providerIds in layers.ts are the same namespace — a mismatch means a silently missing
 // layer, so both sides are exercised by the parity harness.
-import type { BackgroundProps, BgParamValue, KinoProps } from "../../../props.js";
+import type { BackgroundProps, BgParamValue, KinoProps, MotionGraphicProps } from "../../../props.js";
 import type { MediaMap } from "../media.js";
 import type { Dims, TextureSource } from "./graph.js";
 
@@ -273,6 +273,87 @@ export function buildRegistry(
   }
 
   // Film finish is a GL post pass under the compositor — see post.ts / filmPass.
+
+  // Author-declared layers. One TextureSource per id, in the SAME namespace as every built-in
+  // above (av{i}, seg{i}, motion{i}, ...) — that's safe only because layerSpec.ts's validator
+  // rejects a declared id that matches a built-in pattern, so a declared entry can never shadow
+  // one of the sources set above it. This is the other half of the id contract this file's header
+  // comment describes: layersAt emits `source: { providerId: d.id }` for a declared layer (or
+  // `source: null` for an adjustment layer, which paints no pixels and is skipped below), and
+  // whatever key it names has to resolve here or the layer silently fails to draw.
+  for (const d of props.layers ?? []) {
+    if (!d.source) continue; // adjustment layer (grade/blur/etc. chain) — no texture of its own
+    const { kind, src } = d.source;
+    const params = d.source.params ?? {};
+    const keyframes = d.source.keyframes ?? [];
+    const triggers = d.source.triggers ?? [];
+
+    if (kind === "image") {
+      sources.set(d.id, createImageSource("/public/" + src));
+    } else if (kind === "shader") {
+      // Same assumption as `props.background.shaderCode` (used verbatim as `shaderSrc` above,
+      // near line 64): `src` is taken to already BE the GLSL mainImage body, not a path to a
+      // .frag file — createShaderDraw never reads the filesystem. Harmless to construct either
+      // way (it only matters once something calls .prepare() and tries to compile it).
+      sources.set(
+        d.id,
+        createShaderSource({
+          drawFrame: createShaderDraw({ shaderSrc: src, params, keyframes, triggers, width: dims.width, height: dims.height, fps: props.fps }),
+          width: dims.width,
+          height: dims.height,
+          params,
+          keyframes,
+          triggers,
+        }),
+      );
+    } else if (kind === "motion" || kind === "lottie") {
+      // A `segment` binding borrows that beat's own window, same as layersAt §11b — a motion/
+      // lottie layer's internal clock (beatFrom/beatDur) has to agree with the window it paints
+      // in, or its keyframes/pulses/loop math run against the wrong length. With neither a bound
+      // segment nor an explicit toSec, "whole composition" (the declared-layer default) is the
+      // last beat's endSec — buildRegistry has no other notion of the composition's total length.
+      const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
+      const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
+      const compEndSec = props.segments.length ? props.segments[props.segments.length - 1].endSec : 0;
+      const toSec = bound ? bound.endSec : (d.toSec ?? compEndSec);
+      const beatFrom = f(fromSec);
+      const beatDur = f(toSec) - beatFrom;
+
+      // GAP (see task-7-report.md): DeclaredLayerSource carries only a bare `src` string. Every
+      // other .html/.lottie producer in this codebase (resolveMotionGraphic for segment motion,
+      // the CLI's lottie loader) resolves a file into real content node-side before it reaches
+      // KinoProps; nothing does that for declared layers yet — build.ts threads `spec.layers`
+      // through unmodified. So: for "motion", `src` is assumed to already BE sanitized markup, not
+      // a path to it. For "lottie", there is no field at all for parsed animationData, so `lottie`
+      // is left as an empty object — enough for lottie-web to construct without the source
+      // crashing (lottieMeta reads .ip/.op/.fr, tolerating absence as NaN), but it paints nothing
+      // until a real content-resolution step exists.
+      const data: MotionGraphicProps = { html: kind === "motion" ? src : "", lottie: kind === "lottie" ? {} : undefined, params, keyframes, triggers };
+      if (kind === "motion") {
+        sources.set(
+          d.id,
+          createMotionSource({ data, theme: props.theme, width: compDims.width, height: compDims.height, fps: props.fps, scale, beatFrom, beatDur }),
+        );
+      } else {
+        sources.set(d.id, createLottieSource({ data, width: dims.width, height: dims.height, fps: props.fps, beatFrom, beatDur }));
+      }
+    } else if (kind === "video") {
+      // GAP (see task-7-report.md): createFramesSource needs a pre-extracted MediaEntry, keyed
+      // here under the layer's own id exactly like `media["seg{i}"]` — but no job planner
+      // (videoFrames.ts's planMediaJobs) walks props.layers yet, so media[d.id] never exists in
+      // practice today. Mirrors the seg{i} fallback exactly: a real entry if one is ever
+      // produced, else a still image, else nothing — the same silent non-registration seg{i}
+      // already has in this situation, not a new failure mode this task introduces.
+      const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
+      const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
+      const entry = media[d.id];
+      if (entry) {
+        sources.set(d.id, createFramesSource(entry, f(fromSec)));
+      } else if (/\.(jpe?g|png|webp)$/i.test(src)) {
+        sources.set(d.id, createImageSource("/public/" + src));
+      }
+    }
+  }
 
   return sources;
 }
