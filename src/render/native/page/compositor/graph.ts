@@ -32,8 +32,11 @@ export interface LayerTransform {
 export interface LayerDraw {
   id: string;
   /** Paint order. The list is stable-sorted on (z, pushIndex), so equal z keeps authored order.
-   *  Built-in constants live in layers.ts `Z`; declared layers pick their own. */
-  z: number;
+   *  Built-in constants live in layers.ts `Z`; declared layers pick their own. Optional because
+   *  renderer.ts builds bare LayerDraw literals for mask and full-frame blit targets that take no
+   *  part in ordering (they never flow through layersAt's sort); every real layer gets one via
+   *  normalizeLayer's `spec.z ?? 0` default. */
+  z?: number;
   source: TextureRef;
   rect: { x: number; y: number; w: number; h: number }; // frame px, top-left origin
   transform: LayerTransform;

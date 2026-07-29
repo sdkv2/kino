@@ -64,4 +64,24 @@ describe("z ordering", () => {
     expect(byId.get("overlay0")).toBe(Z.overlayVideoBehind);
     expect(byId.get("overlay0")!).toBeLessThan(byId.get("seg0")!);
   });
+
+  it("actually reorders: a text-behind video beat's frame/kicker push after overlay/seg but must paint first", () => {
+    // Push order (section 4, per beat) is overlay0 (Z.overlayVideoBehind 750), seg0
+    // (Z.segBehind 760), frame0 (Z.frame 310), kicker0 (Z.kicker 320) — ascending z would put
+    // frame/kicker LAST if the list were left in push order, so this only passes if the sort
+    // actually reorders the list. (Deleting the sort and returning out.map(normalizeLayer)
+    // would fail this test — see the fix report for the before/after run.)
+    const p = mk([{
+      kind: "video", source: "a.mp4", caption: "hi", startSec: 0, endSec: 3,
+      mask: { source: { kind: "file", src: "masks/presenter/mask.png", channel: "r" } } as any,
+      motionOverlay: { source: "o.html", params: {}, keyframes: [], triggers: [] } as any,
+      frame: { inset: { x: 10, y: 10, w: 80, h: 60 } } as any,
+      kicker: { text: "NEW", color: "#fff", fg: "#000" },
+    }]);
+    const relevant = new Set(["overlay0", "seg0", "frame0", "kicker0"]);
+    const ids = layersAt(p, 30, DIMS)
+      .map((l) => l.id)
+      .filter((id) => relevant.has(id));
+    expect(ids).toEqual(["frame0", "kicker0", "overlay0", "seg0"]);
+  });
 });
