@@ -161,14 +161,26 @@ set a corner `radius`; every shape may set `rotate` in degrees.
 ```
 
 **File** — an image or video mask under `/public`; `channel` is `r`, `g`, `b`, `a`, or `luma`.
-File masks use node-generated SDF frames so feather and expansion remain distance-based.
 
-```json
-"mask": {
-  "source": { "kind": "file", "src": "masks/subject/mask.mp4", "channel": "r" },
-  "expand": 4
-}
+**`kind: "file"` does not work on a segment (or declared-layer) mask today.** `planMaskJobs`
+(`src/render/native/videoFrames.ts`) extracts the node-generated SDF/coverage frames for it, but
+nothing in `registry.ts` or `renderer.ts` ever turns those frames into a bound texture —
+`compositeLayerInnerWithBackdrop`'s mask branch only fills a real `MaskBinding.mask` for a
+`layer`-kind source; every other kind, "file" included, gets `binding: { mask: null, sdf: null,
+sdfMax: 0 }`. Sampling a null texture reads `(0,0,0,1)`, so every channel — including the `luma`
+default — gives coverage `0` and the masked beat's layers render invisible. Validation rejects it
+loudly instead:
+
 ```
+beat 0: mask.source.kind "file" is not supported on a segment mask yet — the compositor has no
+binding for it (renderer.ts's applyMask always gets a null texture for a "file" source, so
+uSourceKind=1 samples nothing and every layer of this beat would render invisible); use
+mask.source.kind "shape" or "layer" instead
+```
+
+Use `kind: "shape"` (analytic, no texture needed) or `kind: "layer"` (another layer's own render)
+instead. A declared layer's `mask` (see [Layers](#layers)) shares this exact gap — it resolves
+through the same renderer code path — and is rejected the same way, naming the layer id.
 
 **Layer** — another compositor layer's alpha or luma. For example, `seg0` targets segment 0's
 main layer.

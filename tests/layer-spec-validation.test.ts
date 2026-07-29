@@ -20,6 +20,10 @@ describe("validateLayers", () => {
     expect(validateLayers([{ ...ok, id: "logo" }], 1).join()).toMatch(/reserved/);
   });
 
+  it('rejects "region{i}" — registry.ts registers it as the regionShader footage provider a seg{i} points at', () => {
+    expect(validateLayers([{ ...ok, id: "region0" }], 1).join()).toMatch(/reserved/);
+  });
+
   it("rejects a z that collides with a built-in constant", () => {
     const errs = validateLayers([{ ...ok, z: Z.caption }], 1);
     expect(errs.join()).toMatch(/z 1100 is reserved/);
@@ -93,6 +97,16 @@ describe("validateLayers", () => {
   it("threads mask errors through with the layer label", () => {
     const errs = validateLayers([{ ...ok, mask: { source: { kind: "nope" } } }], 1);
     expect(errs.join()).toMatch(/^layer "leak": unknown mask source kind: nope/);
+  });
+
+  it('rejects a "file"-kind mask on a declared layer, naming the layer — same unbound-texture gap as a segment mask', () => {
+    const errs = validateLayers(
+      [{ ...ok, mask: { source: { kind: "file", src: "masks/subject/mask.png", channel: "r" } } }],
+      1,
+    );
+    expect(errs.join()).toMatch(/^layer "leak":/);
+    expect(errs.join()).toMatch(/mask\.source\.kind "file"/);
+    expect(errs.join()).toMatch(/not supported/i);
   });
 
   // Carried from Task 6's review: `layersAt`'s adjustment branch (§11b) pushes only

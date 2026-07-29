@@ -43,4 +43,28 @@ describe("validateSegmentFx", () => {
   it("accepts a known blend mode", () => {
     expect(validateSegmentFx({ blend: "screen" }, 0)).toEqual([]);
   });
+
+  it('rejects a "file"-kind segment mask, naming the beat — the compositor has no binding for it', () => {
+    const errs = validateSegmentFx(
+      { mask: { source: { kind: "file", src: "masks/subject/mask.mp4", channel: "r" } } },
+      5,
+    );
+    expect(errs[0]).toMatch(/beat 5/);
+    expect(errs[0]).toMatch(/mask\.source\.kind "file"/);
+    expect(errs[0]).toMatch(/not supported/i);
+  });
+
+  it('still reports other mask errors on a "file"-kind mask alongside the unsupported-kind error', () => {
+    // No `src` — validateMask's own check and the new unsupported-kind check both fire.
+    const errs = validateSegmentFx({ mask: { source: { kind: "file", channel: "r" } } }, 0);
+    expect(errs.some((e) => /mask\.source\.src is required/.test(e))).toBe(true);
+    expect(errs.some((e) => /mask\.source\.kind "file"/.test(e))).toBe(true);
+  });
+
+  it('does not reject "shape" or "layer" mask kinds', () => {
+    expect(
+      validateSegmentFx({ mask: { source: { kind: "shape", shape: { kind: "rect", x: 0, y: 0, w: 10, h: 10 } } } }, 0),
+    ).toEqual([]);
+    expect(validateSegmentFx({ mask: { source: { kind: "layer", layerId: "seg0" } } }, 0)).toEqual([]);
+  });
 });
