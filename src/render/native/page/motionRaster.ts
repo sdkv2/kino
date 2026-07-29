@@ -56,6 +56,15 @@ export function motionHostCss(vars: Record<string, string>, extra = ""): string 
 
 export interface MotionRasterProbe {
   texRoot: HTMLElement;
+  /**
+   * Re-drive the SAME mounted host at another frame's markup + variables, then force layout.
+   *
+   * Re-parses the markup rather than only swapping the injected CSS: motion pages carry force-paused
+   * @keyframes scrubbed by a negative animation-delay, and a fresh subtree is the only way to be sure
+   * that position recomputes against the new --progress rather than holding the old one. Used by the
+   * per-element velocity pass, which needs two frames' layout inside one frame's render.
+   */
+  setFrame: (html: string, vars: Record<string, string>) => void;
   unmount: () => void;
 }
 
@@ -94,7 +103,15 @@ export function mountMotionRasterProbe(
   probe.appendChild(texRoot);
   document.body.appendChild(probe);
   void texRoot.offsetHeight;
-  return { texRoot, unmount: () => probe.remove() };
+  return {
+    texRoot,
+    setFrame: (nextHtml: string, nextVars: Record<string, string>) => {
+      style.textContent = motionHostCss(nextVars);
+      inner.innerHTML = nextHtml;
+      void texRoot.offsetHeight;
+    },
+    unmount: () => probe.remove(),
+  };
 }
 
 function motionCss(vars: Record<string, string>, extra = ""): string {

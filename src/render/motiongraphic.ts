@@ -5,6 +5,7 @@ import { attachLensShaders, type EffectResolveProject } from "../media/effectsLi
 import { sanitizeMotionHtml } from "./sanitizeMotion.js";
 import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
 import { lintDeadVisuals } from "./motionLint.js";
+import { lintPathMorphs } from "./pathMorph.js";
 
 // Re-exported for back-compat (callers/tests import it from here).
 export { sanitizeMotionHtml };
@@ -39,7 +40,13 @@ export function lintMotionHtml(html: string): string[] {
   );
   // Dead-visual checks ride along here (rather than only in lintMotionSource) so every caller gets
   // them — resolveMotionGraphic lints via this function directly, and that is the path a render takes.
-  return [...BANNED.filter((b) => b.re.test(forLint)).map((b) => b.msg), ...lintDeadVisuals(html)];
+  // Path-morph structure is checkable without a frame, so it fails at authoring time rather than as a
+  // mid-render fatal (the in-page reportFatal backstop stays, for markup a Tier-2 proc emits).
+  return [
+    ...BANNED.filter((b) => b.re.test(forLint)).map((b) => b.msg),
+    ...lintDeadVisuals(html),
+    ...lintPathMorphs(html),
+  ];
 }
 
 // Determinism + safety denylist for Tier-2 procedural sources (JS). The function must be a pure

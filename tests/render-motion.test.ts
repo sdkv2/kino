@@ -116,6 +116,81 @@ describe("motion graphics kino-cliptext helper", () => {
   }, 180000);
 });
 
+describe("declarative path morph", () => {
+  it("interpolates `d` per frame, passing through shapes that are neither endpoint", async () => {
+    // A magenta rectangle whose width lerps 80 → 10 of a 100-wide viewBox, so the painted area is a
+    // direct readout of the interpolation. This is what an opacity crossfade between two static
+    // shapes cannot do: a crossfade's union area barely moves and the mid-point is translucent,
+    // whereas a real morph is fully opaque at every t and strictly narrows.
+    const html =
+      '<div style="position:absolute;inset:0">' +
+      '<svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="none">' +
+      '<path fill="#ff00ff" d="M0,0Z"' +
+      ' data-kino-morph-from="M10,10 L90,10 L90,90 L10,90 Z"' +
+      ' data-kino-morph-to="M45,10 L55,10 L55,90 L45,90 Z"/></svg></div>';
+    const props: KinoProps = {
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: { html, params: {}, keyframes: [], triggers: [] } }],
+    };
+    // No data-kino-morph-t → the driver defaults to --progress ≈ localFrame/60.
+    const outs = await renderStills({
+      props, publicDir: mkdtempSync(join(tmpdir(), "morph-pub-")), format: "9:16",
+      frames: [{ frame: 6, name: "early" }, { frame: 30, name: "mid" }, { frame: 54, name: "late" }, { frame: 30, name: "mid2" }],
+      outDir: mkdtempSync(join(tmpdir(), "kino-morph-")),
+    });
+    const [early, mid, late, mid2] = outs.map(magentaFraction);
+    expect(early).toBeGreaterThan(0);   // the shape rendered at all
+    expect(early).toBeGreaterThan(mid); // …and strictly narrows across the beat, so `d` really moved
+    expect(mid).toBeGreaterThan(late);
+    // Seek-independent: the same frame rendered twice in one pass is pixel-identical.
+    expect(sampleCenter(outs[1])).toBe(sampleCenter(outs[3]));
+    expect(mid).toBeCloseTo(mid2, 5);
+  }, 180000);
+});
+
+describe("per-element velocity (data-kino-vel)", () => {
+  it("smears an element only while it travels, and only when it opted in", async () => {
+    // A full-width magenta band slides down for the first second of a 2s beat and then parks (the last
+    // keyframe holds). Blur is driven ONLY by the band's own measured travel, so its ink spreads past
+    // the 240px box while it moves and sits exactly on the box once it stops. The band is full width,
+    // so its painted area does not depend on where it is — only on whether it is smeared. Rendering
+    // the same beat without the opt-in is the control that pins the spread to the measurement.
+    const make = (optIn: boolean) =>
+      '<style>.band{position:absolute;left:0;right:0;height:240px;' +
+      'top:calc(300px + var(--y) * 900px);background:#ff00ff;' +
+      'filter:blur(calc(var(--kino-vel-y) * 1px))}</style>' +
+      `<div class="band"${optIn ? " data-kino-vel" : ""}></div>`;
+    const mkProps = (optIn: boolean): KinoProps => ({
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
+      segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
+        motion: {
+          html: make(optIn), params: { y: 0 },
+          // Linear 0 → 1 over the first second (30 px/frame), then held for the rest of the beat.
+          keyframes: [{ at: 0, params: { y: 0 } }, { at: 1, params: { y: 1 } }],
+          triggers: [],
+        } }],
+    });
+    const frames = [{ frame: 15, name: "moving" }, { frame: 54, name: "parked" }, { frame: 15, name: "moving2" }];
+    const on = await renderStills({ props: mkProps(true), publicDir: mkdtempSync(join(tmpdir(), "vel-a-")), format: "9:16", frames, outDir: mkdtempSync(join(tmpdir(), "kino-vel-a-")) });
+    const off = await renderStills({ props: mkProps(false), publicDir: mkdtempSync(join(tmpdir(), "vel-b-")), format: "9:16", frames, outDir: mkdtempSync(join(tmpdir(), "kino-vel-b-")) });
+    const [onMoving, onParked, onMoving2] = on.map(magentaFraction);
+    const [offMoving, offParked] = off.map(magentaFraction);
+    expect(onParked).toBeGreaterThan(0); // the band rendered
+    // The control: without the opt-in the variable stays at its resting 0, so nothing is measured and
+    // nothing is smeared — the travelling frame paints exactly what the parked one does.
+    expect(offMoving).toBeCloseTo(offParked, 3);
+    // Opting in changes nothing on a parked frame: measured velocity there is exactly 0.
+    expect(onParked).toBeCloseTo(offParked, 3);
+    // …and everything on a travelling one. Same frame, same markup but for the opt-in.
+    expect(onMoving).toBeGreaterThan(offMoving * 1.02);
+    expect(onMoving).toBeGreaterThan(onParked * 1.02);
+    // Deterministic within a pass, whatever order the frames were asked for.
+    expect(onMoving).toBeCloseTo(onMoving2, 5);
+    expect(sampleCenter(on[0])).toBe(sampleCenter(on[2]));
+  }, 180000);
+});
+
 describe("empty disclosure", () => {
   it("renders a still with no disclosure text without crashing", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-nodisc-"));

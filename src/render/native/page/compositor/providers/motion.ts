@@ -2,7 +2,11 @@
 import type { MotionEnv, MotionGraphicProps, Theme } from "../../../../props.js";
 import { paramsAt, pulseAt, progressCurves } from "../../../../bgparams.js";
 import { buildMotionVars, cameraBlurVars } from "../../../../motionVars.js";
+import { annotateVelocityTargets, hasVelocityTargets } from "../../../../motionVelocity.js";
+import { applyPathMorphs, hasPathMorph } from "../../../../pathMorph.js";
 import { sanitizeMotionHtml } from "../../../../sanitizeMotion.js";
+import { measureVelocity } from "../../velocityProbe.js";
+import { reportFatal } from "../../fatal.js";
 import {
   disposeMotionFrameBundle,
   motionNeedsLensLayers,
@@ -74,6 +78,104 @@ export function createMotionSource(opts: {
   const quadPlates = new Map<string, UnderlayPlate>();
   const contentKeys = new Set<string>(); // profile-only; see the cacheHit probe in prepare()
 
+  /**
+   * Everything one frame of this beat resolves to: its variables and its final markup.
+   *
+   * Split out of prepare() because the per-element velocity pass needs a SECOND frame's variables and
+   * markup — the one before this frame — and must re-derive them rather than remember them (frames are
+   * seeked out of order across workers and served from a persistent cache, so the previous frame may
+   * never have been rendered here). Every input is a pure function of `local`, so calling it twice is
+   * free of order effects.
+   */
+  function motionFrame(local: number): { vars: Record<string, string>; html: string; velCount: number } {
+    const tt = opts.fps > 0 ? local / opts.fps : 0;
+    const durationFrames = opts.beatDur;
+    const resolved = paramsAt(opts.data.params, opts.data.keyframes, tt, { implicitBase: true });
+    const prevResolved =
+      local > 0 ? paramsAt(opts.data.params, opts.data.keyframes, tt - 1 / opts.fps, { implicitBase: true }) : undefined;
+    const nextResolved =
+      local < durationFrames - 1
+        ? paramsAt(opts.data.params, opts.data.keyframes, tt + 1 / opts.fps, { implicitBase: true })
+        : undefined;
+    const hasCam = "cam" in opts.data.params || opts.data.keyframes.some((k: { params: Record<string, unknown> }) => "cam" in k.params);
+    const pulse = pulseAt(opts.data.triggers, tt);
+    const progress = durationFrames > 0 ? Math.min(1, Math.max(0, local / durationFrames)) : 0;
+    const curves = progressCurves(progress);
+    const { camVel, camBlur } = cameraBlurVars(resolved, prevResolved, nextResolved, opts.fps, hasCam);
+    const vars = buildMotionVars(opts.theme, {
+      frame: local,
+      t: tt,
+      progress,
+      pulse,
+      params: resolved,
+      fps: opts.fps,
+      prevParams: prevResolved,
+      nextParams: nextResolved,
+      hasCam,
+      captionBottom: opts.captionBottom,
+      wordsShown: 0,
+      wordCount: opts.data.words?.length ?? 0,
+      width: opts.width,
+      height: opts.height,
+      durationFrames,
+    });
+
+    let html = opts.data.html;
+    if (procFn) {
+      const env: MotionEnv = {
+        frame: local,
+        t: tt,
+        progress,
+        in: curves.in,
+        out: curves.out,
+        inout: curves.inout,
+        overshoot: curves.overshoot,
+        spring: curves.spring,
+        edge: curves.edge,
+        pulse,
+        params: resolved,
+        camVel,
+        camBlur,
+        palette: {
+          mint: opts.theme.mint,
+          green: opts.theme.green,
+          night: opts.theme.night,
+          white: opts.theme.white,
+          gold: opts.theme.gold,
+          font: opts.theme.font,
+        },
+        width: opts.width,
+        height: opts.height,
+        words: opts.data.words ?? [],
+        durationFrames,
+        duration: opts.fps > 0 ? durationFrames / opts.fps : 0,
+      };
+      prof.sync("motion:proc", () => {
+        try {
+          html = sanitizeMotionHtml(String(procFn(env) ?? ""));
+        } catch {
+          html = "";
+        }
+      });
+    }
+
+    // Declarative path morphs resolve here, before anything measures or rasterises the tree: the
+    // interpolated `d` changes the element's geometry, so a velocity measurement taken first would
+    // be measuring last frame's shape. Pure string → string from this frame's variables.
+    if (hasPathMorph(html)) {
+      const morphed = prof.sync("motion:morph", () => applyPathMorphs(html, vars));
+      html = morphed.html;
+      // An unshippable frame, not a degraded one: a structural mismatch silently renders as the
+      // authored static `d` (a morph that never morphs), which is precisely the "it looked like it
+      // worked" failure this feature replaces. reportFatal makes the render exit naming the element.
+      if (morphed.errors.length > 0) reportFatal("motion path morph", morphed.errors.join("\n"));
+    }
+
+    // Stamp the opted-in elements with indices so the caller's measurement pass can pair them up.
+    const vel = hasVelocityTargets(html) ? annotateVelocityTargets(html) : { html, count: 0 };
+    return { vars, html: vel.html, velCount: vel.count };
+  }
+
   return {
     async prepare(frame: number, key?: string): Promise<void> {
       const local = frame - opts.beatFrom;
@@ -90,75 +192,35 @@ export function createMotionSource(opts: {
         return;
       }
 
-      const tt = opts.fps > 0 ? local / opts.fps : 0;
       const durationFrames = opts.beatDur;
-      const resolved = paramsAt(opts.data.params, opts.data.keyframes, tt, { implicitBase: true });
-      const prevResolved =
-        local > 0 ? paramsAt(opts.data.params, opts.data.keyframes, tt - 1 / opts.fps, { implicitBase: true }) : undefined;
-      const nextResolved =
-        local < durationFrames - 1
-          ? paramsAt(opts.data.params, opts.data.keyframes, tt + 1 / opts.fps, { implicitBase: true })
-          : undefined;
-      const hasCam = "cam" in opts.data.params || opts.data.keyframes.some((k: { params: Record<string, unknown> }) => "cam" in k.params);
-      const pulse = pulseAt(opts.data.triggers, tt);
-      const progress = durationFrames > 0 ? Math.min(1, Math.max(0, local / durationFrames)) : 0;
-      const curves = progressCurves(progress);
-      const { camVel, camBlur } = cameraBlurVars(resolved, prevResolved, nextResolved, opts.fps, hasCam);
-      const vars = buildMotionVars(opts.theme, {
-        frame: local,
-        t: tt,
-        progress,
-        pulse,
-        params: resolved,
-        fps: opts.fps,
-        prevParams: prevResolved,
-        nextParams: nextResolved,
-        hasCam,
-        captionBottom: opts.captionBottom,
-        wordsShown: 0,
-        wordCount: opts.data.words?.length ?? 0,
-        width: opts.width,
-        height: opts.height,
-        durationFrames,
-      });
+      const frameState = motionFrame(local);
+      const vars = frameState.vars;
+      let html = frameState.html;
 
-      let html = opts.data.html;
-      if (procFn) {
-        const env: MotionEnv = {
-          frame: local,
-          t: tt,
-          progress,
-          in: curves.in,
-          out: curves.out,
-          inout: curves.inout,
-          overshoot: curves.overshoot,
-          spring: curves.spring,
-          edge: curves.edge,
-          pulse,
-          params: resolved,
-          camVel,
-          camBlur,
-          palette: {
-            mint: opts.theme.mint,
-            green: opts.theme.green,
-            night: opts.theme.night,
-            white: opts.theme.white,
-            gold: opts.theme.gold,
-            font: opts.theme.font,
-          },
-          width: opts.width,
-          height: opts.height,
-          words: opts.data.words ?? [],
-          durationFrames,
-          duration: opts.fps > 0 ? durationFrames / opts.fps : 0,
-        };
-        prof.sync("motion:proc", () => {
-          try {
-            html = sanitizeMotionHtml(String(procFn(env) ?? ""));
-          } catch {
-            html = "";
-          }
-        });
+      // Per-element velocity. Two layout passes, and only for a page that asked: the reference frame
+      // is the one before this one, or (on the opening frame) the one after — the same lookahead
+      // cameraBlurVars uses so frame 0 is not silently velocity-free.
+      if (frameState.velCount > 0 && durationFrames > 1) {
+        const forward = local <= 0;
+        const refLocal = forward ? Math.min(local + 1, durationFrames - 1) : local - 1;
+        const ref = refLocal === local ? null : motionFrame(refLocal);
+        // A Tier-2 proc whose element count changes between frames has no stable element identity, so
+        // there is nothing to diff; the markup keeps its indices and the resting zeros apply.
+        if (ref && ref.velCount === frameState.velCount) {
+          html = prof.sync("motion:vel", () =>
+            measureVelocity({
+              html,
+              refHtml: ref.html,
+              vars,
+              refVars: ref.vars,
+              theme: opts.theme,
+              width: opts.width,
+              height: opts.height,
+              forward,
+              count: frameState.velCount,
+            }),
+          );
+        }
       }
 
       // Strip the underlay marker BEFORE inlining: the whole point is that this asset never

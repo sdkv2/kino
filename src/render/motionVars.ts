@@ -1,5 +1,6 @@
 import type { Theme, BgParamValue, WordTiming } from "./props.js";
 import { progressCurves } from "./bgparams.js";
+import { velocityRestVars } from "./motionVelocity.js";
 
 export interface MotionVarDynamics {
   frame: number;
@@ -153,6 +154,11 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     // Continuous (fraction into the current word's span) — 3dp keeps integer values printing bare.
     "--kino-words-shown": String(Math.round((dyn.wordsShown ?? 0) * 1000) / 1000),
     "--kino-word-count": String(dyn.wordCount ?? 0),
+    // Resting per-element velocity. Overridden inline on each `data-kino-vel` element by the
+    // measurement pass; published here so an element that never opted in still resolves the variable
+    // to 0 rather than leaving the whole declaration invalid (an undefined var() takes the element's
+    // paint with it — the silent-invisibility failure this workstream keeps running into).
+    ...velocityRestVars(),
   };
   if (dyn.width && dyn.height) vars["--kino-aspect"] = (dyn.width / dyn.height).toFixed(4);
   for (const [k, v] of Object.entries(dyn.params)) vars[`--${k}`] = String(v);
