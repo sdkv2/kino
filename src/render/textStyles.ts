@@ -138,7 +138,7 @@ export function resolveCaptionLook(
 // Size names are multipliers of the brand captionFontSize.
 export const TEXT_SIZES: Record<"small" | "medium" | "big", number> = { small: 0.7, medium: 1, big: 1.5 };
 
-// Slot → (x, y) % of frame, element anchored at its centre (same convention as LOGO_POSITIONS).
+// Slot → (x, y) % of frame, element anchored at its centre.
 // bottom sits above the caption band (CAPTION_BOTTOM); side slots are inset for 9:16 safe areas.
 export const TEXT_POSITIONS: Record<"top" | "center" | "bottom" | "left" | "right", { x: number; y: number }> = {
   top: { x: 50, y: 16 },

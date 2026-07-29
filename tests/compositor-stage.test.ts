@@ -18,7 +18,7 @@ const bg = {
 };
 
 const props: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "",
   segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }],
 };

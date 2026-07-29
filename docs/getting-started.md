@@ -105,6 +105,6 @@ Renders land at `projects/<name>/out/<title>/<title>[-<tag>]-<format>.mp4` (e.g.
 - **[CLI reference](cli-reference.md)** — every `kino` command and flag.
 - **[Spec reference](spec-reference.md)** — the full JSON spec, `brand.md`, and `project.json`.
 - **[Motion graphics](motion-graphics.md)** — author custom animated beats/overlays in HTML/CSS.
-- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — backgrounds, logo, captions, kickers, shaders.
+- **[Backgrounds & overlays](backgrounds-and-overlays.md)** — backgrounds, captions, kickers, shaders.
 - **[Segmentation](segmentation.md)** — `kino segment` masks + `regionShader`.
 - **[Agent skills](../skills/README.md)** — playbooks (`video-production`, `ad-voice`, `motion-design`, etc.) and `kino skills --install` local agent setup.

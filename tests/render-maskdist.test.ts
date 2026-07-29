@@ -58,7 +58,7 @@ const body =
 // BOTH region bodies get the same body, so the reading does not depend on which side of the mask a
 // pixel falls on — that is what lets a single frame observe distance across the boundary.
 const maskProps: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "",
   segments: [{
     kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {
@@ -126,7 +126,7 @@ describe("kinoMaskDist", () => {
   // reached the frame instead of being skipped or painted over by the night fill.
   it("compiles away unused in a plain shader background (no mask uniforms)", async () => {
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, disclosure: "",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, disclosure: "",
       background: { kind: "custom", image: null, customCode: null, params, keyframes: [], triggers: [],
         shaderCode: "void mainImage(out vec4 c, in vec2 f){ c = vec4(1.0, 0.0, 0.0, 1.0); }" },
       segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }],

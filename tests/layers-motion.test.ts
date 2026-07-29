@@ -12,7 +12,7 @@ const DIMS = { width: 1080, height: 1920 };
 const motion = { html: "<div></div>", params: {}, keyframes: [], triggers: [] };
 
 const mk = (segments: KinoSegment[]): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", segments,
 });
 

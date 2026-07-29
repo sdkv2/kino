@@ -50,7 +50,7 @@ const DIMS = { width: 1080, height: 1920 };
 const noMedia: MediaMap = {};
 
 const props = (layers: KinoProps["layers"]): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", layers,
   segments: [{ kind: "scene", caption: "hi", startSec: 0, endSec: 3 }],
 });

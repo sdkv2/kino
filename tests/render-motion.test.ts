@@ -14,7 +14,7 @@ describe("motion graphics render", () => {
   it("renders a still of a motion segment (CSS-variable bar)", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-mgr-"));
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg,
       disclosure: "test",
       segments: [
         { kind: "motion", caption: "", startSec: 0, endSec: 2,
@@ -29,7 +29,7 @@ describe("motion graphics render", () => {
   it("renders a motionOverlay on an avatar beat", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-mgo-"));
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg,
       disclosure: "test",
       segments: [
         { kind: "scene", caption: "hook", startSec: 0, endSec: 2,
@@ -51,7 +51,7 @@ describe("motion graphics @keyframes scrub", () => {
     // tells us where the scrub is. .kino-anim makes kino pause + scrub it by --progress.
     const scrubHtml = `<style>@keyframes fade{from{background:#000000}to{background:#00ff00}} .bg{position:absolute;inset:0;animation-name:fade}</style><div class="bg kino-anim"></div>`;
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg,
       disclosure: "test",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
         motion: { html: scrubHtml, params: {}, keyframes: [], triggers: [] } }],
@@ -103,7 +103,7 @@ describe("motion graphics kino-cliptext helper", () => {
       `background-image:linear-gradient(#ff00ff,#ff00ff);-webkit-background-clip:text;background-clip:text;color:transparent}</style>` +
       `<div class="wrap"><div class="t ${cls}">8</div></div>`;
     const mkProps = (html: string): KinoProps => ({
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion: { html, params: {}, keyframes: [], triggers: [] } }],
     });
     const outDir = mkdtempSync(join(tmpdir(), "kino-clip-"));
@@ -120,7 +120,7 @@ describe("empty disclosure", () => {
   it("renders a still with no disclosure text without crashing", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-nodisc-"));
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg,
       disclosure: "",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
         motion: { html: `<div style="position:absolute;inset:0;background:#001"></div>`, params: {}, keyframes: [], triggers: [] } }],
@@ -142,7 +142,7 @@ describe("motion graphics procedural (Tier 2)", () => {
     // full-frame block whose green channel = round(progress*255); sampling the centre reads progress.
     const proc = "return `<div style=\"position:absolute;inset:0;background:rgb(0,${Math.round(env.progress*255)},0)\"></div>`;";
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
         motion: { html: "", proc, params: {}, keyframes: [], triggers: [] } }],
     };
@@ -163,7 +163,7 @@ describe("motion graphics procedural (Tier 2)", () => {
     // full-frame block whose green channel = durationFrames; 0..2s beat @30fps = 60 frames.
     const proc = "return `<div style=\"position:absolute;inset:0;background:rgb(0,${env.durationFrames},0)\"></div>`;";
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
         motion: { html: "", proc, params: {}, keyframes: [], triggers: [] } }],
     };
@@ -175,7 +175,7 @@ describe("motion graphics procedural (Tier 2)", () => {
   it("renders a blank frame (no crash) when render(env) throws", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-procerr-"));
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
         motion: { html: "", proc: "throw new Error('boom');", params: {}, keyframes: [], triggers: [] } }],
     };
@@ -189,7 +189,7 @@ describe("motion graphics procedural (Tier 2)", () => {
     // value, so the same frame rendered twice is identical.
     const html = `<style>.b{position:absolute;inset:0;background:#00ff00;opacity:var(--progress);transition:opacity 10s linear}</style><div class="b"></div>`;
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
         motion: { html, params: {}, keyframes: [], triggers: [] } }],
     };
@@ -201,7 +201,7 @@ describe("motion graphics procedural (Tier 2)", () => {
 
 describe("motion graphics CSS helper kit", () => {
   const mkMotion = (html: string, triggers: { at: number; action: string }[] = []): KinoProps => ({
-    theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+    theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
     segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
       motion: { html, params: {}, keyframes: [], triggers } }],
   });
@@ -247,7 +247,7 @@ const stddev = (png: string) => parseFloat(magick([png, "-format", "%[fx:standar
 
 describe("motion graphics SVG texture library", () => {
   const mkMotion = (html: string, disclosure = "test"): KinoProps => ({
-    theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure,
+    theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure,
     segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
       motion: { html, params: {}, keyframes: [], triggers: [] } }],
   });

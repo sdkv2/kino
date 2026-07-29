@@ -15,7 +15,7 @@ const grey = { kind: "custom" as const, image: null, shaderCode: null,
   params: {}, keyframes: [], triggers: [] };
 
 const mk = (postFx?: unknown): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: grey, disclosure: "",
   segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }],
   ...(postFx ? { postFx: postFx as KinoProps["postFx"] } : {}),

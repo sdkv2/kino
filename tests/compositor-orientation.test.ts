@@ -28,7 +28,7 @@ const motionHtml = (extraStyle = "") =>
  *  through the offscreen-target blit — the path that used to mirror it. */
 const propsFor = (opts: { effect?: boolean } = {}): KinoProps =>
   ({
-    theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+    theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
     background: bg, disclosure: "",
     segments: [{
       kind: "motion",

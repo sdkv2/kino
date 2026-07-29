@@ -86,7 +86,7 @@ async function walk(): Promise<WalkProbe> {
         white: "#fff", captionFontSize: 74, captionStroke: 9,
       };
       const props = {
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: { kind: "custom", image: null, shaderCode: null, customCode: "", params: {}, keyframes: [], triggers: [] },
         disclosure: "",
         segments: [

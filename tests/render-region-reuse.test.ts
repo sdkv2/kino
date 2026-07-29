@@ -29,7 +29,7 @@ const bg = {
 const flat = (rgb: string): string => `void mainImage(out vec4 c, in vec2 f){ c = vec4(${rgb}, 1.0); }`;
 
 const propsFor = (rgb: string): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "",
   segments: [{
     kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {

@@ -14,7 +14,7 @@ const fade = JSON.parse(readFileSync(join(__dirname, "../examples/motion-lottie/
 // → lottie frame index × playbackRate, so lottiePlaybackRate = 120/90 = 4/3: the fade plays once
 // stretched across the whole beat → center green is ~linear in beat progress (mid-beat ≈ 127).
 const mkProps = (loop = false): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
   segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 3,
     motion: { html: "", lottie: fade, loop, params: {}, keyframes: [], triggers: [] } }],
 });
@@ -37,7 +37,7 @@ describe("Tier-3 Lottie render", () => {
 
   it("renders a Lottie motionOverlay on an avatar beat", async () => {
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
       segments: [{ kind: "scene", caption: "hook", startSec: 0, endSec: 2,
         motionOverlay: { html: "", lottie: fade, loop: false, params: {}, keyframes: [], triggers: [] } }],
     };
@@ -62,7 +62,7 @@ describe("Tier-3 Lottie word-fire (triggers)", () => {
     // 2s beat = 60 frames @30fps. pop.json is a magenta burst (~0.4s). Triggers at 0.5s (frame 15) and
     // 1.5s (frame 45): each fires the burst once; nothing renders before the first or between bursts.
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2,
         motion: { html: "", lottie: pop, params: {}, keyframes: [],
           triggers: [{ at: 0.5, action: "play" }, { at: 1.5, action: "play" }] } }],

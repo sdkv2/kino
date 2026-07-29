@@ -14,7 +14,7 @@ const seg = (over: Partial<KinoSegment>): KinoSegment => ({
 });
 
 const mk = (segments: KinoSegment[]): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", segments,
 });
 

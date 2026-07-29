@@ -19,7 +19,7 @@ const theme = {
 };
 
 const props: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: {
     kind: "glow", image: null, customCode: null, shaderCode: null,
     params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 },

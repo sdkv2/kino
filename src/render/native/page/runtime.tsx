@@ -1,6 +1,6 @@
-// Frame-driven primitives for the native render page: frame-indexed sequencing, damped-spring
-// easing, piecewise-linear interpolation. Everything is a pure function of the current frame
-// (React context), advanced by window.kinoSeek (see index.tsx) — no wall clock anywhere.
+// Frame-driven primitives for the native render page: frame-indexed sequencing, piecewise-linear
+// interpolation. Everything is a pure function of the current frame (React context), advanced by
+// window.kinoSeek (see index.tsx) — no wall clock anywhere.
 import React from "react";
 
 export interface VideoConfig {
@@ -69,7 +69,3 @@ export function staticFile(p: string): string {
 }
 
 export { interpolate, Easing, type InterpolateOptions } from "../../interpolate.js";
-
-// --- spring --------------------------------------------------------------------------------------
-// Pure frame math, so it lives outside this React module — layers.ts needs it node-side.
-export { spring, type SpringConfig } from "../../spring.js";

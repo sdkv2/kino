@@ -37,7 +37,7 @@ const GREEN_SELF =
 const BLUE = "void mainImage(out vec4 c, in vec2 f){ c = vec4(0.0, 0.0, 1.0, 1.0); }";
 
 const props: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "",
   segments: [{
     kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {

@@ -21,7 +21,6 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [
@@ -51,7 +50,6 @@ describe("renderVideo", () => {
       avatar: "avatar.mp4",
       avatarWindows: [{ fromSec: 0, toSec: 2, audioStartSec: 0 }],
       voTrack: null,
-      logo: null,
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [{ kind: "scene", caption: "on camera", startSec: 0, endSec: 2 }],
@@ -71,7 +69,6 @@ describe("renderVideo", () => {
       avatar: "avatar.mp4",
       avatarWindows: [{ fromSec: 0, toSec: 1, audioStartSec: 0 }],
       voTrack: null,
-      logo: null,
       background: { kind: "mesh", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [
@@ -102,7 +99,6 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [
@@ -135,7 +131,6 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "mesh", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [{ kind: "scene", caption: "hello", startSec: 0, endSec: 2 }],
@@ -153,7 +148,6 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [
@@ -181,7 +175,6 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "solid", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "",
       segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }], // no caption: isolate the background layer
@@ -200,7 +193,6 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "mesh", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }],
@@ -218,7 +210,6 @@ describe("renderVideo", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       segments: [
@@ -254,7 +245,6 @@ describe("renderVideo with sfx + music", () => {
       avatar: null,
       avatarWindows: [],
       voTrack: null,
-      logo: null,
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       sfx: [{ src: "sfx-0.mp3", at: 1.0, volume: 0.8 }],

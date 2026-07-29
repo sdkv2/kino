@@ -16,7 +16,7 @@ const bg = { kind: "glow" as const, image: null, customCode: null, shaderCode: n
 const DIMS = { width: 1080, height: 1920 };
 
 const mk = (segments: KinoSegment[], over: Partial<KinoProps> = {}): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", segments, ...over,
 });
 
@@ -62,12 +62,15 @@ describe("render order is stable across the z port", () => {
     expect(renderOrder(p, 30)).toEqual(["backdrop", "scrim", "seg0", "kicker0", "caption0"]);
   });
 
-  it("logo paints below the caption", () => {
+  // The built-in logo system (a hardcoded Z.logo = 1000 layer) is gone — a persistent brand mark
+  // is now an ordinary declared layer at whatever z the author picks. This case is UPDATED, not
+  // deleted: it still characterises that a layer sitting between the text band and the caption
+  // (the old logo slot, z 1000) paints below the caption, same as the retired built-in did.
+  it("a declared layer at the old logo z (1000) paints below the caption", () => {
     const p = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 3 }], {
-      // LogoProps requires `src`; the brief's sketch omitted it.
-      logo: { src: "logo.png", x: 50, y: 90, sizePx: 120, aspect: 1, keyframes: [] },
+      layers: [{ id: "brandmark", z: 1000, source: { kind: "image" as const, src: "logo.png" }, rect: { x: 44, y: 4, w: 12, h: 12 } }],
     });
-    expect(renderOrder(p, 30)).toEqual(["backdrop", "scrim", "logo", "caption0"]);
+    expect(renderOrder(p, 30)).toEqual(["backdrop", "scrim", "brandmark", "caption0"]);
   });
 
   it("disclosure paints above the caption", () => {

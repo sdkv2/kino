@@ -1,4 +1,4 @@
-// A static image — logo, chrome frame, background image. Decoded once, uploaded once.
+// A static image — chrome frame, background image, declared image layer. Decoded once, uploaded once.
 import type { TextureSource } from "../graph.js";
 import { loadImage, uploadCanvasOrImage } from "./upload.js";
 

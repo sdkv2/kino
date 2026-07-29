@@ -16,7 +16,7 @@ describe("measureLayers", () => {
   });
 
   it("reports an off-center layer's signed offset", () => {
-    const [m] = measureLayers([layer("logo", { x: 0, y: 0, w: 108, h: 108 })], DIMS);
+    const [m] = measureLayers([layer("badge", { x: 0, y: 0, w: 108, h: 108 })], DIMS);
     expect(m.cxPct).toBeCloseTo(5, 4);
     expect(m.dxPct).toBeCloseTo(-45, 4);
     expect(m.dyPct).toBeCloseTo(-47.1875, 4);

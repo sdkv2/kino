@@ -15,7 +15,7 @@ const diagonal = { kind: "custom" as const, image: null, shaderCode: null,
   params: {}, keyframes: [], triggers: [] };
 
 const props: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: diagonal, disclosure: "",
   segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }],
 };

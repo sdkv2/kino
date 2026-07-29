@@ -1,6 +1,8 @@
 # Backgrounds & overlays
 
-Behind every beat, kino renders a deterministic, brand-coloured **background**. On any beat it can also lay out **overlay elements** — the logo mark, captions, and kickers — all tweenable on one shared keyframe layer. This page documents both. For where these fields live in the spec, see the [Spec reference](spec-reference.md); for fully custom animated beats, see [Motion graphics](motion-graphics.md).
+Behind every beat, kino renders a deterministic, brand-coloured **background**. On any beat it can also lay out **overlay elements** — captions and kickers — all tweenable on one shared keyframe layer. This page documents both. For where these fields live in the spec, see the [Spec reference](spec-reference.md); for fully custom animated beats, see [Motion graphics](motion-graphics.md).
+
+A persistent brand mark (the old built-in "logo") is now an ordinary [declared layer](spec-reference.md#layers) — see the note there for the equivalent `spec.layers[]` entry.
 
 - [Backgrounds](#backgrounds)
 - [Animating a background](#animating-a-background)
@@ -104,39 +106,6 @@ Pair `kino-lens` with a **structured** shader field (not a flat night), not fros
 Run `kino elements` for the live contract. All overlays tween on the shared keyframe model (`{ at, params, ease? }`), with `x/y` as a **percent-of-frame offset** and `scale`/`opacity` as multipliers.
 Segments can also clip their rendered layers and run an ordered effect chain before compositing;
 see [Spec reference → Masks and effects](spec-reference.md#masks-and-effects).
-
-### Logo
-
-Shown on presenter-less talking beats. Set `logoSize`/`logoPosition` (spec or brand), and tween with `logoKeyframes` (`params: { x, y, scale, opacity }`).
-
-| Size | px |
-|---|---|
-| `small` | 100 |
-| `medium` | 150 (default) |
-| `big` | 220 |
-
-…or a custom number.
-
-| Position | x, y (% of frame) |
-|---|---|
-| `top` | 50, 8 (default) |
-| `bottom` | 50, 88 |
-| `left` | 12, 50 |
-| `right` | 88, 50 |
-| `center` | 50, 50 |
-
-…or a custom `{ x, y }`. The element is anchored at its centre on `(x, y)`.
-
-```json
-{
-  "logoSize": "small",
-  "logoPosition": "top",
-  "logoKeyframes": [
-    { "at": 0,   "params": { "opacity": 0, "y": -4 } },
-    { "at": 0.4, "params": { "opacity": 1, "y": 0 }, "ease": "easeInOut" }
-  ]
-}
-```
 
 ### Captions
 

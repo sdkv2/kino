@@ -14,7 +14,7 @@ const magenta = { kind: "custom" as const, image: null, shaderCode: null,
   customCode: "ctx.fillStyle='#ff00ff';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);",
   params: {}, keyframes: [], triggers: [] };
 const props: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: magenta, disclosure: "",
   segments: [{ kind: "scene", caption: "", startSec: 0, endSec: 2 }],
 };

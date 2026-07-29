@@ -212,18 +212,6 @@ export interface MotionEnv {
   duration: number; // beat length in seconds
 }
 
-// Brand mark overlay (presenter-less talking beats): resolved layout + an agent keyframe track.
-export interface LogoProps {
-  src: string; // staticFile-relative
-  sizePx: number;
-  /** Natural w/h of the source image, measured node-side at build. `layersAt` is pure and cannot
-   *  decode the file, so it has to be told the shape to size the rect without stretching. */
-  aspect: number;
-  x: number; // % of frame (anchored at centre)
-  y: number;
-  keyframes: BgKeyframe[]; // tween x/y/scale/opacity over time
-}
-
 // A staged sound-effect event (staticFile-relative src, absolute timeline seconds).
 export interface SfxProps {
   src: string;
@@ -248,7 +236,6 @@ export interface KinoProps {
   avatar: string | null; // staticFile-relative path to the (trimmed) presenter clip, or null when there is none
   avatarWindows: AvatarWindow[]; // placements of the presenter clip; empty when there is no presenter
   voTrack: string | null; // staticFile-relative path to the full VO audio track
-  logo: LogoProps | null; // brand mark shown on presenter-less talking beats
   background: BackgroundProps; // background engine selection
   disclosure: string;
   sfx?: SfxProps[]; // free-placed sound effects

@@ -26,7 +26,7 @@ const canvasBg = {
 };
 
 const mk = (segments: KinoSegment[], over: Partial<KinoProps> = {}): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: canvasBg, disclosure: "", segments, ...over,
 });
 

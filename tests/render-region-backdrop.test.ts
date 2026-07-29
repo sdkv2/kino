@@ -42,7 +42,7 @@ const bg = {
 };
 
 const props: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "",
   segments: [{
     kind: "video", source: "asset.mp4", caption: "", startSec: 0, endSec: 2,
     // No subject/background body at all: mask + backdrop IS the cutout spec.
