@@ -2,6 +2,7 @@
 // this is a thin resolver plus a runChain call — the interesting part is the fixed ordering
 // and the theme.film default.
 import type { Theme } from "../../../props.js";
+import type { EffectRef } from "./graph.js";
 import { postChainOrder, type PostFx } from "../../../postSpec.js";
 import { getPass, runChain } from "./effects/chain.js";
 import type { EffectPass } from "./effects/pass.js";
@@ -26,17 +27,29 @@ function copyTarget(gl: WebGL2RenderingContext, pool: TargetPool, src: RenderTar
  * Which passes run, in which order, with which params. A stage that is absent does not run —
  * except `film`, which falls back to theme.film so existing specs keep their finish.
  */
-/** Cinematic finish only — applied mid-stack (below motion/caption), matching KinoVideo's FilmFinish. */
-export function resolveFilmPass(post: PostFx | undefined, theme: Theme, ss = 1): ResolvedPass[] {
-  const params = post?.film as Record<string, number> | undefined;
-  const intensity = params?.intensity ?? theme.film ?? 1;
-  if (intensity <= 0) return [];
-  const pass = getPass("film");
-  return pass ? [{ pass, params: { ...params, intensity, night: theme.night, ss } }] : [];
+/**
+ * Resolve a layer's authored `adjust` chain to passes. Same shape as the post chain, but the
+ * params come off the layer instead of spec.postFx — an adjustment layer states what it does.
+ *
+ * `film` is the one stage that still reaches for a theme value: its vignette is tinted by the
+ * night colour, and no layer should have to restate the theme to get its own default look.
+ * `ss` is the stage supersample factor, which every pass needs to keep its pixel radii honest.
+ */
+export function resolveAdjustChain(adjust: EffectRef[], theme: Theme, ss = 1): ResolvedPass[] {
+  const out: ResolvedPass[] = [];
+  for (const a of adjust) {
+    const pass = getPass(a.kind);
+    if (!pass) continue;
+    const params: Record<string, number | string> = { ...a.params, ss };
+    if (a.kind === "film") params.night = theme.night;
+    out.push({ pass, params });
+  }
+  return out;
 }
 
 /**
- * Grade / bloom / lens — run over the finished composite (film excluded; see resolveFilmPass).
+ * Grade / bloom / lens — run over the finished composite. `film` is excluded: it is an
+ * adjustment LAYER now (layersAt §12), so it runs mid-stack where its z puts it, not here.
  *
  * `ss` is the stage supersample factor. The tail chain runs AFTER the resolve to output
  * resolution (StageRenderer.draw), but bloom's `radius` is in target pixels — it used to be

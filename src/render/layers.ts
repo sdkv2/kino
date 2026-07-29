@@ -441,8 +441,27 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   if (props.platformGuide) out.push({ id: "platformGuide", z: Z.qa, source: { providerId: "platformGuide" }, rect: full });
   if (props.grid) out.push({ id: "grid", z: Z.qa, source: { providerId: "grid" }, rect: full });
 
-  // 12. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
-  // Under the compositor the post stage owns film; the DOM path still uses the html layer.
+  // 12. Cinematic finish — an ADJUSTMENT layer over everything beneath it: no texture source of
+  // its own, just a chain the renderer runs over whatever has composited by the time it is
+  // reached. Emitted by default so an existing spec keeps its look without naming it;
+  // `postFx.film` overrides the params, `film: 0` drops the layer entirely.
+  //
+  // It is pushed last but sorts on z like everything else, so it lands between the grained
+  // content (z < Z.film) and the clean type (z >= Z.film) — the split the renderer used to make
+  // by hand. Nothing else claims z === Z.film; if a declared layer ever did, push order would
+  // put it BELOW the finish, where the retired band test put it above.
+  const filmParams = (props.postFx as { film?: Record<string, number> } | undefined)?.film;
+  const filmIntensity = filmParams?.intensity ?? props.theme.film ?? 1;
+  if (filmIntensity > 0) {
+    out.push({
+      id: "film",
+      z: Z.film,
+      source: null,
+      rect: full,
+      adjust: [{ kind: "film", params: { ...filmParams, intensity: filmIntensity } }],
+    });
+  }
+
   // Stable sort: equal z keeps push order, so same-band layers stay in authored sequence.
   // Array.prototype.sort is stable per spec in every engine we target, but the explicit index
   // tiebreak documents the intent and survives anyone swapping in a different sort.

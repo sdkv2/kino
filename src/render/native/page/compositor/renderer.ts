@@ -6,12 +6,12 @@
 // Everything here runs in the SYNCHRONOUS draw phase. No awaits, no decodes, no layout:
 // sources have already been prepared by the time draw() is called.
 import { IDENTITY_TRANSFORM, type BlendMode, type LayerDraw, type TextureSource } from "./graph.js";
-import { BASE_GROUP, groupRuns, groupsOf } from "./groups.js";
+import { BASE_GROUP, groupRuns } from "./groups.js";
 import { TargetPool, type RenderTarget } from "./targets.js";
 import { applyMask, type MaskBinding } from "./masks.js";
 import { resolveMaskDefaults, type LayerMask } from "../../../maskSpec.js";
 import { getPass, runChain, type EffectPass } from "./effects/index.js";
-import { resolveFilmPass, resolveTailPostChain, runPost } from "./post.js";
+import { resolveAdjustChain, resolveTailPostChain, runPost } from "./post.js";
 import type { PostFx } from "../../../postSpec.js";
 import type { Theme } from "../../../props.js";
 import { clearBackdrop, registerBackdropTexture } from "../backdrop.js";
@@ -20,9 +20,9 @@ import {
   groupSpans,
   transitionKindForWindow,
   transitionProgress,
+  type TransitionWindow,
 } from "../../../transitionSpec.js";
 import type { KinoProps } from "../../../props.js";
-import { Z } from "../../../layers.js";
 import { CompositeResolve } from "./resolve.js";
 import { shaderFXAA } from "../../shaderQuality.js";
 import * as prof from "./profile.js";
@@ -150,11 +150,6 @@ function modelMatrix(layer: LayerDraw): Float32Array {
   return new Float32Array([a, b, 0, c, d, 0, tx, ty, 1]);
 }
 
-/** Below the film adjustment is grained; above it stays clean. One rule, from the layer's own z.
- *  z is optional on LayerDraw (mask/blit literals never set it) — treat absent z as 0, same
- *  default normalizeLayer gives every real layer, which bands it below the film like today. */
-const isAboveFilmLayer = (layer: LayerDraw): boolean => (layer.z ?? 0) >= Z.film;
-
 export class StageRenderer {
   private gl: WebGL2RenderingContext;
   private prog: WebGLProgram;
@@ -274,14 +269,19 @@ export class StageRenderer {
     this.pool.clear(gl, accum);
 
     const transition = transitionProgress({ groups: groupSpans(opts.props), frame });
-    const skipGroups = transition ? new Set([transition.from, transition.to]) : null;
+    /** The two beats a crossfade is mixing this frame — their layers never composite directly. */
+    const mixing = transition ? new Set([transition.from, transition.to]) : null;
 
-    // Layer masks are built just before the layers that consume them — after photographic
-    // compositing, so pool reuse cannot scribble over a held mask source (SS=2 pressure).
+    // Layer masks are resolved before the walk, not inside it: each is drawn from its provider's
+    // texture into its own target and immediately HELD, so pool reuse cannot hand a mask source
+    // out as scratch (SS=2 pressure) no matter how long the walk runs. They are unheld together
+    // once the walk is done.
     const ensureLayerMaskTarget = (layerId: string): void => {
       if (maskTargets.has(layerId)) return;
-      const maskLayer = layers.find((l) => l.id === layerId || l.source.providerId === layerId);
-      const providerId = maskLayer ? maskLayer.source.providerId : layerId;
+      // An adjustment layer has no pixels, so it can never BE a mask source — skip sourceless
+      // entries rather than matching one by id and then dereferencing a null source.
+      const maskLayer = layers.find((l) => l.source !== null && (l.id === layerId || l.source.providerId === layerId));
+      const providerId = maskLayer?.source ? maskLayer.source.providerId : layerId;
       const maskSource = sources.get(providerId);
       if (!maskSource) return;
       const targetLayer: LayerDraw = maskLayer ?? {
@@ -301,58 +301,56 @@ export class StageRenderer {
       }
     };
 
-    const belowFilm = layers.filter((l) => !isAboveFilmLayer(l));
-    const aboveFilm = layers.filter((l) => isAboveFilmLayer(l));
-
-    for (const layer of belowFilm) {
+    for (const layer of layers) {
       const ref = (layer.mask as { source?: { kind?: string; layerId?: string } })?.source;
       if (ref?.kind === "layer" && ref.layerId) ensureLayerMaskTarget(ref.layerId);
     }
 
-    this.glPhase("draw:composite-below", () => {
-      for (const run of groupRuns(belowFilm)) {
-        const gid = run[0].group ?? BASE_GROUP;
-        if (skipGroups?.has(gid)) continue;
-        this.compositeRun(accum, run, sources, frame, maskTargets);
-      }
-    });
+    // ONE ordered walk. Three entry kinds interleave by z:
+    //
+    //   adjustment    no pixels of its own; runs its chain over everything accumulated so far.
+    //   transitioning both beats composite in isolation and the mix lands at this z, in place.
+    //   everything else composites normally.
+    //
+    // Nothing is pulled out of the walk and replayed afterwards, which is exactly what makes an
+    // adjustment's "everything beneath me" well-defined: the film finish is an ordinary entry at
+    // Z.film, so a layer below it is grained and a layer above it is not — including a
+    // transitioning beat's, which the old post-hoc transition block used to sidestep entirely.
+    const runs = groupRuns(layers);
+    for (let i = 0; i < runs.length; i++) {
+      const run = runs[i];
+      const adjust = run[0].adjust;
 
-    const filmChain = resolveFilmPass(opts.postFx, opts.theme, this.compScale);
-    if (filmChain.length) {
-      const filmed = this.glPhase("draw:film", () => runPost(gl, this.pool, accum, filmChain, frame));
-      if (filmed !== accum) {
-        this.pool.release(accum);
-        accum = filmed;
+      if (adjust?.length) {
+        const chain = resolveAdjustChain(adjust, opts.theme, this.compScale);
+        if (chain.length) {
+          const adjusted = this.glPhase(`draw:adjust:${run[0].id}`, () =>
+            runPost(gl, this.pool, accum, chain, frame),
+          );
+          if (adjusted !== accum) {
+            this.pool.release(accum);
+            accum = adjusted;
+          }
+        }
+        continue;
       }
-    }
 
-    for (const layer of aboveFilm) {
-      const ref = (layer.mask as { source?: { kind?: string; layerId?: string } })?.source;
-      if (ref?.kind === "layer" && ref.layerId) ensureLayerMaskTarget(ref.layerId);
-    }
-
-    this.glPhase("draw:composite-above", () => {
-      for (const run of groupRuns(aboveFilm)) {
-        const gid = run[0].group ?? BASE_GROUP;
-        if (skipGroups?.has(gid)) continue;
-        this.compositeRun(accum, run, sources, frame, maskTargets);
+      if (mixing?.has(run[0].group ?? BASE_GROUP)) {
+        // Consume the whole CONSECUTIVE stretch of transitioning runs and mix it as one unit.
+        // Positional rather than group-wide, and so free of any assumption that the two beats
+        // are adjacent in the walk: wherever their runs meet, that band mixes there. A beat's
+        // footage and its caption sit on opposite sides of the film adjustment, so they mix as
+        // two bands — footage below the grain, type above it.
+        const stretch: LayerDraw[] = [];
+        while (i < runs.length && mixing.has(runs[i][0].group ?? BASE_GROUP)) stretch.push(...runs[i++]);
+        i--; // the run that ended the stretch has not been walked yet
+        this.glPhase("draw:transition", () =>
+          this.mixTransitioningStretch(accum, stretch, transition!, opts.props, sources, frame, maskTargets),
+        );
+        continue;
       }
-    });
 
-    if (transition) {
-      const byGroup = groupsOf(layers);
-      const fromLayers = (byGroup.get(transition.from) ?? []).map((l) => ({ ...l, opacity: 1 }));
-      const toLayers = (byGroup.get(transition.to) ?? []).map((l) => ({ ...l, opacity: 1 }));
-      const fromTarget = this.compositeLayersToTarget(fromLayers, sources, frame, maskTargets);
-      const toTarget = this.compositeLayersToTarget(toLayers, sources, frame, maskTargets);
-      if (fromTarget && toTarget) {
-        const kind = transitionKindForWindow(opts.props, transition);
-        const mixed = mixGroups(gl, this.pool, fromTarget, toTarget, kind, transition.p);
-        this.blitTarget(accum, mixed, 1, "normal");
-        this.pool.release(fromTarget);
-        this.pool.release(toTarget);
-        this.pool.release(mixed);
-      }
+      this.glPhase("draw:composite", () => this.compositeRun(accum, run, sources, frame, maskTargets));
     }
     for (const t of maskTargets.values()) this.pool.unhold(t);
 
@@ -400,7 +398,7 @@ export class StageRenderer {
       gl.uniformMatrix3fv(
         this.uModel,
         false,
-        modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.outW, h: this.outH }, transform: IDENTITY_TRANSFORM, source: null as any, opacity: 1, blend: "normal", textGamma: 1, effects: [] }),
+        modelMatrix({ id: "_accum", rect: { x: 0, y: 0, w: this.outW, h: this.outH }, transform: IDENTITY_TRANSFORM, source: null, opacity: 1, blend: "normal", textGamma: 1, effects: [] }),
       );
       gl.uniform1f(this.uOpacity, 1.0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -420,18 +418,56 @@ export class StageRenderer {
   private snapW = 0;
   private snapH = 0;
 
+  /** Composite `layers` into a target of their own. Always returns one — an empty list yields a
+   *  cleared, fully transparent target, which is the correct "nothing on this side" input to a
+   *  crossfade rather than a reason to skip the mix. Caller releases it. */
   private compositeLayersToTarget(
     layers: LayerDraw[],
     sources: Map<string, TextureSource>,
     frame: number,
     maskTargets: Map<string, RenderTarget>,
-  ): RenderTarget | null {
-    if (!layers.length) return null;
+  ): RenderTarget {
     const gl = this.gl;
     const group = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, group);
     for (const layer of layers) this.compositeLayer(group, layer, sources, frame, maskTargets);
     return group;
+  }
+
+  /**
+   * Mix one z-band of a crossfade, in place. `stretch` is the consecutive walk positions that
+   * belong to either transitioning beat; each side composites into its own target, the transition
+   * shader mixes them, and the result blits onto `accum` exactly where those beats would have
+   * painted — so whatever adjustment layers sit above that point still see the mixed pixels.
+   *
+   * A side with no layers in this band composites to a transparent target and dissolves against
+   * the other, which is what the whole-group mix did for a layer the other beat did not have.
+   */
+  private mixTransitioningStretch(
+    accum: RenderTarget,
+    stretch: LayerDraw[],
+    transition: TransitionWindow,
+    props: KinoProps,
+    sources: Map<string, TextureSource>,
+    frame: number,
+    maskTargets: Map<string, RenderTarget>,
+  ): void {
+    const gl = this.gl;
+    // A beat's own opacity is the fade the crossfade REPLACES — the mix owns the blend now.
+    const side = (group: string): LayerDraw[] =>
+      stretch.filter((l) => (l.group ?? BASE_GROUP) === group).map((l) => ({ ...l, opacity: 1 }));
+    const fromTarget = this.compositeLayersToTarget(side(transition.from), sources, frame, maskTargets);
+    const toTarget = this.compositeLayersToTarget(side(transition.to), sources, frame, maskTargets);
+    const kind = transitionKindForWindow(props, transition);
+    const mixed = mixGroups(gl, this.pool, fromTarget, toTarget, kind, transition.p);
+    this.blitTarget(accum, mixed, 1, "normal");
+    // mixGroups binds `to` on unit 1 and leaves it selected. Every other draw here binds on unit
+    // 0 after selecting it, but the walk continues past this point now, so restore the invariant
+    // draw() established rather than trusting the next caller.
+    gl.activeTexture(gl.TEXTURE0);
+    this.pool.release(fromTarget);
+    this.pool.release(toTarget);
+    this.pool.release(mixed);
   }
 
   private compositeRun(
@@ -581,6 +617,9 @@ export class StageRenderer {
     frame: number,
     maskTargets: Map<string, RenderTarget>,
   ): void {
+    // An adjustment layer has no source: it is handled by the walk, never composited. Guarding
+    // here as well keeps every other caller of compositeLayer honest.
+    if (!layer.source) return;
     const source = sources.get(layer.source.providerId);
     if (!source) return;
 
@@ -671,13 +710,13 @@ export class StageRenderer {
       return;
     }
 
-    const tex = this.glPhase(`texture:${layer.id}`, () => source.texture(gl, frame, layer.source.key));
+    const tex = this.glPhase(`texture:${layer.id}`, () => source.texture(gl, frame, layer.source?.key));
     if (!tex) return;
     gl.bindFramebuffer(gl.FRAMEBUFFER, dest.fbo);
     gl.viewport(0, 0, this.width, this.height);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
-    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source.key));
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source?.key));
+    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source?.key));
     gl.uniform1f(this.uEncode, 0);
     gl.uniform1f(this.uTextGamma, layer.textGamma);
     gl.uniform2f(this.uRes, this.width, this.height);
@@ -692,7 +731,7 @@ export class StageRenderer {
   /** Layer-mask sources render at composition resolution (mask UV is comp-space when SS>1). */
   private drawMaskSource(layer: LayerDraw, source: TextureSource, frame: number): RenderTarget | null {
     const gl = this.gl;
-    const tex = source.texture(gl, frame, layer.source.key);
+    const tex = source.texture(gl, frame, layer.source?.key);
     if (!tex) return null;
     // Composition resolution, always: the geometry below is drawn unscaled (comp px), and
     // applyMask maps back to target px via compScale. Identical to the old `ss > 1 ? out : width`
@@ -704,8 +743,8 @@ export class StageRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, w, h);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
-    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source.key));
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source?.key));
+    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source?.key));
     gl.uniform1f(this.uEncode, 0);
     gl.uniform1f(this.uTextGamma, layer.textGamma);
     gl.uniform2f(this.uRes, w, h);
@@ -724,13 +763,13 @@ export class StageRenderer {
    *  owns the target and must release it. */
   drawToTarget(layer: LayerDraw, source: TextureSource, frame: number): RenderTarget | null {
     const gl = this.gl;
-    const tex = source.texture(gl, frame, layer.source.key);
+    const tex = source.texture(gl, frame, layer.source?.key);
     if (!tex) return null;
     const target = this.pool.acquire(gl, this.width, this.height);
     this.pool.clear(gl, target);
     gl.useProgram(this.prog);
-    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source.key));
-    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source.key));
+    gl.uniform1f(this.uFlipY, this.sampleFlip(source, frame, layer.source?.key));
+    gl.uniform1i(this.uDecode, this.sampleDecode(source, frame, layer.source?.key));
     gl.uniform1f(this.uEncode, 0);
     gl.uniform1f(this.uTextGamma, layer.textGamma);
     gl.uniform2f(this.uRes, this.width, this.height);

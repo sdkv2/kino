@@ -37,7 +37,9 @@ export interface LayerDraw {
    *  part in ordering (they never flow through layersAt's sort); every real layer gets one via
    *  normalizeLayer's `spec.z ?? 0` default. */
   z?: number;
-  source: TextureRef;
+  /** Where this layer's pixels come from, or null on an adjustment layer, which has none of
+   *  its own — see `adjust`. */
+  source: TextureRef | null;
   rect: { x: number; y: number; w: number; h: number }; // frame px, top-left origin
   transform: LayerTransform;
   opacity: number;
@@ -51,6 +53,10 @@ export interface LayerDraw {
   mask?: MaskRef;
   /** Beat this layer belongs to, for transitions. Absent = the base group. */
   group?: string;
+  /** Effects applied to everything composited BENEATH this layer, not to the layer itself.
+   *  An adjustment layer is always base-group and always full-frame — it has no rect of its
+   *  own to respect. Mutually exclusive with `source`, which is null when this is set. */
+  adjust?: EffectRef[];
 }
 
 /** What `layersAt` may omit; `normalizeLayer` fills the rest. */
@@ -88,6 +94,7 @@ export function normalizeLayer(spec: LayerSpec): LayerDraw {
     effects: spec.effects ?? [],
     mask: spec.mask,
     group: spec.group,
+    adjust: spec.adjust,
   };
 }
 

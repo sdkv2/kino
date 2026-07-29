@@ -23,8 +23,12 @@ const mk = (segments: KinoSegment[], over: Partial<KinoProps> = {}): KinoProps =
 // Was an id-prefix regex mirroring renderer.ts:153; now the renderer reads z and so does this.
 const isAboveFilm = (l: { z: number }): boolean => l.z >= Z.film;
 
+// Adjustment layers (the film finish, since it became an entry in the list rather than a
+// hardcoded pass) have no texture source: they paint no pixels of their own, they run a chain
+// over whatever is already composited. They take no part in the CONTENT paint order this oracle
+// characterises, so they are filtered out here — every assertion below is untouched.
 export const renderOrder = (p: KinoProps, frame: number): string[] => {
-  const ls = layersAt(p, frame, DIMS);
+  const ls = layersAt(p, frame, DIMS).filter((l) => l.source !== null);
   return [...ls.filter((l) => !isAboveFilm(l)), ...ls.filter((l) => isAboveFilm(l))].map((l) => l.id);
 };
 
