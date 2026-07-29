@@ -283,29 +283,42 @@ export function buildRegistry(
   // whatever key it names has to resolve here or the layer silently fails to draw.
   for (const d of props.layers ?? []) {
     if (!d.source) continue; // adjustment layer (grade/blur/etc. chain) — no texture of its own
-    const { kind, src } = d.source;
+    const { kind } = d.source;
     const params = d.source.params ?? {};
     const keyframes = d.source.keyframes ?? [];
     const triggers = d.source.triggers ?? [];
 
+    // Task 7b: build.ts resolves `source.src` node-side into exactly one of url/shaderCode/graphic
+    // BEFORE this ever reaches the page (see layerSpec.ts's DeclaredLayerSource comment) — `src`
+    // itself is only the author-facing reference and is never read here. A resolved field missing
+    // at this point means the caller built KinoProps by hand rather than through build.ts's
+    // resolution pass (every unit test does this); a real build already failed loudly if a source
+    // couldn't resolve, so silently not registering a texture here mirrors the same "no entry yet"
+    // fallback the seg{i}/video branch below has always had, not a new failure mode.
     if (kind === "image") {
-      sources.set(d.id, createImageSource("/public/" + src));
+      if (d.source.url) sources.set(d.id, createImageSource("/public/" + d.source.url));
     } else if (kind === "shader") {
-      // Same assumption as `props.background.shaderCode` (used verbatim as `shaderSrc` above,
-      // near line 64): `src` is taken to already BE the GLSL mainImage body, not a path to a
-      // .frag file — createShaderDraw never reads the filesystem. Harmless to construct either
-      // way (it only matters once something calls .prepare() and tries to compile it).
-      sources.set(
-        d.id,
-        createShaderSource({
-          drawFrame: createShaderDraw({ shaderSrc: src, params, keyframes, triggers, width: dims.width, height: dims.height, fps: props.fps }),
-          width: dims.width,
-          height: dims.height,
-          params,
-          keyframes,
-          triggers,
-        }),
-      );
+      if (d.source.shaderCode) {
+        sources.set(
+          d.id,
+          createShaderSource({
+            drawFrame: createShaderDraw({
+              shaderSrc: d.source.shaderCode,
+              params,
+              keyframes,
+              triggers,
+              width: dims.width,
+              height: dims.height,
+              fps: props.fps,
+            }),
+            width: dims.width,
+            height: dims.height,
+            params,
+            keyframes,
+            triggers,
+          }),
+        );
+      }
     } else if (kind === "motion" || kind === "lottie") {
       // A `segment` binding borrows that beat's own window, same as layersAt §11b — a motion/
       // lottie layer's internal clock (beatFrom/beatDur) has to agree with the window it paints
@@ -319,38 +332,31 @@ export function buildRegistry(
       const beatFrom = f(fromSec);
       const beatDur = f(toSec) - beatFrom;
 
-      // GAP (see task-7-report.md): DeclaredLayerSource carries only a bare `src` string. Every
-      // other .html/.lottie producer in this codebase (resolveMotionGraphic for segment motion,
-      // the CLI's lottie loader) resolves a file into real content node-side before it reaches
-      // KinoProps; nothing does that for declared layers yet — build.ts threads `spec.layers`
-      // through unmodified. So: for "motion", `src` is assumed to already BE sanitized markup, not
-      // a path to it. For "lottie", there is no field at all for parsed animationData, so `lottie`
-      // is left as an empty object — enough for lottie-web to construct without the source
-      // crashing (lottieMeta reads .ip/.op/.fr, tolerating absence as NaN), but it paints nothing
-      // until a real content-resolution step exists.
-      const data: MotionGraphicProps = { html: kind === "motion" ? src : "", lottie: kind === "lottie" ? {} : undefined, params, keyframes, triggers };
-      if (kind === "motion") {
-        sources.set(
-          d.id,
-          createMotionSource({ data, theme: props.theme, width: compDims.width, height: compDims.height, fps: props.fps, scale, beatFrom, beatDur }),
-        );
-      } else {
-        sources.set(d.id, createLottieSource({ data, width: dims.width, height: dims.height, fps: props.fps, beatFrom, beatDur }));
+      if (d.source.graphic) {
+        const data: MotionGraphicProps = d.source.graphic;
+        if (kind === "motion") {
+          sources.set(
+            d.id,
+            createMotionSource({ data, theme: props.theme, width: compDims.width, height: compDims.height, fps: props.fps, scale, beatFrom, beatDur }),
+          );
+        } else {
+          sources.set(d.id, createLottieSource({ data, width: dims.width, height: dims.height, fps: props.fps, beatFrom, beatDur }));
+        }
       }
     } else if (kind === "video") {
-      // GAP (see task-7-report.md): createFramesSource needs a pre-extracted MediaEntry, keyed
-      // here under the layer's own id exactly like `media["seg{i}"]` — but no job planner
-      // (videoFrames.ts's planMediaJobs) walks props.layers yet, so media[d.id] never exists in
-      // practice today. Mirrors the seg{i} fallback exactly: a real entry if one is ever
-      // produced, else a still image, else nothing — the same silent non-registration seg{i}
-      // already has in this situation, not a new failure mode this task introduces.
+      // createFramesSource needs a pre-extracted MediaEntry, keyed here under the layer's own id
+      // exactly like `media["seg{i}"]` — no job planner (videoFrames.ts's planMediaJobs) walks
+      // props.layers yet (see resolveDeclaredLayers in build.ts, which rejects a real video file
+      // for exactly this reason), so media[d.id] never exists in practice today. Mirrors the
+      // seg{i} fallback exactly: a real entry if one is ever produced, else the resolved still
+      // image, else nothing.
       const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
       const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
       const entry = media[d.id];
       if (entry) {
         sources.set(d.id, createFramesSource(entry, f(fromSec)));
-      } else if (/\.(jpe?g|png|webp)$/i.test(src)) {
-        sources.set(d.id, createImageSource("/public/" + src));
+      } else if (d.source.url) {
+        sources.set(d.id, createImageSource("/public/" + d.source.url));
       }
     }
   }

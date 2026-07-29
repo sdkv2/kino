@@ -30,9 +30,17 @@ const props = (layers: KinoProps["layers"]): KinoProps => ({
   segments: [{ kind: "scene", caption: "hi", startSec: 0, endSec: 3 }],
 });
 
+// Task 7b: build.ts resolves `source.src` node-side into url/shaderCode/graphic before a layer
+// ever reaches KinoProps (see layerSpec.ts's DeclaredLayerSource comment and build.ts's
+// resolveDeclaredLayers) — registry.ts reads only those resolved fields now, never `src` directly.
+// These fixtures construct KinoProps by hand (bypassing build.ts), so they supply the resolved
+// field themselves, exactly like a real resolution pass would have.
 describe("declared layers in the registry", () => {
   it("registers an image layer under its id", () => {
-    const reg = buildRegistry(props([{ id: "leak", z: 350, source: { kind: "image", src: "fx/leak.png" } }]), DIMS, DIMS, noMedia, 1);
+    const reg = buildRegistry(
+      props([{ id: "leak", z: 350, source: { kind: "image", src: "fx/leak.png", url: "fx/leak.png" } }]),
+      DIMS, DIMS, noMedia, 1,
+    );
     expect(reg.has("leak")).toBe(true);
   });
 
@@ -44,11 +52,11 @@ describe("declared layers in the registry", () => {
     // the real createFramesSource path instead of asserting something no pipeline stage can supply.
     const media: MediaMap = { d: { dir: "d", byFrame: { 0: "d/000.png" }, maxFrame: 0 } };
     const reg = buildRegistry(props([
-      { id: "a", z: 310, source: { kind: "image", src: "a.png" } },
-      { id: "b", z: 320, source: { kind: "motion", src: "b.html" } },
-      { id: "c", z: 330, source: { kind: "shader", src: "c.frag" } },
-      { id: "d", z: 340, source: { kind: "video", src: "d.mp4" } },
-      { id: "e", z: 350, source: { kind: "lottie", src: "e.json" } },
+      { id: "a", z: 310, source: { kind: "image", src: "a.png", url: "a.png" } },
+      { id: "b", z: 320, source: { kind: "motion", src: "b.html", graphic: { html: "<div></div>", params: {}, keyframes: [], triggers: [] } } },
+      { id: "c", z: 330, source: { kind: "shader", src: "c.frag", shaderCode: "vec4 mainImage() { return vec4(1.0); }" } },
+      { id: "d", z: 340, source: { kind: "video", src: "d.mp4", url: "d.mp4" } },
+      { id: "e", z: 350, source: { kind: "lottie", src: "e.json", graphic: { html: "", lottie: { v: "5.5.7" }, params: {}, keyframes: [], triggers: [] } } },
     ]), DIMS, DIMS, media, 1);
     for (const id of ["a", "b", "c", "d", "e"]) expect(reg.has(id)).toBe(true);
   });
@@ -58,18 +66,24 @@ describe("declared layers in the registry", () => {
     expect(reg.has("grade")).toBe(false);
   });
 
-  // A declared "video" layer with no media entry and a source that isn't a still image: the same
+  // A declared "video" layer with no media entry and no resolved `url` (i.e. never went through
+  // build.ts's resolution pass, which would otherwise have staged it or thrown): the same
   // silent-no-registration behaviour `seg{i}` already has in this exact situation (registry.ts's
   // segment loop, `else if (s.source && /\.(jpe?g|png|webp)$/i.test(...))`) — not a new gap.
-  it("registers nothing for an unresolvable video layer (no media entry, not a still image)", () => {
+  it("registers nothing for an unresolved video layer (no media entry, no resolved url)", () => {
     const reg = buildRegistry(props([{ id: "ghost", z: 340, source: { kind: "video", src: "ghost.mp4" } }]), DIMS, DIMS, noMedia, 1);
     expect(reg.has("ghost")).toBe(false);
   });
 
-  // The image-extension fallback a "video" kind layer gets when no media entry exists — mirrors
-  // the identical fallback already used for `seg{i}` video beats pointed at a still image.
-  it("falls back to a static image for a video-kind layer with an image src and no media entry", () => {
-    const reg = buildRegistry(props([{ id: "poster", z: 340, source: { kind: "video", src: "poster.png" } }]), DIMS, DIMS, noMedia, 1);
+  // The resolved-url fallback a "video" kind layer gets when no media entry exists — mirrors the
+  // identical fallback already used for `seg{i}` video beats pointed at a still image. In a real
+  // build this `url` is only ever populated for a still image (resolveDeclaredLayers rejects a
+  // real video file outright — see build.ts), so the extension no longer needs rechecking here.
+  it("falls back to the resolved still image for a video-kind layer with no media entry", () => {
+    const reg = buildRegistry(
+      props([{ id: "poster", z: 340, source: { kind: "video", src: "poster.png", url: "poster.png" } }]),
+      DIMS, DIMS, noMedia, 1,
+    );
     expect(reg.has("poster")).toBe(true);
   });
 });

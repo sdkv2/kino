@@ -8,7 +8,9 @@
 // top level, so a cycle would hit a temporal-dead-zone error at load. Keep the dependency one-way.
 import { Z } from "./layers.js";
 import { validateMask, EFFECT_KINDS, type LayerEffect, type LayerMask } from "./maskSpec.js";
-import type { BgKeyframe } from "./props.js";
+// Type-only, so it can't participate in the layers.js value-import cycle warned about above:
+// MotionGraphicProps is only used to shape the `graphic` resolved field below.
+import type { BgKeyframe, MotionGraphicProps } from "./props.js";
 import type { BlendMode } from "./native/page/compositor/graph.js";
 import { BLEND_MODES } from "./blendModes.js";
 
@@ -26,10 +28,21 @@ export type { BlendMode };
 
 export interface DeclaredLayerSource {
   kind: LayerSourceKind;
+  /** Author-facing reference: an asset-relative path (image/video/motion/lottie) or, for "shader",
+   *  either a path or a bare assets-lib/backgrounds id. Never read directly by the page. */
   src: string;
   params?: Record<string, number | string>;
   keyframes?: BgKeyframe[];
   triggers?: { at: number; action: string }[];
+  // Resolved node-side by build.ts from `src` — the page never reads files (every OTHER provider
+  // in this codebase consumes resolved content, not a path: createImageSource wants a staged URL,
+  // createShaderDraw wants GLSL source text, MotionGraphicProps.html is already-sanitized markup).
+  // Mirrors how `background` carries both `kind` and its resolved `shaderCode` (props.ts). Exactly
+  // one of the three is populated, matching `kind`; all are undefined on a layer that hasn't been
+  // through build.ts's resolution pass yet (e.g. a KinoProps fixture built by hand in a test).
+  url?: string; // image, video: public-relative staged path (stageAsset's target, same as seg{i}/frame{i})
+  shaderCode?: string; // shader: GLSL mainImage body, read from the resolved component file
+  graphic?: MotionGraphicProps; // motion, lottie: sanitized markup (Tier 1/2) or parsed animationData (Tier 3)
 }
 
 export interface DeclaredLayer {
@@ -70,6 +83,35 @@ const RESERVED_Z = new Set<number>(Object.values(Z));
 const ADJUST_INCOMPATIBLE_FIELDS = [
   "fromSec", "toSec", "segment", "hold", "rect", "opacity", "mask", "effects", "keyframes", "blend",
 ] as const satisfies readonly (keyof DeclaredLayer)[];
+
+// Static (no I/O) shape check: does `src`'s extension agree with the declared `kind`? This is the
+// one part of "does this source resolve" that doesn't need a project/filesystem to answer, so it
+// runs here rather than only in build.ts's resolution pass — same rationale as every other check
+// in this function (fail the whole build at once, cheaply, before spending on VO/avatar/render).
+// It exists to catch a specific silent-nothing failure: e.g. kind "lottie" pointed at a .html file
+// would resolve fine as Tier-1 markup (resolveMotionGraphic dispatches on extension, not `kind`),
+// but registry.ts routes a "lottie" kind to createLottieSource, which reads `graphic.lottie` — left
+// undefined — and paints nothing. A bare id (no dot) is left to the resolution pass, which is the
+// only place that knows the library contents.
+function checkSourceShape(kind: LayerSourceKind, src: string): string[] {
+  const hasExt = /\.\w+$/.test(src);
+  if (kind === "image" && !/\.(png|jpe?g|webp)$/i.test(src)) {
+    return [`source.src "${src}" doesn't look like an image — expected .png/.jpg/.jpeg/.webp`];
+  }
+  if (kind === "video" && !/\.(mp4|mov|png|jpe?g|webp)$/i.test(src)) {
+    return [`source.src "${src}" doesn't look like a video or still image — expected .mp4/.mov/.png/.jpg/.jpeg/.webp`];
+  }
+  if (kind === "shader" && hasExt && !/\.(frag|glsl)$/i.test(src)) {
+    return [`source.src "${src}" doesn't look like a shader — expected .frag/.glsl, or a bare assets-lib/backgrounds id`];
+  }
+  if (kind === "motion" && /\.json$/i.test(src)) {
+    return [`source.kind is "motion" but src "${src}" is a .json file — use kind "lottie" for a Lottie animation`];
+  }
+  if (kind === "lottie" && hasExt && !/\.json$/i.test(src)) {
+    return [`source.kind is "lottie" but src "${src}" is not a .json file`];
+  }
+  return [];
+}
 
 export function validateLayers(layers: unknown, segmentCount: number): string[] {
   if (layers === undefined) return [];
@@ -122,6 +164,8 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
         errs.push(at(`unknown layer source kind: ${String(kind)} — expected one of ${LAYER_SOURCE_KINDS.join(", ")}`));
       } else if (!l.source.src) {
         errs.push(at("source.src is required"));
+      } else {
+        errs.push(...checkSourceShape(kind, l.source.src).map(at));
       }
     }
 
