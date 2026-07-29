@@ -32,6 +32,8 @@ import { parseFormatList, type FormatId } from "../render/formats.js";
 import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
 import type { PostFx } from "../render/postSpec.js";
 import type { DeclaredLayer } from "../render/layerSpec.js";
+import type { LayerEffect, LayerMask } from "../render/maskSpec.js";
+import type { BlendMode } from "../render/native/page/compositor/graph.js";
 import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
@@ -479,6 +481,15 @@ export async function prepare(
     const base = {
       kind: seg.kind,
       source: seg.kind === "video" ? seg.source : undefined,
+      // mask/effects/blend: spec-side types are permissive (z.unknown()) so validateSegmentFx can
+      // report actionable errors instead of Zod stripping bad values — cast to the concrete
+      // KinoSegment shapes here. These three MUST stay threaded onto `base` (shared by every
+      // segment kind below); their absence was invisible for a whole release because every mask/fx
+      // test builds KinoProps directly and never goes through this mapping. Keep in sync with
+      // KinoSegment (src/render/props.ts).
+      mask: seg.mask as LayerMask | undefined,
+      effects: seg.effects as LayerEffect[] | undefined,
+      blend: seg.blend as BlendMode | undefined,
       caption: seg.caption ?? "",
       startSec,
       endSec,
