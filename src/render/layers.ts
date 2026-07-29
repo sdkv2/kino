@@ -22,6 +22,40 @@ const AVATAR_PUSH_IN = 1.08;
 /** Chained-cutaway hold: a held clip extends this many frames into its successor. */
 const CHAIN_HOLD_FRAMES = 12;
 
+/**
+ * Paint order as data. Every built-in layer gets a z; declared layers slot between them.
+ *
+ * These values are DERIVED from the historical push order plus the film split that used to be
+ * decided by an id-prefix regex in the renderer — they are not a fresh design. The gaps are
+ * deliberate: they are where a declared layer goes. tests/layer-order-invariance.test.ts is the
+ * oracle that says these reproduce the old order; if it fails, these are wrong.
+ */
+export const Z = {
+  backdrop: 0,
+  scrim: 100,
+  avatar: 200,
+  seg: 300,
+  frame: 310,
+  kicker: 320,
+  /** The cinematic finish. Everything below is grained; everything above stays clean. */
+  film: 700,
+  overlayVideoBehind: 750,
+  segBehind: 760,
+  overlayMotionBehind: 800,
+  motion: 810,
+  overlay: 820,
+  text: 900,
+  logo: 1000,
+  caption: 1100,
+  disclosure: 1200,
+  /** QA guides. Above everything — a safe-zone guide a caption can cover is useless.
+   *  NOTE: this is the one constant that does NOT reproduce today's order. Today these ids
+   *  match nothing in the renderer's id-prefix band test, so they paint BELOW the film and
+   *  behind every caption, contradicting their own comment in §11. Setting them above is a
+   *  deliberate fix, and it takes effect in Task 3 (when banding starts reading z), not here. */
+  qa: 9000,
+} as const;
+
 const num = (v: unknown, d: number): number => (typeof v === "number" ? v : Number(v) || d);
 
 /**
@@ -130,6 +164,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   const bgScale = props.background.kind === "image" ? kenBurnsScale(frame) : 1;
   out.push({
     id: "backdrop",
+    z: Z.backdrop,
     source: { providerId: "backdrop" },
     rect: full,
     transform: bgScale !== 1 ? { scale: bgScale, rotate: 0, translate: [0, 0] } : undefined,
@@ -137,7 +172,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
 
   // The scrim rides above canvas and image backdrops, never above a shader one.
   const shaderBg = props.background.kind === "custom" && Boolean(props.background.shaderCode);
-  if (!shaderBg) out.push({ id: "scrim", source: { providerId: "scrim" }, rect: full });
+  if (!shaderBg) out.push({ id: "scrim", z: Z.scrim, source: { providerId: "scrim" }, rect: full });
 
   // 3. Avatar windows.
   if (props.avatar) {
@@ -149,6 +184,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       const scale = interpolate(local, [0, dur], [1, AVATAR_PUSH_IN], { extrapolateRight: "clamp" });
       out.push({
         id: `av${i}`,
+        z: Z.avatar,
         source: { providerId: `av${i}` },
         rect: full,
         transform: { scale, rotate: 0, translate: [0, 0] },
@@ -185,6 +221,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     if (behind) {
       out.push({
         id: `overlay${i}`,
+        z: Z.overlayVideoBehind,
         source: { providerId: `overlay${i}`, key: String(local) },
         rect: full,
         opacity,
@@ -223,12 +260,13 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     // of the beat's chain, which was authored for the footage.
     const chromeEffects = segEffects?.filter((e) => e.kind === "motionBlur");
 
-    out.push({ id: `seg${i}`, source: { providerId: footageProvider }, rect, opacity: groupOpacity, transform: segTransform, mask: segMask, effects: segEffects, group: beat, aboveFilm: behind });
-    if (s.frame) out.push({ id: `frame${i}`, source: { providerId: `frame${i}` }, rect: full, opacity: groupOpacity, transform: zoom?.transform, effects: chromeEffects?.length ? chromeEffects : undefined, group: beat });
+    out.push({ id: `seg${i}`, z: behind ? Z.segBehind : Z.seg, source: { providerId: footageProvider }, rect, opacity: groupOpacity, transform: segTransform, mask: segMask, effects: segEffects, group: beat, aboveFilm: behind });
+    if (s.frame) out.push({ id: `frame${i}`, z: Z.frame, source: { providerId: `frame${i}` }, rect: full, opacity: groupOpacity, transform: zoom?.transform, effects: chromeEffects?.length ? chromeEffects : undefined, group: beat });
     if (s.kicker) {
       const kt = tweenAt(s.kickerKeyframes, local / props.fps, dims);
       out.push({
         id: `kicker${i}`,
+        z: Z.kicker,
         source: { providerId: `kicker${i}` },
         rect: full,
         // The chained-clip fade and the authored track are independent — they multiply.
@@ -268,6 +306,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     if (isTextBehindSubject(segMask, i) && s.motionOverlay) {
       out.push({
         id: `overlay${i}`,
+        z: Z.overlayMotionBehind,
         source: { providerId: `overlay${i}`, key: String(beatLocal) },
         rect: full,
         opacity,
@@ -277,6 +316,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     }
     out.push({
       id: `motion${i}`,
+      z: Z.motion,
       source: { providerId: `motion${i}`, key: String(beatLocal) },
       rect: full,
       opacity,
@@ -298,6 +338,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const beat = `beat${i}`;
     out.push({
       id: `overlay${i}`,
+      z: Z.overlay,
       source: { providerId: `overlay${i}`, key: String(local) },
       rect: full,
       mask: (s as any).mask,
@@ -314,6 +355,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       if (frame < from || frame >= to) return;
       out.push({
         id: `text${i}_${j}`,
+        z: Z.text,
         source: { providerId: `text${i}_${j}` },
         rect: full,
         mask: (t as any).mask ?? (s as any).mask,
@@ -345,6 +387,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       const lh = logo.sizePx / (logo.aspect || 1);
       out.push({
         id: "logo",
+        z: Z.logo,
         source: { providerId: "logo" },
         rect: {
           x: (num(p.x, logo.x) / 100) * width - lw / 2,
@@ -377,6 +420,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const tween = tweenAt(s.captionKeyframes, local / props.fps, dims);
     out.push({
       id: `caption${i}`,
+      z: Z.caption,
       source: { providerId: `caption${i}`, key },
       rect: full,
       mask: (s as any).mask,
@@ -389,15 +433,21 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
 
   // 10. AI disclosure.
   if (props.disclosure) {
-    out.push({ id: "disclosure", source: { providerId: "disclosure" }, rect: full });
+    out.push({ id: "disclosure", z: Z.disclosure, source: { providerId: "disclosure" }, rect: full });
   }
 
   // 11. Still/storyboard QA overlays, above every content layer so nothing hides a safe-zone
   // breach. `kino build` never sets these props.
-  if (props.platformGuide) out.push({ id: "platformGuide", source: { providerId: "platformGuide" }, rect: full });
-  if (props.grid) out.push({ id: "grid", source: { providerId: "grid" }, rect: full });
+  if (props.platformGuide) out.push({ id: "platformGuide", z: Z.qa, source: { providerId: "platformGuide" }, rect: full });
+  if (props.grid) out.push({ id: "grid", z: Z.qa, source: { providerId: "grid" }, rect: full });
 
   // 12. Cinematic finish — vignette and grain over everything. `theme.film === 0` disables it.
   // Under the compositor the post stage owns film; the DOM path still uses the html layer.
-  return out.map(normalizeLayer);
+  // Stable sort: equal z keeps push order, so same-band layers stay in authored sequence.
+  // Array.prototype.sort is stable per spec in every engine we target, but the explicit index
+  // tiebreak documents the intent and survives anyone swapping in a different sort.
+  return out
+    .map((spec, i) => ({ spec, i }))
+    .sort((a, b) => (a.spec.z ?? 0) - (b.spec.z ?? 0) || a.i - b.i)
+    .map(({ spec }) => normalizeLayer(spec));
 }

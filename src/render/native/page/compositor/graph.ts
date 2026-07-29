@@ -31,6 +31,9 @@ export interface LayerTransform {
 
 export interface LayerDraw {
   id: string;
+  /** Paint order. The list is stable-sorted on (z, pushIndex), so equal z keeps authored order.
+   *  Built-in constants live in layers.ts `Z`; declared layers pick their own. */
+  z: number;
   source: TextureRef;
   rect: { x: number; y: number; w: number; h: number }; // frame px, top-left origin
   transform: LayerTransform;
@@ -74,6 +77,7 @@ const TEXT_GAMMA_DEFAULT = 2.2;
 export function normalizeLayer(spec: LayerSpec): LayerDraw {
   return {
     id: spec.id,
+    z: spec.z ?? 0,
     source: spec.source,
     rect: spec.rect,
     transform: spec.transform ?? IDENTITY_TRANSFORM,
