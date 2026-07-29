@@ -9,17 +9,6 @@ import type { LayerDraw } from "./graph.js";
  *  everything that is not part of a beat and so never participates in a transition. */
 export const BASE_GROUP = "base";
 
-export function groupsOf(layers: LayerDraw[]): Map<string, LayerDraw[]> {
-  const out = new Map<string, LayerDraw[]>();
-  for (const layer of layers) {
-    const key = layer.group ?? BASE_GROUP;
-    const bucket = out.get(key);
-    if (bucket) bucket.push(layer);
-    else out.set(key, [layer]);
-  }
-  return out;
-}
-
 /**
  * Consecutive layers sharing a group id — preserves z-order when base layers interleave beats.
  *
