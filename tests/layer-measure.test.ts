@@ -47,4 +47,14 @@ describe("measureLayers", () => {
   it("returns an empty list for no layers", () => {
     expect(measureLayers([], DIMS)).toEqual([]);
   });
+
+  it("drops adjustment layers (source: null) — they paint no pixels of their own", () => {
+    const film = normalizeLayer({ id: "film", source: null, rect: { x: 0, y: 0, w: 1080, h: 1920 }, adjust: [] });
+    const ms = measureLayers([
+      layer("backdrop", { x: 0, y: 0, w: 1080, h: 1920 }),
+      film,
+    ], DIMS);
+    expect(ms.map((m) => m.label)).toEqual(["backdrop"]);
+    expect(ms.some((m) => m.label === "film")).toBe(false);
+  });
 });
