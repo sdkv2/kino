@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { layersAt } from "../src/render/layers.js";
+import { layersAt, Z } from "../src/render/layers.js";
 import { MOTION_XFADE_FRAMES } from "../src/render/motion.js";
 import type { KinoProps, KinoSegment } from "../src/render/props.js";
 
@@ -91,7 +91,8 @@ describe("layersAt — motion beats", () => {
     } as KinoSegment]);
     const ids = layersAt(p, 15, DIMS).map((l) => l.id);
     expect(ids.indexOf("overlay0")).toBeLessThan(ids.indexOf("seg0"));
-    expect(layersAt(p, 15, DIMS).find((l) => l.id === "seg0")!.aboveFilm).toBe(true);
+    // aboveFilm is gone (Task 3); the same "paints above the film" fact now lives in z.
+    expect(layersAt(p, 15, DIMS).find((l) => l.id === "seg0")!.z).toBe(Z.segBehind);
   });
 
   it("passes the beat-local frame as the source key so the raster scrubs per beat", () => {

@@ -51,8 +51,6 @@ export interface LayerDraw {
   mask?: MaskRef;
   /** Beat this layer belongs to, for transitions. Absent = the base group. */
   group?: string;
-  /** Composite after the cinematic-finish pass (motion/overlay tier). Text-behind seg cutouts need this. */
-  aboveFilm?: boolean;
 }
 
 /** What `layersAt` may omit; `normalizeLayer` fills the rest. */
@@ -68,7 +66,7 @@ export interface Dims {
 
 export const IDENTITY_TRANSFORM: LayerTransform = { scale: 1, rotate: 0, translate: [0, 0] };
 
-/** Layers whose pixels are glyph coverage, by the same id convention isAboveFilmLayer uses. */
+/** Layers whose pixels are glyph coverage — same id convention the old id-prefix band test used. */
 const TEXT_CLASS = /^(text|caption|disclosure)/;
 // 2.2 is the display gamma, and that is the principled value rather than a fitted one: correcting
 // coverage by it makes linear-light blending of a glyph edge reproduce what sRGB blending gave,
@@ -90,7 +88,6 @@ export function normalizeLayer(spec: LayerSpec): LayerDraw {
     effects: spec.effects ?? [],
     mask: spec.mask,
     group: spec.group,
-    aboveFilm: spec.aboveFilm,
   };
 }
 

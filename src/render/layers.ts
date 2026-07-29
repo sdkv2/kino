@@ -260,7 +260,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     // of the beat's chain, which was authored for the footage.
     const chromeEffects = segEffects?.filter((e) => e.kind === "motionBlur");
 
-    out.push({ id: `seg${i}`, z: behind ? Z.segBehind : Z.seg, source: { providerId: footageProvider }, rect, opacity: groupOpacity, transform: segTransform, mask: segMask, effects: segEffects, group: beat, aboveFilm: behind });
+    out.push({ id: `seg${i}`, z: behind ? Z.segBehind : Z.seg, source: { providerId: footageProvider }, rect, opacity: groupOpacity, transform: segTransform, mask: segMask, effects: segEffects, group: beat });
     if (s.frame) out.push({ id: `frame${i}`, z: Z.frame, source: { providerId: `frame${i}` }, rect: full, opacity: groupOpacity, transform: zoom?.transform, effects: chromeEffects?.length ? chromeEffects : undefined, group: beat });
     if (s.kicker) {
       const kt = tweenAt(s.kickerKeyframes, local / props.fps, dims);

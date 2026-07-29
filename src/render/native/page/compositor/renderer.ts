@@ -22,6 +22,7 @@ import {
   transitionProgress,
 } from "../../../transitionSpec.js";
 import type { KinoProps } from "../../../props.js";
+import { Z } from "../../../layers.js";
 import { CompositeResolve } from "./resolve.js";
 import { shaderFXAA } from "../../shaderQuality.js";
 import * as prof from "./profile.js";
@@ -149,19 +150,10 @@ function modelMatrix(layer: LayerDraw): Float32Array {
   return new Float32Array([a, b, 0, c, d, 0, tx, ty, 1]);
 }
 
-/** Motion, overlays, type, and logo sit above the cinematic finish — same stack as KinoVideo. */
-function isAboveFilmLayer(layer: LayerDraw): boolean {
-  if (layer.aboveFilm) return true;
-  const id = layer.id;
-  return (
-    id.startsWith("motion") ||
-    id.startsWith("overlay") ||
-    id.startsWith("text") ||
-    id.startsWith("caption") ||
-    id === "disclosure" ||
-    id === "logo"
-  );
-}
+/** Below the film adjustment is grained; above it stays clean. One rule, from the layer's own z.
+ *  z is optional on LayerDraw (mask/blit literals never set it) — treat absent z as 0, same
+ *  default normalizeLayer gives every real layer, which bands it below the film like today. */
+const isAboveFilmLayer = (layer: LayerDraw): boolean => (layer.z ?? 0) >= Z.film;
 
 export class StageRenderer {
   private gl: WebGL2RenderingContext;

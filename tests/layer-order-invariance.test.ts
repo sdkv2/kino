@@ -5,7 +5,7 @@
 // This test exists to be a no-op oracle for the z port. It asserts today's behaviour, correct
 // or not — if the port changes any of these orders, the port is wrong.
 import { describe, it, expect } from "vitest";
-import { layersAt } from "../src/render/layers.js";
+import { layersAt, Z } from "../src/render/layers.js";
 import type { KinoProps, KinoSegment } from "../src/render/props.js";
 
 const theme = {
@@ -20,12 +20,8 @@ const mk = (segments: KinoSegment[], over: Partial<KinoProps> = {}): KinoProps =
   background: bg, disclosure: "", segments, ...over,
 });
 
-// Mirrors isAboveFilmLayer in renderer.ts:153 EXACTLY. Duplicated rather than imported because
-// that function lives in the page bundle; Task 2 deletes it and this copy with it.
-const isAboveFilm = (l: { id: string; aboveFilm?: boolean }): boolean =>
-  Boolean(l.aboveFilm) ||
-  l.id.startsWith("motion") || l.id.startsWith("overlay") || l.id.startsWith("text") ||
-  l.id.startsWith("caption") || l.id === "disclosure" || l.id === "logo";
+// Was an id-prefix regex mirroring renderer.ts:153; now the renderer reads z and so does this.
+const isAboveFilm = (l: { z: number }): boolean => l.z >= Z.film;
 
 export const renderOrder = (p: KinoProps, frame: number): string[] => {
   const ls = layersAt(p, frame, DIMS);
@@ -75,16 +71,15 @@ describe("render order is stable across the z port", () => {
     expect(renderOrder(p, 30)).toEqual(["backdrop", "scrim", "caption0", "disclosure"]);
   });
 
-  it("QA overlays do NOT get elevated above film — isAboveFilmLayer has no case for them", () => {
-    // Surprising but real: layers.ts's own comment calls these "above every content layer", but
-    // isAboveFilmLayer (renderer.ts:153) checks only motion*/overlay*/text*/caption*/disclosure/
-    // logo prefixes — platformGuide and grid match none of them and no `aboveFilm` flag is set
-    // on them in layers.ts, so they land in the BELOW-film band, ahead of the caption in final
-    // paint order. `kino build` never sets these props; only `kino still`/storyboard does.
+  it("QA overlays paint above everything", () => {
     const p = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 3 }], {
       platformGuide: "tiktok", grid: true,
-    });
-    expect(renderOrder(p, 30)).toEqual(["backdrop", "scrim", "platformGuide", "grid", "caption0"]);
+    } as Partial<KinoProps>);
+    // Changed deliberately: these used to paint BELOW the film and behind the caption, because
+    // the old id-prefix band test had no case for their ids. Now that the band reads z, Z.qa
+    // puts them where §11 always said they were. QA props are set only by `kino still` and
+    // `kino storyboard` — `kino build` never sets them, so no delivered render can change.
+    expect(renderOrder(p, 30)).toEqual(["backdrop", "scrim", "caption0", "platformGuide", "grid"]);
   });
 
   it("avatar window paints above the scrim, below the caption", () => {
