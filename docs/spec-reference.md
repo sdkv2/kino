@@ -263,9 +263,25 @@ with x aspect-corrected so a radial region is a circle rather than an ellipse.
 | `focusMode` | `radial` or `band` (tilt-shift) | `radial` |
 | `focusAngle` | band orientation in degrees, `band` mode only (`0` = horizontal band) | `0` |
 
-Keyframe `focusRadius` (or `focusX`/`focusY`) for a rack focus. Sharpness bleeds slightly outward
-across the focal boundary — taps in the blurred region still reach into the sharp one. That is
-inherent to a 2D depth-of-field stand-in and is not visible at the radii layer effects use.
+Keyframe `focusRadius` (or `focusX`/`focusY`) for a rack focus. Two things worth knowing before
+you pick numbers:
+
+- **`focusRadius` saturates well below `1`.** It is measured from the focal centre in frame
+  heights, so the value at which the region covers the whole frame is the distance to the corner:
+  **≈0.57 on 9:16**, ≈1.02 on 16:9. Past that everything is sharp and further increases do nothing.
+  The useful range on a vertical frame is roughly `0 → 0.6`.
+- **A front-loaded ease finishes the visible move early.** `easeOutQuart` is ~68% travelled at a
+  quarter of its duration, so a rack keyframed `0.12 → 0.95` at `at: 2.4` is visually done by
+  ~0.6s. Either keyframe within the useful range, or use a gentler ease, or place the keyframe
+  where you actually want the focus to land.
+
+Sharpness bleeds slightly outward across the focal boundary — taps in the blurred region still
+reach into the sharp one. That is inherent to a 2D depth-of-field stand-in and is not visible at
+the radii layer effects use.
+
+A radial region on a tall frame softens the top and bottom symmetrically, which reads as depth
+when there is a clear subject at the focal centre and as a toy tilt-shift when there is not. Use
+`focusMode: "band"` when the subject spans the full width.
 
 ### Tween channels
 
