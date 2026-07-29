@@ -142,6 +142,9 @@ const normalizeSegment = (raw: unknown): unknown => {
 const segmentFxFields = {
   mask: z.unknown().optional(),
   effects: z.unknown().optional(),
+  // Kept permissive here too — see src/render/layerSpec.ts, which validates in the author's
+  // vocabulary rather than Zod's.
+  blend: z.unknown().optional(),
 };
 
 const SegmentUnion = z.discriminatedUnion("kind", [
@@ -367,6 +370,9 @@ export const SpecSchema = z
     // `loop` (Lottie playback).
     seamlessLoop: z.boolean().optional(),
     postFx: z.unknown().optional(),
+    // Kept permissive here so the shared CLI validator reports layer errors in the author's
+    // vocabulary rather than Zod's. See src/render/layerSpec.ts.
+    layers: z.unknown().optional(),
     segments: z.array(Segment).min(1),
   })
   .strict() // reject unknown top-level keys — a misplaced/misspelled key errors instead of silently no-op'ing
