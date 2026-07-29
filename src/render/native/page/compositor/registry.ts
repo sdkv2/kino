@@ -316,6 +316,10 @@ export function buildRegistry(
             params,
             keyframes,
             triggers,
+            // A declared shader layer is content, not the backdrop — it must not republish the
+            // glass bus mid-batch (Stage.tsx fires every layer's prepare() in one Promise.all
+            // after the real backdrop's; see shader.ts's publishBackdrop doc comment).
+            publishBackdrop: false,
           }),
         );
       }

@@ -182,6 +182,14 @@ function resolveDeclaredLayers(
       } catch (e) {
         return fail((e as Error).message);
       }
+      // resolveBackgroundComponent resolves a bare id against the whole backgrounds library, which
+      // holds both .frag/.glsl shaders AND .js Canvas2D draw components (e.g. "brand-wash") — same
+      // ambiguity the main background resolution disambiguates with isShaderPath (see bgShaderCode
+      // below). Without this check, a bare id pointing at a .js component would have its JS source
+      // read as GLSL, registered, and only fail during the first seek — after VO/avatar spend.
+      if (!isShaderPath(abs)) {
+        fail(`source.src "${src}" resolved to "${abs}", which is not a shader (.frag/.glsl) — a declared "shader" layer can't use a Canvas2D draw component`);
+      }
       return { ...d, source: { ...d.source, shaderCode: readFileSync(abs, "utf8") } };
     }
 

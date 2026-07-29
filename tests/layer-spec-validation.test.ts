@@ -68,6 +68,14 @@ describe("validateLayers", () => {
     expect(validateLayers([{ id: "x", z: 400 }], 1).join()).toMatch(/needs either a source or an adjust chain/);
   });
 
+  // An empty `adjust: []` is not a real adjustment chain — `!l.adjust` alone (truthy for `[]`)
+  // would let this slip past both the "needs either" check AND the ADJUST_INCOMPATIBLE_FIELDS
+  // check, then fall through layersAt's `d.adjust?.length` guard into the pixel branch, emitting
+  // `source: { providerId: "x" }` with nothing ever registered for it. Silent nothing.
+  it("rejects a layer with an empty adjust array and no source", () => {
+    expect(validateLayers([{ id: "x", z: 400, adjust: [] }], 1).join()).toMatch(/needs either a source or an adjust chain/);
+  });
+
   it("rejects an unknown adjust kind that isn't the film exception", () => {
     const errs = validateLayers([{ id: "f", z: 650, adjust: [{ kind: "chroma", params: {} }] }], 1);
     expect(errs.join()).toMatch(/unknown adjust kind: chroma/);

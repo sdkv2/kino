@@ -18,6 +18,11 @@ export function createShaderSource(opts: {
   params: Record<string, BgParamValue>;
   keyframes: BgKeyframe[];
   triggers: BgTrigger[];
+  /** The real backdrop shader publishes itself for glass to sample; a declared shader layer must
+   *  not clobber that bus (it would null out the compositor's registered backdropTexture mid-batch
+   *  — see registry.ts's declared-layer loop). Mirrors createCanvas2dSource's option of the same
+   *  name. Defaults to true so the real backdrop's behaviour is unchanged. */
+  publishBackdrop?: boolean;
 }): TextureSource {
   const canvas = document.createElement("canvas");
   canvas.width = opts.width;
@@ -27,7 +32,7 @@ export function createShaderSource(opts: {
   return {
     async prepare(frame: number): Promise<void> {
       opts.drawFrame(canvas, frame);
-      registerBackdrop(canvas, opts.width, opts.height);
+      if (opts.publishBackdrop ?? true) registerBackdrop(canvas, opts.width, opts.height);
     },
     texture(gl: WebGL2RenderingContext): WebGLTexture | null {
       tex = uploadCanvasOrImage(gl, tex, canvas);

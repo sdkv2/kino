@@ -2,7 +2,7 @@
 // Every declared layer must get a TextureSource under its own id. layersAt and buildRegistry
 // share one id namespace; a mismatch is a silently missing layer, which is exactly the failure
 // the registry's own header comment warns about.
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // registry.ts statically imports every provider, including providers/lottie.ts -> "lottie-web".
 // That module runs browser-canvas feature detection at IMPORT time (not lazily), which throws
@@ -11,6 +11,31 @@ import { describe, it, expect, vi } from "vitest";
 // a minimal stub that satisfies the import is enough; real lottie playback is Task 8+GPU-test
 // territory, not this file's concern.
 vi.mock("lottie-web", () => ({ default: { loadAnimation: () => ({ isLoaded: true }) } }));
+
+// Finding 3: build.ts sets `url: src` for both image and video in production, so every
+// image/video fixture elsewhere in this file has a `url` byte-identical to its `src` — a registry
+// that read `d.source.src` instead of `d.source.url` would pass every one of them. These two
+// mocks let the discrimination tests below assert on the actual argument buildRegistry hands the
+// provider, not just `reg.has(id)`.
+const imageSourceCalls: string[] = [];
+vi.mock("../src/render/native/page/compositor/providers/image.js", () => ({
+  createImageSource: vi.fn((url: string) => {
+    imageSourceCalls.push(url);
+    return { prepare: async () => {}, texture: () => null, size: () => null };
+  }),
+}));
+
+// Finding 1: the registry-level half of the publishBackdrop wiring — createShaderSource itself is
+// unit-tested directly (tests/shader-source-backdrop.test.ts); this mock instead proves
+// buildRegistry passes `publishBackdrop: false` for a declared shader layer while leaving the real
+// backdrop shader's call alone (defaulting to true, unchanged behaviour).
+const shaderSourceOpts: Array<{ publishBackdrop?: boolean }> = [];
+vi.mock("../src/render/native/page/compositor/providers/shader.js", () => ({
+  createShaderSource: vi.fn((opts: { publishBackdrop?: boolean }) => {
+    shaderSourceOpts.push({ publishBackdrop: opts.publishBackdrop });
+    return { prepare: async () => {}, texture: () => null, size: () => null };
+  }),
+}));
 
 import { buildRegistry } from "../src/render/native/page/compositor/registry.js";
 import type { KinoProps } from "../src/render/props.js";
@@ -36,6 +61,11 @@ const props = (layers: KinoProps["layers"]): KinoProps => ({
 // These fixtures construct KinoProps by hand (bypassing build.ts), so they supply the resolved
 // field themselves, exactly like a real resolution pass would have.
 describe("declared layers in the registry", () => {
+  beforeEach(() => {
+    imageSourceCalls.length = 0;
+    shaderSourceOpts.length = 0;
+  });
+
   it("registers an image layer under its id", () => {
     const reg = buildRegistry(
       props([{ id: "leak", z: 350, source: { kind: "image", src: "fx/leak.png", url: "fx/leak.png" } }]),
@@ -85,5 +115,50 @@ describe("declared layers in the registry", () => {
       DIMS, DIMS, noMedia, 1,
     );
     expect(reg.has("poster")).toBe(true);
+  });
+
+  // Finding 3: `src` and `url` are deliberately DIFFERENT here (every other fixture in this file
+  // has them byte-identical, matching what build.ts actually produces — `url: src` — so none of
+  // them could ever catch a registry that read the wrong field). If registry.ts read
+  // `d.source.src` instead of `d.source.url`, this would assert the raw (unresolved) value instead
+  // and fail.
+  it("passes the resolved source.url to the image provider, not the raw src", () => {
+    const reg = buildRegistry(
+      props([{ id: "leakUrl", z: 355, source: { kind: "image", src: "fx/leak-original.png", url: "fx/leak-resolved.png" } }]),
+      DIMS, DIMS, noMedia, 1,
+    );
+    expect(reg.has("leakUrl")).toBe(true);
+    expect(imageSourceCalls).toContain("/public/fx/leak-resolved.png");
+    expect(imageSourceCalls).not.toContain("/public/fx/leak-original.png");
+  });
+
+  it("passes the resolved source.url to the image provider for a video-kind still-image fallback, not the raw src", () => {
+    const reg = buildRegistry(
+      props([{ id: "posterUrl", z: 356, source: { kind: "video", src: "posters/raw-name.png", url: "posters/resolved-name.png" } }]),
+      DIMS, DIMS, noMedia, 1,
+    );
+    expect(reg.has("posterUrl")).toBe(true);
+    expect(imageSourceCalls).toContain("/public/posters/resolved-name.png");
+    expect(imageSourceCalls).not.toContain("/public/posters/raw-name.png");
+  });
+
+  // Finding 1 (registry-level half — see tests/shader-source-backdrop.test.ts for the provider's
+  // own behaviour under each option): a declared shader layer must opt OUT of the backdrop bus,
+  // while the real backdrop shader's call must be left alone (defaulting to true unchanged).
+  it("passes publishBackdrop: false for a declared shader layer but not for the real backdrop shader", () => {
+    const shaderProps: KinoProps = {
+      ...props([{ id: "declaredShader", z: 357, source: { kind: "shader", src: "c.frag", shaderCode: "vec4 mainImage(){return vec4(1.0);}" } }]),
+      background: {
+        kind: "custom", image: null, customCode: null,
+        shaderCode: "vec4 mainImage(){return vec4(1.0);}",
+        params: {}, keyframes: [], triggers: [],
+      },
+    };
+    const reg = buildRegistry(shaderProps, DIMS, DIMS, noMedia, 1);
+    expect(reg.has("backdrop")).toBe(true);
+    expect(reg.has("declaredShader")).toBe(true);
+    // Order follows buildRegistry's own body: the backdrop is built before the declared-layer loop.
+    expect(shaderSourceOpts[0]).toEqual({ publishBackdrop: undefined });
+    expect(shaderSourceOpts[1]).toEqual({ publishBackdrop: false });
   });
 });

@@ -141,8 +141,14 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
       errs.push(at(`z ${l.z} is reserved for a built-in layer — pick a value between them so the order is unambiguous`));
     }
 
-    if (l.source && l.adjust) errs.push(at("cannot have both source and adjust — an adjustment layer has no pixels of its own"));
-    else if (!l.source && !l.adjust) errs.push(at("needs either a source or an adjust chain"));
+    // `.length`-aware, not just truthy: an empty `adjust: []` is not a real adjustment chain (the
+    // ADJUST_INCOMPATIBLE_FIELDS check below and layersAt's own emission branch, layers.ts §11b,
+    // both gate on `.length` too) — `!l.adjust` alone would let `{ id, z, adjust: [] }` (no source,
+    // no length) slip past both branches and fall through to layersAt's pixel branch, emitting
+    // `source: { providerId: d.id }` with nothing ever registered for that id.
+    const hasAdjust = Boolean(l.adjust?.length);
+    if (l.source && hasAdjust) errs.push(at("cannot have both source and adjust — an adjustment layer has no pixels of its own"));
+    else if (!l.source && !hasAdjust) errs.push(at("needs either a source or an adjust chain"));
 
     // An adjustment layer (layers.ts §11b) is always base-group and applies to the whole
     // accumulator: the `d.adjust?.length` branch pushes only id/z/source:null/adjust and
