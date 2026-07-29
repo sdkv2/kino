@@ -180,7 +180,7 @@ kino still projects/vesper/specs/vesper-rite.json --segment 0 --around 1.5
 
 # Your project
 kino still specs/foo.json --around <t>
-KINO_SHADER_DRAFT=1 kino build specs/foo.json --mock   # fast look
+KINO_SHADER_DRAFT=1 kino build specs/foo.json --draft  # fast look
 kino build specs/foo.json                              # SSAA 2 + FXAA
 ```
 

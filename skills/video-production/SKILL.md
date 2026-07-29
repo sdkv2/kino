@@ -599,8 +599,11 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   whisper.cpp). Keep `text` matching the recording; STT normalizes tokens ("thirty"→"30"), so
   `atWord` anchors bind to the *transcribed* words (a miss fails the build listing them).
   See docs/audio.md § Imported real voiceover.
-- Use `--mock` while iterating to avoid avatar credit spend; real builds cache VO+avatar so edits to
-  captions don't re-bill. Faceless real builds spend only ElevenLabs (no avatar credits at all).
+- **`--tts` is the only flag that spends.** A plain `kino build <spec>` is silent, FULL quality and
+  $0 — so a silent cut is a real deliverable, not just a preview. Add `--draft` for a faster 720p
+  pass while iterating. Reach for `--tts` only when the piece actually needs a voiceover, or to lock
+  speech-synced timing against real words; VO+avatar are content-cached, so caption edits don't
+  re-bill, and `--tts --no-avatar` spends ElevenLabs only (no avatar credits).
 - **Suspect a rendering bug (not a spec mistake)? Stop and say so before patching render source.**
   The render pipeline (`src/render/**`) is shared across every brand and spec — a fix there is correct
   for everyone or wrong for everyone, unlike a spec/brand tweak scoped to the one video you're making.

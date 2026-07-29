@@ -7,6 +7,7 @@ import type { BgKeyframe, KinoProps } from "./props.js";
 import type { LayerEffect } from "./maskSpec.js";
 import { interpolate } from "./interpolate.js";
 import { paramsAt } from "./bgparams.js";
+import { resolveEffects } from "./effectParams.js";
 import { IDENTITY_TRANSFORM, normalizeLayer, type Dims, type LayerDraw, type LayerSpec, type LayerTransform } from "./native/page/compositor/graph.js";
 import { motionHandoff, motionXfadeFrames, shotTransform, type Shot } from "./motion.js";
 import { hasCaptionContent } from "./captionLayout.js";
@@ -62,7 +63,8 @@ const num = (v: unknown, d: number): number => (typeof v === "number" ? v : Numb
  *
  * Ported from the retired DOM composition's TweenOverlay, which applied
  * `translate(x%, y%) scale(s)` to a full-frame box: x/y are PERCENT OF FRAME, and the scale is
- * about the rect centre — which is exactly the order `modelMatrix` composes, so the mapping is
+ * about the layer's anchor — [0.5, 0.5] by default, which is the rect centre and what this did
+ * before the anchor existed. That is exactly the order `modelMatrix` composes, so the mapping is
  * exact rather than approximate. `opacity` is returned separately because some layers already
  * carry one (a chained video fade) and the two multiply.
  */
@@ -72,12 +74,28 @@ function tweenAt(
   dims: Dims,
 ): { transform: LayerSpec["transform"]; opacity: number } | null {
   if (!keyframes?.length) return null;
-  const p = paramsAt({ x: 0, y: 0, scale: 1, opacity: 1 }, keyframes, tSec);
+  const p = paramsAt(
+    { x: 0, y: 0, scale: 1, opacity: 1, rotate: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5 },
+    keyframes,
+    tSec,
+  );
+  // Emit the new channels ONLY when a track actually moves them. modelMatrix reads them as
+  // `?? 1` / `?? 0.5`, so omitting a default is identical in pixels — and it keeps the transform
+  // object shape-identical to the inline literals cameraAt builds, which layers-tweens.test.ts
+  // compares against directly. It also avoids allocating an anchor pair per layer per frame for
+  // the overwhelmingly common case where nobody set one.
+  const scaleX = num(p.scaleX, 1);
+  const scaleY = num(p.scaleY, 1);
+  const anchorX = num(p.anchorX, 0.5);
+  const anchorY = num(p.anchorY, 0.5);
   return {
     transform: {
       scale: num(p.scale, 1),
-      rotate: 0,
+      rotate: num(p.rotate, 0),
       translate: [(num(p.x, 0) / 100) * dims.width, (num(p.y, 0) / 100) * dims.height],
+      ...(scaleX !== 1 ? { scaleX } : {}),
+      ...(scaleY !== 1 ? { scaleY } : {}),
+      ...(anchorX !== 0.5 || anchorY !== 0.5 ? { anchor: [anchorX, anchorY] as [number, number] } : {}),
     },
     opacity: num(p.opacity, 1),
   };
@@ -200,6 +218,10 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const local = frame - from;
     if (local < 0 || local >= seqDur) return;
 
+    // One resolution per beat, shared by every layer this beat emits. Beat-local seconds, matching
+    // zoomKeyframes/captionKeyframes — see docs/spec-reference.md.
+    const beatEffects = resolveEffects(s.effects, local / props.fps);
+
     // A chained successor fades in over the overlap its predecessor is held through.
     const prev = props.segments[i - 1];
     const fadesIn = prev?.kind === "video";
@@ -223,7 +245,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
         source: { providerId: `overlay${i}`, key: String(local) },
         rect: full,
         opacity,
-        effects: s.effects,
+        effects: beatEffects,
         group: beat,
       });
     }
@@ -252,7 +274,9 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const zoom = tweenAt(s.zoomKeyframes, local / props.fps, dims);
     const segTransform = cameraAt(local);
     const groupOpacity = opacity * (zoom?.opacity ?? 1);
-    const segEffects = autoMotionBlur(s.effects, segTransform, cameraAt(local - 1));
+    // Resolving BEFORE autoMotionBlur means a keyframed `shutter`/`samples` feeds the derivation,
+    // while the three channels auto computes from measured travel still win over any keyframe.
+    const segEffects = autoMotionBlur(beatEffects, segTransform, cameraAt(local - 1));
     // The chrome rides the same camera, so it smears with the footage — a sharp bezel around a
     // blurred screen reads as a compositing mistake. Only the blur carries over, never the rest
     // of the beat's chain, which was authored for the footage.
@@ -299,6 +323,9 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       : 1;
     // Freeze --progress at end of authored beat while held into the handoff.
     const beatLocal = Math.min(local, h.beatDur - 1);
+    // Effect keyframes ride the same frozen clock as the graphic's own --progress, so a held
+    // beat's effects settle with it instead of continuing to tween through the handoff.
+    const beatEffects = resolveEffects(s.effects, beatLocal / props.fps);
     const beat = `beat${i}`;
     const segMask = (s as any).mask;
     if (isTextBehindSubject(segMask, i) && s.motionOverlay) {
@@ -308,7 +335,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
         source: { providerId: `overlay${i}`, key: String(beatLocal) },
         rect: full,
         opacity,
-        effects: s.effects,
+        effects: beatEffects,
         group: beat,
       });
     }
@@ -319,7 +346,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       rect: full,
       opacity,
       mask: motionMask(segMask, `motion${i}`),
-      effects: s.effects,
+      effects: beatEffects,
       blend: s.blend,
       group: beat,
     });
@@ -334,6 +361,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const dur = f(s.endSec) - from;
     const local = frame - from;
     if (local < 0 || local >= dur) return;
+    const beatEffects = resolveEffects(s.effects, local / props.fps);
     const beat = `beat${i}`;
     out.push({
       id: `overlay${i}`,
@@ -341,13 +369,16 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       source: { providerId: `overlay${i}`, key: String(local) },
       rect: full,
       mask: (s as any).mask,
-      effects: s.effects,
+      effects: beatEffects,
       group: beat,
     });
   });
 
   // 7. Standalone text overlays (spec `texts[]`), absolute-timed.
   props.segments.forEach((s, i) => {
+    // A text overlay is absolute-timed, but the fallback `effects` it inherits belong to the BEAT,
+    // so they resolve on the beat's clock. A text's own `effects` carry no track of their own.
+    const beatEffects = resolveEffects(s.effects, (frame - f(s.startSec)) / props.fps);
     s.texts?.forEach((t, j) => {
       const from = f(t.fromSec);
       const to = "durSec" in t ? f(t.fromSec + (t as any).durSec) : f((t as any).toSec);
@@ -358,7 +389,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
         source: { providerId: `text${i}_${j}` },
         rect: full,
         mask: (t as any).mask ?? (s as any).mask,
-        effects: (t as any).effects ?? s.effects,
+        effects: (t as any).effects ?? beatEffects,
         group: `beat${i}`,
       });
     });
@@ -372,6 +403,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const local = frame - from;
     if (local < 0 || local >= dur) return;
     if (!hasCaptionContent(s)) return;
+    const beatEffects = resolveEffects(s.effects, local / props.fps);
 
     let key = "phrase";
     if (s.captionMode === "words" && s.words?.length) {
@@ -387,7 +419,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       source: { providerId: `caption${i}`, key },
       rect: full,
       mask: (s as any).mask,
-      effects: s.effects,
+      effects: beatEffects,
       group: `beat${i}`,
       transform: tween?.transform,
       opacity: tween?.opacity,
@@ -408,7 +440,10 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   // sort rather than by this position in the function.
   for (const d of props.layers ?? []) {
     if (d.adjust?.length) {
-      out.push({ id: d.id, z: d.z, source: null, rect: full, adjust: d.adjust });
+      // An adjustment layer spans the whole accumulator — validateLayers rejects fromSec/toSec/
+      // segment on one (ADJUST_INCOMPATIBLE_FIELDS), so its own start IS the composition's and
+      // its keyframe clock is absolute.
+      out.push({ id: d.id, z: d.z, source: null, rect: full, adjust: resolveEffects(d.adjust, frame / props.fps) });
       continue;
     }
     // A segment binding borrows that beat's window; `hold` keeps the layer out of the beat's
@@ -443,7 +478,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       opacity: (d.opacity ?? 1) * (tween?.opacity ?? 1),
       transform: tween?.transform,
       mask: d.mask as LayerSpec["mask"],
-      effects: d.effects,
+      effects: resolveEffects(d.effects, localFrame / props.fps),
       group: bound && !d.hold ? `beat${d.segment}` : undefined,
     });
   }

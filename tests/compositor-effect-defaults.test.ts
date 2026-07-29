@@ -120,3 +120,42 @@ describe("motionBlur radial term", () => {
     expect(b.got.uRadial).toBe(0);
   });
 });
+
+describe("blur focal region defaults to off", () => {
+  it("focusRadius 0 is the gate — a bare blur is spatially uniform", () => {
+    const { gl, loc, got } = capture();
+    blurPass.uniforms(gl, loc, { radius: 12 }, 0);
+    expect(got.uFocusRadius).toBe(0);
+  });
+
+  it("centres the focal region and feathers it over 0.35 of frame height", () => {
+    const { gl, loc, got } = capture();
+    blurPass.uniforms(gl, loc, { radius: 12, focusRadius: 0.2 }, 0);
+    expect(got.uFocusX).toBeCloseTo(0.5, 5);
+    expect(got.uFocusY).toBeCloseTo(0.5, 5);
+    expect(got.uFocusFeather).toBeCloseTo(0.35, 5);
+    expect(got.uFalloff).toBeCloseTo(1, 5);
+  });
+
+  it("radial is mode 0 and band is mode 1", () => {
+    const radial = capture();
+    blurPass.uniforms(radial.gl, radial.loc, { focusRadius: 0.2 }, 0);
+    expect(radial.got.uFocusMode).toBe(0);
+
+    const band = capture();
+    blurPass.uniforms(band.gl, band.loc, { focusRadius: 0.2, focusMode: "band" }, 0);
+    expect(band.got.uFocusMode).toBe(1);
+  });
+
+  it("an unknown focusMode falls back to radial rather than to garbage", () => {
+    const { gl, loc, got } = capture();
+    blurPass.uniforms(gl, loc, { focusRadius: 0.2, focusMode: "sideways" }, 0);
+    expect(got.uFocusMode).toBe(0);
+  });
+
+  it("converts focusAngle from degrees to radians", () => {
+    const { gl, loc, got } = capture();
+    blurPass.uniforms(gl, loc, { focusRadius: 0.2, focusMode: "band", focusAngle: 90 }, 0);
+    expect(got.uFocusAngle).toBeCloseTo(Math.PI / 2, 5);
+  });
+});

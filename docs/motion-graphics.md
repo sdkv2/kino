@@ -305,7 +305,7 @@ Reference: `projects/compositor-demo/assets/motion/liquid-glass-stack.html` + be
 }
 ```
 
-Preview: `kino still projects/compositor-demo/specs/glass-refraction-demos.json --beat 5 --around 2` or build beat 5 with `--draft --no-tts`.
+Preview: `kino still projects/compositor-demo/specs/glass-refraction-demos.json --beat 5 --around 2` or build beat 5 with `--draft`.
 
 ## Gradient-clipped text (`kino-cliptext`)
 

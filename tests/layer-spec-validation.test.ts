@@ -182,3 +182,35 @@ describe("validateLayers", () => {
     });
   });
 });
+
+describe("effect keyframe validation on declared layers", () => {
+  // An adjustment layer carries no source — ADJUST_INCOMPATIBLE_FIELDS rejects the combination.
+  const adjustLayer = (adjust: unknown[]) => ({ id: "grade", z: 650, adjust });
+
+  it("names the layer and the effect index", () => {
+    const errs = validateLayers(
+      [{ ...ok, effects: [{ kind: "blur", params: {}, keyframes: [{ at: -3, params: { radius: 1 } }] }] }],
+      1,
+    );
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toContain("effects[0].keyframes[0].at");
+  });
+
+  it("validates an adjust track too", () => {
+    const errs = validateLayers(
+      [adjustLayer([{ kind: "grade", params: {}, keyframes: [{ at: 1, params: "nope" }] }])],
+      1,
+    );
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toContain("adjust[0].keyframes[0].params");
+  });
+
+  it("still accepts a film adjust entry with a keyframe track", () => {
+    expect(
+      validateLayers(
+        [adjustLayer([{ kind: "film", params: { intensity: 1 }, keyframes: [{ at: 1, params: { intensity: 0.5 } }] }])],
+        1,
+      ),
+    ).toEqual([]);
+  });
+});

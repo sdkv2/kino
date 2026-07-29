@@ -25,6 +25,25 @@ describe("blur", () => {
     const [atEdge] = await probe("blur", { radius: 0 });
     expect(atEdge === 0 || atEdge === 255).toBe(true);
   }, 300000);
+
+  it("keeps the edge hard when the focal region covers it", async () => {
+    // The hard edge runs down the middle of the fixture, so a focal region centred there and wide
+    // enough to reach the probe pixel should leave it as sharp as radius 0 did.
+    const [atEdge] = await probe("blur", { radius: 8, focusRadius: 0.6, focusFeather: 0.1 });
+    expect(atEdge).toBeLessThan(10);
+  }, 300000);
+
+  it("still blurs the edge when the focal region is far from it", async () => {
+    const [atEdge] = await probe("blur", { radius: 8, focusX: 0.05, focusY: 0.05, focusRadius: 0.05, focusFeather: 0.1 });
+    expect(atEdge).toBeGreaterThan(10);
+    expect(atEdge).toBeLessThan(245);
+  }, 300000);
+
+  it("focusRadius 0 is indistinguishable from a plain blur", async () => {
+    const [plain] = await probe("blur", { radius: 8 });
+    const [gated] = await probe("blur", { radius: 8, focusRadius: 0, focusX: 0.1, focusY: 0.9 });
+    expect(gated).toBeCloseTo(plain, 5);
+  }, 300000);
 });
 
 describe("grade", () => {

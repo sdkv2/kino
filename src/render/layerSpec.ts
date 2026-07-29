@@ -7,7 +7,7 @@
 // never gain a value import back from this module — RESERVED_Z runs `Object.values(Z)` at module
 // top level, so a cycle would hit a temporal-dead-zone error at load. Keep the dependency one-way.
 import { Z } from "./layers.js";
-import { validateMask, EFFECT_KINDS, type LayerEffect, type LayerMask } from "./maskSpec.js";
+import { validateMask, validateEffectKeyframes, validateEffectParams, EFFECT_KINDS, type LayerEffect, type LayerMask } from "./maskSpec.js";
 // Type-only, so it can't participate in the layers.js value-import cycle warned about above:
 // MotionGraphicProps is only used to shape the `graphic` resolved field below.
 import type { BgKeyframe, MotionGraphicProps } from "./props.js";
@@ -190,13 +190,17 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
     // in EFFECT_KINDS — that list is the per-layer effect passes, and film is a distinct
     // full-frame-grade concept validated by its own postFx range checks (postSpec.ts). It is
     // allowed here as an explicit exception rather than folded into EFFECT_KINDS.
-    for (const e of l.adjust ?? []) {
+    for (const [j, e] of (l.adjust ?? []).entries()) {
       if (!(EFFECT_KINDS as readonly string[]).includes(e.kind) && (e.kind as string) !== "film") {
         errs.push(at(`unknown adjust kind: ${String(e.kind)}`));
       }
+      errs.push(...validateEffectKeyframes(e, `adjust[${j}]`).map(at));
+      errs.push(...validateEffectParams(e, `adjust[${j}]`).map(at));
     }
-    for (const e of l.effects ?? []) {
+    for (const [j, e] of (l.effects ?? []).entries()) {
       if (!(EFFECT_KINDS as readonly string[]).includes(e.kind)) errs.push(at(`unknown effect kind: ${String(e.kind)}`));
+      errs.push(...validateEffectKeyframes(e, `effects[${j}]`).map(at));
+      errs.push(...validateEffectParams(e, `effects[${j}]`).map(at));
     }
 
     if (l.blend !== undefined && !(BLEND_MODES as readonly string[]).includes(l.blend)) {

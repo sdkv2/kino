@@ -83,7 +83,7 @@ export async function ttsWithTimestamps(
 
 // --mock / silent timestamps: evenly spaced fake word timings over a silent clip. With no
 // `durSec`, the clip is paced at 0.38s/word (the default estimate). Pass `durSec` (a segment's
-// `dur`) to force an exact beat length — words spread evenly across it — for silent/no-tts beats
+// `dur`) to force an exact beat length — words spread evenly across it — for silent beats
 // that must hit a fixed duration (art films, music-locked motion) rather than a word estimate.
 export async function ttsMockWithTimestamps(text: string, out: string, durSec?: number): Promise<WordTiming[]> {
   const words = text.trim().split(/\s+/).filter(Boolean);

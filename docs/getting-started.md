@@ -90,8 +90,9 @@ The render loop is built for tight iteration — every preview step is free:
 kino inspect  projects/acme/specs/lie-test.json            # resolved plan (beats, timings) as JSON
 kino still    projects/acme/specs/lie-test.json --segment 0 # one frame, fast, free (mock by default)
 kino storyboard projects/acme/specs/lie-test.json           # one still per beat, tiled into a labeled contact sheet
-kino build    projects/acme/specs/lie-test.json --mock      # full structural render, silent VO, $0
-kino build    projects/acme/specs/lie-test.json             # real render → projects/acme/out/lie-test/lie-test-9x16.mp4
+kino build    projects/acme/specs/lie-test.json --draft     # 720p structural render, silent, $0
+kino build    projects/acme/specs/lie-test.json             # FULL-quality silent render, still $0 → projects/acme/out/lie-test/lie-test-9x16.mp4
+kino build    projects/acme/specs/lie-test.json --tts       # add real voiceover (the only flag that spends)
 ```
 
 Typical loop: **map beats → preview a beat → edit the spec → re-preview → `build`**. Use `kino inspect` to read per-word VO timings when you need to sync animations (background tweens, motion-graphic keyframes) to the voiceover.

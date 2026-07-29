@@ -1,7 +1,8 @@
 # kino reference
 
 ## Commands
-- `kino build <spec> [--mock] [--format 9:16,3:4] [--provider <p>] [--background <kind>] [--tag <label>]`
+- `kino build <spec> [--tts] [--draft] [--no-avatar] [--format 9:16,3:4] [--provider <p>] [--background <kind>] [--tag <label>]`
+  — silent + full quality + free by default; `--tts` is the only flag that spends.
 - `kino inspect <spec> [--real]` — resolved plan as JSON: beats, timings, modes + per-segment **word timestamps**
 - `kino backgrounds` — list animated backgrounds + their agent-controllable params/actions
 - `kino elements` — list overlay elements (logo …) + their layout/tween controls
