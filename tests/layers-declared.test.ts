@@ -91,4 +91,47 @@ describe("declared layers", () => {
     const ids = layersAt(p, 30, DIMS).map((l) => l.id).filter((id) => id === "a" || id === "b");
     expect(ids).toEqual(["a", "b"]);
   });
+
+  // §11b's first branch: a declared layer with an `adjust` chain and no source. It applies to
+  // everything composited beneath it, so it has none of the rect/window/group machinery below —
+  // the `continue` skips straight past all of it.
+  describe("adjustment layer branch", () => {
+    const grade = { id: "grade", z: 500, adjust: [{ kind: "grade" as const, params: { contrast: 1.2 } }] };
+
+    it("is emitted with source: null and its adjust chain intact", () => {
+      const l = layersAt(mk(beats, { layers: [grade] }), 30, DIMS).find((x) => x.id === "grade")!;
+      expect(l.source).toBeNull();
+      expect(l.adjust).toEqual(grade.adjust);
+    });
+
+    it("sorts into the stack at its own z, between two content layers", () => {
+      const before = { ...leak, id: "before", z: 300 };
+      const after = { ...leak, id: "after", z: 700 };
+      const p = mk(beats, { layers: [before, grade, after] });
+      const ids = layersAt(p, 30, DIMS)
+        .map((l) => l.id)
+        .filter((id) => id === "before" || id === "grade" || id === "after");
+      expect(ids).toEqual(["before", "grade", "after"]);
+    });
+
+    // Current behaviour, read straight off the code: the `d.adjust?.length` check and its
+    // `continue` come before the fromSec/toSec/segment window is even looked at, so an
+    // adjustment layer paints on every frame of the whole composition no matter what window
+    // fields it carries. `validateLayers` does not reject fromSec/toSec/segment alongside
+    // `adjust`, so a spec author CAN write one of these on an adjustment layer — it will just be
+    // silently ignored at render time. That silent accept-then-ignore looks like a defect to me
+    // (either the fields should work, or authoring them on an adjust layer should be a validation
+    // error), not a deliberate design choice, but this task is coverage, not redesign: asserting
+    // the current behaviour here so a future change to it is a deliberate decision, not a fluke.
+    it("is emitted regardless of fromSec/toSec/segment", () => {
+      const windowed = { ...grade, fromSec: 1, toSec: 2, segment: 1 };
+      const p = mk(beats, { layers: [windowed] });
+      // Before its own fromSec (1s = frame 30) and before segment 1 even starts (2s = frame 60).
+      expect(layersAt(p, 0, DIMS).some((l) => l.id === "grade")).toBe(true);
+      // Inside the declared window.
+      expect(layersAt(p, 45, DIMS).some((l) => l.id === "grade")).toBe(true);
+      // After its own toSec (2s = frame 60) — a normal declared layer would have dropped out.
+      expect(layersAt(p, 90, DIMS).some((l) => l.id === "grade")).toBe(true);
+    });
+  });
 });
