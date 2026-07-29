@@ -212,6 +212,13 @@ this is the pulse on that noun. Motion may not say “look at me” with no caus
 Weight: big windows and full-bleed washes move slower than carets and chips. Elastic/bounce is a
 rare brand joke, not a default on every pulse.
 
+**Focus and anchor are motion too.** A `blur` with `focusRadius` keyframed across the beat is a
+rack focus — attention moving without the camera moving. An `anchorX`/`anchorY` away from `0.5`
+makes a scale-up grow *toward* something instead of ballooning from the middle: anchor a card at
+the edge it is docked to, anchor a hero numeral at its baseline. Both read as intent; a centred
+uniform scale reads as a default. Neither is free — one focal move per beat, same budget as camera.
+Spec surface: `docs/spec-reference.md` § Timed effects / blur focal region / Tween channels.
+
 Stagger only when order must be understood (pipeline steps, chip list synced to VO). Uniform
 mechanical delays feel generated — vary slightly or drive from word starts.
 

@@ -8,7 +8,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Segments](#segments) — [scene](#scene-segment) · [video](#video-segment) · [motion](#motion-segment)
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
-- [Masks and effects](#masks-and-effects)
+- [Masks and effects](#masks-and-effects) — [timed effects](#timed-effects) · [blur focal region](#blur-focal-region) · [tween channels](#tween-channels)
 - [Layers](#layers) — [source kinds](#source-kinds) · [z scale](#z-scale) · [adjustment layers](#adjustment-layers)
 - [Post FX](#post-fx)
 - [Keyframes & triggers](#keyframes--triggers)
@@ -80,7 +80,7 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 | `shot` | [Shot](#enums) | — | Camera move. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Words to emphasise in `words` mode. |
-| `captionKeyframes` | BgKeyframe[] | — | Tween the caption (`x/y/scale/opacity`). |
+| `captionKeyframes` | BgKeyframe[] | — | Tween the caption — see [Tween channels](#tween-channels). |
 | `motionOverlay` | [MotionRef](#motion-segment) | — | Layer a motion graphic over this beat. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
@@ -108,9 +108,9 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `frame` | `{ src, inset: { x,y,w,h } }` | — | Chrome overlay: footage in `inset` (% of composition); `src` is full-bleed PNG/WebP on top. `x+w` and `y+h` ≤ 100. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Emphasised words (`words` mode). |
-| `captionKeyframes` | BgKeyframe[] | — | Tween the caption. |
-| `kickerKeyframes` | BgKeyframe[] | — | Tween the kicker. |
-| `zoomKeyframes` | BgKeyframe[] | — | Camera push/pan on the whole footage+chrome group (canvas zoom for inset device footage); beat-relative track like `captionKeyframes` — `at` is seconds from this segment's start, so it rides the beat when VO timing shifts (params `x/y/scale/opacity`). |
+| `captionKeyframes` | BgKeyframe[] | — | Tween the caption — see [Tween channels](#tween-channels). |
+| `kickerKeyframes` | BgKeyframe[] | — | Tween the kicker — see [Tween channels](#tween-channels). |
+| `zoomKeyframes` | BgKeyframe[] | — | Camera push/pan on the whole footage+chrome group (canvas zoom for inset device footage); beat-relative track like `captionKeyframes` — `at` is seconds from this segment's start, so it rides the beat when VO timing shifts (see [Tween channels](#tween-channels)). |
 | `motionOverlay` | [MotionRef](#motion-segment) | — | Layer a motion graphic over this beat. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
@@ -140,7 +140,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `triggers` | MotionTrigger[] | — | One-shot `pulse` envelopes (`--pulse`). Same `at` / `atWord` anchoring as keyframes. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Emphasised words (`words` mode). |
-| `captionKeyframes` | BgKeyframe[] | — | Tween the caption. |
+| `captionKeyframes` | BgKeyframe[] | — | Tween the caption — see [Tween channels](#tween-channels). |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
@@ -227,6 +227,71 @@ This includes targets outside their active beat window.
 ]
 ```
 
+### Timed effects
+
+Each effect takes an optional `keyframes` track that tweens its own params over time, using the
+same `{ at, params, ease? }` shape as every other keyframe track. Base `params` act as an implicit
+t=0 keyframe, so a lone keyframe tweens from the authored base:
+
+```jsonc
+"effects": [{
+  "kind": "blur",
+  "params": { "radius": 0, "focusRadius": 0.15 },
+  "keyframes": [{ "at": 1.2, "params": { "focusRadius": 0.9 }, "ease": "easeOutQuart" }]
+}]
+```
+
+`at` is relative to the effect's owner — the beat's start for a segment's `effects`, the layer's
+own start for a declared layer's `effects`, and the composition start for an `adjust` chain (an
+adjustment layer always spans the whole accumulator). On a `motionBlur` effect with `auto`,
+`angle`/`distance`/`radial` are still derived from measured layer travel and a keyframe on them is
+overridden; keyframe `shutter` or `samples` instead.
+
+### `blur` focal region
+
+`blur` is spatially uniform until `focusRadius` is set above `0`, which turns on a focal region:
+sharp inside, ramping to the full `radius` outside. Distances are in units of frame **height**,
+with x aspect-corrected so a radial region is a circle rather than an ellipse.
+
+| Param | Meaning | Default |
+|---|---|---|
+| `radius` | maximum blur, at full defocus | `0` |
+| `focusX` / `focusY` | focal centre, 0–1 of the frame (`focusY` measured from the top) | `0.5` |
+| `focusRadius` | radius of the fully sharp region — **`0` disables the focal region entirely** | `0` |
+| `focusFeather` | distance over which sharp ramps to full blur | `0.35` |
+| `falloff` | exponent shaping that ramp; `>1` holds sharpness longer, then falls faster | `1` |
+| `focusMode` | `radial` or `band` (tilt-shift) | `radial` |
+| `focusAngle` | band orientation in degrees, `band` mode only (`0` = horizontal band) | `0` |
+
+Keyframe `focusRadius` (or `focusX`/`focusY`) for a rack focus. Sharpness bleeds slightly outward
+across the focal boundary — taps in the blurred region still reach into the sharp one. That is
+inherent to a 2D depth-of-field stand-in and is not visible at the radii layer effects use.
+
+### Tween channels
+
+`captionKeyframes`, `kickerKeyframes`, `zoomKeyframes` and a declared layer's own `keyframes` all
+drive one transform, so they share a channel set:
+
+| Channel | Unit | Default |
+|---|---|---|
+| `x` / `y` | percent of frame | `0` |
+| `scale` | multiplier, about the anchor | `1` |
+| `scaleX` / `scaleY` | per-axis multipliers on top of `scale` | `1` |
+| `rotate` | degrees, clockwise, about the anchor | `0` |
+| `anchorX` / `anchorY` | the fixed point of scale and rotation, as a fraction of the layer rect — `0` top-left, `0.5` centre, `1` bottom-right | `0.5` |
+| `opacity` | `0`–`1` | `1` |
+
+An anchor away from `0.5` is what makes a scale-up grow *toward* something rather than ballooning
+from the middle. Values outside `0..1` are legal — an anchor beyond the rect is a valid pivot.
+
+```jsonc
+// A card that grows from the edge it is docked to, tilting slightly as it lands.
+"keyframes": [
+  { "at": 0,   "params": { "scale": 0.9, "rotate": -3, "anchorX": 0, "anchorY": 1 } },
+  { "at": 1.2, "params": { "scale": 1,   "rotate": 0 }, "ease": "easeOutQuart" }
+]
+```
+
 `blend` — one of `normal` (default), `screen`, `multiply`, `add` — sets how a beat's own content
 layer composites against whatever is beneath it; declared layers share the same vocabulary (see
 [Layers](#layers)). It applies to a `video` beat's footage and a `motion` beat's graphic; a `scene`
@@ -267,7 +332,7 @@ sits in the array.
 | `opacity` | number 0–1 | — | Default `1`. |
 | `mask` | mask | — | Same mask model as segments — see [Masks and effects](#masks-and-effects). |
 | `effects` | effect[] | — | Same effect chain as segments, run before compositing — see [Masks and effects](#masks-and-effects). |
-| `keyframes` | BgKeyframe[] | — | Tweens the layer's own `x`/`y` (% of frame), `scale`, `opacity` — the same idiom as `captionKeyframes`/`kickerKeyframes`. `at` is relative to the layer's own start (its `fromSec`, or its bound segment's `startSec`), not absolute like `backgroundKeyframes`. |
+| `keyframes` | BgKeyframe[] | — | Tweens the layer's own transform — see [Tween channels](#tween-channels) for the full list. `at` is relative to the layer's own start (its `fromSec`, or its bound segment's `startSec`), not absolute like `backgroundKeyframes`. |
 
 Exactly one of `source`/`adjust` is required. Every field below `adjust` in the table above is
 rejected on an adjustment layer — see [Adjustment layers](#adjustment-layers) for why.
