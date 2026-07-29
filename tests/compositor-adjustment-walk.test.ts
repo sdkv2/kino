@@ -4,12 +4,27 @@
 // render target it acquires, on the transition path as well as the plain one.
 import { describe, it, expect, afterAll } from "vitest";
 import { glProbe, closeGlHost } from "./helpers/glHost.js";
+import { groupSpans, transitionProgress } from "../src/render/transitionSpec.js";
+import type { KinoProps } from "../src/render/props.js";
 
 afterAll(closeGlHost);
 
 const ENTRY = "src/render/native/page/compositor/renderer.ts";
 const GLOBAL = "KinoRenderer";
 const HTML = `<!doctype html><body style="margin:0"><canvas id="c" width="200" height="200"></canvas></body>`;
+const FRAME_UNDER_TEST = 66;
+
+// Mirrors the `props.segments`/`fps` built inside walk()'s glProbe fn. That fn is serialised via
+// toString() and cannot close over anything in this file (see glHost.ts), so the transition
+// timing is re-derived here, at the Node side, from the same two-beat shape — purely to assert
+// this test's own premise, not to duplicate the GL probe itself.
+const TRANSITION_PROPS = {
+  fps: 30,
+  segments: [
+    { kind: "video", source: "a.mp4", caption: "a", startSec: 0, endSec: 2, transition: "cut" },
+    { kind: "video", source: "b.mp4", caption: "b", startSec: 2, endSec: 4, transition: "fade" },
+  ],
+} as unknown as KinoProps;
 
 interface WalkProbe {
   /** Canvas corner and centre luma at the crossfade midpoint, with the finish on and off. */
@@ -18,6 +33,12 @@ interface WalkProbe {
   /** Targets the pool had ever allocated, after warm-up and after many more frames. */
   poolAfterWarmup: number;
   poolAfterMany: number;
+  /** Free-list entries after the "many" pass, and how many of those entries are distinct
+   *  objects. A double-release pushes the same target onto a free bucket twice — `all.length`
+   *  does not move (acquire() was never called again), but the free list gains a duplicate
+   *  reference, so these two counts diverge. */
+  freeListLength: number;
+  freeListUniqueLength: number;
 }
 
 /**
@@ -131,13 +152,32 @@ async function walk(): Promise<WalkProbe> {
       for (let i = 0; i < 12; i++) for (const f of [10, 66, 100]) { sample(1, f); sample(0, f); }
       const poolAfterMany = pool.all.length;
 
-      return { filmOn, filmOff, poolAfterWarmup, poolAfterMany };
+      // Duplicate watch. `all.length` only grows on an `acquire()` cache miss, so a double
+      // `release()` of the same target is invisible to it — the target just gets pushed onto
+      // its size bucket in the free list twice. Flatten every bucket and compare the entry
+      // count against a Set's size: a duplicate object reference collapses in the Set but not
+      // in the array, so the two counts diverge exactly when a double-release has happened.
+      const freeEntries: unknown[] = [];
+      for (const bucket of pool.free.values()) freeEntries.push(...bucket);
+      const freeListLength = freeEntries.length;
+      const freeListUniqueLength = new Set(freeEntries).size;
+
+      return { filmOn, filmOff, poolAfterWarmup, poolAfterMany, freeListLength, freeListUniqueLength };
     },
   });
 }
 
 describe("the ordered walk", () => {
   it("applies the film adjustment to a transitioning beat, which the old order could not", async () => {
+    // Pin the test's own premise: frame 66 must actually be mid-transition, or the assertions
+    // below would pass just as well on a plain, non-transitioning frame and silently stop
+    // testing what this test is named for.
+    const win = transitionProgress({ groups: groupSpans(TRANSITION_PROPS), frame: FRAME_UNDER_TEST });
+    expect(win).not.toBeNull();
+    expect(win?.from).toBe("beat0");
+    expect(win?.to).toBe("beat1");
+    expect(win?.p).toBeCloseTo(0.5, 5);
+
     const p = await walk();
     // With the finish off the frame is flat: the mixed footage is one solid white either way.
     expect(p.filmOff.corner).toBe(p.filmOff.centre);
@@ -151,5 +191,9 @@ describe("the ordered walk", () => {
     const p = await walk();
     expect(p.poolAfterWarmup).toBeGreaterThan(0);
     expect(p.poolAfterMany).toBe(p.poolAfterWarmup);
+    // A double-release (handing one target to two later acquires — a use-after-free) would
+    // make `all.length` grow MORE slowly, so the assertion above could pass while masking it.
+    // Catch that direction too: the free list must never hold the same target twice.
+    expect(p.freeListUniqueLength).toBe(p.freeListLength);
   }, 120000);
 });
