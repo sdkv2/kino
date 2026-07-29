@@ -63,9 +63,23 @@ class GlHost {
       if (process.platform === "win32") {
         // Electron closes piped stdin immediately on Windows, so commands go over TCP instead —
         // the same split src/render/native/electron/slots.ts makes for the render host.
+        //
+        // Boot is TWO independent events here: the child announces itself on stdout, and it dials
+        // back on TCP. They can land in either order, and `send()` writes to `this.cmd` the moment
+        // `booted` resolves — so resolving on the stdout line alone raced the socket and threw
+        // "Cannot read properties of null (reading 'write')" on every probe when ready won. Wait
+        // for both. (The stdin path below has no such race: the pipe exists as soon as spawn
+        // returns.)
+        let ready = false;
+        let connected = false;
+        const readyWhenBothLand = () => {
+          if (ready && connected) afterReady();
+        };
         const server = createServer((sock: Socket) => {
           this.cmd = sock;
+          connected = true;
           server.close();
+          readyWhenBothLand();
         });
         server.once("error", fail);
         server.listen(0, "127.0.0.1", () => {
@@ -74,7 +88,14 @@ class GlHost {
             fail(new Error("GL host cmd server failed to bind"));
             return;
           }
-          this.spawnChild({ KINO_GLHOST_CMD_PORT: String(addr.port) }, afterReady, fail);
+          this.spawnChild(
+            { KINO_GLHOST_CMD_PORT: String(addr.port) },
+            () => {
+              ready = true;
+              readyWhenBothLand();
+            },
+            fail,
+          );
         });
       } else {
         this.spawnChild({}, afterReady, fail);
