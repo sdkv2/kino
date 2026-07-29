@@ -16,12 +16,15 @@ jobs:
     # full 3×2 matrix, every job full scope.
     name: test (${{ matrix.os }}, node ${{ matrix.node }}${{ github.event_name == 'pull_request' && matrix.os != 'ubuntu-latest' && ', light' || '' }})
     runs-on: ${{ matrix.os }}
-    if: github.event_name != 'pull_request' || matrix.node == 22
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: [22, 24]
+        # The node axis is narrowed here rather than by a job-level `if`. `jobs.<job_id>.if`
+        # accepts only the github/needs/vars/inputs contexts — NOT matrix — so `if: … ||
+        # matrix.node == 22` made the whole file invalid and every run failed at startup with
+        # zero jobs. `jobs.<job_id>.strategy` does take `github`, so the same rule belongs here.
+        node: ${{ github.event_name == 'pull_request' && fromJSON('[22]') || fromJSON('[22, 24]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
