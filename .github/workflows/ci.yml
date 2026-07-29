@@ -120,3 +120,18 @@ jobs:
           KINO_TEST_SCOPE: ${{ github.event_name == 'pull_request' && matrix.os != 'ubuntu-latest' && 'light' || '' }}
       # CLI smoke test: verifies compiled dist/ actually boots on this OS/node
       - run: node bin/kino.mjs --version
+
+  # TEMPORARY diagnostic job — remove with scripts/osr-size-probe.*. tests/format-4k-parity gets a
+  # 1024x720 PNG out of a 2160x3840 render on windows-latest and nowhere else; this reports what
+  # size the offscreen window actually ends up at there, and which BrowserWindow config avoids it.
+  win-osr-probe:
+    name: probe (windows OSR window size)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --allow-git=all
+      - run: node scripts/osr-size-probe.mjs
