@@ -3,6 +3,7 @@
 // a silently empty layer.
 import { SDF_MAX_PX } from "./sdf.js";
 import type { ShapeMask } from "./shapes.js";
+import { BLEND_MODES } from "./blendModes.js";
 
 export type MaskChannel = "r" | "g" | "b" | "a" | "luma";
 
@@ -72,12 +73,6 @@ export interface LayerEffect {
   params: Record<string, number | string>;
 }
 
-// Mirrors BLEND_MODES in layerSpec.ts (segment `blend` and declared-layer `blend` share one
-// vocabulary). Not imported: layerSpec.ts value-imports EFFECT_KINDS/validateMask from THIS
-// module, so importing BLEND_MODES back from layerSpec.ts would be a cycle. Duplicated on
-// purpose — keep the two lists in sync if a blend mode is ever added.
-const SEGMENT_BLEND_MODES = ["normal", "screen", "multiply", "add"] as const;
-
 /** Validate the mask, effects and blend on one beat. `index` is the beat's position, so a
  *  message points at the thing the author has to edit. */
 export function validateSegmentFx(seg: unknown, index: number): string[] {
@@ -87,8 +82,8 @@ export function validateSegmentFx(seg: unknown, index: number): string[] {
 
   if (s.mask !== undefined) errs.push(...validateMask(s.mask).map(at));
 
-  if (s.blend !== undefined && !(SEGMENT_BLEND_MODES as readonly string[]).includes(s.blend as string)) {
-    errs.push(at(`blend must be one of ${SEGMENT_BLEND_MODES.join(", ")}`));
+  if (s.blend !== undefined && !(BLEND_MODES as readonly string[]).includes(s.blend as string)) {
+    errs.push(at(`blend must be one of ${BLEND_MODES.join(", ")}`));
   }
 
   if (s.effects !== undefined) {

@@ -10,6 +10,7 @@ import { Z } from "./layers.js";
 import { validateMask, EFFECT_KINDS, type LayerEffect, type LayerMask } from "./maskSpec.js";
 import type { BgKeyframe } from "./props.js";
 import type { BlendMode } from "./native/page/compositor/graph.js";
+import { BLEND_MODES } from "./blendModes.js";
 
 export const LAYER_SOURCE_KINDS = ["image", "motion", "shader", "video", "lottie"] as const;
 export type LayerSourceKind = (typeof LAYER_SOURCE_KINDS)[number];
@@ -18,7 +19,9 @@ export type LayerSourceKind = (typeof LAYER_SOURCE_KINDS)[number];
 // identical unions in two modules is exactly how they drift apart when one gains a mode. A bare
 // `export type { X } from "mod"` re-exports X but does not bind it locally (it's an "export …
 // from" re-export, no local name introduced), so this imports it first, same as Dims in layers.ts.
-export const BLEND_MODES = ["normal", "screen", "multiply", "add"] as const;
+// BLEND_MODES itself now lives in blendModes.ts (shared with maskSpec.ts's segment validator);
+// re-exported here since nothing outside this module needs to know it moved.
+export { BLEND_MODES };
 export type { BlendMode };
 
 export interface DeclaredLayerSource {
