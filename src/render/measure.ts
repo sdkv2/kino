@@ -19,7 +19,12 @@ export interface ElementMeasure {
 
 export function measureLayers(layers: LayerDraw[], dims: Dims): ElementMeasure[] {
   const { width: W, height: H } = dims;
-  return layers.map((layer) => {
+  // Adjustment layers (e.g. the film finish) have `source: null` — they paint no pixels of
+  // their own, they run a chain over whatever is already composited beneath them. They are
+  // not a measurable element, so they're excluded here rather than left for every caller to
+  // filter individually (see tests/layer-order-invariance.test.ts, which applies the same
+  // reasoning to its own oracle).
+  return layers.filter((layer) => layer.source !== null).map((layer) => {
     const { x, y, w, h } = layer.rect;
     const { scale, translate } = layer.transform;
     // Transform scales about the rect center, then translates — the same order modelMatrix

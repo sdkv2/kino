@@ -21,6 +21,7 @@ const GPU_PIXEL_TESTS = [
   "tests/compositor-ss.test.ts",
   "tests/compositor-stage.test.ts",
   "tests/glass-shape.test.ts",
+  "tests/layers-declared-pixel.test.ts",
   "tests/liquid-glass-showcase.test.ts",
   "tests/postfx-integration.test.ts",
   "tests/render-compositor-parity.test.ts",

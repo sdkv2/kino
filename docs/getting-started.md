@@ -8,7 +8,7 @@ This guide takes you from a clean checkout to your first rendered video. For the
 
 | Requirement | Why |
 |---|---|
-| **Node 20+** | runtime (the CLI is ESM) |
+| **Node 22+** | runtime (the CLI is ESM) |
 | **ffmpeg / ffprobe** | audio muxing, frame extraction |
 | **ImageMagick** (`magick`) | storyboard contact sheets + frame montages |
 | **ElevenLabs API key** | voiceover (required for real renders, with or without a presenter) |
@@ -29,7 +29,7 @@ bash ~/kino/setup.sh          # installs the `kino` command + writes a project .
 node ~/kino/setup.mjs         # same installer, pure Node — use this on Windows
 ```
 
-`setup.mjs` (which `setup.sh` execs) is a guided installer: it checks prerequisites (Node 20+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt/winget), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. Re-running it keeps any keys already in the `.env` (press Enter at the prompt). Keys can also be supplied via the environment to run non-interactively:
+`setup.mjs` (which `setup.sh` execs) is a guided installer: it checks prerequisites (Node 22+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt/winget), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. Re-running it keeps any keys already in the `.env` (press Enter at the prompt). Keys can also be supplied via the environment to run non-interactively:
 
 ```bash
 ELEVENLABS_API_KEY=sk_... bash ~/kino/setup.sh
@@ -49,7 +49,7 @@ run, so `npm i -g @sdkv2/kino` is worth it once you use kino regularly.
 ## Verify your environment
 
 ```bash
-kino doctor      # checks deps (node, ffmpeg/ffprobe, ImageMagick, headless Chrome, heygen CLI) + which API keys are present
+kino doctor      # checks deps (node, ffmpeg/ffprobe, ImageMagick, Electron render host, heygen CLI) + which API keys are present
 kino update      # later: pull + rebuild a repo install (or npm -g @latest for a global one)
 ```
 

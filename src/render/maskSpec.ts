@@ -3,6 +3,7 @@
 // a silently empty layer.
 import { SDF_MAX_PX } from "./sdf.js";
 import type { ShapeMask } from "./shapes.js";
+import { BLEND_MODES } from "./blendModes.js";
 
 export type MaskChannel = "r" | "g" | "b" | "a" | "luma";
 
@@ -72,14 +73,43 @@ export interface LayerEffect {
   params: Record<string, number | string>;
 }
 
-/** Validate the mask and effects on one beat. `index` is the beat's position, so a message
- *  points at the thing the author has to edit. */
+/** Validate the mask, effects and blend on one beat. `index` is the beat's position, so a
+ *  message points at the thing the author has to edit. */
 export function validateSegmentFx(seg: unknown, index: number): string[] {
-  const s = (seg ?? {}) as { mask?: unknown; effects?: unknown };
+  const s = (seg ?? {}) as { mask?: unknown; effects?: unknown; blend?: unknown };
   const errs: string[] = [];
   const at = (msg: string) => `beat ${index}: ${msg}`;
 
-  if (s.mask !== undefined) errs.push(...validateMask(s.mask).map(at));
+  if (s.mask !== undefined) {
+    errs.push(...validateMask(s.mask).map(at));
+    // The compositor has no binding for a `file`-kind segment mask: renderer.ts's
+    // compositeLayerInnerWithBackdrop only fills MaskBinding.mask for a `layer`-kind source (via
+    // maskTargets, built from another layer's own render); every other kind — "file" included —
+    // falls through to `binding = { mask: null, sdf: null, sdfMax: 0 }` unconditionally. "shape"
+    // doesn't care (uSourceKind 0 is analytic, no texture read), but "file" sets uSourceKind 1 and
+    // then samples that null texture, which reads (0,0,0,1) — every channel (r/g/b/luma, including
+    // the default) gives coverage 0, so every layer this mask attaches to (seg{i}, caption{i},
+    // overlay{i}, text{i}_{j}) renders invisible. planMaskJobs (videoFrames.ts) does extract
+    // lmask{i} frames for this case, but nothing in registry.ts or renderer.ts ever turns them into
+    // a bound texture — the feature is half-built. Fail loudly here instead of authoring a beat
+    // that silently disappears (same policy as a declared "video" layer — see build.ts's
+    // resolveDeclaredLayers and docs/spec-reference.md's "kind: video does not work" note).
+    const maskSrc = (s.mask as { source?: { kind?: unknown } }).source;
+    if (maskSrc && (maskSrc as { kind?: unknown }).kind === "file") {
+      errs.push(
+        at(
+          `mask.source.kind "file" is not supported on a segment mask yet — the compositor has no ` +
+            `binding for it (renderer.ts's applyMask always gets a null texture for a "file" source, ` +
+            `so uSourceKind=1 samples nothing and every layer of this beat would render invisible); ` +
+            `use mask.source.kind "shape" or "layer" instead`,
+        ),
+      );
+    }
+  }
+
+  if (s.blend !== undefined && !(BLEND_MODES as readonly string[]).includes(s.blend as string)) {
+    errs.push(at(`blend must be one of ${BLEND_MODES.join(", ")}`));
+  }
 
   if (s.effects !== undefined) {
     if (!Array.isArray(s.effects)) {

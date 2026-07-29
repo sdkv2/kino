@@ -4,6 +4,11 @@ import type { CaptionStyle, CaptionAnimation, CaptionReveal, ResolvedText } from
 import type { Ease } from "./bgparams.js";
 import type { LayerEffect, LayerMask } from "./maskSpec.js";
 import type { PostFx } from "./postSpec.js";
+// Type-only: a value import here would create a runtime cycle. layerSpec.ts value-imports Z from
+// layers.js, and RESERVED_Z runs `Object.values(Z)` at module top level — see layerSpec.ts's own
+// header comment. `import type` is erased at compile time, so it cannot participate in that cycle.
+import type { DeclaredLayer } from "./layerSpec.js";
+import type { BlendMode } from "./native/page/compositor/graph.js";
 
 export interface Theme {
   font: string;
@@ -86,6 +91,7 @@ export interface KinoSegment {
   source?: string; // video beats: the asset path this beat composites
   mask?: LayerMask;          // clip this beat's layers to a shape, file or other layer
   effects?: LayerEffect[];   // per-layer effect chain, applied before compositing
+  blend?: BlendMode; // how this beat's main layer composites (default "normal")
   caption: string; // "" = no caption for this beat (spec caption is optional; build coalesces)
   startSec: number;
   endSec: number;
@@ -248,6 +254,8 @@ export interface KinoProps {
   sfx?: SfxProps[]; // free-placed sound effects
   music?: MusicProps | null; // music bed, ducked while VO speaks
   segments: KinoSegment[];
+  /** Author-declared layers, sorted into the built-in stack by z. See render/layerSpec.ts. */
+  layers?: DeclaredLayer[];
   /** Full-frame post stage: grade → bloom → lens → film (compositor only). */
   postFx?: PostFx;
   /** Still/storyboard only — in-feed safe-zone overlay. Never set by `kino build`. */

@@ -17,7 +17,7 @@
 **kino** is a video engine: a framework you author in and a renderer that turns what you wrote
 into a finished MP4. You (or an agent) write a JSON spec; kino renders it — ElevenLabs voiceover,
 a background or motion graphic, and an optional AI presenter (HeyGen / Hedra / Replicate),
-composited frame-by-frame in headless Chrome (9:16, 3:4, 16:9, …). Same spec → same frames.
+composited frame-by-frame by a GL compositor in Electron (9:16, 3:4, 16:9, …). Same spec → same frames.
 
 The spec is the source; the MP4 is the build artifact. Edits are spec edits and a rebuild, not
 timeline drags — so revisions diff, review, and version like code.
@@ -43,7 +43,7 @@ timeline drags — so revisions diff, review, and version like code.
 ```
 spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ presenter plan + trim
           ─▶ background / motion graphics, plus an optional presenter (HeyGen/Hedra/Replicate)
-          ─▶ native render (headless Chrome) ─▶ ffmpeg ─▶ out/<title>/…mp4
+          ─▶ native render (Electron + GL compositor) ─▶ ffmpeg ─▶ out/<title>/…mp4
 ```
 No LLM inside the CLI: every step is deterministic, so the same spec renders the same video.
 
@@ -57,7 +57,7 @@ npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → 
 `init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with
 no editing. Swap in your own spec once the preview looks right.
 
-Needs Node 20+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Real voiceover needs
+Needs Node 22+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Real voiceover needs
 an [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project);
 presenter builds also need their provider's key. `kino doctor` checks all of it.
 

@@ -56,18 +56,20 @@ export function createStage(
       await awaited("prep:backdrop", () => sources.get("backdrop")?.prepare(frame));
       await awaited("prep:scrim", () => sources.get("scrim")?.prepare(frame));
       await Promise.all([
+        // An adjustment layer (source === null) has no pixels to prepare — it runs a chain over
+        // what is already composited.
         ...layers
-          .filter((l) => l.source.providerId !== "backdrop" && l.source.providerId !== "scrim")
-          .map((l) =>
-            awaited(`prep:${l.source.providerId}`, () => sources.get(l.source.providerId)?.prepare(frame, l.source.key)),
-          ),
+          .map((l) => l.source)
+          .filter((s): s is NonNullable<typeof s> => s !== null)
+          .filter((s) => s.providerId !== "backdrop" && s.providerId !== "scrim")
+          .map((s) => awaited(`prep:${s.providerId}`, () => sources.get(s.providerId)?.prepare(frame, s.key))),
         ...layers
           .map((l) => (l.mask as { source?: { kind?: string; layerId?: string } } | undefined)?.source)
           .filter((s): s is { kind: "layer"; layerId: string } => s?.kind === "layer")
           .map((ref) => {
-            const mLayer = layers.find((l) => l.id === ref.layerId || l.source.providerId === ref.layerId);
-            const providerId = mLayer ? mLayer.source.providerId : ref.layerId;
-            return sources.get(providerId)?.prepare(frame, mLayer?.source.key);
+            const mLayer = layers.find((l) => l.id === ref.layerId || l.source?.providerId === ref.layerId);
+            const providerId = mLayer?.source ? mLayer.source.providerId : ref.layerId;
+            return sources.get(providerId)?.prepare(frame, mLayer?.source?.key);
           }),
       ]);
       sync("draw", () => renderer.draw(layers, sources, frame, { theme: props.theme, postFx: props.postFx, props }));

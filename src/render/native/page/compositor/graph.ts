@@ -31,7 +31,15 @@ export interface LayerTransform {
 
 export interface LayerDraw {
   id: string;
-  source: TextureRef;
+  /** Paint order. The list is stable-sorted on (z, pushIndex), so equal z keeps authored order.
+   *  Built-in constants live in layers.ts `Z`; declared layers pick their own. Optional because
+   *  renderer.ts builds bare LayerDraw literals for mask and full-frame blit targets that take no
+   *  part in ordering (they never flow through layersAt's sort); every real layer gets one via
+   *  normalizeLayer's `spec.z ?? 0` default. */
+  z?: number;
+  /** Where this layer's pixels come from, or null on an adjustment layer, which has none of
+   *  its own — see `adjust`. */
+  source: TextureRef | null;
   rect: { x: number; y: number; w: number; h: number }; // frame px, top-left origin
   transform: LayerTransform;
   opacity: number;
@@ -45,8 +53,10 @@ export interface LayerDraw {
   mask?: MaskRef;
   /** Beat this layer belongs to, for transitions. Absent = the base group. */
   group?: string;
-  /** Composite after the cinematic-finish pass (motion/overlay tier). Text-behind seg cutouts need this. */
-  aboveFilm?: boolean;
+  /** Effects applied to everything composited BENEATH this layer, not to the layer itself.
+   *  An adjustment layer is always base-group and always full-frame — it has no rect of its
+   *  own to respect. Mutually exclusive with `source`, which is null when this is set. */
+  adjust?: EffectRef[];
 }
 
 /** What `layersAt` may omit; `normalizeLayer` fills the rest. */
@@ -62,7 +72,7 @@ export interface Dims {
 
 export const IDENTITY_TRANSFORM: LayerTransform = { scale: 1, rotate: 0, translate: [0, 0] };
 
-/** Layers whose pixels are glyph coverage, by the same id convention isAboveFilmLayer uses. */
+/** Layers whose pixels are glyph coverage — same id convention the old id-prefix band test used. */
 const TEXT_CLASS = /^(text|caption|disclosure)/;
 // 2.2 is the display gamma, and that is the principled value rather than a fitted one: correcting
 // coverage by it makes linear-light blending of a glyph edge reproduce what sRGB blending gave,
@@ -74,6 +84,7 @@ const TEXT_GAMMA_DEFAULT = 2.2;
 export function normalizeLayer(spec: LayerSpec): LayerDraw {
   return {
     id: spec.id,
+    z: spec.z ?? 0,
     source: spec.source,
     rect: spec.rect,
     transform: spec.transform ?? IDENTITY_TRANSFORM,
@@ -83,7 +94,7 @@ export function normalizeLayer(spec: LayerSpec): LayerDraw {
     effects: spec.effects ?? [],
     mask: spec.mask,
     group: spec.group,
-    aboveFilm: spec.aboveFilm,
+    adjust: spec.adjust,
   };
 }
 

@@ -9,6 +9,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
 - [Masks and effects](#masks-and-effects)
+- [Layers](#layers) — [source kinds](#source-kinds) · [z scale](#z-scale) · [adjustment layers](#adjustment-layers)
 - [Post FX](#post-fx)
 - [Keyframes & triggers](#keyframes--triggers)
 - [Backgrounds](#backgrounds), [logo & overlays](#logo--overlay-tweening)
@@ -47,6 +48,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `music` | [Music](#sound-effects--music) | — | Music bed under the VO, auto-ducked while segments speak. See [Sound effects & music](#sound-effects--music). |
 | `seamlessLoop` | boolean | — | Loop-ad contract: last beat must be `kind:"motion"`; validate warns if `film` unset/`>0` or first/last motion sources aren't a ready-state pair; post-build compares first/last frame RGB (warn only). Prefer `"film": 0`. Not the same as segment `loop` (Lottie playback). |
 | `postFx` | [PostFx](#post-fx) | — | Full-frame post stage over the finished composite (compositor only). See [Post FX](#post-fx). |
+| `layers` | [DeclaredLayer](#layers)[] | — | Author-declared layers, slotted into the built-in stack by z. See [Layers](#layers). |
 
 ## Segments
 
@@ -75,6 +77,7 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
+| `blend` | `normal\|screen\|multiply\|add` | — | Accepted by the schema, but a `scene` beat has no content layer of its own to apply it to (background + optional presenter only) — it validates and threads through, with no visible effect. Use `video`/`motion` for a beat that should actually blend. |
 
 ### `video` segment
 Footage, a screenshot, or any other video source cut in full-frame, with an optional caption (and optional kicker label).
@@ -104,6 +107,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
+| `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's footage layer (not its chrome frame or kicker) against what's beneath it. Default `normal`. Same vocabulary as a declared layer's `blend` — see [Layers](#layers). |
 | `regionShader` | `{ mask?, masks?, subject?, background?, object?, params?, keyframes?, textures? }` | — | Split this beat's frame by a segmentation mask: subject region (`mask>0.5`) runs one `.frag`, background region another. `mask` = mask asset dir (`manifest.json` + `mask.png`/`mask.mp4` from [`kino segment`](segmentation.md)). `object` picks which packed object channel (0..3). Need at least one of `subject`/`background`; omit a side to pass that region's original pixels through. `masks` (up to 4) takes several mask sources in one beat, each optionally with its own `subject`; later entries paint over earlier ones. Unknown keys are rejected. See [Segmentation](segmentation.md). |
 | `regionShader.params` | `{ name: number\|string }` | — | Author params shared by **every** body in the beat (`subject`, `background`, and each `masks[].subject`) — they compile into one program with one uniform bank. Numeric names alias to `u_<name>` in GLSL, packed alphabetically into `uParam0..3`; `colorA`/`colorB`/`colorC` (hex) and `intensity` drive their own uniforms and cost no slot. Max **4** numeric names across `params` + `keyframes`; more is a build error, not a silent drop. |
 | `regionShader.keyframes` | `{ at, params, ease? }[]` | — | Tweens those params over the beat. **`at` is beat-relative seconds** (0 = this beat's start), like `zoomKeyframes`/`captionKeyframes` — *not* absolute like `backgroundKeyframes`. Region shaders have no `triggers` surface, so `uPulse` always reads 0. |
@@ -132,13 +136,14 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
+| `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's motion-graphic layer against what's beneath it. Default `normal`. |
 
 > **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS. `atWord` anchoring works in all motion slots (full-screen beats and overlays); other keyframe tracks (`backgroundKeyframes`, `zoomKeyframes`, `captionKeyframes`, …) remain seconds-only and keep their one-keyframe-holds idiom.
 
 ## Masks and effects
 
-Every segment kind accepts `mask` and `effects`. A mask clips the beat's rendered layers before
-compositing; effects run in array order before the masked result is composited.
+Every segment kind accepts `mask`, `effects` and `blend`. A mask clips the beat's rendered layers
+before compositing; effects run in array order before the masked result is composited.
 
 `mask.source` supports three sources:
 
@@ -156,14 +161,26 @@ set a corner `radius`; every shape may set `rotate` in degrees.
 ```
 
 **File** — an image or video mask under `/public`; `channel` is `r`, `g`, `b`, `a`, or `luma`.
-File masks use node-generated SDF frames so feather and expansion remain distance-based.
 
-```json
-"mask": {
-  "source": { "kind": "file", "src": "masks/subject/mask.mp4", "channel": "r" },
-  "expand": 4
-}
+**`kind: "file"` does not work on a segment (or declared-layer) mask today.** `planMaskJobs`
+(`src/render/native/videoFrames.ts`) extracts the node-generated SDF/coverage frames for it, but
+nothing in `registry.ts` or `renderer.ts` ever turns those frames into a bound texture —
+`compositeLayerInnerWithBackdrop`'s mask branch only fills a real `MaskBinding.mask` for a
+`layer`-kind source; every other kind, "file" included, gets `binding: { mask: null, sdf: null,
+sdfMax: 0 }`. Sampling a null texture reads `(0,0,0,1)`, so every channel — including the `luma`
+default — gives coverage `0` and the masked beat's layers render invisible. Validation rejects it
+loudly instead:
+
 ```
+beat 0: mask.source.kind "file" is not supported on a segment mask yet — the compositor has no
+binding for it (renderer.ts's applyMask always gets a null texture for a "file" source, so
+uSourceKind=1 samples nothing and every layer of this beat would render invisible); use
+mask.source.kind "shape" or "layer" instead
+```
+
+Use `kind: "shape"` (analytic, no texture needed) or `kind: "layer"` (another layer's own render)
+instead. A declared layer's `mask` (see [Layers](#layers)) shares this exact gap — it resolves
+through the same renderer code path — and is rejected the same way, naming the layer id.
 
 **Layer** — another compositor layer's alpha or luma. For example, `seg0` targets segment 0's
 main layer.
@@ -200,6 +217,134 @@ This includes targets outside their active beat window.
   { "kind": "grade", "params": { "contrast": 1.1, "saturation": 0.9 } }
 ]
 ```
+
+`blend` — one of `normal` (default), `screen`, `multiply`, `add` — sets how a beat's own content
+layer composites against whatever is beneath it; declared layers share the same vocabulary (see
+[Layers](#layers)). It applies to a `video` beat's footage and a `motion` beat's graphic; a `scene`
+beat has no content layer of its own (background + optional presenter only), so `blend` there
+validates but has no visible effect.
+
+## Layers
+
+`spec.layers[]` declares extra layers that slot into the built-in stack — backdrop, beats,
+captions, logo, the cinematic finish — at an author-chosen z. A light leak under the captions, a
+full-frame grade over the footage but under the type, a sticker that survives a beat's crossfade
+untouched: each is one entry, positioned by z rather than by where it sits in the array.
+
+```json
+"layers": [
+  {
+    "id": "leak",
+    "z": 350,
+    "source": { "kind": "image", "src": "fx/leak.png" },
+    "blend": "screen",
+    "opacity": 0.6
+  }
+]
+```
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `id` | string | ✅ | Unique among declared layers; cannot match a built-in id pattern (`backdrop`, `scrim`, `film`, `logo`, `disclosure`, `platformGuide`, `grid`, or a numbered built-in like `seg0`/`caption3`/`motion2`/`text0_1`). |
+| `z` | number | ✅ | Paint order — sorts against every built-in layer's z, see [Z scale](#z-scale) below. Cannot equal a reserved constant; pick a value between two of them. Layers sharing a z paint in authored order. |
+| `source` | [source kind](#source-kinds) | one of `source`/`adjust` | The layer's pixels. Mutually exclusive with `adjust` — a layer either draws something or grades what's beneath it, never both. |
+| `adjust` | effect[] | one of `source`/`adjust` | No pixels of its own; runs this effect chain over everything composited beneath it. See [Adjustment layers](#adjustment-layers). |
+| `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode against what's beneath it. Default `normal`. Rejected together with `adjust`. |
+| `fromSec` / `toSec` | number | — | Visible window on the main timeline. Omit `toSec` to run to the end of the composition. Rejected with `adjust`; superseded by `segment` when both are set. |
+| `segment` | int | — | Bind the window to a beat's `startSec`/`endSec` instead of authoring `fromSec`/`toSec` by hand, and pull the layer into that beat's crossfade group. |
+| `hold` | boolean | — | Keep the layer out of the beat's crossfade group while still using its window — steady through a transition the beats beneath it are dissolving through. Requires `segment`. |
+| `rect` | `{x,y,w,h}` | — | Placement, % of frame. Default full-bleed. |
+| `opacity` | number 0–1 | — | Default `1`. |
+| `mask` | mask | — | Same mask model as segments — see [Masks and effects](#masks-and-effects). |
+| `effects` | effect[] | — | Same effect chain as segments, run before compositing — see [Masks and effects](#masks-and-effects). |
+| `keyframes` | BgKeyframe[] | — | Tweens the layer's own `x`/`y` (% of frame), `scale`, `opacity` — the same idiom as `captionKeyframes`/`kickerKeyframes`. `at` is relative to the layer's own start (its `fromSec`, or its bound segment's `startSec`), not absolute like `backgroundKeyframes`/`logoKeyframes`. |
+
+Exactly one of `source`/`adjust` is required. Every field below `adjust` in the table above is
+rejected on an adjustment layer — see [Adjustment layers](#adjustment-layers) for why.
+
+### Source kinds
+
+`source.kind` picks the provider; `src` is an author-facing reference, resolved at build time into
+whatever that provider actually consumes — the render page never reads a file path itself, same as
+every other source in kino (a background carries resolved `shaderCode`, a `motionOverlay` carries
+sanitized `html`).
+
+| Kind | `src` | Accepts | Notes |
+|---|---|---|---|
+| `image` | asset path | `.png` / `.jpg` / `.jpeg` / `.webp` | Staged like any other asset. |
+| `shader` | asset path or bare id | `.frag` / `.glsl`, or an `assets-lib/backgrounds` id that resolves to a shader (not a Canvas2D draw fn like `brand-wash`) | Same uniform contract as a [shader background](#shader-backgrounds-frag--glsl) (`iResolution`/`iTime`/`iFrame`/`uPulse`/`uColorA-C`/`uParam0-3`), driven by this layer's own `params`/`keyframes`/`triggers` — not the spec's `backgroundKeyframes`/`backgroundTriggers`. |
+| `motion` | asset path or library id | `.html` / `.js` (Tier 1/2) | `params`/`keyframes`/`triggers` behave like a `motionOverlay` [MotionRef](#motion-segment). No `loop` field. |
+| `lottie` | asset path or library id | `.json` (Tier 3) | Same `params`/`keyframes`/`triggers` idiom. No `loop` field — unlike a `motion` segment's own Lottie, a declared Lottie layer always stretches once across its window rather than looping. |
+| `video` | asset path | in practice, a still image only — see below | **Does not play back real footage.** |
+
+`params`/`keyframes`/`triggers` on `source` only matter for `shader`/`motion`/`lottie` — `image` and
+`video` read `url` and ignore the rest.
+
+**`kind: "video"` does not work for real footage today.** Validation accepts a `.mp4`/`.mov` `src`
+(the shape check can't tell a working source from a broken one), but the build rejects it loudly:
+`planMediaJobs` (`src/render/native/videoFrames.ts`) decides which clips get per-frame extraction
+by walking `props.segments` and `props.avatarWindows` — it never walks `props.layers` — so a
+declared video layer has no frames to draw. `resolveDeclaredLayers` (`src/commands/build.ts`)
+throws rather than staging a file nothing will ever read:
+
+```
+layer "bg": source.src "clip.mp4": a declared "video" layer needs per-frame extraction, which is
+not wired up yet (videoFrames.ts's planMediaJobs walks segments/avatarWindows, not spec.layers) —
+use a still image (.png/.jpg/.jpeg/.webp) for a declared "video" layer for now
+```
+
+Point it at a still frame instead. `kind: "image"` and `kind: "video"` resolve identically for a
+still, so prefer `image` for one. Real per-frame video in a declared layer needs a job planner that
+walks `spec.layers`, which does not exist yet.
+
+### Z scale
+
+Every built-in layer's z (`src/render/layers.ts`), so a declared layer can be slotted exactly where
+it needs to go:
+
+| Constant | z | Built-in layer |
+|---|---|---|
+| `Z.backdrop` | 0 | Background |
+| `Z.scrim` | 100 | Scrim over the backdrop |
+| `Z.avatar` | 200 | Presenter clip |
+| `Z.seg` | 300 | Beat content — video/scene |
+| `Z.frame` | 310 | Device chrome |
+| `Z.kicker` | 320 | Kicker label |
+| `Z.film` | 700 | Cinematic finish (adjustment layer, see below) |
+| `Z.overlayVideoBehind` | 750 | `motionOverlay` on a video beat, placed behind the footage |
+| `Z.segBehind` | 760 | Beat content, when its `motionOverlay` sits behind it |
+| `Z.overlayMotionBehind` | 800 | `motionOverlay` on a motion beat, placed behind |
+| `Z.motion` | 810 | Beat content — motion |
+| `Z.overlay` | 820 | `motionOverlay`, default (in front) |
+| `Z.text` | 900 | Standalone `texts` overlays |
+| `Z.logo` | 1000 | Brand logo |
+| `Z.caption` | 1100 | Captions |
+| `Z.disclosure` | 1200 | AI disclosure |
+| `Z.qa` | 9000 | Storyboard/platform QA guides (above everything — a safe-zone guide a caption can cover is useless) |
+
+A declared `z` equal to any value above is a build error, naming the layer.
+
+### Adjustment layers
+
+A layer with `adjust` and no `source` has no pixels of its own — it runs an effect chain over
+everything composited beneath it, like a full-frame grade rather than a texture. It is always
+base-group and spans the whole composition, so `fromSec`/`toSec`/`segment`/`hold`/`rect`/`opacity`/
+`mask`/`effects`/`keyframes`/`blend` are all rejected alongside it: the emission path that draws an
+adjustment layer never reads any of them, so accepting them would validate clean and then silently
+do nothing.
+
+```json
+{ "id": "warmth", "z": 650, "adjust": [{ "kind": "grade", "params": { "brightness": 1.05, "saturation": 0.95 } }] }
+```
+
+`adjust` takes the same kinds as segment `effects` (see [Masks and effects](#masks-and-effects)),
+plus one more: `film`, the cinematic finish. kino **emits a `film` adjustment layer at `Z.film` by
+default** — top-level `film` / `theme.film` (default `1`) supplies its intensity when `postFx.film`
+is absent — so an existing spec keeps its graded look without ever declaring a layer for it. Drop
+it with `"film": 0`; nothing else may declare `z: Z.film`.
+
+Everything below `Z.film` is grained; everything at or above stays clean. A declared adjustment
+layer placed above `Z.film` grades the clean type instead of the footage — usually not the intent.
 
 ## Post FX
 

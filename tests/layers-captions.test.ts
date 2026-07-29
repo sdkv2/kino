@@ -50,18 +50,20 @@ describe("layersAt — captions", () => {
     expect(layersAt(pAvatar, 15, DIMS).some((l) => l.id === "logo")).toBe(false);
   });
 
-  it("puts disclosure last — film finish is a post pass, not a layer", () => {
+  it("puts disclosure last — above the film finish, so the legal line stays clean", () => {
     const p = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], { disclosure: "AI generated" });
     const ids = layersAt(p, 15, DIMS).map((l) => l.id);
     expect(ids.at(-1)).toBe("disclosure");
-    expect(ids).not.toContain("film");
+    expect(ids.indexOf("film")).toBeLessThan(ids.indexOf("disclosure"));
   });
 
-  it("never emits a film layer — vignette/grain run in the post stage", () => {
+  it("emits the film layer as a sourceless adjustment, and drops it at intensity 0", () => {
     const p = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], { theme: { ...theme, film: 0 } });
     expect(layersAt(p, 15, DIMS).some((l) => l.id === "film")).toBe(false);
     const withFilm = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], { theme: { ...theme, film: 1 } });
-    expect(layersAt(withFilm, 15, DIMS).some((l) => l.id === "film")).toBe(false);
+    const film = layersAt(withFilm, 15, DIMS).find((l) => l.id === "film");
+    expect(film?.source).toBeNull();
+    expect(film?.adjust?.[0].kind).toBe("film");
   });
 
   it("emits standalone text overlays keyed per beat and index", () => {

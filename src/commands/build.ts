@@ -31,6 +31,9 @@ import { renderVideo, renderStills, variantName } from "../render/render.js";
 import { parseFormatList, type FormatId } from "../render/formats.js";
 import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
 import type { PostFx } from "../render/postSpec.js";
+import type { DeclaredLayer } from "../render/layerSpec.js";
+import type { LayerEffect, LayerMask } from "../render/maskSpec.js";
+import type { BlendMode } from "../render/native/page/compositor/graph.js";
 import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
@@ -121,6 +124,92 @@ function resolveRegionShader(
     keyframes: rs.keyframes,
     textures: textures.length ? textures : undefined,
   };
+}
+
+// Resolve every declared layer's source into what its provider actually consumes — the render page
+// never reads files (registry.ts's own header comment). Every built-in layer gets this kind of
+// resolution already (stageAsset for a file, resolveBackgroundComponent + readFileSync for a
+// shader body — see bgShaderCode below — resolveMotionGraphic for motion/lottie); nothing did it
+// for declared layers, so a validated layer built successfully and painted nothing (task-7-report.md,
+// task-7b-brief.md). An adjustment layer (no `source`) has no pixels and passes through untouched.
+// Throws, naming the layer id, when a source can't become something a provider can draw — never
+// returns a layer that silently paints nothing, because renderer.ts's compositeLayerInner just
+// no-ops a missing TextureSource (`if (!source) return`) with no error of its own.
+function resolveDeclaredLayers(
+  layers: DeclaredLayer[] | undefined,
+  project: Project,
+  stageAsset: (rel: string) => void,
+): DeclaredLayer[] | undefined {
+  if (!layers) return layers;
+  return layers.map((d) => {
+    if (!d.source) return d; // adjustment layer (grade/blur/etc. chain) — no pixels to resolve
+    const { kind, src } = d.source;
+    const fail = (msg: string): never => {
+      throw new Error(`layer "${d.id}": ${msg}`);
+    };
+
+    if (kind === "image") {
+      if (!existsSync(project.assetPath(src))) fail(`image not found: assets/${src}`);
+      stageAsset(src);
+      return { ...d, source: { ...d.source, url: src } };
+    }
+
+    if (kind === "video") {
+      const isStill = /\.(jpe?g|png|webp)$/i.test(src);
+      if (!existsSync(project.assetPath(src))) fail(`video source not found: assets/${src}`);
+      if (!isStill) {
+        // GAP (task-7-report.md / task-7b-brief.md): videoFrames.ts's planMediaJobs walks
+        // props.segments and props.avatarWindows only — it never walks props.layers, so a declared
+        // video layer never gets a MediaEntry and createFramesSource has nothing to draw (registry.ts
+        // falls back to a still image only when the extension matches one). Staging the file and
+        // calling it "resolved" would reproduce exactly the silent-nothing bug this task exists to
+        // close, just one layer deeper — fail loudly here instead until a job planner walks
+        // declared layers too.
+        fail(
+          `source.src "${src}": a declared "video" layer needs per-frame extraction, which is not wired ` +
+            `up yet (videoFrames.ts's planMediaJobs walks segments/avatarWindows, not spec.layers) — ` +
+            `use a still image (.png/.jpg/.jpeg/.webp) for a declared "video" layer for now`,
+        );
+      }
+      stageAsset(src);
+      return { ...d, source: { ...d.source, url: src } };
+    }
+
+    if (kind === "shader") {
+      let abs: string;
+      try {
+        abs = resolveBackgroundComponent(src, project);
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+      // resolveBackgroundComponent resolves a bare id against the whole backgrounds library, which
+      // holds both .frag/.glsl shaders AND .js Canvas2D draw components (e.g. "brand-wash") — same
+      // ambiguity the main background resolution disambiguates with isShaderPath (see bgShaderCode
+      // below). Without this check, a bare id pointing at a .js component would have its JS source
+      // read as GLSL, registered, and only fail during the first seek — after VO/avatar spend.
+      if (!isShaderPath(abs)) {
+        fail(`source.src "${src}" resolved to "${abs}", which is not a shader (.frag/.glsl) — a declared "shader" layer can't use a Canvas2D draw component`);
+      }
+      return { ...d, source: { ...d.source, shaderCode: readFileSync(abs, "utf8") } };
+    }
+
+    // motion | lottie: resolveMotionGraphic dispatches Tier 1/2/3 by the file EXTENSION, not by
+    // this declared `kind` — so it would happily resolve a "lottie" layer pointed at a .html file
+    // as sanitized markup (graphic.lottie left undefined). registry.ts routes a "lottie" kind to
+    // createLottieSource, which reads only graphic.lottie — that mismatch would silently paint
+    // nothing, so it's rejected here rather than left to surface as an empty layer.
+    try {
+      const graphic = resolveMotionGraphic(
+        { source: src, params: d.source.params, keyframes: d.source.keyframes, triggers: d.source.triggers },
+        project,
+      );
+      if (kind === "lottie" && !graphic.lottie) fail(`source.kind is "lottie" but "${src}" did not resolve to a Lottie animation`);
+      if (kind === "motion" && graphic.lottie) fail(`source.kind is "motion" but "${src}" is a Lottie (.json) file — use kind "lottie"`);
+      return { ...d, source: { ...d.source, graphic } };
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  });
 }
 
 // Resolve the portrait image hedra/replicate lip-sync against (heygen uses a hosted look id instead).
@@ -292,6 +381,10 @@ export async function prepare(
       if (seg.frame) stageAsset(seg.frame.src);
     }
   }
+  // Author-declared layers (spec.layers): resolve each source into what its provider actually
+  // consumes — see resolveDeclaredLayers's own header comment. Runs here (same place as the
+  // segment asset staging just above) so it shares this one stageAsset/staged Set.
+  const layers = resolveDeclaredLayers(spec.layers as DeclaredLayer[] | undefined, project, stageAsset);
   // Motion HTML can't use relative url() in CSS (determinism lint) — raster siblings are served via
   // <img src="/public/motion/..."> and staged here.
   const motionAssets = join(project.projectRoot, "assets", "motion");
@@ -478,6 +571,15 @@ export async function prepare(
     const base = {
       kind: seg.kind,
       source: seg.kind === "video" ? seg.source : undefined,
+      // mask/effects/blend: spec-side types are permissive (z.unknown()) so validateSegmentFx can
+      // report actionable errors instead of Zod stripping bad values — cast to the concrete
+      // KinoSegment shapes here. These three MUST stay threaded onto `base` (shared by every
+      // segment kind below); their absence was invisible for a whole release because every mask/fx
+      // test builds KinoProps directly and never goes through this mapping. Keep in sync with
+      // KinoSegment (src/render/props.ts).
+      mask: seg.mask as LayerMask | undefined,
+      effects: seg.effects as LayerEffect[] | undefined,
+      blend: seg.blend as BlendMode | undefined,
       caption: seg.caption ?? "",
       startSec,
       endSec,
@@ -569,6 +671,7 @@ export async function prepare(
     sfx,
     music,
     segments: renderSegments,
+    layers,
     ...(spec.postFx ? { postFx: spec.postFx as PostFx } : {}),
   };
 
