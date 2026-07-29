@@ -133,20 +133,29 @@ function applyBlend(gl: WebGL2RenderingContext, mode: BlendMode): void {
   }
 }
 
-/** Column-major 3x3: translate ∘ rotate ∘ scale about the rect center, in pixel space. */
-function modelMatrix(layer: LayerDraw): Float32Array {
+/** Column-major 3x3: translate ∘ rotate ∘ scale about the layer's anchor, in pixel space.
+ *
+ * At the defaults (anchor [0.5,0.5], scaleX/scaleY 1) this reduces algebraically to the
+ * scale-about-the-centre form it replaced — `tests/compositor-model-matrix.test.ts` holds that
+ * identity against a verbatim copy of the old expression. */
+export function modelMatrix(layer: LayerDraw): Float32Array {
   const { x, y, w, h } = layer.rect;
-  const { scale, rotate, translate } = layer.transform;
+  const { scale, rotate, translate, scaleX, scaleY, anchor } = layer.transform;
+  const sx = scale * (scaleX ?? 1);
+  const sy = scale * (scaleY ?? 1);
+  const ax = anchor?.[0] ?? 0.5;
+  const ay = anchor?.[1] ?? 0.5;
   const rad = (rotate * Math.PI) / 180;
-  const cos = Math.cos(rad) * scale;
-  const sin = Math.sin(rad) * scale;
-  const cx = x + w / 2 + translate[0];
-  const cy = y + h / 2 + translate[1];
-  // unit quad → centered → scaled/rotated → placed
-  const a = cos * w, b = sin * w;
-  const c = -sin * h, d = cos * h;
-  const tx = cx - (a + c) / 2;
-  const ty = cy - (b + d) / 2;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  // Column 0 is the u axis (rect width) after scale+rotate; column 1 the v axis (rect height).
+  const a = cos * sx * w, b = sin * sx * w;
+  const c = -sin * sy * h, d = cos * sy * h;
+  // The anchor is the one point the transform does not move: place it, then work back to the origin.
+  const anchorX = x + ax * w + translate[0];
+  const anchorY = y + ay * h + translate[1];
+  const tx = anchorX - (a * ax + c * ay);
+  const ty = anchorY - (b * ax + d * ay);
   return new Float32Array([a, b, 0, c, d, 0, tx, ty, 1]);
 }
 

@@ -25,8 +25,16 @@ export type BlendMode = "normal" | "screen" | "multiply" | "add";
 
 export interface LayerTransform {
   scale: number;
-  rotate: number;          // degrees, about the rect center
+  rotate: number;          // degrees, clockwise, about the anchor
   translate: [number, number]; // px
+  /** Per-axis multipliers ON TOP of `scale`. Default 1. */
+  scaleX?: number;
+  scaleY?: number;
+  /** Fixed point of scale and rotation, as a fraction of the layer rect — [0,0] top-left,
+   *  [0.5,0.5] centre (the default, and what every transform did before this existed),
+   *  [1,1] bottom-right. Values outside 0..1 are legal: an anchor beyond the rect is a
+   *  useful pivot. */
+  anchor?: [number, number];
 }
 
 export interface LayerDraw {
