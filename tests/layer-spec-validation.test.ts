@@ -17,7 +17,12 @@ describe("validateLayers", () => {
   it("rejects an id that collides with a built-in", () => {
     expect(validateLayers([{ ...ok, id: "seg0" }], 1).join()).toMatch(/reserved/);
     expect(validateLayers([{ ...ok, id: "caption12" }], 1).join()).toMatch(/reserved/);
-    expect(validateLayers([{ ...ok, id: "logo" }], 1).join()).toMatch(/reserved/);
+  });
+
+  // "logo" is an ordinary declared-layer id now — the built-in logo system was removed and its
+  // id reservation with it (see BUILTIN_ID_PATTERNS in layerSpec.ts).
+  it("accepts \"logo\" as a declared layer id", () => {
+    expect(validateLayers([{ ...ok, id: "logo" }], 1)).toEqual([]);
   });
 
   it('rejects "region{i}" — registry.ts registers it as the regionShader footage provider a seg{i} points at', () => {

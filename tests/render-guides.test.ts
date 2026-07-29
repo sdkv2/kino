@@ -22,7 +22,6 @@ const baseProps = (extra: Partial<KinoProps> = {}): KinoProps => ({
   avatar: null,
   avatarWindows: [],
   voTrack: null,
-  logo: null,
   background: {
     kind: "glow", image: null, customCode: null, shaderCode: null,
     params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 },

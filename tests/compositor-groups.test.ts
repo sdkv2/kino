@@ -20,15 +20,15 @@ describe("groupRuns", () => {
   });
 
   it("breaks a run when the group changes and back again", () => {
-    const runs = groupRuns([layer("seg0", "beat0"), layer("logo"), layer("cap0", "beat0")]);
-    expect(runs.map((r) => r.map((l) => l.id))).toEqual([["seg0"], ["logo"], ["cap0"]]);
+    const runs = groupRuns([layer("seg0", "beat0"), layer("badge"), layer("cap0", "beat0")]);
+    expect(runs.map((r) => r.map((l) => l.id))).toEqual([["seg0"], ["badge"], ["cap0"]]);
   });
 
   // An adjustment consumes everything composited beneath it, so it is a barrier in the walk.
   // Without this it would ride along in a base run and never get its chance to run its chain.
   it("gives an adjustment layer a run of its own, even among base layers", () => {
-    const runs = groupRuns([layer("backdrop"), layer("scrim"), adjustment("film"), layer("logo")]);
-    expect(runs.map((r) => r.map((l) => l.id))).toEqual([["backdrop", "scrim"], ["film"], ["logo"]]);
+    const runs = groupRuns([layer("backdrop"), layer("scrim"), adjustment("film"), layer("badge")]);
+    expect(runs.map((r) => r.map((l) => l.id))).toEqual([["backdrop", "scrim"], ["film"], ["badge"]]);
   });
 
   it("keeps two adjustments in separate runs", () => {

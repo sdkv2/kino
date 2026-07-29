@@ -13,7 +13,7 @@ const bg = {
 const DIMS = { width: 1080, height: 1920 };
 
 const base: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", segments: [],
 };
 

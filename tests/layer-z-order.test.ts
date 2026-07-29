@@ -11,7 +11,7 @@ const theme = {
 const bg = { kind: "glow" as const, image: null, customCode: null, shaderCode: null, params: {}, keyframes: [], triggers: [] };
 const DIMS = { width: 1080, height: 1920 };
 const mk = (segments: KinoSegment[], over: Partial<KinoProps> = {}): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", segments, ...over,
 });
 

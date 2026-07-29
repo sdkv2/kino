@@ -10,7 +10,7 @@ const bg = { kind: "glow" as const, image: null, customCode: null, shaderCode: n
 const DIMS = { width: 1080, height: 1920 };
 
 const mk = (segments: KinoSegment[], over: Partial<KinoProps> = {}): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", segments, ...over,
 });
 
@@ -36,18 +36,6 @@ describe("layersAt — captions", () => {
   it("emits no caption layer for a beat with no caption content", () => {
     const p = mk([{ kind: "scene", caption: "", startSec: 0, endSec: 2 }]);
     expect(layersAt(p, 15, DIMS).some((l) => l.id === "caption0")).toBe(false);
-  });
-
-  it("emits the logo only on presenter-less beats", () => {
-    const withLogo = { src: "logo.png", sizePx: 120, x: 60, y: 60, keyframes: [], fromSec: 0 } as unknown as KinoProps["logo"];
-    const p = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], { logo: withLogo });
-    expect(layersAt(p, 15, DIMS).some((l) => l.id === "logo")).toBe(true);
-    const pAvatar = mk([{ kind: "scene", caption: "hi", startSec: 0, endSec: 2 }], {
-      logo: withLogo,
-      avatar: { src: "a.mp4" } as unknown as KinoProps["avatar"],
-      avatarWindows: [{ fromSec: 0, toSec: 2, audioStartSec: 0 }],
-    });
-    expect(layersAt(pAvatar, 15, DIMS).some((l) => l.id === "logo")).toBe(false);
   });
 
   it("puts disclosure last — above the film finish, so the legal line stays clean", () => {

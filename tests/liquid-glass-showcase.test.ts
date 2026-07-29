@@ -26,7 +26,7 @@ describe("liquid-glass showcase", () => {
       params: {}, keyframes: [], triggers: [],
     };
     const mk = (h: string): KinoProps => ({
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
       background: bg, disclosure: "",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion: { html: h, params: {}, keyframes: [], triggers: [] } }],
     });

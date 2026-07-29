@@ -168,12 +168,12 @@ describe("SpecSchema video beat regionShader", () => {
       segments: [
         {
           ...valid.segments[0],
-          regionShader: { mask: "masks/x", subject: "a.frag", textures: ["motion/badge.html", "logo.png"] },
+          regionShader: { mask: "masks/x", subject: "a.frag", textures: ["motion/badge.html", "sticker.png"] },
         },
       ],
     });
     const seg = s.segments[0];
-    expect(seg.kind === "video" && seg.regionShader?.textures).toEqual(["motion/badge.html", "logo.png"]);
+    expect(seg.kind === "video" && seg.regionShader?.textures).toEqual(["motion/badge.html", "sticker.png"]);
     // A 3rd channel has no uTex to bind to (uTex0 is the beat's own asset, uTex1 the cutout
     // backdrop) — reject rather than drop.
     expect(() =>

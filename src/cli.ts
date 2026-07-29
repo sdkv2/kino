@@ -202,7 +202,7 @@ program
 
 program
   .command("elements")
-  .description("List overlay elements (logo …) + their layout/tween controls")
+  .description("List overlay elements (caption, kicker, zoom …) + their layout/tween controls")
   .action(async () => (await import("./commands/elements.js")).elements());
 
 program

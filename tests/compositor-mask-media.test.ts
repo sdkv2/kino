@@ -9,7 +9,7 @@ const theme = {
 const bg = { kind: "glow" as const, image: null, customCode: null, shaderCode: null, params: {}, keyframes: [], triggers: [] };
 
 const withMask = (mask: unknown): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "",
   segments: [{ kind: "video", caption: "", startSec: 0, endSec: 2, source: "clip.mp4", mask } as unknown as KinoSegment],
 });

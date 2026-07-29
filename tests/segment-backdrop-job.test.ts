@@ -13,7 +13,7 @@ const bg = { kind: "custom" as const, image: null, shaderCode: null, customCode:
 
 // clipFrom/speed are set to values a shared clock would visibly leak: 5s in at 2x.
 const propsWith = (backdrop: string): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "",
   segments: [{
     kind: "video", source: "asset.png", caption: "", startSec: 1, endSec: 3,
     clipFrom: 5, speed: 2,

@@ -102,7 +102,7 @@ describe("kino-lens SVG shape", () => {
       "",
     ).replace("border: none;", "border-radius: 48px; border: 3px solid rgba(255,255,255,.7);");
     const mk = (h: string): KinoProps => ({
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
       background: bg, disclosure: "",
       segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion: { html: h, params: {}, keyframes: [], triggers: [] } }],
     });
@@ -127,7 +127,7 @@ describe("kino-lens SVG shape", () => {
       params: {}, keyframes: [], triggers: [],
     };
     const mk = (morph: number): KinoProps => ({
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
       background: bg, disclosure: "",
       segments: [{
         kind: "motion", caption: "", startSec: 0, endSec: 2,
@@ -155,7 +155,7 @@ describe("kino-lens SVG shape", () => {
       params: {}, keyframes: [], triggers: [],
     };
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
       background: bg, disclosure: "",
       segments: [{
         kind: "motion", caption: "", startSec: 0, endSec: 4,

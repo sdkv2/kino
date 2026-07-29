@@ -22,8 +22,8 @@ import { presenterBeats, resolvePresenterPin } from "../avatar/source.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { lookupFont } from "../fonts/registry.js";
 import { ensureFont } from "../fonts/manager.js";
-import { resolveLogoSize, resolveLogoPosition, resolveCaptionBackplate } from "../render/elements.js";
-import { probeDuration, probeImageAspect, stitchAudio } from "../media/ffmpeg.js";
+import { resolveCaptionBackplate } from "../render/elements.js";
+import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { parseQuality } from "../render/native/engine.js";
@@ -239,7 +239,7 @@ function resolveSpecPathIn(specPath: string, project: Project): string {
   return specPath;
 }
 
-// Resolve an optional brand asset (logo/backdrop) — brands are shared, so paths are workspace-relative.
+// Resolve an optional brand asset (e.g. backdrop) — brands are shared, so paths are workspace-relative.
 function resolveBrandFile(p: string | undefined, project: Project): string | null {
   if (!p) return null;
   const abs = isAbsolute(p) ? p : join(project.workspaceRoot, p);
@@ -348,7 +348,7 @@ export async function prepare(
 
   log.step("presenter");
   const plan = planAvatarWindows(presenterBeats(spec), vo.timings, GAP);
-  const avatarWindows = plan.windows; // contiguous on-camera runs: presenter placement + steady logo
+  const avatarWindows = plan.windows; // contiguous on-camera runs: presenter placement on the timeline
   let avatarRel: string | null = null;
   let avatarPath: string | null = null;
   if (provider === "none" || plan.avatarIndices.length === 0) {
@@ -422,21 +422,6 @@ export async function prepare(
       duckSpans: vo.timings.map((t) => ({ from: t.startSec, to: t.endSec })),
     };
   }
-  const logoAbs = resolveBrandFile(brand.logo, project);
-  if (logoAbs) copyFileSync(logoAbs, join(publicDir, "logo.png"));
-  const logoPos = resolveLogoPosition(spec.logoPosition ?? brand.logoPosition);
-  const logo = logoAbs
-    ? {
-        src: "logo.png",
-        sizePx: resolveLogoSize(spec.logoSize ?? brand.logoSize),
-        // Measured here because layersAt is pure — without it the mark has no shape to size to.
-        aspect: await probeImageAspect(logoAbs),
-        x: logoPos.x,
-        y: logoPos.y,
-        keyframes: spec.logoKeyframes ?? [],
-      }
-    : null;
-
   // Faceless background: stage the image (image kind) or read the custom draw-fn (custom kind).
   const bgKind = (opts.background as ReturnType<typeof resolveBackgroundKind> | undefined) ?? resolveBackgroundKind(brand, spec);
   let bgImageRel: string | null = null;
@@ -665,7 +650,6 @@ export async function prepare(
     avatar: avatarRel,
     avatarWindows,
     voTrack: "vo.mp3",
-    logo,
     background,
     disclosure: avatarRel ? (brand.presenterDisclosure ?? brand.disclosure) : brand.disclosure,
     sfx,
@@ -702,11 +686,11 @@ export async function build(
   const quality = parseQuality(opts.quality);
 
   // --beat: reduce to a single-segment spec and re-run prepare() on it, so the isolated clip gets
-  // its own from-scratch VO/timing pass (segment starts at t=0). Only backgroundKeyframes/
-  // logoKeyframes need adjusting here — they're absolute on the FULL spec's timeline (unlike
-  // caption/kicker/zoom/regionShader keyframes, which are already beat-relative) — so they're
-  // filtered to the beat's original window and rebased to it. A 1-segment spec has no "next" for
-  // the renderer to crossfade with, so transitions already degrade to a hard cut with no extra work.
+  // its own from-scratch VO/timing pass (segment starts at t=0). Only backgroundKeyframes needs
+  // adjusting here — it's absolute on the FULL spec's timeline (unlike caption/kicker/zoom/
+  // regionShader keyframes, which are already beat-relative) — so it's filtered to the beat's
+  // original window and rebased to it. A 1-segment spec has no "next" for the renderer to
+  // crossfade with, so transitions already degrade to a hard cut with no extra work.
   let beatTag: string | undefined;
   if (opts.beat != null) {
     if (!draft && opts.tts !== false) {
@@ -726,7 +710,6 @@ export async function build(
       segments: [spec.segments[idx]],
       seamlessLoop: false,
       backgroundKeyframes: rebase(spec.backgroundKeyframes),
-      logoKeyframes: rebase(spec.logoKeyframes),
     };
 
     const tmpDir = scratchDir("kino-beat-");

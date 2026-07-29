@@ -14,9 +14,9 @@ export async function probeDuration(file: string): Promise<number> {
 
 /**
  * Natural width/height of a still image. The compositor's layer list is a pure function that
- * cannot decode pixels, so a layer sized to its own artwork (the logo) has to be measured here
- * and threaded through props. Unprobeable input (a missing file, an SVG) falls back to 1: a
- * square rect is wrong-but-bounded, and never a full-bleed stretch.
+ * cannot decode pixels, so a layer that needs sizing to its own artwork's aspect ratio has to be
+ * measured here and threaded through props. Unprobeable input (a missing file, an SVG) falls back
+ * to 1: a square rect is wrong-but-bounded, and never a full-bleed stretch.
  */
 export async function probeImageAspect(file: string): Promise<number> {
   try {

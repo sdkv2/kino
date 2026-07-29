@@ -142,7 +142,7 @@ The shader samples `uTex1` (the mask) to composite — e.g. `mix(bg, subject, te
 
 ### 2. Region shaders — the main event
 
-On a `video` beat, `regionShader` splits the beat's own source by the mask: the **subject** region (mask > 0.5) runs one shader, the **background** region (mask ≤ 0.5) runs another. Output is the beat's visual; captions/logo composite on top as usual.
+On a `video` beat, `regionShader` splits the beat's own source by the mask: the **subject** region (mask > 0.5) runs one shader, the **background** region (mask ≤ 0.5) runs another. Output is the beat's visual; captions and any declared layers composite on top as usual.
 
 ```json
 {
@@ -416,7 +416,7 @@ rasterizes at composition size **every frame**, scrubbed by the beat's own progr
   "mask": "masks/clip",
   "subject": "backgrounds/glass.frag",     // refracts the badge (uTex2) behind the subject
   "background": "backgrounds/plasma.frag",
-  "textures": ["motion/badge.html", "logo.png"]   // → uTex2, uTex3
+  "textures": ["motion/badge.html", "sticker.png"]   // → uTex2, uTex3
 }
 ```
 

@@ -21,7 +21,7 @@ const fullMotion = {
 };
 
 const props = (mask: unknown): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: blackBg, disclosure: "",
   segments: [{ kind: "motion", caption: "", startSec: 0, endSec: 2, motion: fullMotion, mask } as never],
 });
@@ -56,7 +56,7 @@ describe("layer-as-mask", () => {
         params: {}, keyframes: [], triggers: [],
       };
       const layerProps: KinoProps = {
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: blackBg, disclosure: "",
         segments: [{
           kind: "motion", caption: "", startSec: 0, endSec: 2,
@@ -91,7 +91,7 @@ describe("layer-as-mask", () => {
       };
       // Fullscreen text overlay, masked by inverted subject layer (so text only shows where subject is NOT)
       const textBehindProps: KinoProps = {
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: blackBg, disclosure: "",
         segments: [{
           kind: "motion", caption: "TITLE BEHIND SUBJECT", startSec: 0, endSec: 2,
@@ -125,7 +125,7 @@ describe("layer-as-mask", () => {
         params: {}, keyframes: [], triggers: [],
       };
       const layerProps: KinoProps = {
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: blackBg, disclosure: "",
         segments: [{
           kind: "motion", caption: "", startSec: 0, endSec: 2,

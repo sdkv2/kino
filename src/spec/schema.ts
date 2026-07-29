@@ -76,8 +76,6 @@ const motionFields = {
   loop: z.boolean().optional(), // Tier-3 Lottie playback; inert for html/proc graphics
 };
 const MotionGraphicRef = z.object(motionFields);
-const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
-const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
 
 const SfxEvent = z
   .object({
@@ -337,9 +335,6 @@ export const SpecSchema = z
     backgroundIntensity: z.number().min(0).max(1).optional(), // 0..1 motion strength override
     backgroundKeyframes: z.array(BgKeyframe).optional(), // agent-driven param tweens over time
     backgroundTriggers: z.array(BgTrigger).optional(), // agent-driven one-shot actions (e.g. pulse)
-    logoSize: LogoSize.optional(), // small|medium|big or px (overrides brand.logoSize)
-    logoPosition: LogoPosition.optional(), // top|bottom|left|right|center or {x,y}% (overrides brand)
-    logoKeyframes: z.array(BgKeyframe).optional(), // tween logo x/y/scale/opacity over time
     // Custom Canvas2D draw fn when background is "custom". Bare id → assets-lib/backgrounds/;
     // path → project assets/ or workspace (overrides brand.backgroundComponent).
     backgroundComponent: z.string().min(1).optional(),
@@ -418,9 +413,6 @@ export type Segment = z.infer<typeof Segment>;
 
 /** Top-level / brand fields agents often park on a segment by mistake. */
 const TOP_LEVEL_KEYS: Record<string, string> = {
-  logoPosition: "logoPosition is top-level (or brand.md) — not a segment field",
-  logoSize: "logoSize is top-level (or brand.md) — not a segment field",
-  logoKeyframes: "logoKeyframes is top-level — not a segment field",
   film: "film is top-level — not a segment field",
   seamlessLoop: "seamlessLoop is top-level — not a segment field",
   background: "background is top-level (or brand.md) — not a segment field",
@@ -476,7 +468,7 @@ export function formatSpecError(err: z.ZodError): string {
     })
     .join("\n");
 }
-/** Parse a spec with helpful footgun messages (logoPosition on CTA, transition on motion, …). */
+/** Parse a spec with helpful footgun messages (film on a segment, transition on motion, …). */
 export function parseSpec(input: unknown): Spec {
   const r = SpecSchema.safeParse(input);
   if (r.success) return r.data;

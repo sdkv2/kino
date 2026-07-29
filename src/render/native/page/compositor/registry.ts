@@ -256,8 +256,6 @@ export function buildRegistry(
     }
   });
 
-  if (props.logo) sources.set("logo", createImageSource("/public/" + props.logo.src));
-
   if (props.disclosure) {
     sources.set(
       "disclosure",

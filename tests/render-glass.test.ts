@@ -40,7 +40,7 @@ void main() {
 }`;
 
 const mkProps = (html: string, lensShaders?: Record<string, string>): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "test",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "test",
   segments: [{
     kind: "motion", caption: "", startSec: 0, endSec: 2,
     motion: { html, params: {}, keyframes: [], triggers: [], ...(lensShaders ? { lensShaders } : {}) },

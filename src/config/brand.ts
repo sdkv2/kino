@@ -5,8 +5,6 @@ import { parse as parseYaml } from "yaml";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS, type CaptionStyle, type CaptionAnimation } from "../render/textStyles.js";
 
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
-const LogoSize = z.union([z.enum(["small", "medium", "big"]), z.number()]);
-const LogoPosition = z.union([z.enum(["top", "bottom", "left", "right", "center"]), z.object({ x: z.number(), y: z.number() })]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "solid", "custom"]);
 const CaptionStyleBg = z.object({ color: z.string().optional(), opacity: z.number().min(0).max(1).optional(), appOnly: z.boolean().optional() });
 
@@ -45,9 +43,6 @@ export const BrandFrontmatterSchema = z
     disclosure: z.string().optional(), // AI disclosure shown on ordinary beats
     presenterDisclosure: z.string().optional(), // shown instead whenever a presenter is composited
     facelessDisclosure: z.string().optional(), // pre-1.22 name for `disclosure` (see normalizeDisclosures)
-    logo: z.string().optional(),
-    logoSize: LogoSize.optional(),
-    logoPosition: LogoPosition.optional(),
     backdrop: z.string().optional(), // still image behind `background: "image"`
     facelessBackdrop: z.string().optional(), // pre-1.22 name for `backdrop`
     background: Background.optional(),
@@ -90,9 +85,6 @@ export interface Brand {
   };
   disclosure: string;
   presenterDisclosure?: string;
-  logo?: string;
-  logoSize?: z.infer<typeof LogoSize>;
-  logoPosition?: z.infer<typeof LogoPosition>;
   backdrop?: string;
   background?: z.infer<typeof Background>;
   backgroundComponent?: string;

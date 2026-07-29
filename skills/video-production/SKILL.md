@@ -165,7 +165,7 @@ bars, decorative docks, secondary labels) is allowed in those bands — don't li
 the tint.
 
 | Music | Quiet bed `"volume": 0.10–0.14`, `"duck": 0.04`, short `fadeOutSec` | Loud beds fighting VO/captions |
-| Logo | `logoPosition: top` on talking runs; CTA `center` only if mark clears hero type | Omit logo when CTA caption already names the brand (double mark); tiny lower-third as the whole ending |
+| Brand mark | A declared layer at `z: 1000`, `rect` near the top on talking runs; centred on a CTA only if it clears hero type | Omit the mark when the CTA caption already names the brand (double mark); tiny lower-third as the whole ending |
 
 **Caption stability is the default.** Omit `captionKeyframes` on a first pass. Add one only when a
 single beat must dodge a bright subject (check that still) — never a different `y` on every beat.
@@ -179,8 +179,8 @@ graphic/`texts`, not via `cta: true`. **Two valid CTA shapes:** (a) a plain scen
 graphic), or (b) a pure `kind:"motion"` end-card **without** `cta:true`. A scene has no face unless its
 `source` asks for one. Write a short caption (`Cadence · free to try`, not a
 full spoken sentence). Prefer `captionMode: "phrase"` or `captionReveal: "all"` so the line lands as
-one poster, not a word drip. Logo is optional: if the caption already carries the brand name, **omit
-`brand.logo`** — a centered mark + centered wordmark fights. Otherwise put the mark mid/top so the
+one poster, not a word drip. A brand mark is optional: if the caption already carries the brand name,
+**leave the mark layer out** — a centered mark + centered wordmark fights. Otherwise put it mid/top so the
 frame isn't empty mesh + type. Stronger: end on an `app` still of the product, then a short hero CTA
 beat — never a lone lower-third pill on blank mesh.
 
@@ -263,9 +263,9 @@ don't reintroduce per-caption `y` offsets to compensate.
   - a full-bleed `.bg` inside motion graphics (occludes the background layer entirely)
   Spec `backgroundComponent` overrides brand. Tween with `backgroundKeyframes` / `backgroundTriggers`;
   sync to VO via `kino inspect`. See `docs/backgrounds-and-overlays.md`.
-- **Overlay elements tween** (`kino elements`): the logo has `logoSize` (small/medium/big/px) +
-  `logoPosition` (top/bottom/left/right/center/{x,y}%) and `logoKeyframes`; captions + kickers tween via
-  per-segment `captionKeyframes` / `kickerKeyframes` — all x/y/scale/opacity over time, same keyframe system.
+- **Overlay elements tween** (`kino elements`): captions + kickers tween via per-segment
+  `captionKeyframes` / `kickerKeyframes`, and anything you declare in `spec.layers[]` takes the same
+  `keyframes` track — all x/y/scale/opacity over time, same keyframe system.
 - **Camera push on app footage** (`zoomKeyframes`, per `app` segment): scales/pans the footage **+ frame
   chrome** as one group about centre — the "canvas zoom" for inset iPhone footage. The phone grows/pushes
   in; captions, kicker, logo and the background stay anchored. **Beat-relative** track (`at` = seconds from

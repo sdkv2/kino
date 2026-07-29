@@ -69,8 +69,11 @@ export interface DeclaredLayer {
  *
  *  Enumerated directly against layers.ts: backdrop, scrim, av{i} (§3); overlay{i} (§4 behind, §5
  *  behind, §6 — three push sites, one id shape), seg{i}/frame{i}/kicker{i} (§4); motion{i} (§5);
- *  text{i}_{j} (§7); logo (§8); caption{i} (§9); disclosure (§10); platformGuide/grid (§11);
+ *  text{i}_{j} (§7); caption{i} (§9); disclosure (§10); platformGuide/grid (§11);
  *  film — the cinematic-finish adjustment layer (§12).
+ *
+ *  There is no built-in "logo" id anymore — the logo system was removed in favour of an ordinary
+ *  declared layer (spec.layers[]), so "logo" is a free id an author can use like any other.
  *
  *  region{i} is the odd one out: it is never pushed by layersAt at all — layers.ts §4 sets
  *  `seg{i}`'s own `source.providerId` to `region{i}` for a beat with a regionShader (the footage
@@ -79,7 +82,7 @@ export interface DeclaredLayer {
  *  against every `sources.set(...)` call in registry.ts (not just layersAt's push sites, since this
  *  one is registry-side only) — region{i} was the only id registry.ts sets that this list missed. */
 const BUILTIN_ID_PATTERNS = [
-  /^backdrop$/, /^scrim$/, /^film$/, /^logo$/, /^disclosure$/, /^platformGuide$/, /^grid$/,
+  /^backdrop$/, /^scrim$/, /^film$/, /^disclosure$/, /^platformGuide$/, /^grid$/,
   /^av\d+$/, /^seg\d+$/, /^frame\d+$/, /^kicker\d+$/, /^motion\d+$/, /^overlay\d+$/,
   /^caption\d+$/, /^text\d+_\d+$/, /^region\d+$/,
 ];

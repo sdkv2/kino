@@ -12,7 +12,7 @@ describe("still --measure geometry probe", () => {
   it("reports layer-graph geometry (center + size) for composited layers", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-measure-"));
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg,
       disclosure: "test",
       segments: [{ kind: "scene", caption: "hook", startSec: 0, endSec: 2, motionOverlay: { html: "<div></div>", params: {}, keyframes: [], triggers: [] } }],
     };
@@ -35,7 +35,7 @@ describe("still --measure geometry probe", () => {
   it("collects nothing when no measureSink is passed (opt-in, zero overhead)", async () => {
     const outDir = mkdtempSync(join(tmpdir(), "kino-measure-off-"));
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg,
       disclosure: "test",
       segments: [{ kind: "scene", caption: "hook", startSec: 0, endSec: 2, motionOverlay: { html: "<div></div>", params: {}, keyframes: [], triggers: [] } }],
     };

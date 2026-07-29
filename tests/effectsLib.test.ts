@@ -54,7 +54,7 @@ describe("effectsLib", () => {
       gold: "#aa0", white: "#fff", captionFontSize: 74, captionStroke: 9, film: 0,
     };
     const props: KinoProps = {
-      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+      theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
       background: {
         kind: "custom", image: null, shaderCode: null,
         customCode: "ctx.fillRect(0,0,1,1)", params: {}, keyframes: [], triggers: [],

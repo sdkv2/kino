@@ -68,7 +68,7 @@ describe("declared layers — pixel proof", () => {
       magick(["-size", "1080x1920", "xc:#ffffff", join(publicDir, "leak.png")]);
 
       const props: KinoProps = {
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: blackBg, disclosure: "",
         segments: [],
         layers: [{
@@ -102,7 +102,7 @@ describe("declared layers — pixel proof", () => {
       const outDir = mkdtempSync(join(tmpdir(), "kino-decl-screen-out-"));
 
       const mkProps = (blend: "normal" | "screen"): KinoProps => ({
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: midGreyBg, disclosure: "",
         segments: [],
         layers: [{ id: "src", z: 350, source: { kind: "image", src: "src.png", url: "src.png" }, blend }],
@@ -130,7 +130,7 @@ describe("declared layers — pixel proof", () => {
       const outDir = mkdtempSync(join(tmpdir(), "kino-decl-multiply-out-"));
 
       const mkProps = (blend: "normal" | "multiply"): KinoProps => ({
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: midGreyBg, disclosure: "",
         segments: [],
         layers: [{ id: "src", z: 350, source: { kind: "image", src: "src.png", url: "src.png" }, blend }],
@@ -161,7 +161,7 @@ describe("declared layers — pixel proof", () => {
       const outDir = mkdtempSync(join(tmpdir(), "kino-decl-grade-out-"));
 
       const mkProps = (withGrade: boolean): KinoProps => ({
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: blackBg, disclosure: "",
         segments: [{ kind: "video", source: "footage.png", caption: "TEST CAPTION", startSec: 0, endSec: 3 }],
         layers: withGrade
@@ -209,7 +209,7 @@ describe("declared layers — pixel proof", () => {
       // (layers.ts §11b: `group: bound && !d.hold ? ... : undefined`) — it should just sit there,
       // painted after the mix, unaffected by it.
       const props: KinoProps = {
-        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+        theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
         background: blackBg, disclosure: "",
         segments: [
           { kind: "motion", caption: "", startSec: 0, endSec: 2, motion: blackMotion },

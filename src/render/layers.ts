@@ -7,7 +7,6 @@ import type { BgKeyframe, KinoProps } from "./props.js";
 import type { LayerEffect } from "./maskSpec.js";
 import { interpolate } from "./interpolate.js";
 import { paramsAt } from "./bgparams.js";
-import { spring } from "./spring.js";
 import { IDENTITY_TRANSFORM, normalizeLayer, type Dims, type LayerDraw, type LayerSpec, type LayerTransform } from "./native/page/compositor/graph.js";
 import { motionHandoff, motionXfadeFrames, shotTransform, type Shot } from "./motion.js";
 import { hasCaptionContent } from "./captionLayout.js";
@@ -45,7 +44,6 @@ export const Z = {
   motion: 810,
   overlay: 820,
   text: 900,
-  logo: 1000,
   caption: 1100,
   disclosure: 1200,
   /** QA guides. Above everything — a safe-zone guide a caption can cover is useless.
@@ -59,8 +57,8 @@ export const Z = {
 const num = (v: unknown, d: number): number => (typeof v === "number" ? v : Number(v) || d);
 
 /**
- * An authored tween track (captionKeyframes / kickerKeyframes / zoomKeyframes / logoKeyframes)
- * resolved to a layer transform at `tSec`.
+ * An authored tween track (captionKeyframes / kickerKeyframes / zoomKeyframes / a declared
+ * layer's own `keyframes`) resolved to a layer transform at `tSec`.
  *
  * Ported from the retired DOM composition's TweenOverlay, which applied
  * `translate(x%, y%) scale(s)` to a full-frame box: x/y are PERCENT OF FRAME, and the scale is
@@ -365,42 +363,6 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
       });
     });
   });
-
-  // 8. Logo — presenter-less beats only (the avatar covers it on camera).
-  if (props.logo) {
-    const onCamera = props.avatar
-      ? props.avatarWindows.some((w) => frame >= f(w.fromSec) && frame < f(w.toSec))
-      : false;
-    const logo = props.logo;
-    const logoFromSec = (logo as any).fromSec ?? 0;
-    if (!onCamera && frame >= f(logoFromSec)) {
-      // Ported from AnimatedElement: `left/top` are % of frame under a translate(-50%,-50%),
-      // so x/y name the CENTRE, and the mark draws at sizePx wide at its natural aspect —
-      // never full-bleed. The track tweens FROM the configured position and reads ABSOLUTE
-      // time: logoKeyframes span the whole spec, not a beat (build.ts rebases them per cut).
-      // No track → the default entrance: a critically-damped fade-and-settle from 0.9, measured
-      // from the mark's own start frame. An authored track replaces it outright.
-      const entrance = spring({ frame: frame - f(logoFromSec), fps: props.fps, config: { damping: 200 } });
-      const p = logo.keyframes?.length
-        ? paramsAt({ x: logo.x, y: logo.y, scale: 1, opacity: 1 }, logo.keyframes, frame / props.fps)
-        : { x: logo.x, y: logo.y, scale: interpolate(entrance, [0, 1], [0.9, 1]), opacity: entrance };
-      const lw = logo.sizePx;
-      const lh = logo.sizePx / (logo.aspect || 1);
-      out.push({
-        id: "logo",
-        z: Z.logo,
-        source: { providerId: "logo" },
-        rect: {
-          x: (num(p.x, logo.x) / 100) * width - lw / 2,
-          y: (num(p.y, logo.y) / 100) * height - lh / 2,
-          w: lw,
-          h: lh,
-        },
-        transform: { scale: num(p.scale, 1), rotate: 0, translate: [0, 0] },
-        opacity: num(p.opacity, 1),
-      });
-    }
-  }
 
   // 9. Captions. The raster is keyed by the ACTIVE WORD, not the frame: a words-mode caption
   // re-rasters once per spoken word, and the per-word pop rides the quad instead.

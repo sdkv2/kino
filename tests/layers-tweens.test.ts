@@ -1,10 +1,12 @@
-// The authored tween tracks — captionKeyframes, kickerKeyframes, zoomKeyframes, logoKeyframes
-// and `shot`. Each was consumed by the retired DOM composition (KinoVideo.tsx / components.tsx)
-// and has to land on a LayerDraw.transform now that the compositor is the only render path.
+// The authored tween tracks — captionKeyframes, kickerKeyframes, zoomKeyframes (segment-level)
+// and a declared layer's own `keyframes` — and `shot`. Each was consumed by the retired DOM
+// composition (KinoVideo.tsx / components.tsx) and has to land on a LayerDraw.transform now that
+// the compositor is the only render path.
 //
 // Semantics are ported verbatim from TweenOverlay / AnimatedElement / AppCutaway:
 //   · x/y are PERCENT OF FRAME, translate applied after a scale about the rect centre
-//   · segment tracks (caption/kicker/zoom) are BEAT-RELATIVE; logoKeyframes are ABSOLUTE
+//   · segment tracks (caption/kicker/zoom) are BEAT-RELATIVE; a declared layer's own track is
+//     relative to ITS start (see tests/layers-declared.test.ts)
 import { describe, it, expect } from "vitest";
 import { layersAt } from "../src/render/layers.js";
 import type { KinoProps, KinoSegment } from "../src/render/props.js";
@@ -17,7 +19,7 @@ const bg = { kind: "glow" as const, image: null, customCode: null, shaderCode: n
 const DIMS = { width: 1080, height: 1920 };
 
 const mk = (segments: KinoSegment[], over: Partial<KinoProps> = {}): KinoProps => ({
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null,
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null,
   background: bg, disclosure: "", segments, ...over,
 });
 
@@ -142,64 +144,6 @@ describe("shot", () => {
     expect(t.translate[0]).toBeCloseTo(108 + 2 * 54); // Tz + Z · Ts
     // The chrome-less group still moves as one: no chrome layer here, but the zoom alone
     // governs any sibling.
-  });
-});
-
-// `aspect` is the logo's natural w/h, measured node-side at build. layersAt is pure and cannot
-// decode the image, so the rect it computes has to be told the shape.
-const logoProps = (over: Record<string, unknown> = {}) =>
-  ({ src: "logo.png", sizePx: 120, aspect: 3, x: 50, y: 90, keyframes: [], ...over }) as unknown as KinoProps["logo"];
-
-describe("logo geometry", () => {
-  const beat: KinoSegment = { kind: "scene", caption: "hi", startSec: 0, endSec: 3 };
-
-  it("sizes the logo to sizePx at its natural aspect, centred on x/y percent", () => {
-    const p = mk([beat], { logo: logoProps() });
-    // 120px wide at 3:1 → 40 tall; centre (50% of 1080, 90% of 1920) = (540, 1728).
-    expect(layer(p, 30, "logo").rect).toEqual({ x: 480, y: 1708, w: 120, h: 40 });
-  });
-
-  it("does not stretch the logo across the whole frame", () => {
-    const p = mk([beat], { logo: logoProps() });
-    const r = layer(p, 30, "logo").rect;
-    expect(r.w).toBeLessThan(DIMS.width);
-    expect(r.h).toBeLessThan(DIMS.height);
-  });
-
-  it("tweens x/y/scale/opacity from logoKeyframes on the ABSOLUTE timeline", () => {
-    const p = mk([beat], {
-      logo: logoProps({
-        keyframes: [
-          { at: 0, params: { opacity: 0, scale: 1 } },
-          { at: 2, params: { opacity: 1, scale: 2 } },
-        ],
-      }),
-    });
-    const l = layer(p, 30, "logo"); // t = 1s absolute → halfway
-    expect(l.opacity).toBeCloseTo(0.5);
-    expect(l.transform.scale).toBeCloseTo(1.5);
-  });
-
-  it("keeps the configured x/y as the base a partial track tweens from", () => {
-    const p = mk([beat], { logo: logoProps({ keyframes: [{ at: 0, params: { scale: 1 } }] }) });
-    // The track never mentions x/y, so the logo stays at its configured 50/90 centre.
-    expect(layer(p, 30, "logo").rect.x).toBe(480);
-  });
-
-  it("springs in when no track is authored — the default entrance, not a hard cut", () => {
-    const p = mk([beat], { logo: logoProps() });
-    const first = layer(p, 0, "logo");
-    expect(first.opacity).toBe(0);
-    expect(first.transform.scale).toBeCloseTo(0.9);
-    // Critically damped at damping 200 → settled within a second.
-    const settled = layer(p, 30, "logo");
-    expect(settled.opacity).toBeCloseTo(1, 2);
-    expect(settled.transform.scale).toBeCloseTo(1, 2);
-  });
-
-  it("lets an authored track replace the entrance entirely", () => {
-    const p = mk([beat], { logo: logoProps({ keyframes: [{ at: 0, params: { opacity: 1 } }] }) });
-    expect(layer(p, 0, "logo").opacity).toBe(1);
   });
 });
 

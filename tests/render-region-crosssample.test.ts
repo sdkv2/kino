@@ -44,7 +44,7 @@ void mainImage(out vec4 c, in vec2 f){
 }`;
 
 const props: KinoProps = {
-  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, logo: null, background: bg, disclosure: "",
+  theme, fps: 30, avatar: null, avatarWindows: [], voTrack: null, background: bg, disclosure: "",
   segments: [{
     kind: "video", source: "asset.png", caption: "", startSec: 0, endSec: 2,
     regionShader: {

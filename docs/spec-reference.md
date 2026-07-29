@@ -12,7 +12,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Layers](#layers) — [source kinds](#source-kinds) · [z scale](#z-scale) · [adjustment layers](#adjustment-layers)
 - [Post FX](#post-fx)
 - [Keyframes & triggers](#keyframes--triggers)
-- [Backgrounds](#backgrounds), [logo & overlays](#logo--overlay-tweening)
+- [Backgrounds](#backgrounds)
 - [Sound effects & music](#sound-effects--music)
 - [brand.md](#brandmd) · [project.json](#projectjson)
 - [Examples](#examples)
@@ -37,9 +37,6 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `backgroundIntensity` | number | — | 0..1 motion-strength override. |
 | `backgroundKeyframes` | [BgKeyframe](#keyframes--triggers)[] | — | Tween background params over time. |
 | `backgroundTriggers` | [BgTrigger](#keyframes--triggers)[] | — | One-shot background actions (e.g. `pulse`). |
-| `logoSize` | `small\|medium\|big` \| number | — | Logo size; overrides brand. |
-| `logoPosition` | `top\|bottom\|left\|right\|center` \| `{x,y}` | — | Logo placement (% of frame); overrides brand. |
-| `logoKeyframes` | [BgKeyframe](#keyframes--triggers)[] | — | Tween logo `x/y/scale/opacity`. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset; overrides `brand.captionStyle.style`. Default `stroke`. See [Captions](#captions). |
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Unset = the surface's native entrance (`pop`; `rise` for presenter-less hero text). See [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal: `word` (default, one word at a time) or `all` (whole line laid out, active-word highlight tracks VO). See [Captions](#captions). |
@@ -49,6 +46,18 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `seamlessLoop` | boolean | — | Loop-ad contract: last beat must be `kind:"motion"`; validate warns if `film` unset/`>0` or first/last motion sources aren't a ready-state pair; post-build compares first/last frame RGB (warn only). Prefer `"film": 0`. Not the same as segment `loop` (Lottie playback). |
 | `postFx` | [PostFx](#post-fx) | — | Full-frame post stage over the finished composite (compositor only). See [Post FX](#post-fx). |
 | `layers` | [DeclaredLayer](#layers)[] | — | Author-declared layers, slotted into the built-in stack by z. See [Layers](#layers). |
+
+> There is no built-in `logo`/`logoSize`/`logoPosition`/`logoKeyframes` field anymore. A persistent
+> brand mark is now an ordinary [declared layer](#layers) — with strictly more control (rect,
+> opacity, blend, mask, effects, its own keyframe track):
+> ```jsonc
+> "layers": [{
+>   "id": "brandmark", "z": 1000,
+>   "source": { "kind": "image", "src": "logo.png" },
+>   "rect": { "x": 44, "y": 4, "w": 12, "h": 12 },
+>   "keyframes": [{ "at": 0, "params": { "opacity": 0 } }]
+> }]
+> ```
 
 ## Segments
 
@@ -227,9 +236,10 @@ validates but has no visible effect.
 ## Layers
 
 `spec.layers[]` declares extra layers that slot into the built-in stack — backdrop, beats,
-captions, logo, the cinematic finish — at an author-chosen z. A light leak under the captions, a
-full-frame grade over the footage but under the type, a sticker that survives a beat's crossfade
-untouched: each is one entry, positioned by z rather than by where it sits in the array.
+captions, the cinematic finish — at an author-chosen z. A light leak under the captions, a
+full-frame grade over the footage but under the type, a persistent brand mark, a sticker that
+survives a beat's crossfade untouched: each is one entry, positioned by z rather than by where it
+sits in the array.
 
 ```json
 "layers": [
@@ -245,7 +255,7 @@ untouched: each is one entry, positioned by z rather than by where it sits in th
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `id` | string | ✅ | Unique among declared layers; cannot match a built-in id pattern (`backdrop`, `scrim`, `film`, `logo`, `disclosure`, `platformGuide`, `grid`, or a numbered built-in like `seg0`/`caption3`/`motion2`/`text0_1`). |
+| `id` | string | ✅ | Unique among declared layers; cannot match a built-in id pattern (`backdrop`, `scrim`, `film`, `disclosure`, `platformGuide`, `grid`, or a numbered built-in like `seg0`/`caption3`/`motion2`/`text0_1`). |
 | `z` | number | ✅ | Paint order — sorts against every built-in layer's z, see [Z scale](#z-scale) below. Cannot equal a reserved constant; pick a value between two of them. Layers sharing a z paint in authored order. |
 | `source` | [source kind](#source-kinds) | one of `source`/`adjust` | The layer's pixels. Mutually exclusive with `adjust` — a layer either draws something or grades what's beneath it, never both. |
 | `adjust` | effect[] | one of `source`/`adjust` | No pixels of its own; runs this effect chain over everything composited beneath it. See [Adjustment layers](#adjustment-layers). |
@@ -257,7 +267,7 @@ untouched: each is one entry, positioned by z rather than by where it sits in th
 | `opacity` | number 0–1 | — | Default `1`. |
 | `mask` | mask | — | Same mask model as segments — see [Masks and effects](#masks-and-effects). |
 | `effects` | effect[] | — | Same effect chain as segments, run before compositing — see [Masks and effects](#masks-and-effects). |
-| `keyframes` | BgKeyframe[] | — | Tweens the layer's own `x`/`y` (% of frame), `scale`, `opacity` — the same idiom as `captionKeyframes`/`kickerKeyframes`. `at` is relative to the layer's own start (its `fromSec`, or its bound segment's `startSec`), not absolute like `backgroundKeyframes`/`logoKeyframes`. |
+| `keyframes` | BgKeyframe[] | — | Tweens the layer's own `x`/`y` (% of frame), `scale`, `opacity` — the same idiom as `captionKeyframes`/`kickerKeyframes`. `at` is relative to the layer's own start (its `fromSec`, or its bound segment's `startSec`), not absolute like `backgroundKeyframes`. |
 
 Exactly one of `source`/`adjust` is required. Every field below `adjust` in the table above is
 rejected on an adjustment layer — see [Adjustment layers](#adjustment-layers) for why.
@@ -317,12 +327,13 @@ it needs to go:
 | `Z.motion` | 810 | Beat content — motion |
 | `Z.overlay` | 820 | `motionOverlay`, default (in front) |
 | `Z.text` | 900 | Standalone `texts` overlays |
-| `Z.logo` | 1000 | Brand logo |
 | `Z.caption` | 1100 | Captions |
 | `Z.disclosure` | 1200 | AI disclosure |
 | `Z.qa` | 9000 | Storyboard/platform QA guides (above everything — a safe-zone guide a caption can cover is useless) |
 
-A declared `z` equal to any value above is a build error, naming the layer.
+A declared `z` equal to any value above is a build error, naming the layer. `z: 1000` — the old
+built-in brand logo's slot, between `Z.text` and `Z.caption` — is ordinary now; a persistent brand
+mark declared there paints exactly where the retired built-in used to.
 
 ### Adjustment layers
 
@@ -442,7 +453,7 @@ Overlays are clamped to their segment (an overlay never outlives its beat) and d
 
 ## Keyframes & triggers
 
-All tweenable layers (background, logo, captions, kickers, motion params) share one keyframe model. Times are **absolute on the main timeline** — read per-word start/end with `kino inspect`.
+All tweenable layers (background, declared layers, captions, kickers, motion params) share one keyframe model. Times are **absolute on the main timeline** — read per-word start/end with `kino inspect`.
 
 ```ts
 BgKeyframe = { at: number, params: Record<string, number | string>, ease?: "linear" | "easeInOut" | "overshoot" | "spring" }
@@ -525,10 +536,6 @@ floor reflection, and a shard-dissolve materialize driven by a `reveal` param
 }
 ```
 
-## Logo & overlay tweening
-
-`logoSize`/`logoPosition` place the brand mark on presenter-less talking beats; `logoKeyframes` tweens `x/y/scale/opacity` over time. Captions and kickers tween the same way via `captionKeyframes`/`kickerKeyframes`. Details in [Backgrounds & overlays → Overlay elements](backgrounds-and-overlays.md#overlay-elements).
-
 ## Sound effects & music
 
 Free-placed SFX events and an auto-ducked music bed. Place timestamps against real audio
@@ -605,8 +612,6 @@ The frontmatter fields:
 | `captionStyle` | `{ fontSize?, strokeWidth?, background?, style?, animation? }` | — | `fontSize` 74, `strokeWidth` 9; `background` = the caption backplate `{ color?, opacity? (0..1, def .82), appOnly? (def true) }`; `style`/`animation` = brand-level defaults for [caption look/entrance](#captions) (segment/spec override). |
 | `disclosure` | string | — | AI disclosure shown on ordinary beats. |
 | `presenterDisclosure` | string | — | Disclosure shown instead whenever a presenter is composited (falls back to `disclosure`). |
-| `logo` | string | — | Brand mark (transparent PNG) for presenter-less talking beats. |
-| `logoSize` / `logoPosition` | size / position | — | Default logo layout. |
 | `backdrop` | string | — | Background image (when `background="image"`). |
 | `background` | preset | — | Default background engine. |
 | `backgroundComponent` | string | — | Path or bare id for custom Canvas2D draw fn (when `background="custom"`). |
@@ -659,7 +664,6 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
     { "at": 2.5, "params": { "intensity": 0.7 }, "ease": "easeInOut" }
   ],
   "backgroundTriggers": [{ "at": 2.5, "action": "pulse" }],
-  "logoPosition": "top",
   "segments": [
     {
       "text": "Recruiters spend six seconds on your resume.",

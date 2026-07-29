@@ -11,7 +11,6 @@ colors:
   green: "#0c8d64"
   white: "#ffffff"
   gold: "#d99a20"
-logo: logo/kino-logo-web.png
 ---
 
 # kino
