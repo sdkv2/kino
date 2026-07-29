@@ -11,7 +11,7 @@ import type { WordTiming } from "../render/props.js";
 import type { Cache } from "../media/cache.js";
 import { contentHash, fileHash } from "../media/hash.js";
 import { offsetWords } from "../render/captions.js";
-import { extractAudio, probeDuration, stitchAudio, trailingArtifactCut, trimAudio } from "../media/ffmpeg.js";
+import { extractAudio, genSilence, probeDuration, stitchAudio, trailingArtifactCut, trimAudio } from "../media/ffmpeg.js";
 import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL, modelSupportsContext } from "./elevenlabs.js";
 import { transcribeAudio, scribeToWords } from "./scribe.js";
 import { pickSttEngine, resolveWhisper, whisperTranscribe } from "./whisper.js";
@@ -83,7 +83,11 @@ export function stripTagWords(words: WordTiming[]): WordTiming[] {
 export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needClips, resolveAsset }: BuildVOOpts): Promise<VOResult> {
   const resolvedModel = model ?? DEFAULT_VOICE_MODEL;
   const hasVoFiles = spec.segments.some((s) => s.voFile);
-  if (!mock && !needClips && !hasVoFiles && !modelSupportsContext(resolvedModel)) {
+  // A beat with no `text` speaks nothing, so it has no words — and buildVOSingle derives each beat's
+  // bounds from its first/last word, which a wordless beat cannot supply. Those specs take the
+  // per-clip path below, where a silent beat is placed as a plain `dur`-long silence.
+  const hasSilentBeats = spec.segments.some((s) => !s.text?.trim());
+  if (!mock && !needClips && !hasVoFiles && !hasSilentBeats && !modelSupportsContext(resolvedModel)) {
     return buildVOSingle(spec, voiceId, cache, apiKey!, resolvedModel);
   }
   const dir = scratchDir("kino-vo-");
@@ -92,6 +96,22 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
     const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
     const useCtx = modelSupportsContext(resolvedModel);
     for (const [i, seg] of spec.segments.entries()) {
+      // Purely visual beat: no `text`, so nothing is spoken and there are no words. It still occupies
+      // its slot on the timeline, as a silence of exactly `dur` (assertBeatLengths guarantees `dur`).
+      // Costs nothing on a real build either — an unspoken beat makes no TTS call.
+      if (!seg.text?.trim() && !seg.voFile) {
+        const secs = seg.dur!;
+        const key = contentHash({ silent: secs, v: "silent-beat" });
+        let silent = cache.get(key, "mp3");
+        if (!silent) {
+          const tmp = join(dir, `seg${i}.mp3`);
+          await genSilence(secs, tmp);
+          silent = cache.put(key, "mp3", tmp);
+        }
+        clips.push(silent);
+        clipWords.push([]);
+        continue;
+      }
       // Imported real VO: the file IS the clip. Mock paces spec text over the true duration (free,
       // offline); real builds transcribe once (Scribe with a key, else local whisper.cpp; KINO_STT
       // forces either) and cache the words by file content.
@@ -99,7 +119,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
         const abs = resolveAsset ? resolveAsset(seg.voFile) : seg.voFile;
         clips.push(abs);
         if (mock) {
-          clipWords.push(mockWordsForDuration(seg.text, await probeDuration(abs)));
+          clipWords.push(seg.text ? mockWordsForDuration(seg.text, await probeDuration(abs)) : []);
         } else {
           const engine = pickSttEngine({
             hasKey: !!apiKey,
@@ -154,8 +174,8 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
         const tmp = join(dir, `seg${i}.mp3`);
         const words = stripTagWords(
           mock
-            ? await ttsMockWithTimestamps(seg.text, tmp, seg.dur)
-            : await ttsWithTimestamps(apiKey!, voiceId, seg.text, tmp, DEFAULT_SETTINGS, resolvedModel, { previousText: prev, nextText: next }),
+            ? await ttsMockWithTimestamps(seg.text!, tmp, seg.dur)
+            : await ttsWithTimestamps(apiKey!, voiceId, seg.text!, tmp, DEFAULT_SETTINGS, resolvedModel, { previousText: prev, nextText: next }),
         );
         clip = cache.put(key, "mp3", tmp);
         const tmpJson = join(dir, `seg${i}.json`);
@@ -225,7 +245,7 @@ export function splitWordsBySegment(texts: string[], allWords: WordTiming[]): Wo
 // Tradeoff (accepted): one cache entry for the whole script — editing any segment re-bills the
 // entire VO. Avatar providers need per-segment clips, so they stay on the per-segment path.
 async function buildVOSingle(spec: Spec, voiceId: string, cache: Cache, apiKey: string, model: string): Promise<VOResult> {
-  const texts = spec.segments.map((s) => s.text);
+  const texts = spec.segments.map((s) => s.text ?? "");
   const key = contentHash({ texts, voiceId, settings: DEFAULT_SETTINGS, v: "single", model });
   let track = cache.get(key, "mp3");
   let metaFile = cache.get(key, "json");

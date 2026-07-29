@@ -63,7 +63,13 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 
 Every segment is one beat. `kind` selects the beat type; **omit it for a `scene`**, the ordinary beat. Two fields recur and are easy to confuse:
 
-- **`text`** — the **spoken** voiceover for the beat (drives VO + timing). Required on every kind.
+- **`text`** — the **spoken** voiceover for the beat (drives VO + timing). **Optional.** Omit it for a
+  purely visual beat — a title card, a logo sting, a shape morph — and give **`dur`** instead: the beat
+  then speaks nothing, produces no words and no caption, and lasts exactly `dur`. Under real TTS an
+  omitted `text` makes no API call, so a spec can speak on some beats and stay silent on others.
+  A beat with neither `text` nor `dur` (nor a `voFile`) is rejected — nothing would define its length.
+  Note that an unspoken beat also has no word timings, so nothing anchored to words (`atWord`,
+  `--kino-words-shown`, `env.words`) fires on it — drive that beat off `--progress` instead.
 - **`caption`** — the **on-screen** text. Optional on every kind: omit it and the beat renders no caption line at all (the VO still speaks `text`). In `captionMode: "words"` the synced spoken words render regardless of `caption` — under a words-mode brand, set `"captionMode": "phrase"` on the beat (and omit `caption`) for a fully caption-free beat.
 
 ### `scene` segment
@@ -73,7 +79,7 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 |---|---|---|---|
 | `kind` | `"scene"` | — | Default when `kind` is omitted. |
 | `source` | presenter scheme | — | Put a presenter on this beat: `"avatar:"` uses the configured provider, `"heygen:look-id"` / `"hedra:portraits/founder.png"` / `"replicate:"` pin one (anything after the colon is the look). Omit for no presenter. A file path here is an error — that is a [`video`](#video-segment) beat. |
-| `text` | string | ✅ | Spoken VO. |
+| `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
 | `cta` | boolean | — | Mark as a call-to-action / end-card beat. With no presenter: centered hero (not lower-third). Default `false`. |
@@ -95,7 +101,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 |---|---|---|---|
 | `kind` | `"video"` | ✅ | |
 | `source` | string | ✅ | Project asset path (`.mp4`/`.mov`/`.jpg`/`.png`). A presenter scheme (`"heygen:…"`) is also accepted here and resolves to a [`scene`](#scene-segment) with that presenter. |
-| `text` | string | ✅ | Spoken VO. |
+| `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
 | `kicker` | `{ text, color }` | — | Small label; `color` ∈ `mint\|green\|gold` (default `mint`). |
@@ -131,7 +137,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 |---|---|---|---|
 | `kind` | `"motion"` | ✅ | |
 | `source` | string | ✅ | Path under the project (`motion/hook.html`) **or** a bare library id with no `/` or `.` (e.g. `"prompt-type"` → `assets-lib/motion/prompt-type.js`). See `kino motion` for bundled ids. |
-| `text` | string | ✅ | Spoken VO for the beat. |
+| `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | Optional on-screen caption. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
 | `loop` | boolean | — | Tier-3 Lottie: loop at native speed instead of stretching once across the beat (default). |

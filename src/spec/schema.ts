@@ -152,7 +152,11 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     // Optional presenter video ("avatar:" for the configured provider, or "heygen:"/"hedra:"/
     // "replicate:" to pin one). Resolves to nothing when the provider is "none".
     source: z.string().min(1).optional(),
-    text: z.string().min(1),
+    // The line this beat speaks. OPTIONAL: omit it for a beat that is purely visual (a title
+    // card, a logo sting, a shape morph) and give `dur` instead — the beat then has no VO, no
+    // words, and no caption, and its length is exactly `dur`. Under real TTS an omitted `text`
+    // costs nothing and renders as silence, so a mixed spec can speak on some beats only.
+    text: z.string().min(1).optional(),
     voFile: VoFile.optional(),
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
@@ -175,7 +179,11 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     // Asset path under the project's assets/ (.mp4/.mov/.jpg/.png), or a presenter scheme
     // ("avatar:", "heygen:", "hedra:", "replicate:").
     source: z.string().min(1),
-    text: z.string().min(1),
+    // The line this beat speaks. OPTIONAL: omit it for a beat that is purely visual (a title
+    // card, a logo sting, a shape morph) and give `dur` instead — the beat then has no VO, no
+    // words, and no caption, and its length is exactly `dur`. Under real TTS an omitted `text`
+    // costs nothing and renders as silence, so a mixed spec can speak on some beats only.
+    text: z.string().min(1).optional(),
     voFile: VoFile.optional(),
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
@@ -284,7 +292,11 @@ const SegmentUnion = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("motion"),
     ...motionFields,
-    text: z.string().min(1),
+    // The line this beat speaks. OPTIONAL: omit it for a beat that is purely visual (a title
+    // card, a logo sting, a shape morph) and give `dur` instead — the beat then has no VO, no
+    // words, and no caption, and its length is exactly `dur`. Under real TTS an omitted `text`
+    // costs nothing and renders as silence, so a mixed spec can speak on some beats only.
+    text: z.string().min(1).optional(),
     voFile: VoFile.optional(),
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(),

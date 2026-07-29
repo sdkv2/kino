@@ -161,7 +161,7 @@ export function assertSeamlessLoop(spec: Spec, brand?: Brand): void {
   if (spec.film == null || spec.film > 0) {
     log.warn('seamlessLoop: set "film": 0 so the loop seam is not graded differently per encode');
   }
-  if (last.text.trim().split(/\s+/).length <= 2) {
+  if (last.text && last.text.trim().split(/\s+/).length <= 2) {
     log.warn("seamlessLoop: last beat VO is very short — settle may feel rushed");
   }
   const first = spec.segments[0];
@@ -180,6 +180,27 @@ export function assertSeamlessLoop(spec: Spec, brand?: Brand): void {
         '(e.g. backgroundComponent: "brand-wash") and paint a static .bg in every motion beat',
     );
   }
+}
+
+/**
+ * A beat with no `text` speaks nothing, so nothing derives its length — `dur` has to.
+ *
+ * `text` used to be mandatory on every beat, which meant a purely visual beat (a title card, a logo
+ * sting, a shape morph) had to carry a line it would never speak just to satisfy the schema. That
+ * line was not inert: it set the beat's length, and it produced word timings that any typed-in-sync
+ * surface would then lock to, so an invented caption silently dictated on-screen pacing.
+ */
+export function assertBeatLengths(spec: Spec): void {
+  const bad = spec.segments
+    .map((seg, i) => ({ seg, i }))
+    // A voFile beat takes its length from the audio file, so it needs neither text nor dur.
+    .filter(({ seg }) => !seg.text?.trim() && !seg.voFile && seg.dur == null)
+    .map(({ i }) => `segment[${i}]`);
+  if (!bad.length) return;
+  throw new Error(
+    `${bad.join(", ")}: a beat with no "text" has nothing to derive its length from — give it ` +
+      `"dur" (seconds) for a purely visual beat, or add "text" for it to speak.`,
+  );
 }
 
 /** Soft nudge when background-led work is about to ship on stock mesh with no custom stage. */
@@ -208,7 +229,9 @@ export function assertCaptionModes(spec: Spec, brand: Brand): void {
     const mode = seg.captionMode ?? spec.captionMode ?? brand.captionMode ?? "phrase";
     if (mode !== "words") return;
     const cap = seg.caption?.trim();
-    if (!cap || cap === seg.text.trim()) return;
+    // A beat with no `text` speaks nothing, so words mode has nothing to paint and the caption is
+    // the only line there is — never warn it away.
+    if (!cap || !seg.text || cap === seg.text.trim()) return;
     log.warn(
       `segment[${i}]: caption is ignored under words mode (the spoken text paints word-by-word) — ` +
         `set "captionMode": "phrase" on this beat to show the caption, or drop it`,
@@ -224,7 +247,7 @@ export function assertVoiceTags(spec: Spec, brand: Brand): void {
   if (model.startsWith("eleven_v3")) return;
   const hits: string[] = [];
   spec.segments.forEach((seg, i) => {
-    if (AUDIO_TAG_RE.test(seg.text)) hits.push(`segment[${i}]`);
+    if (seg.text && AUDIO_TAG_RE.test(seg.text)) hits.push(`segment[${i}]`);
   });
   if (!hits.length) return;
   log.warn(
@@ -251,6 +274,7 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   if (layerErrors.length) throw new Error(layerErrors.join("\n"));
   const postErrors = validatePostFx((spec as { postFx?: unknown }).postFx);
   if (postErrors.length) throw new Error(postErrors.join("\n"));
+  assertBeatLengths(spec);
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
   assertAudioSources(spec, project);
