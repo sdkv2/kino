@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { prepare } from "./build.js";
 import { renderStills } from "../render/render.js";
+import { runMotionQa, qaReportPath } from "../render/motionQa.js";
 import { pickFrames } from "../render/preview.js";
 import { montage } from "../media/montage.js";
 import { parsePlatform } from "../render/platform.js";
@@ -27,4 +28,8 @@ export async function storyboard(
   const cols = perBeat * Math.max(1, Math.floor(4 / perBeat));
   await montage(stills.map((p, i) => ({ path: p, label: picks[i].label })), out, { font: r.labelFont ?? undefined, cols });
   log.ok(out);
+
+  // A storyboard is the closest thing to "watch the beat" an agent has, so it is where a frozen or
+  // diffusely-animated beat should surface. Diagnostic only — see motionQa.ts.
+  await runMotionQa({ props: r.props, publicDir: r.publicDir, format, reportPath: qaReportPath(outDir) });
 }

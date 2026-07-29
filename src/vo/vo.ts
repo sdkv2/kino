@@ -130,8 +130,10 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
       // segment re-bills its neighbors too (their clips were conditioned on the old text).
       const prev = useCtx ? spec.segments[i - 1]?.text : undefined;
       const next = useCtx ? spec.segments[i + 1]?.text : undefined;
-      // `dur` only bites when silent (mock): it forces the beat length instead of the 0.38s/word
-      // estimate. It's in the key so editing dur re-bakes the silent clip; harmless on real TTS.
+      // `dur` only bites when silent (mock): it forces the beat LENGTH. Word timings keep the
+      // 0.38s/word cadence regardless (see ttsMockWithTimestamps) so typed-in-sync surfaces preview
+      // at a realistic rate. It's in the key so editing dur re-bakes the silent clip; harmless on
+      // real TTS.
       const key = contentHash({
         text: seg.text,
         ...(useCtx ? { prev, next } : {}),

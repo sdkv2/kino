@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { existsSync, rmSync } from "node:fs";
 import { prepare } from "./build.js";
 import { renderStills, type FrameMeasure } from "../render/render.js";
+import { runMotionQa, qaReportPath } from "../render/motionQa.js";
 import { parseQuality } from "../render/native/engine.js";
 import { pickFrames, parseTimes, timesAround, inspectPlan } from "../render/preview.js";
 import { montage } from "../media/montage.js";
@@ -76,6 +77,17 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
   const measurements: FrameMeasure[] = [];
   const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir, measureSink: opts.measure ? measurements : undefined, quality: parseQuality(opts.quality) });
   outs.forEach((o) => log.ok(o));
+
+  // Authored-graphic QA in the authoring loop. A still shows one instant, so it cannot show that a
+  // beat is frozen, that only the background is moving, or that a coloured effect rendered grey —
+  // which is exactly what the agent iterating on this command needs to know. Diagnostic only.
+  await runMotionQa({
+    props: r.props,
+    publicDir: r.publicDir,
+    format,
+    quality: parseQuality(opts.quality),
+    reportPath: qaReportPath(outDir),
+  });
 
   // --measure: deterministic element geometry so alignment is read as numbers, not eyeballed.
   // Δx/Δy are the element center's signed offset from frame center in % (0 = dead-center).

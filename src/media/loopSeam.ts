@@ -21,6 +21,30 @@ async function extractRawRgb(
   await execa(FFMPEG_PATH, args);
 }
 
+/**
+ * Decode an image to a raw RGB24 buffer at an exact size.
+ *
+ * QA decodes to a fixed small raster rather than native size: the buffer length then implies the
+ * dimensions (so tiling needs no ffprobe round-trip), the cost is constant across 1080/4K and every
+ * quality preset, and the downscale averages out encode noise that would otherwise show up as
+ * spurious per-tile movement.
+ */
+export async function decodeRgbAt(image: string, width: number, height: number): Promise<Buffer> {
+  const dir = scratchDir("kino-rgbat-");
+  try {
+    const out = join(dir, "f.rgb");
+    await execa(FFMPEG_PATH, [
+      "-y", "-loglevel", "error",
+      "-i", image,
+      "-vf", `scale=${width}:${height}:flags=area`,
+      "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", out,
+    ]);
+    return readFileSync(out);
+  } finally {
+    releaseScratch(dir);
+  }
+}
+
 /** Mean channel Δ (0..255) between two same-size images, via ffmpeg PNG→raw RGB24 decode. */
 export async function imageMeanDiff(a: string, b: string): Promise<number> {
   const dir = scratchDir("kino-imgdiff-");

@@ -4,6 +4,7 @@ import { resolveMotionSource } from "../media/motionLib.js";
 import { attachLensShaders, type EffectResolveProject } from "../media/effectsLib.js";
 import { sanitizeMotionHtml } from "./sanitizeMotion.js";
 import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
+import { lintDeadVisuals } from "./motionLint.js";
 
 // Re-exported for back-compat (callers/tests import it from here).
 export { sanitizeMotionHtml };
@@ -36,7 +37,9 @@ export function lintMotionHtml(html: string): string[] {
     /<svg\b[^>]*\bkino-lens-shape\b[^>]*>[\s\S]*?<\/svg>/gi,
     '<svg class="kino-lens-shape"></svg>',
   );
-  return BANNED.filter((b) => b.re.test(forLint)).map((b) => b.msg);
+  // Dead-visual checks ride along here (rather than only in lintMotionSource) so every caller gets
+  // them — resolveMotionGraphic lints via this function directly, and that is the path a render takes.
+  return [...BANNED.filter((b) => b.re.test(forLint)).map((b) => b.msg), ...lintDeadVisuals(html)];
 }
 
 // Determinism + safety denylist for Tier-2 procedural sources (JS). The function must be a pure
@@ -206,7 +209,9 @@ function stripJsNoise(src: string): string {
 // Returns a list of human-readable violations for a Tier-2 procedural (JS) source (empty = clean).
 export function lintMotionJs(src: string): string[] {
   const code = stripJsNoise(src);
-  return BANNED_JS.filter((b) => b.re.test(code)).map((b) => b.msg);
+  // Dead-visual checks run on the raw source: the CSS a Tier-2 page emits lives in its string
+  // literals, which stripJsNoise removes.
+  return [...BANNED_JS.filter((b) => b.re.test(code)).map((b) => b.msg), ...lintDeadVisuals(src)];
 }
 
 // Determinism/safety lint for a motion source, dispatched on the (lowercased) extension — the single
@@ -225,6 +230,8 @@ export function lintMotionSource(source: string, raw: string): string[] {
       return [(err as Error).message];
     }
   }
+  // Dead-visual checks live inside lintMotionHtml/lintMotionJs so the render path gets them too.
+  // Lottie is a compiled asset — no CSS to read.
   if (ext.endsWith(".html")) return lintMotionHtml(raw);
   return ["motion source must be .html, .js, or .json"];
 }

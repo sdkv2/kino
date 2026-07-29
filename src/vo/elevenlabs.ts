@@ -81,15 +81,35 @@ export async function ttsWithTimestamps(
   return a ? charsToWords(a.characters, a.character_start_times_seconds, a.character_end_times_seconds) : [];
 }
 
-// --mock / silent timestamps: evenly spaced fake word timings over a silent clip. With no
-// `durSec`, the clip is paced at 0.38s/word (the default estimate). Pass `durSec` (a segment's
-// `dur`) to force an exact beat length — words spread evenly across it — for silent beats
-// that must hit a fixed duration (art films, music-locked motion) rather than a word estimate.
+/** Default silent-build speaking rate — the estimate a mock clip is paced at. */
+export const MOCK_WORD_SEC = 0.38;
+
+// --mock / silent timestamps: fake word timings over a silent clip, paced at MOCK_WORD_SEC/word.
+// Pass `durSec` (a segment's `dur`) to force an exact beat length for silent beats that must hit a
+// fixed duration (art films, music-locked motion).
+//
+// `dur` sets the BEAT length, not the speaking rate. Words keep their natural cadence and the rest of
+// the beat is hold. Spreading them evenly across `dur` instead made every VO-locked typed surface
+// mistime: a 5-word phrase in a 3.633s beat typed at 0.727s/word, so it finished at the beat's end
+// rather than early — and a later collapse/exit keyframe then cut the phrase off mid-word, on a
+// surface whose whole job was to finish typing and hold. Silent previews are meant to be timing-
+// faithful to the eventual VO, and stretching the words made them structurally unfaithful.
+//
+// Only compress below the natural rate when the forced beat is too short to hold the words at all.
+export function mockWordPacing(wordCount: number, durSec?: number): { total: number; per: number } {
+  const fixed = typeof durSec === "number" && durSec > 0;
+  const total = fixed ? durSec! : Math.max(0.8, wordCount * MOCK_WORD_SEC);
+  const per = !wordCount
+    ? 0
+    : fixed
+      ? Math.min(MOCK_WORD_SEC, total / wordCount)
+      : MOCK_WORD_SEC;
+  return { total, per };
+}
+
 export async function ttsMockWithTimestamps(text: string, out: string, durSec?: number): Promise<WordTiming[]> {
   const words = text.trim().split(/\s+/).filter(Boolean);
-  const fixed = typeof durSec === "number" && durSec > 0;
-  const total = fixed ? durSec! : Math.max(0.8, words.length * 0.38);
-  const per = fixed && words.length ? total / words.length : 0.38;
+  const { total, per } = mockWordPacing(words.length, durSec);
   await genSilence(total, out);
   return words.map((w, i) => ({ word: w, start: i * per, end: (i + 1) * per }));
 }

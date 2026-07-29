@@ -39,8 +39,8 @@ import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic, sanitizeMotionHtml, type MotionGraphicRefInput } from "../render/motiongraphic.js";
 import { beatRelativeWords, resolveWordAnchors } from "../render/motionVars.js";
-import { probeFramePicks, isUnderAnimated } from "../render/motionProbe.js";
-import { checkLoopSeam, imageMeanDiff } from "../media/loopSeam.js";
+import { runMotionQa } from "../render/motionQa.js";
+import { checkLoopSeam } from "../media/loopSeam.js";
 import { holdLastFrameToMatchAudio } from "../media/avSync.js";
 import { log } from "../log.js";
 
@@ -749,37 +749,10 @@ export async function build(
     beatTag = `beat${beatNum}${draft ? "-draft" : ""}`;
     log.info(`  · isolating beat ${beatNum} (${target.startSec.toFixed(1)}–${target.endSec.toFixed(1)}s of the full timeline)`);
   }
-  // Under-animation probe: sample each full-screen motion beat at a few progress points and warn
-  // when the frames barely differ — a poster with a dissolve, not motion. Never fails the build.
-  try {
-    const picks = probeFramePicks(props.segments, props.fps);
-    if (picks.length) {
-      const dir = scratchDir("kino-probe-");
-      // finally, not a trailing call: the enclosing catch deliberately swallows probe failures
-      // ("never fails the build"), so a throw here would silently orphan the whole probe dir.
-      try {
-        const frames = picks.flatMap((p) => p.frames.map((f, j) => ({ frame: f, name: `probe-${p.segment}-${j}` })));
-        const outs = await renderStills({ props, publicDir, format: formats[0], frames, outDir: dir });
-        let k = 0;
-        for (const p of picks) {
-          const mine = outs.slice(k, k + p.frames.length);
-          k += p.frames.length;
-          const diffs: number[] = [];
-          for (let j = 1; j < mine.length; j++) diffs.push(await imageMeanDiff(mine[j - 1], mine[j]));
-          if (isUnderAnimated(diffs)) {
-            log.warn(
-              `segment[${p.segment}] motion graphic barely animates across the beat (probe Δ ` +
-                `${diffs.map((d) => d.toFixed(2)).join(" / ")}) — add entrance/life/speech layers (skills/motion-design)`,
-            );
-          }
-        }
-      } finally {
-        releaseScratch(dir);
-      }
-    }
-  } catch (e) {
-    log.warn(`motion probe skipped: ${(e as Error).message}`);
-  }
+  // Authored-graphic QA: probe each full-screen motion beat and warn on a frozen or diffusely-animated
+  // beat. Shared with `still`/`storyboard` so the authoring loop sees the same findings — that is where
+  // they are actionable. Never fails the build (runMotionQa swallows its own errors).
+  await runMotionQa({ props, publicDir, format: formats[0] });
   log.step("render");
   // Tag variant renders (explicit --tag, else a --background/--font override, else draft) so a
   // preview or variant never overwrites the shipped default render.
