@@ -68,3 +68,48 @@ describe("validateSegmentFx", () => {
     expect(validateSegmentFx({ mask: { source: { kind: "layer", layerId: "seg0" } } }, 0)).toEqual([]);
   });
 });
+
+describe("effect keyframe validation", () => {
+  it("accepts a well-formed track", () => {
+    expect(
+      validateSegmentFx(
+        { effects: [{ kind: "blur", params: { radius: 0 }, keyframes: [{ at: 1.2, params: { radius: 20 }, ease: "easeOutQuart" }] }] },
+        0,
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects a non-array keyframes", () => {
+    const errs = validateSegmentFx({ effects: [{ kind: "blur", params: {}, keyframes: {} }] }, 2);
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toContain("beat 2");
+    expect(errs[0]).toContain("keyframes must be an array");
+  });
+
+  it("rejects a negative at", () => {
+    const errs = validateSegmentFx({ effects: [{ kind: "blur", params: {}, keyframes: [{ at: -1, params: { radius: 2 } }] }] }, 0);
+    expect(errs[0]).toContain("at must be a number >= 0");
+  });
+
+  it("rejects a missing params object", () => {
+    const errs = validateSegmentFx({ effects: [{ kind: "blur", params: {}, keyframes: [{ at: 1 }] }] }, 0);
+    expect(errs[0]).toContain("params must be an object");
+  });
+
+  it("rejects an unknown ease and names the valid ones", () => {
+    const errs = validateSegmentFx({ effects: [{ kind: "blur", params: {}, keyframes: [{ at: 1, params: { radius: 2 }, ease: "swoosh" }] }] }, 0);
+    expect(errs[0]).toContain("swoosh");
+    expect(errs[0]).toContain("easeOutQuart");
+  });
+
+  it("rejects an unknown blur focusMode", () => {
+    const errs = validateSegmentFx({ effects: [{ kind: "blur", params: { focusMode: "sideways" } }] }, 0);
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toContain("expected radial or band");
+  });
+
+  it("accepts both real focus modes", () => {
+    expect(validateSegmentFx({ effects: [{ kind: "blur", params: { focusMode: "band" } }] }, 0)).toEqual([]);
+    expect(validateSegmentFx({ effects: [{ kind: "blur", params: { focusMode: "radial" } }] }, 0)).toEqual([]);
+  });
+});

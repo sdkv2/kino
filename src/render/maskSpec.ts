@@ -4,7 +4,7 @@
 import { SDF_MAX_PX } from "./sdf.js";
 import type { ShapeMask } from "./shapes.js";
 import { BLEND_MODES } from "./blendModes.js";
-import type { Keyframe } from "./bgparams.js";
+import { EASE_NAMES, type Keyframe } from "./bgparams.js";
 
 export type MaskChannel = "r" | "g" | "b" | "a" | "luma";
 
@@ -79,6 +79,42 @@ export interface LayerEffect {
   keyframes?: Keyframe[];
 }
 
+/** Validate one effect's `keyframes` track. `label` prefixes each message with the thing the
+ *  author has to edit ("effects[0]", "adjust[1]"); the caller adds the beat or layer. */
+export function validateEffectKeyframes(e: unknown, label: string): string[] {
+  const kf = (e as { keyframes?: unknown } | null | undefined)?.keyframes;
+  if (kf === undefined) return [];
+  if (!Array.isArray(kf)) return [`${label}.keyframes must be an array`];
+  const errs: string[] = [];
+  kf.forEach((k, i) => {
+    const at = `${label}.keyframes[${i}]`;
+    const entry = (k ?? {}) as { at?: unknown; params?: unknown; ease?: unknown };
+    if (typeof entry.at !== "number" || !Number.isFinite(entry.at) || entry.at < 0) {
+      errs.push(`${at}.at must be a number >= 0`);
+    }
+    if (typeof entry.params !== "object" || entry.params === null || Array.isArray(entry.params)) {
+      errs.push(`${at}.params must be an object`);
+    }
+    if (entry.ease !== undefined && !(EASE_NAMES as readonly string[]).includes(entry.ease as string)) {
+      errs.push(`${at}.ease "${String(entry.ease)}" is not an ease — expected one of ${EASE_NAMES.join(", ")}`);
+    }
+  });
+  return errs;
+}
+
+/** `blur`'s focusMode is the one effect param whose value is an enum rather than a number, so it
+ *  is the one a typo can silently degrade — numParam bounds every other param at the GPU edge,
+ *  but an unknown mode string would just fall back to radial and look like a bug in the falloff. */
+export function validateEffectParams(e: unknown, label: string): string[] {
+  const eff = (e ?? {}) as { kind?: unknown; params?: Record<string, unknown> };
+  if (eff.kind !== "blur") return [];
+  const mode = eff.params?.focusMode;
+  if (mode !== undefined && mode !== "radial" && mode !== "band") {
+    return [`${label}.params.focusMode "${String(mode)}" is not a mode — expected radial or band`];
+  }
+  return [];
+}
+
 /** Validate the mask, effects and blend on one beat. `index` is the beat's position, so a
  *  message points at the thing the author has to edit. */
 export function validateSegmentFx(seg: unknown, index: number): string[] {
@@ -129,6 +165,8 @@ export function validateSegmentFx(seg: unknown, index: number): string[] {
         if (typeof eff.params !== "object" || eff.params === null) {
           errs.push(at(`effects[${j}].params must be an object`));
         }
+        errs.push(...validateEffectKeyframes(e, `effects[${j}]`).map(at));
+        errs.push(...validateEffectParams(e, `effects[${j}]`).map(at));
       });
     }
   }
