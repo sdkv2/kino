@@ -86,4 +86,72 @@ describe("validateLayers", () => {
     const errs = validateLayers([{ ...ok, mask: { source: { kind: "nope" } } }], 1);
     expect(errs.join()).toMatch(/^layer "leak": unknown mask source kind: nope/);
   });
+
+  // Carried from Task 6's review: `layersAt`'s adjustment branch (§11b) pushes only
+  // id/z/source:null/adjust and `continue`s before any other DeclaredLayer field is read, so a
+  // schema-valid layer combining `adjust` with one of these would validate clean and then be
+  // silently ignored at render time. One test per field the emission branch drops.
+  describe("rejects fields the adjustment branch silently ignores", () => {
+    const grade = { id: "grade", z: 650, adjust: [{ kind: "grade" as const, params: { contrast: 1.2 } }] };
+
+    it("accepts a plain adjustment layer with none of them", () => {
+      expect(validateLayers([grade], 1)).toEqual([]);
+    });
+
+    it("rejects fromSec", () => {
+      expect(validateLayers([{ ...grade, fromSec: 1 }], 1).join()).toMatch(/adjust cannot be combined with fromSec/);
+    });
+
+    it("rejects toSec", () => {
+      expect(validateLayers([{ ...grade, toSec: 2 }], 1).join()).toMatch(/adjust cannot be combined with toSec/);
+    });
+
+    it("rejects segment", () => {
+      expect(validateLayers([{ ...grade, segment: 0 }], 1).join()).toMatch(/adjust cannot be combined with segment/);
+    });
+
+    it("rejects hold", () => {
+      expect(validateLayers([{ ...grade, hold: true }], 1).join()).toMatch(/adjust cannot be combined with hold/);
+    });
+
+    // Not named in the brief's list, but read straight off the same emission branch: `d.rect` is
+    // never consulted for an adjust entry — `layersAt` hardcodes `rect: full` instead.
+    it("rejects rect", () => {
+      const errs = validateLayers([{ ...grade, rect: { x: 0, y: 0, w: 50, h: 50 } }], 1);
+      expect(errs.join()).toMatch(/adjust cannot be combined with rect/);
+    });
+
+    it("rejects opacity", () => {
+      expect(validateLayers([{ ...grade, opacity: 0.5 }], 1).join()).toMatch(/adjust cannot be combined with opacity/);
+    });
+
+    it("rejects mask", () => {
+      const errs = validateLayers(
+        [{ ...grade, mask: { source: { kind: "shape", shape: { kind: "circle", x: 0, y: 0, w: 10, h: 10 } } } }],
+        1,
+      );
+      expect(errs.join()).toMatch(/adjust cannot be combined with mask/);
+    });
+
+    it("rejects effects", () => {
+      const errs = validateLayers([{ ...grade, effects: [{ kind: "blur" as const, params: { radius: 4 } }] }], 1);
+      expect(errs.join()).toMatch(/adjust cannot be combined with effects/);
+    });
+
+    it("rejects keyframes", () => {
+      const errs = validateLayers([{ ...grade, keyframes: [{ at: 0, params: { opacity: 1 } }] }], 1);
+      expect(errs.join()).toMatch(/adjust cannot be combined with keyframes/);
+    });
+
+    // Also not named in the brief's list: `blend` is likewise never set on the LayerDraw pushed
+    // for an adjust entry, so it is exactly as silently dropped as the four named fields.
+    it("rejects blend", () => {
+      expect(validateLayers([{ ...grade, blend: "screen" as const }], 1).join()).toMatch(/adjust cannot be combined with blend/);
+    });
+
+    it("reports one error per offending field when several are combined", () => {
+      const errs = validateLayers([{ ...grade, fromSec: 1, segment: 0 }], 1);
+      expect(errs.filter((e) => /adjust cannot be combined with/.test(e))).toHaveLength(2);
+    });
+  });
 });

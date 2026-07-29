@@ -65,6 +65,12 @@ const BUILTIN_ID_PATTERNS = [
 
 const RESERVED_Z = new Set<number>(Object.values(Z));
 
+/** Fields the adjustment branch in layers.ts §11b never reads — see the check in validateLayers
+ *  that rejects them alongside `adjust`. */
+const ADJUST_INCOMPATIBLE_FIELDS = [
+  "fromSec", "toSec", "segment", "hold", "rect", "opacity", "mask", "effects", "keyframes", "blend",
+] as const satisfies readonly (keyof DeclaredLayer)[];
+
 export function validateLayers(layers: unknown, segmentCount: number): string[] {
   if (layers === undefined) return [];
   if (!Array.isArray(layers)) return ["spec.layers must be an array"];
@@ -95,6 +101,20 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
 
     if (l.source && l.adjust) errs.push(at("cannot have both source and adjust — an adjustment layer has no pixels of its own"));
     else if (!l.source && !l.adjust) errs.push(at("needs either a source or an adjust chain"));
+
+    // An adjustment layer (layers.ts §11b) is always base-group and applies to the whole
+    // accumulator: the `d.adjust?.length` branch pushes only id/z/source:null/adjust and
+    // `continue`s before fromSec/toSec/segment/hold/rect/opacity/mask/effects/keyframes/blend are
+    // even read. Accepting those fields here would let a schema-valid spec author a windowed,
+    // masked, or blended adjustment layer that silently does nothing of the kind at render time —
+    // reject the combination instead of letting it validate clean and then quietly not work.
+    if (l.adjust?.length) {
+      for (const field of ADJUST_INCOMPATIBLE_FIELDS) {
+        if (l[field] !== undefined) {
+          errs.push(at(`adjust cannot be combined with ${field} — an adjustment layer is always base-group, spans the whole accumulator, and layersAt's adjustment branch never reads ${field}, so it would be silently ignored at render time`));
+        }
+      }
+    }
 
     if (l.source) {
       const kind = l.source.kind;
