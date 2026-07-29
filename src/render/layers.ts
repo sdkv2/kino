@@ -101,9 +101,16 @@ function tweenAt(
   };
 }
 
+/** Travel per frame (px of translation at comp scale) below which auto blur is not worth a pass —
+ *  a sub-pixel smear is invisible and still costs a multi-tap sample. */
+const AUTO_BLUR_MIN_PX = 2.5;
+/** Per-frame fractional scale change with the same role for a push/pull. */
+const AUTO_BLUR_MIN_GROWTH = 0.006;
+
 /**
- * Fill in an opt-in `{ kind: "motionBlur", params: { auto: 1 } }` from how far this layer actually
- * travelled since the previous frame.
+ * Fill in `{ kind: "motionBlur", params: { auto: 1 } }` from how far this layer actually travelled
+ * since the previous frame — either because the author opted in, or (when `defaultOn`) because the
+ * layer is moving fast enough to want it.
  *
  * Effect params are static for a whole beat, so a hand-authored blur cannot describe a punch — it
  * would smear the entire beat instead of the six frames that are moving. Measuring the transform
@@ -119,10 +126,9 @@ function autoMotionBlur(
   effects: LayerEffect[] | undefined,
   cur: LayerTransform | undefined,
   prev: LayerTransform | undefined,
+  defaultOn = false,
 ): LayerEffect[] | undefined {
-  if (!effects?.length) return effects;
   const isAuto = (e: LayerEffect) => e.kind === "motionBlur" && num(e.params?.auto, 0) > 0;
-  if (!effects.some(isAuto)) return effects;
 
   const c = cur ?? IDENTITY_TRANSFORM;
   const p = prev ?? IDENTITY_TRANSFORM;
@@ -130,7 +136,20 @@ function autoMotionBlur(
   const dy = c.translate[1] - p.translate[1];
   const growth = p.scale > 0 ? c.scale / p.scale - 1 : 0;
 
-  return effects.map((e) => {
+  let chain = effects;
+  if (!chain?.some(isAuto)) {
+    // Nothing opted in. Add it ourselves when the layer is genuinely travelling and the author has
+    // not already hand-authored a blur — an opt-in nobody knows about is an opt-in nobody uses (0 of
+    // 37 authored beats in a review reached for this, and 0 reached for --cam-blur either). Gated on
+    // measured travel so a still or slow beat renders byte-identically and pays for no extra pass.
+    const travelling =
+      Math.hypot(dx, dy) >= AUTO_BLUR_MIN_PX || Math.abs(growth) >= AUTO_BLUR_MIN_GROWTH;
+    const handAuthored = chain?.some((e) => e.kind === "motionBlur") ?? false;
+    if (!defaultOn || handAuthored || !travelling) return effects;
+    chain = [...(chain ?? []), { kind: "motionBlur", params: { auto: 1 } } as LayerEffect];
+  }
+
+  return chain.map((e) => {
     if (!isAuto(e)) return e;
     const shutter = num(e.params?.shutter, 0.5);
     return {
@@ -276,7 +295,7 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const groupOpacity = opacity * (zoom?.opacity ?? 1);
     // Resolving BEFORE autoMotionBlur means a keyframed `shutter`/`samples` feeds the derivation,
     // while the three channels auto computes from measured travel still win over any keyframe.
-    const segEffects = autoMotionBlur(beatEffects, segTransform, cameraAt(local - 1));
+    const segEffects = autoMotionBlur(beatEffects, segTransform, cameraAt(local - 1), props.motionBlur !== false);
     // The chrome rides the same camera, so it smears with the footage — a sharp bezel around a
     // blurred screen reads as a compositing mistake. Only the blur carries over, never the rest
     // of the beat's chain, which was authored for the footage.

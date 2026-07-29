@@ -245,6 +245,9 @@ export interface KinoProps {
   layers?: DeclaredLayer[];
   /** Full-frame post stage: grade → bloom → lens → film (compositor only). */
   postFx?: PostFx;
+  /** Automatic camera motion blur (spec `motionBlur`, default true). False disables the derived smear
+   *  on fast camera moves; a hand-authored `motionBlur` effect is always honoured either way. */
+  motionBlur?: boolean;
   /** Still/storyboard only — in-feed safe-zone overlay. Never set by `kino build`. */
   platformGuide?: "tiktok" | "reels";
   /** Still only — rule-of-thirds grid overlay for composition QA. Never set by `kino build`. */

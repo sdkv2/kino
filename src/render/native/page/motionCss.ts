@@ -47,13 +47,46 @@ export const motionScrubStyle = (host: string): string => `<style>${motionScrubC
 // SVG filter library referenced from agent CSS via filter:url(#kino-…). Static + seeded → identical
 // every frame (deterministic). Bare filter elements: inside a raster they are injected directly into
 // the SVG document (already the SVG namespace), where a nested unprefixed <svg> would not be.
+/** Axis-specific Gaussian blur. CSS `filter: blur()` is isotropic, so a *directional* smear — the
+ *  drag a fast-moving letter or card leaves along its path — is not expressible in CSS at all. Authors
+ *  reached for stacked `linear-gradient` bars instead, which read as a bar parked beside the glyph
+ *  rather than the glyph's own motion. `feGaussianBlur` takes a two-axis stdDeviation, so it is.
+ *
+ *  Fixed strengths rather than a var: SVG filter attributes cannot read CSS custom properties, so a
+ *  scrubbable strength has to come from a Tier-2 page emitting its own <filter> per frame. Cross-fade
+ *  between the two rungs for a Tier-1 approximation. */
+const SMEAR_FILTERS =
+  '<filter id="kino-smear-x" x="-20%" y="-10%" width="140%" height="120%">' +
+  '<feGaussianBlur stdDeviation="10 0"/></filter>' +
+  '<filter id="kino-smear-x-lg" x="-35%" y="-10%" width="170%" height="120%">' +
+  '<feGaussianBlur stdDeviation="26 0"/></filter>' +
+  '<filter id="kino-smear-y" x="-10%" y="-20%" width="120%" height="140%">' +
+  '<feGaussianBlur stdDeviation="0 10"/></filter>' +
+  '<filter id="kino-smear-y-lg" x="-10%" y="-35%" width="120%" height="170%">' +
+  '<feGaussianBlur stdDeviation="0 26"/></filter>';
+
+/** True per-channel RGB split: red shifted left, blue right, green held, recombined additively.
+ *  A stacked `text-shadow` (the usual stand-in) tints copies of the same pixels — it has no channel
+ *  structure, so it reads as a coloured halo rather than as separated channels. */
+const RGB_SPLIT_FILTER =
+  '<filter id="kino-rgb" x="-10%" y="-10%" width="120%" height="120%">' +
+  '<feOffset in="SourceGraphic" dx="-4" dy="0" result="ro"/>' +
+  '<feColorMatrix in="ro" type="matrix" values="1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="r"/>' +
+  '<feOffset in="SourceGraphic" dx="4" dy="0" result="bo"/>' +
+  '<feColorMatrix in="bo" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0" result="b"/>' +
+  '<feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0" result="g"/>' +
+  '<feBlend in="r" in2="g" mode="screen" result="rg"/>' +
+  '<feBlend in="rg" in2="b" mode="screen"/></filter>';
+
 export const KINO_FILTERS =
   '<filter id="kino-grain" x="0" y="0" width="100%" height="100%">' +
   '<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="11" stitchTiles="stitch"/>' +
   '<feColorMatrix type="saturate" values="0"/></filter>' +
   '<filter id="kino-displace" x="-10%" y="-10%" width="120%" height="120%">' +
   '<feTurbulence type="fractalNoise" baseFrequency="0.01 0.014" numOctaves="2" seed="3" result="t"/>' +
-  '<feDisplacementMap in="SourceGraphic" in2="t" scale="20" xChannelSelector="R" yChannelSelector="G"/></filter>';
+  '<feDisplacementMap in="SourceGraphic" in2="t" scale="20" xChannelSelector="R" yChannelSelector="G"/></filter>' +
+  SMEAR_FILTERS +
+  RGB_SPLIT_FILTER;
 
 /** The same filters as a hidden HTML-embeddable <svg> (for the shadow-root surface). */
 export const KINO_DEFS =

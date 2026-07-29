@@ -329,6 +329,11 @@ export const SpecSchema = z
     // (graded film look). Set 0 for a clean, flat video — e.g. a light "paper" brand where the edge
     // vignette reads as a dark border. Motion-graphic beats are never graded (they own their finish).
     film: z.number().min(0).max(1).optional(),
+    // Automatic camera motion blur on fast moves, default true. A pan or push that displaces the
+    // frame by more than ~2.5px/frame gets a derived directional/radial smear, so the move reads as
+    // expensive rather than as a jump. Set false for a deliberately crisp, snappy look (or when a
+    // beat's own hand-authored blur should be the only smear).
+    motionBlur: z.boolean().optional(),
     avatarLook: z.string().optional(), // heygen: look alias/id · hedra/replicate: portrait image path/url
     provider: Provider.optional(), // overrides brand.defaultProvider
     background: Background.optional(), // overrides brand.background

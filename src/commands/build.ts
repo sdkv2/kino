@@ -673,6 +673,7 @@ export async function prepare(
       film: resolveFilm(spec, brand),
     },
     fps: spec.fps ?? 30,
+    motionBlur: spec.motionBlur,
     avatar: avatarRel,
     avatarWindows,
     voTrack: "vo.mp3",
