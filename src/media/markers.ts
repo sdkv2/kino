@@ -1,14 +1,14 @@
 // Audio marker analysis for agents: a coarse RMS envelope plus onsets (energy jumps), peaks
-// (loud local maxima), and silences, computed from raw PCM. Pure math — deterministic and
-// unit-tested against synthetic buffers. The ffmpeg-backed decode/analyze helpers live below
-// in this file.
-// ponytail: energy-delta onsets, no BPM grid — swap in a real DSP dep if music-video beat
-// tracking is ever needed.
+// (loud local maxima), silences, and the beat grid (bpm / period / phase / strength from
+// media/beats.ts — the `kino sync` machinery), computed from raw PCM. Pure math —
+// deterministic and unit-tested against synthetic buffers. The ffmpeg-backed decode/analyze
+// helpers live below in this file.
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { releaseScratch, scratchDir } from "../scratch.js";
 import { decodeRawPcm, waveformPng, spectrumPng } from "./ffmpeg.js";
+import { detectBeatGrid, type BeatGrid } from "./beats.js";
 
 export interface AudioMarkers {
   durationSec: number;
@@ -16,6 +16,7 @@ export interface AudioMarkers {
   onsets: number[]; // seconds — energy-delta jumps (SFX anchor points)
   peaks: number[]; // seconds — loud local maxima
   silences: Array<{ from: number; to: number }>; // runs under the silence floor, ≥ 0.3s
+  grid: BeatGrid | null; // beat grid (whole-file fit; `kino sync` refits locally) — null when beatless
 }
 
 const HOP_SEC = 0.1; // 10 Hz envelope
@@ -77,7 +78,7 @@ export function computeMarkers(samples: Float32Array, sampleRate: number): Audio
     }
   }
 
-  return { durationSec: r2(durationSec), rms, onsets, peaks, silences };
+  return { durationSec: r2(durationSec), rms, onsets, peaks, silences, grid: detectBeatGrid(samples, sampleRate) };
 }
 
 const ANALYSIS_RATE = 16000;

@@ -148,6 +148,20 @@ program
   .action(async (s, o) => (await import("./commands/retune.js")).retune(s, { dryRun: o.dryRun, project: o.project }));
 
 program
+  .command("sync <spec>")
+  .description("Retime visual beats so every cut lands on the music bed's beat grid (music-video sync)")
+  .option("--grain <g>", "snap cuts to every beat or every bar (4 beats)", "bar")
+  .option("--offset <mode>", '"auto" picks the loudest on-grid music.startSec; default keeps the current one', "keep")
+  .option("--min-dur <sec>", "floor for a rewritten beat dur", parseFloat)
+  .option("--dry-run", "print changes without writing the spec")
+  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
+  .action(async (s, o) => {
+    if (o.grain !== "beat" && o.grain !== "bar") throw new Error(`--grain must be "beat" or "bar", got "${o.grain}"`);
+    if (o.offset !== "auto" && o.offset !== "keep") throw new Error(`--offset must be "auto" or "keep", got "${o.offset}"`);
+    await (await import("./commands/sync.js")).sync(s, { grain: o.grain, offset: o.offset, minDur: o.minDur, dryRun: o.dryRun, project: o.project });
+  });
+
+program
   .command("batch <input>")
   .description('Render many specs — JSON array of paths, or { "base", "variants": [{ "tag", "set" }] }')
   .option("--mock")

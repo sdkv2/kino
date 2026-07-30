@@ -791,7 +791,16 @@ voiceover, ducking model, sourcing beds — see [Audio](audio.md).
 - `music` plays under the VO for the whole video: `volume` is the bed level (default `0.12`),
   `duck` the level while a segment is speaking (default `0.04`, with 0.3s linear ramps in/out
   of each VO span), `fadeOutSec` the linear tail fade to silence at the end of the video
-  (default `2`).
+  (default `2`), and `startSec` (default `0`) the offset into the source file the bed plays
+  from — sample-accurate, so a beat-aligned offset stays beat-aligned. `kino sync --offset auto`
+  sets it to the loudest on-grid stretch of the track; hand-set it to skip an intro.
+- **`kino sync <spec>`** retimes the visual beats (those with an authored `dur`) so every cut —
+  and the video's end — lands on the music bed's beat grid: it detects bpm/phase over the
+  stretch that will actually play, then rewrites `dur`s (`--grain bar` default, `--grain beat`
+  for faster cutting; `--dry-run` to preview). VO-driven beats keep their spoken length; the
+  next visual beat re-anchors the timeline. Run it after the real VO exists on spoken specs
+  (same rule as `retune`); all-visual specs sync for free. `kino audio-markers` reports the
+  same grid (`grid: { bpm, periodSec, phaseSec, strength }`) for any track.
 
 ## brand.md
 

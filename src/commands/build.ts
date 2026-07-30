@@ -457,6 +457,7 @@ export async function prepare(
       duck: spec.music.duck,
       fadeInSec: spec.music.fadeInSec,
       fadeOutSec: spec.music.fadeOutSec,
+      startSec: spec.music.startSec,
       duckSpans: vo.timings.map((t) => ({ from: t.startSec, to: t.endSec })),
     };
   }

@@ -3,6 +3,17 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [Unreleased]
+- **`kino sync` — beat-synced cuts:** retimes visual beats so every cut (and the video end)
+  lands on the music bed's beat grid. Detection is local to the playback window (kick-band
+  onset envelope → autocorrelation + comb fit, `src/media/beats.ts`); `--grain beat|bar`,
+  `--min-dur`, `--dry-run`. VO beats keep their spoken length and the next visual beat
+  re-anchors.
+- **`music.startSec`:** play the bed from a sample-accurate offset into the source file.
+  `kino sync --offset auto` sets it to the loudest on-grid window so the piece opens on a hit.
+- **`audio-markers` beat grid:** markers JSON gains `grid: { bpm, periodSec, phaseSec,
+  strength } | null` — a 10 ms-precision fit (onsets stay 0.1s-quantized).
+
 ## [3.1.0] — Custom beat transitions and motion authoring feedback
 - **Custom beat transitions:** a shader transition library (`kino transitions`) — CRT collapse, film
   scorch, geo facade, iris, optic prism, organic inkbleed, paper tear, print halftone — plus

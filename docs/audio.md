@@ -73,6 +73,10 @@ One bed plays under the entire video. It **ducks automatically** whenever a segm
 | `duck` | `0.04` | Level while a segment speaks, with 0.3s linear ramps in/out of each VO span. |
 | `fadeInSec` | `0` | Head fade from silence (avoids a click on loop-audio starts). |
 | `fadeOutSec` | `2` | Linear tail fade to silence at the end of the video. |
+| `startSec` | `0` | Offset into the source the bed plays from (sample-accurate). Set by `kino sync --offset auto`, or by hand to skip an intro. |
+
+**Music-only pieces:** with no VO there is nothing to duck under — set `volume` to the level you
+want (e.g. `0.85`) and `duck` to the same value.
 
 Overlapping VO spans take the *most-ducked* level, so back-to-back beats never pop the bed up in a short gap. The curve is `musicVolumeAt` in [`src/render/audio.ts`](../src/render/audio.ts).
 
@@ -111,7 +115,31 @@ kino audio-markers .kino-cache/<title>/vo-0.mp3     # onsets/peaks/silences of t
 kino audio-markers assets/music/bed.mp3 --out markers/
 ```
 
-It writes `<name>.markers.json` (`{ durationSec, rms[], onsets[], peaks[], silences[] }`) plus `<name>.wave.png` and `<name>.spectrum.png` for an eyeball read. Works on any audio or video file — the cached VO, an imported bed, or an external reference. Details in the [CLI reference](cli-reference.md#audio-markers).
+It writes `<name>.markers.json` (`{ durationSec, rms[], onsets[], peaks[], silences[], grid }`) plus `<name>.wave.png` and `<name>.spectrum.png` for an eyeball read. Works on any audio or video file — the cached VO, an imported bed, or an external reference. Details in the [CLI reference](cli-reference.md#audio-markers).
+
+`grid` is the track's beat grid — `{ bpm, periodSec, phaseSec, strength }`, or `null` for beatless
+audio. Onsets are 0.1s-quantized (SFX placement precision); the grid is fit from a 10 ms
+kick-band envelope, so it's the one to trust for beat math. `strength` below ~0.5 means the pulse
+is too loose to sync cuts against.
+
+## Beat-syncing cuts (`kino sync`)
+
+For a music-driven piece (no VO, or VO already built), `kino sync <spec>` retimes every cut to the
+bed's beat grid:
+
+```bash
+kino sync specs/promo.json --offset auto --dry-run   # preview: bpm, startSec, per-cut deltas
+kino sync specs/promo.json --offset auto             # write music.startSec + new durs
+```
+
+- Detects bpm/phase **locally over the stretch that will play** (real tracks drift), then rewrites
+  each visual beat's `dur` so cuts — and the video end — land on the grid. `--grain bar` (default)
+  snaps to every 4th beat; `--grain beat` cuts faster.
+- `--offset auto` scans the whole track for the loudest on-grid window of the video's length and
+  writes it to `music.startSec`, so the piece opens on a hit.
+- VO-driven beats are untouched (their length is the recording); the next visual beat re-anchors
+  the timeline on the grid. On spoken specs run sync **after** the real VO exists, like `retune`.
+- A weak grid (strength < 0.5) logs a warning — pick a more percussive track rather than fighting it.
 
 ## Licensing & attribution
 
