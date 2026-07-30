@@ -1,24 +1,37 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 // Files that drive a real Chrome + SwiftShader WebGL context and probe the resulting pixels with
-// ImageMagick. They are 26 of ~136 test files but ~93% of the suite's cost (545s of 586s on a
-// 4-core runner), and they are platform-independent by construction: KINO_GPU=0 below pins every
-// one of them to SwiftShader, so a Windows runner renders the same frames a Linux runner does.
+// ImageMagick (or, for the compositor-* entries, with the glProbe helper's direct pixel reads).
+// They are platform-independent by construction: KINO_GPU=0 below pins every one of them to
+// SwiftShader, so a Windows runner renders the same frames a Linux runner does.
 // KINO_TEST_SCOPE=light skips them; CI runs the light scope on the macOS/Windows PR jobs and the
 // full scope on Linux and on every push to main (see .github/workflows/ci.yml).
 //
 // segment-mock is deliberately NOT in this list. It is one full Chrome render -> ffmpeg encode ->
 // magick probe, and that single path is what catches the per-OS integration breaks this matrix
-// exists to find (binary discovery, argv quoting, sandbox flags) — the other 26 only re-prove
+// exists to find (binary discovery, argv quoting, sandbox flags) — the rest only re-prove
 // compositor maths that SwiftShader already makes identical everywhere.
+//
+// draft-canvas-render / format-4k-render are split out of draft-canvas / format-4k-parity: those
+// two files also carry cheap pure-logic unit tests (scaledDims, compDims) that light scope should
+// still run, so only the render+magick half moved here.
+//
+// capture-path / compositor-transitions / compositor-film-pass were added 2026-07-30: they were
+// always real-render/glProbe pixel tests (together with the two split-out above, ~137s of a
+// ~307s light-scope run on this machine) but had been missed when this list was first curated.
 const GPU_PIXEL_TESTS = [
   "tests/appclip-frames.test.ts",
+  "tests/capture-path.test.ts",
   "tests/compositor-effects.test.ts",
+  "tests/compositor-film-pass.test.ts",
   "tests/compositor-glass-composite.test.ts",
   "tests/compositor-layer-mask.test.ts",
   "tests/compositor-orientation.test.ts",
   "tests/compositor-ss.test.ts",
   "tests/compositor-stage.test.ts",
+  "tests/compositor-transitions.test.ts",
+  "tests/draft-canvas-render.test.ts",
+  "tests/format-4k-render.test.ts",
   "tests/layers-declared-pixel.test.ts",
   "tests/postfx-integration.test.ts",
   "tests/render-compositor-parity.test.ts",
