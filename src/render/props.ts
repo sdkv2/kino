@@ -255,6 +255,7 @@ export interface MusicProps {
   duck: number;
   fadeInSec: number;
   fadeOutSec: number;
+  startSec: number; // decode offset into the source file (0 = play from the top)
   duckSpans: Array<{ from: number; to: number }>;
 }
 

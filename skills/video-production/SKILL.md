@@ -588,6 +588,10 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   are enough. Skip `sfx` unless a reveal/CTA earns a soft pop/click. Avoid loud drums fighting captions.
 - **Place SFX after the real VO exists** (when used): `kino build` → `kino inspect --real` and/or
   `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not shipping.
+- **Music-driven pieces cut on the beat**: `kino sync <spec> --offset auto` detects the bed's
+  beat grid, writes `music.startSec` (loudest on-grid stretch, opens on a hit) and retimes the
+  visual beats' `dur`s so every cut lands on a bar (`--grain beat` for faster cutting; `--dry-run`
+  first). VO beats keep their spoken length. See docs/audio.md § Beat-syncing cuts.
 
 ## Hard rules (the CLI enforces these — don't fight them)
 - **HeyGen looks must be Avatar-IV photo-avatars** — list valid ones with `kino avatars` (add

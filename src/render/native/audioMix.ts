@@ -13,7 +13,10 @@ const RATE = 44100;
 
 async function shapeMusicBed(srcAbs: string, music: NonNullable<KinoProps["music"]>, endSec: number, workDir: string): Promise<string> {
   const raw = join(workDir, "music-raw.pcm");
-  await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-i", srcAbs, "-vn", "-f", "s16le", "-ar", String(RATE), "-ac", "2", raw]);
+  // startSec: output-side -ss (after -i) decodes and discards, so the offset is
+  // sample-accurate — beat-grid phase alignment depends on this.
+  const seek = music.startSec > 0 ? ["-ss", String(music.startSec)] : [];
+  await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-i", srcAbs, ...seek, "-vn", "-f", "s16le", "-ar", String(RATE), "-ac", "2", raw]);
   const buf = readFileSync(raw);
   const opts = {
     duckSpans: music.duckSpans,

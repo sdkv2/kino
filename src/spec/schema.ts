@@ -127,6 +127,7 @@ const Music = z
     duck: z.number().min(0).max(1).default(0.04), // level while VO is speaking
     fadeInSec: z.number().min(0).default(0), // head fade (avoids a click on loop-audio starts)
     fadeOutSec: z.number().min(0).default(2),
+    startSec: z.number().min(0).default(0), // play the bed from this offset into the file (`kino sync --offset auto` sets it to a beat)
   })
   .strict();
 
