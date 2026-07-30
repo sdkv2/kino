@@ -4,6 +4,12 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **Fixed: the brand font never reached any caption.** Every text surface in the compositor
+  (`captionMarkup`, `kickerMarkup`, `textMarkup`, `disclosureMarkup`) wrapped the whole font *stack*
+  in single quotes, so `font-family` asked for one family literally named `"KinoBrandFont", "Anton",
+  …` — which matches nothing, silently dropping every caption, kicker, overlay and disclosure to
+  `sans-serif`. Brand fonts now actually render. **Expect captions to look different** (correctly so)
+  in any build whose brand sets a `font`.
 - **Role-keyed brand palette:** `brand.md` colors are now named by role — `bg`, `fg`, `accent`,
   `accent2`, `deep` — instead of the old literal hues (`night/white/mint/gold/green`), which
   lied the moment a brand's accent wasn't mint. The literal names remain accepted in brand.md,
