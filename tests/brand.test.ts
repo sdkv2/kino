@@ -35,8 +35,8 @@ describe("loadBrand", () => {
     const dir = brandDirWith('---\nname: acme\ncolors: { night: "#101010" }\nfont: Sora\ndefaultVoice: v123\n---\nguide\n');
     const b = loadBrand(dir);
     expect(b.name).toBe("acme");
-    expect(b.colors.night).toBe("#101010"); // overridden
-    expect(b.colors.mint).toBe(DEFAULT_BRAND.colors.mint); // defaulted
+    expect(b.colors.bg).toBe("#101010"); // overridden (legacy `night` key maps onto the bg role)
+    expect(b.colors.accent).toBe(DEFAULT_BRAND.colors.accent); // defaulted
     expect(b.font).toBe("Sora");
     expect(b.defaultVoice).toBe("v123");
     expect(b.disclosure).toBe(""); // no default disclosure

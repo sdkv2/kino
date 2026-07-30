@@ -111,7 +111,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
-| `kicker` | `{ text, color }` | — | Small label; `color` ∈ `mint\|green\|gold` (default `mint`). |
+| `kicker` | `{ text, color }` | — | Small label; `color` ∈ `accent\|deep\|accent2` (default `accent`; legacy `mint\|green\|gold` still accepted for the same slots). |
 | `shot` | [Shot](#enums) | — | Camera move (e.g. `scroll` for long screenshots). |
 | `transition` | [Transition](#enums) | — | In/out transition for the cut-in. |
 | `clipFrom` | number ≥ 0 | — | Start reading a video asset at this source second. |
@@ -513,7 +513,7 @@ the edge is tunable via a sibling **`transitionParams`** object (all fields opti
 | `angle` | degrees | from the name | Direction of travel: `0` down, `90` right, `180` up, `270` left. Any angle is valid — the projection is normalised per-angle, so a diagonal still starts and finishes fully off-frame instead of clipping mid-sweep. Overrides the direction implied by a `wipe-<dir>` name. |
 | `softness` | `0..0.5` | `0.018` | Feather on the reveal edge, as a fraction of the frame. Small = a crisp cut-in; large = closer to a gradient wipe. Floored just above `0` — a literal hard edge aliases into a staircase on a diagonal. |
 | `edgeWidth` | `0..0.5` | `0.013` | Width of the lit band riding the edge. **`0` = no lit band**, i.e. a clean, invisible reveal. |
-| `edgeColor` | hex | brand `mint` | Colour of the lit band. |
+| `edgeColor` | hex | brand `accent` | Colour of the lit band. |
 | `edgeGain` | `0..4` | `0.55` | Brightness of the lit band. `0` also disables it. |
 
 ```jsonc
@@ -809,7 +809,7 @@ The brand config lives at `brands/<name>/brand.md`: a YAML **frontmatter** block
 ```md
 ---
 name: acme
-colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64" }
+colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64" }
 # disclosure: AI-generated   # optional — shown on every video when set
 # defaultVoice: <elevenlabs-voice-id>   # or set per spec
 bannedPhrases: [get the job, guaranteed interview, land more interviews]
@@ -847,7 +847,7 @@ The frontmatter fields:
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `name` | string | — | Brand name. |
-| `colors` | `{ night, mint, green, white?, gold? }` | — | Palette. `white` default `#ffffff`, `gold` default `#d99a20`. |
+| `colors` | `{ bg, fg, accent, accent2, deep }` | — | Palette, keyed by ROLE: `bg` page base · `fg` text ink · `accent` primary · `accent2` secondary/bright · `deep` deep fill / active word. The pre-rename literal names (`night/white/mint/gold/green`) are accepted forever as aliases for the same slots; a role key wins over its alias. |
 | `font` | string | — | Registry font name (downloaded) or raw CSS family. Default `Helvetica, ...`. |
 | `labelFont` | string | — | Registry font for storyboard/montage labels (default: caption font). |
 | `captionStyle` | `{ fontSize?, strokeWidth?, background?, style?, animation? }` | — | `fontSize` 74, `strokeWidth` 9; `background` = the caption backplate `{ color?, opacity? (0..1, def .82), appOnly? (def true) }`; `style`/`animation` = brand-level defaults for [caption look/entrance](#captions) (segment/spec override). |
@@ -856,7 +856,7 @@ The frontmatter fields:
 | `backdrop` | string | — | Background image (when `background="image"`). |
 | `background` | preset | — | Default background engine. |
 | `backgroundComponent` | string | — | Path or bare id for custom Canvas2D draw fn (when `background="custom"`). |
-| `backgroundColors` | string[] | — | Palette for animated backgrounds (else mint/green/gold). |
+| `backgroundColors` | string[] | — | Palette for animated backgrounds (else accent/deep/accent2). |
 | `backgroundIntensity` | number | — | 0..1 motion strength (default 0.5). |
 | `captionMode` | `phrase\|words` | — | Default caption style. |
 | `bannedPhrases` | string[] | — | Phrases that **fail the build** (compliance). Default `[]`. |

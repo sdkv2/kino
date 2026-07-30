@@ -3,7 +3,7 @@ import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntens
 import type { Brand } from "../src/config/brand.js";
 import type { Spec } from "../src/spec/schema.js";
 
-const palette = { night: "#000", mint: "#1", green: "#2", gold: "#3", white: "#fff" };
+const palette = { bg: "#000", accent: "#1", deep: "#2", accent2: "#3", fg: "#fff" };
 
 describe("resolveBackgroundKind", () => {
   it("defaults to glow when nothing is set", () => {
@@ -25,7 +25,7 @@ describe("resolveBackgroundKind", () => {
 });
 
 describe("resolveBackgroundColors", () => {
-  it("derives [mint, green, gold] from the brand palette by default", () => {
+  it("derives [accent, deep, accent2] from the brand palette by default", () => {
     expect(resolveBackgroundColors({ colors: palette } as unknown as Brand)).toEqual(["#1", "#2", "#3"]);
   });
   it("honours an explicit backgroundColors override", () => {

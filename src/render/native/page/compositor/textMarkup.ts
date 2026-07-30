@@ -65,9 +65,9 @@ export function captionMarkup(opts: {
       `.kino-cap-wrap{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;padding:0 80px}` +
       `.kino-cap-row{display:flex;flex-wrap:wrap;justify-content:center;column-gap:${colGap}px;row-gap:${rowGap}px}` +
       `.kino-word{font-family:'${theme.font}',sans-serif;font-weight:900;font-size:${size}px;line-height:1.04;letter-spacing:-0.015em;` +
-      `color:${theme.white};text-align:center;` +
+      `color:${theme.fg};text-align:center;` +
       `-webkit-text-stroke:${theme.captionStroke}px #000;paint-order:stroke fill;text-shadow:0 8px 28px rgba(0,0,0,.5)}` +
-      `.kino-word-active{color:${theme.mint}}` +
+      `.kino-word-active{color:${theme.accent}}` +
       `</style><div class="kino-cap-wrap"><div class="kino-cap-row">${heroWords}</div></div>`
     );
   }
@@ -76,9 +76,9 @@ export function captionMarkup(opts: {
     `<style>` +
     `.kino-cap-wrap{position:absolute;left:48px;right:48px;bottom:${CAPTION_BOTTOM}px;display:flex;justify-content:center}` +
     `.kino-cap{font-family:'${theme.font}',sans-serif;font-weight:900;font-size:${size}px;line-height:1.03;letter-spacing:-0.01em;` +
-    `color:${theme.white};text-align:center;` +
+    `color:${theme.fg};text-align:center;` +
     `-webkit-text-stroke:${theme.captionStroke}px #000;paint-order:stroke fill;text-shadow:0 6px 20px rgba(0,0,0,.45)}` +
-    `.kino-word-active{color:${theme.mint}}` +
+    `.kino-word-active{color:${theme.accent}}` +
     `</style><div class="kino-cap-wrap"><span class="kino-cap">${body}</span></div>`
   );
 }
@@ -106,7 +106,7 @@ export function textMarkup(opts: {
   return (
     `<style>` +
     `.kino-overlay-wrap{position:absolute;left:${overlay.x}%;top:${overlay.y}%;transform:translate(-50%,-50%);max-width:86%;display:flex;justify-content:center}` +
-    `.kino-overlay{font-family:'${theme.font}',sans-serif;font-size:${overlay.sizePx}px;text-align:center;line-height:1.05;white-space:pre-line;color:${theme.white};font-weight:900}` +
+    `.kino-overlay{font-family:'${theme.font}',sans-serif;font-size:${overlay.sizePx}px;text-align:center;line-height:1.05;white-space:pre-line;color:${theme.fg};font-weight:900}` +
     `</style><div class="kino-overlay-wrap"><span class="kino-overlay">${escapeHtml(overlay.text)}</span></div>`
   );
 }
@@ -128,12 +128,12 @@ export function filmMarkup(opts: {
   frame: number;
 }): string {
   const { theme, frame } = opts;
-  const { vignette, grainOpacity } = filmFinishParams(theme.night, theme.film);
+  const { vignette, grainOpacity } = filmFinishParams(theme.bg, theme.film);
   const OX = [0, -6, 5, -3, 7, -5, 3, -7];
   const OY = [0, 5, -7, 4, -5, 7, -4, 6];
   const dx = OX[frame % 8];
   const dy = OY[frame % 8];
-  const light = luminance(theme.night) > 0.5;
+  const light = luminance(theme.bg) > 0.5;
   const blend = light ? "multiply" : "soft-light";
 
   return (

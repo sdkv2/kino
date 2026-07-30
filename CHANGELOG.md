@@ -4,6 +4,12 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **Role-keyed brand palette:** `brand.md` colors are now named by role — `bg`, `fg`, `accent`,
+  `accent2`, `deep` — instead of the old literal hues (`night/white/mint/gold/green`), which
+  lied the moment a brand's accent wasn't mint. The literal names remain accepted in brand.md,
+  stay injected as `--kino-mint`-style CSS-var aliases, and stay present in `env.palette`, so
+  every existing brand and motion page renders identically. Kicker `color` accepts both
+  vocabularies (`accent|deep|accent2` canonical). Internal `Brand.colors`/`Theme` are role-keyed.
 - **`kino sync` — beat-synced cuts:** retimes visual beats so every cut (and the video end)
   lands on the music bed's beat grid. Detection is local to the playback window (kick-band
   onset envelope → autocorrelation + comb fit, `src/media/beats.ts`); `--grain beat|bar`,

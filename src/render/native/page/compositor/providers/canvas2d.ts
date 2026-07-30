@@ -13,7 +13,7 @@ export function createCanvas2dSource(opts: {
   params: Record<string, BgParamValue>;
   keyframes: BgKeyframe[];
   triggers: BgTrigger[];
-  theme: Pick<Theme, "night">;
+  theme: Pick<Theme, "bg">;
   width: number;
   height: number;
   fps: number;
@@ -36,7 +36,7 @@ export function createCanvas2dSource(opts: {
       ctx.filter = "none";
       ctx.clearRect(0, 0, opts.width, opts.height);
       if (opts.clearNight ?? true) {
-        ctx.fillStyle = opts.theme.night;
+        ctx.fillStyle = opts.theme.bg;
         ctx.fillRect(0, 0, opts.width, opts.height);
       }
       const t = frame / opts.fps;

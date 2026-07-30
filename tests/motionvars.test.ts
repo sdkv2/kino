@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { buildMotionVars, wordsShownAt, beatRelativeWords, resolveWordAnchors, cameraBlurVars } from "../src/render/motionVars.js";
 
-const theme = { font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", gold: "#d99a20", white: "#ffffff", captionFontSize: 74, captionStroke: 9 };
+// Role-keyed theme; the assertions below intentionally check the LEGACY --kino-* names too,
+// pinning the alias emission every pre-rename motion page depends on.
+const theme = { font: "Arial", bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64", accent2: "#d99a20", fg: "#ffffff", captionFontSize: 74, captionStroke: 9 };
 const dyn = { frame: 12, t: 0.4, progress: 0.5, pulse: 0.25, params: {} as Record<string, number | string> };
 
 describe("buildMotionVars", () => {

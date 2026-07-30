@@ -105,7 +105,7 @@ export function transitionWipeForWindow(props: KinoProps, win: TransitionWindow)
   const kind = transitionKindForWindow(props, win);
   if (!isWipe(kind)) return undefined;
   const seg = props.segments[parseInt(win.to.slice(4), 10)];
-  return resolveWipeParams(kind, seg?.transitionParams, props.theme.mint);
+  return resolveWipeParams(kind, seg?.transitionParams, props.theme.accent);
 }
 
 /**

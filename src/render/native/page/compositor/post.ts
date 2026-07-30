@@ -41,7 +41,7 @@ export function resolveAdjustChain(adjust: EffectRef[], theme: Theme, ss = 1): R
     const pass = getPass(a.kind);
     if (!pass) continue;
     const params: Record<string, number | string> = { ...a.params, ss };
-    if (a.kind === "film") params.night = theme.night;
+    if (a.kind === "film") params.night = theme.bg;
     out.push({ pass, params });
   }
   return out;
@@ -76,7 +76,7 @@ export function resolvePostChain(post: PostFx | undefined, theme: Theme): Resolv
       const intensity = params?.intensity ?? theme.film ?? 1;
       if (intensity > 0) {
         const pass = getPass("film");
-        if (pass) out.push({ pass, params: { intensity, night: theme.night } });
+        if (pass) out.push({ pass, params: { intensity, night: theme.bg } });
       }
       continue;
     }

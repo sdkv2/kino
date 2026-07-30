@@ -167,8 +167,11 @@ export function resetFontFaceCacheForTests(): void {
 
 export function paletteVars(theme: KinoProps["theme"]): string {
   return (
-    `--kino-mint:${theme.mint};--kino-green:${theme.green};--kino-night:${theme.night};` +
-    `--kino-white:${theme.white};--kino-gold:${theme.gold};` +
+    `--kino-bg:${theme.bg};--kino-fg:${theme.fg};--kino-accent:${theme.accent};` +
+    `--kino-accent2:${theme.accent2};--kino-deep:${theme.deep};` +
+    // Legacy literal-name aliases — every pre-rename motion page reads these.
+    `--kino-mint:${theme.accent};--kino-green:${theme.deep};--kino-night:${theme.bg};` +
+    `--kino-white:${theme.fg};--kino-gold:${theme.accent2};` +
     `--kino-font:${theme.font};--kino-label-font:${theme.labelFont};`
   );
 }
