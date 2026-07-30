@@ -2,7 +2,7 @@
 import type { MotionEnv, MotionGraphicProps, Theme } from "../../../../props.js";
 import { paramsAt, pulseAt, progressCurves } from "../../../../bgparams.js";
 import { buildMotionVars, cameraBlurVars } from "../../../../motionVars.js";
-import { annotateVelocityTargets, hasVelocityTargets } from "../../../../motionVelocity.js";
+import { annotateVelocityTargets, hasVelocityTargets, implySmearOptIn } from "../../../../motionVelocity.js";
 import { applyPathMorphs, hasPathMorph } from "../../../../pathMorph.js";
 import { sanitizeMotionHtml } from "../../../../sanitizeMotion.js";
 import { measureVelocity } from "../../velocityProbe.js";
@@ -172,7 +172,10 @@ export function createMotionSource(opts: {
     }
 
     // Stamp the opted-in elements with indices so the caller's measurement pass can pair them up.
-    const vel = hasVelocityTargets(html) ? annotateVelocityTargets(html) : { html, count: 0 };
+    // .kino-smear is expanded to the measurement attribute first, so the class alone opts in.
+    const vel = hasVelocityTargets(html)
+      ? annotateVelocityTargets(implySmearOptIn(html))
+      : { html, count: 0 };
     return { vars, html: vel.html, velCount: vel.count };
   }
 

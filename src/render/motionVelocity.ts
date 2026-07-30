@@ -30,9 +30,41 @@ export const VEL_ATTR = "data-kino-vel";
  *  stable — and it means "the smear appears only while the element moves" is literally true. */
 export const VEL_EPSILON = 0.01;
 
+/**
+ * Helper class that bundles the opt-in with a ready-made smear, so the common case is one token
+ * instead of an attribute plus a hand-tuned filter expression.
+ *
+ * It exists because the opt-in was the thing nobody reached for. Automatic motion blur covers a
+ * camera or layer move, but the usual way an author moves something fast is a CSS transform inside
+ * the page, which neither the layer blur nor --cam-blur can see — and nothing warns. A beat shipped
+ * with a whip pan at 153 px/frame rendering perfectly sharp, 61× the threshold at which a layer move
+ * would have been smeared for free.
+ */
+export const SMEAR_CLASS = "kino-smear";
+
+const SMEAR_CLASS_RE = new RegExp(`class\\s*=\\s*(?:"[^"]*\\b${SMEAR_CLASS}\\b[^"]*"|'[^']*\\b${SMEAR_CLASS}\\b[^']*')`, "i");
+
 /** Cheap gate: a page with no opted-in element pays for no measurement pass at all. */
 export function hasVelocityTargets(html: string): boolean {
-  return html.includes(VEL_ATTR);
+  return html.includes(VEL_ATTR) || html.includes(SMEAR_CLASS);
+}
+
+/**
+ * Give every `.kino-smear` element the measurement attribute, so the class alone is a complete
+ * opt-in. Runs before annotateVelocityTargets; an element that already carries the attribute is left
+ * alone, so writing both is harmless.
+ */
+export function implySmearOptIn(html: string): string {
+  if (!html.includes(SMEAR_CLASS)) return html;
+  return html.replace(TAG_RE, (whole, tag: string, attrs: string, slash: string) => {
+    if (!SMEAR_CLASS_RE.test(attrs)) return whole;
+    if (new RegExp(`(?:^|\\s)${VEL_ATTR}(?![\\w-])`).test(attrs)) return whole;
+    // Inserted after the TAG NAME, not appended: the attrs group's `[^>'"]` also matches "/", so on a
+    // self-closing tag the trailing slash is captured into attrs and appending would emit
+    // `<path class='x'/ data-kino-vel>` — the slash stranded mid-tag, so the element no longer
+    // self-closes and swallows its siblings.
+    return `<${tag} ${VEL_ATTR}${attrs}${slash}>`;
+  });
 }
 
 // `(?![\w-])` keeps this off a longer attribute that merely starts the same way.
@@ -45,7 +77,16 @@ const VEL_ATTR_RE = new RegExp(`(?<=^|\\s)${VEL_ATTR}(?![\\w-])(\\s*=\\s*(?:"[^"
  */
 export function annotateVelocityTargets(html: string): { html: string; count: number } {
   let count = 0;
-  const out = html.replace(VEL_ATTR_RE, () => `${VEL_ATTR}="${count++}"`);
+  // Scoped to tag interiors. A bare string replace also rewrote the attribute's NAME wherever it
+  // appeared as ordinary text or inside <style>, so a graphic whose own copy mentions data-kino-vel
+  // rendered `data-kino-vel="1"` on screen — visible corruption of the author's text — and burned an
+  // index doing it.
+  const out = html.replace(TAG_RE, (whole, tag: string, attrs: string, slash: string) => {
+    if (!VEL_ATTR_RE.test(attrs)) return whole;
+    VEL_ATTR_RE.lastIndex = 0;
+    const next = attrs.replace(VEL_ATTR_RE, () => `${VEL_ATTR}="${count++}"`);
+    return `<${tag}${next}${slash}>`;
+  });
   return { html: out, count };
 }
 
@@ -136,7 +177,9 @@ export function writeVelocityVars(html: string, decls: (string | undefined)[]): 
     const decl = decls[Number(idx[1])];
     if (!decl) return whole;
     const style = STYLE_ATTR_RE.exec(attrs);
-    if (!style) return `<${tag}${attrs} style="${decl}"${slash}>`;
+    // After the tag name for the same reason as implySmearOptIn: a self-closing tag's "/" is captured
+    // into attrs, so appending would strand it mid-tag and un-close the element.
+    if (!style) return `<${tag} style="${decl}"${attrs}${slash}>`;
     const existing = (style[2] ?? style[3] ?? "").trim().replace(/;$/, "");
     const merged = existing ? `${existing};${decl}` : decl;
     return `<${tag}${attrs.replace(STYLE_ATTR_RE, `$1style="${merged}"`)}${slash}>`;

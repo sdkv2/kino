@@ -26,6 +26,14 @@ export const motionScrubCss = (host: string): string =>
   "@keyframes kino-wipe{0%{clip-path:inset(0 100% 0 0)}40%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 0)}}" +
   ".kino-pulse{opacity:var(--pulse,0);transform:scale(calc(.88 + var(--pulse,0) * .18))}" +
   ".kino-camera{filter:blur(calc(var(--cam-blur,0) * 1px));will-change:transform,filter}" +
+  // Velocity smear for an element moving under its OWN transform, where .kino-camera cannot help:
+  // --cam-blur describes the camera, and the automatic layer blur reads the segment's camera track,
+  // so a CSS translate inside the page is invisible to both. The class implies data-kino-vel
+  // (see implySmearOptIn), so this one token is the whole opt-in.
+  // --kino-smear is px of blur per px/frame travelled; --kino-smear-max caps it so a whip pan softens
+  // rather than dissolving. Both are plain custom properties — override them on the element.
+  ".kino-smear{filter:blur(calc(min(var(--kino-vel,0) * var(--kino-smear,.05)," +
+  "var(--kino-smear-max,18)) * 1px));will-change:filter}" +
   ".kino-cliptext{padding-inline:.12em;margin-inline:-.12em}" +
   ".kino-fade-edges{-webkit-mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent);" +
   "mask-image:linear-gradient(180deg,transparent,#000 7%,#000 93%,transparent)}" +

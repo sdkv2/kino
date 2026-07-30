@@ -125,7 +125,7 @@ describe("writeVelocityVars", () => {
   it("writes each element's own values, keyed by index", () => {
     const html = '<span data-kino-vel="0">S</span><span data-kino-vel="1">M</span>';
     const out = writeVelocityVars(html, ["--kino-vel:4", "--kino-vel:9"]);
-    expect(out).toBe('<span data-kino-vel="0" style="--kino-vel:4">S</span><span data-kino-vel="1" style="--kino-vel:9">M</span>');
+    expect(out).toBe('<span style="--kino-vel:4" data-kino-vel="0">S</span><span style="--kino-vel:9" data-kino-vel="1">M</span>');
   });
 
   it("merges into an existing style attribute instead of dropping it", () => {
@@ -136,13 +136,13 @@ describe("writeVelocityVars", () => {
   it("ignores an element with no measurement and anything that never opted in", () => {
     const html = '<span data-kino-vel="0">S</span><span data-kino-vel="1">M</span><i>plain</i>';
     expect(writeVelocityVars(html, ["--kino-vel:4"])).toBe(
-      '<span data-kino-vel="0" style="--kino-vel:4">S</span><span data-kino-vel="1">M</span><i>plain</i>',
+      '<span style="--kino-vel:4" data-kino-vel="0">S</span><span data-kino-vel="1">M</span><i>plain</i>',
     );
   });
 
   it("does not confuse a data-style attribute for style", () => {
     const out = writeVelocityVars('<b data-kino-vel="0" data-style="loud">x</b>', ["--kino-vel:2"]);
-    expect(out).toBe('<b data-kino-vel="0" data-style="loud" style="--kino-vel:2">x</b>');
+    expect(out).toBe('<b style="--kino-vel:2" data-kino-vel="0" data-style="loud">x</b>');
   });
 });
 
