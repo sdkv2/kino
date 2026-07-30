@@ -193,7 +193,9 @@ class ElectronHostProc {
     });
   }
 
-  private async requestFrame(cmdWithoutId: string, timeoutMs = 10_000): Promise<Buffer | null> {
+  // Must stay above offscreenWindow.ts's CAPTURE_TIMEOUT_MS (15s) — this wraps that whole
+  // seek+capture round trip, so a smaller value here fires first and hides the inner timeout.
+  private async requestFrame(cmdWithoutId: string, timeoutMs = 20_000): Promise<Buffer | null> {
     return new Promise((resolve, reject) => {
       let id = 0;
       const timer = setTimeout(() => {

@@ -36,6 +36,14 @@ describe("electron gpu switches", () => {
     expect(valueOf(gpuSwitches({}, "darwin", {}), "use-angle")).toBe("metal");
     expect(valueOf(gpuSwitches({}, "win32", {}), "use-angle")).toBe("d3d11");
   });
+
+  it("forces the swiftshader ANGLE backend on every platform when KINO_GPU=0", () => {
+    // vulkan assumes a real GPU (see angle.ts) — a GPU-less box like GitHub Actions'
+    // ubuntu-latest runners fails Vulkan init and hangs the render page's boot forever.
+    expect(valueOf(gpuSwitches({ KINO_GPU: "0" }, "linux", {}), "use-angle")).toBe("swiftshader");
+    expect(valueOf(gpuSwitches({ KINO_GPU: "0" }, "darwin", {}), "use-angle")).toBe("swiftshader");
+    expect(valueOf(gpuSwitches({ KINO_GPU: "0" }, "win32", {}), "use-angle")).toBe("swiftshader");
+  });
 });
 
 describe("hasDisplay", () => {

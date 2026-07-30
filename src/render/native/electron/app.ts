@@ -24,9 +24,13 @@ export function gpuSwitches(
     ["force-device-scale-factor", "1"],
     ["force-color-profile", "srgb"],
     // Same backend puppeteer picks (../angle.ts) — Electron otherwise falls to a slower path.
-    ["use-angle", angleBackend(platform)],
+    ["use-angle", angleBackend(env, platform)],
     ["use-gl", "angle"],
   ];
+  // Recent Chromium refuses to fall back to software WebGL without this even when
+  // --use-angle=swiftshader is explicit ("Automatic fallback to software WebGL has been
+  // deprecated"), so KINO_GPU=0's swiftshader backend silently degrades further without it.
+  if (env.KINO_GPU === "0") switches.push("enable-unsafe-swiftshader");
   // Session-0 / SSH heads often crash the GPU process (exit_code=34) unless sandbox is off.
   // Linux containers block unprivileged user namespaces, so the zygote host aborts before any
   // page loads — same rule as the puppeteer path, so both renderers agree.

@@ -15,7 +15,11 @@ import {
 
 const JPEG_Q = 95;
 const SEEK_TIMEOUT_MS = 30_000;
-const CAPTURE_TIMEOUT_MS = 5_000;
+// True SwiftShader software rendering (KINO_GPU=0, see ../angle.ts) is far slower than hardware
+// ANGLE, especially at higher supersampling — a supersampled (SS=2) capture measured comfortably
+// past 5s on a otherwise-idle dev machine once the swiftshader backend was actually engaged
+// (previously silently ignored, see angleBackend's KINO_GPU handling).
+const CAPTURE_TIMEOUT_MS = 15_000;
 // Offscreen paint cadence ceiling — NOT the output timeline fps.
 const CAPTURE_PAINT_FPS = 240;
 
