@@ -1,5 +1,5 @@
-import type { Theme, BgParamValue, WordTiming } from "./props.js";
-import { progressCurves } from "./bgparams.js";
+import type { Theme, BgParamValue, WordTiming, MotionEnv, MotionGraphicProps } from "./props.js";
+import { progressCurves, paramsAt, pulseAt } from "./bgparams.js";
 import { velocityRestVars } from "./motionVelocity.js";
 
 export interface MotionVarDynamics {
@@ -172,4 +172,79 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
   vars["--cam-vel"] = camVel.toFixed(4);
   vars["--cam-blur"] = camBlur.toFixed(4);
   return vars;
+}
+
+/**
+ * Everything one frame of a motion beat resolves to, before its markup is produced: the CSS custom
+ * properties for the host, and the `env` a Tier-2 `render(env)` receives.
+ *
+ * Extracted so the two places that need it cannot drift: the in-page compositor provider, which
+ * renders the frame, and the Node-side `kino still --dump-html`, which reproduces the exact markup
+ * a frame emitted. A dump computed from a second, hand-copied definition of `env` would be a dump
+ * of something the renderer never saw — worse than no dump at all.
+ *
+ * Pure: every input is a function of `local`, so calling it twice (the velocity pass needs the
+ * previous frame too) is free of order effects.
+ */
+export function motionFrameState(
+  data: Pick<MotionGraphicProps, "params" | "keyframes" | "words"> & Partial<Pick<MotionGraphicProps, "triggers">>,
+  ctx: { local: number; fps: number; durationFrames: number; theme: Theme; width: number; height: number; captionBottom?: number },
+): { env: MotionEnv; vars: Record<string, string> } {
+  const { local, fps, durationFrames, theme } = ctx;
+  const tt = fps > 0 ? local / fps : 0;
+  const resolved = paramsAt(data.params, data.keyframes, tt, { implicitBase: true });
+  const prevResolved = local > 0 ? paramsAt(data.params, data.keyframes, tt - 1 / fps, { implicitBase: true }) : undefined;
+  const nextResolved =
+    local < durationFrames - 1 ? paramsAt(data.params, data.keyframes, tt + 1 / fps, { implicitBase: true }) : undefined;
+  const hasCam = "cam" in data.params || data.keyframes.some((k) => "cam" in k.params);
+  const pulse = pulseAt(data.triggers ?? [], tt);
+  const progress = durationFrames > 0 ? Math.min(1, Math.max(0, local / durationFrames)) : 0;
+  const curves = progressCurves(progress);
+  const { camVel, camBlur } = cameraBlurVars(resolved, prevResolved, nextResolved, fps, hasCam);
+  const vars = buildMotionVars(theme, {
+    frame: local,
+    t: tt,
+    progress,
+    pulse,
+    params: resolved,
+    fps,
+    prevParams: prevResolved,
+    nextParams: nextResolved,
+    hasCam,
+    captionBottom: ctx.captionBottom,
+    wordsShown: 0,
+    wordCount: data.words?.length ?? 0,
+    width: ctx.width,
+    height: ctx.height,
+    durationFrames,
+  });
+  const env: MotionEnv = {
+    frame: local,
+    t: tt,
+    progress,
+    in: curves.in,
+    out: curves.out,
+    inout: curves.inout,
+    overshoot: curves.overshoot,
+    spring: curves.spring,
+    edge: curves.edge,
+    pulse,
+    params: resolved,
+    camVel,
+    camBlur,
+    palette: {
+      mint: theme.mint,
+      green: theme.green,
+      night: theme.night,
+      white: theme.white,
+      gold: theme.gold,
+      font: theme.font,
+    },
+    width: ctx.width,
+    height: ctx.height,
+    words: data.words ?? [],
+    durationFrames,
+    duration: fps > 0 ? durationFrames / fps : 0,
+  };
+  return { env, vars };
 }

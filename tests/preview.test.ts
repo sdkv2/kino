@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { inspectPlan, parseTimes, pickFrames, pickIntervalTimes, timesAround } from "../src/render/preview.js";
 import type { KinoProps } from "../src/render/props.js";
+import { GAP } from "../src/vo/gap.js";
+import { computeTimings } from "../src/vo/vo.js";
 
 const props = {
   fps: 30,
@@ -45,6 +47,21 @@ describe("pickFrames", () => {
   });
   it("out-of-range segment → clear error, not undefined deref", () => {
     expect(() => pickFrames(segs, 30, { segment: 2 })).toThrow(/--segment 2 out of range .*2 segments.*0\.\.1/);
+  });
+  // A run wipes the stills dir (so nothing stale is ever read by path), which made the natural
+  // "check each beat" loop — one `kino still --segment N` per beat — delete all but the last.
+  // Taking a list lets that be one run.
+  it("segment list → one midpoint frame per requested beat, in the given order", () => {
+    expect(pickFrames(segs, 30, { segment: [1, 0] })).toEqual([
+      { frame: Math.round(3.65 * 30), label: "1 video" },
+      { frame: 30, label: "0 scene" },
+    ]);
+  });
+  it("a one-element list behaves exactly like the scalar form", () => {
+    expect(pickFrames(segs, 30, { segment: [1] })).toEqual(pickFrames(segs, 30, { segment: 1 }));
+  });
+  it("reports the offending index when any member of the list is out of range", () => {
+    expect(() => pickFrames(segs, 30, { segment: [0, 7] })).toThrow(/--segment 7 out of range/);
   });
   it("default → one midpoint frame per beat (storyboard)", () => {
     const r = pickFrames(segs, 30, {});
@@ -95,5 +112,23 @@ describe("timesAround", () => {
   });
   it("clamps to [min, max]", () => {
     expect(timesAround(0.2, { count: 3, span: 1, min: 0, max: 10 })).toEqual([0, 0.2, 0.7]);
+  });
+});
+
+describe("inspectPlan interBeatGapSec", () => {
+  // A beat's rendered length is its authored dur PLUS this gap (visuals hold to the next beat's
+  // start so nothing blinks off during the silence), so reporting the gap is what makes the
+  // per-beat durSec numbers add up instead of looking like an off-by-0.32 bug.
+  it("reports the inter-beat gap so durSec arithmetic is checkable", () => {
+    expect(inspectPlan(props).interBeatGapSec).toBe(GAP);
+  });
+
+  // On the AUDIO timeline the gap is silence between clips: a beat owns exactly its own duration
+  // and the next one starts GAP later. The visual hold (build.ts) is what stretches the rendered
+  // beat to dur + GAP; both readings come from this one constant.
+  it("separates consecutive beats on the audio timeline by exactly the gap", () => {
+    const t = computeTimings([3.4, 3.6], GAP);
+    expect(t[0]).toMatchObject({ startSec: 0, endSec: 3.4, durSec: 3.4 });
+    expect(t[1].startSec).toBeCloseTo(3.4 + GAP, 5);
   });
 });

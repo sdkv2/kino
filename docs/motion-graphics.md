@@ -115,9 +115,46 @@ with the same envelope.
 ### Beat handoffs
 
 Consecutive motion beats hand off with **shader transitions** during the overlap
-window (`MOTION_XFADE_FRAMES`), not a CSS opacity crossfade. The `transition`
-field on each beat still selects from the same vocabulary (`fade`, `dissolve`, `fly-left`,
-`fly-up`, `pop`, `cut`); only the renderer changed. Auto-vary (`pickTransition`) is unchanged.
+window (`MOTION_XFADE_FRAMES`), not a CSS opacity crossfade. Set `transition` on the **incoming**
+beat; the vocabulary is `fade`, `dissolve`, `fly-left`, `fly-up`, `pop`, `cut`, the `wipe`
+family, and `custom` (your own shader). `kino transitions` lists them all.
+
+**Motion beats default to `dissolve` and are not part of the app auto-vary rotation.** (They used to
+fall through to it and silently get `fly-left` — a horizontal slide on every motion handoff in every
+spec. A motion beat owns its whole frame, so shoving that frame sideways reads as a compositing
+glitch rather than an authored move.)
+
+**The `wipe` family** is what to reach for when a handoff should read as motion graphics: a lit edge
+travels across the frame and *uncovers* the incoming beat behind it. Prefer it over `fade`/`dissolve`
+between two authored compositions — a cross-fade mushes two layouts on top of each other, which is
+especially bad when the beats share a layout skeleton (same kicker slot, same title position), since
+the two titles then ghost through each other in place.
+
+`wipe-down` / `-up` / `-left` / `-right` are direction shorthands; bare `wipe` + `transitionParams`
+gives an arbitrary `angle` plus control over `softness`, `edgeWidth`, `edgeColor` and `edgeGain`
+(`edgeWidth: 0` = an unlit, invisible reveal). Full table in
+[spec-reference § Wipe transitions](spec-reference.md#wipe-transitions).
+
+Any transition can be **reversed** with `"transitionInvert": true` beside it — a reveal becomes a
+conceal, an opening iris becomes a closing one. It works on built-ins and custom shaders alike
+because it is a compositor-side flip (swap the beats, feed `1-p`), not something a shader implements.
+
+**`transitionCamera`** carries a camera move through the handoff — `{ "move": "whip-left" }`,
+`{ "move": "push" }`, or a raw `zoom`/`panX`/`panY` vector — so the outgoing beat keeps moving as it
+leaves and the incoming arrives already in motion. It stacks onto any transition and onto
+`transitionInvert`. Full table in
+[spec-reference § Carrying a camera through the cut](spec-reference.md#carrying-a-camera-through-the-cut).
+
+Not enough? **Write your own**: `transition: "custom"` + `transitionSource` (a bare id from
+`assets-lib/transitions/`, or an `assets/` path) runs your `.frag`, with `kinoFrom(uv)` / `kinoTo(uv)`
+/ `uP` in scope and your `transitionParams` as `u_<name>` uniforms. Run **`kino transitions`** for the
+contract, or copy `assets-lib/transitions/iris.frag`.
+
+Don't hand-roll a sweeping band inside the graphic to fake this. A CSS band plus the engine's real
+transition is two transitions fighting, and the band can't reveal anything — it only draws *over*
+the outgoing beat, because the incoming beat is a separate page the graphic cannot mask against.
+What the beat should do either side of a handoff is stop being frozen: give it a small settle so the
+frame the wipe uncovers is easing rather than static.
 
 ## Driving it from the spec
 
@@ -198,6 +235,41 @@ You can use **real CSS `@keyframes`** — kino force-pauses every animation (`*{
 - **Don't** set `animation-play-state` yourself — kino manages the pause (it's lint-rejected).
 - Stagger with `--kino-delay` (see below).
 
+### The two things authors get wrong here
+
+**1. The class goes on the element that carries the animation — never on a wrapper.** kino only
+scrubs elements that have the class. Put it on a parent and the child is left with CSS's default
+`animation-duration: 0s`, so it paints its **end state from frame 0**. The beat doesn't look broken,
+it looks *already finished* — which is why it survives a midpoint still and the under-animation
+probe. This is lint-rejected now, but the shape is worth recognising:
+
+```html
+<div class="wrap kino-anim">                <!-- ✗ scrub on the wrapper does nothing -->
+  <span class="ch">O</span>                 <!--   .ch{animation-name:fall} never scrubs -->
+</div>
+<div class="wrap">
+  <span class="ch kino-anim">O</span>       <!-- ✓ scrub on the animated element -->
+</div>
+```
+
+**2. Percentages are fractions of the BEAT, not of an entrance.** The scrub pins
+`animation-duration` to `1s` and maps that second across the whole beat
+(`animation-delay: calc((var(--progress) - var(--kino-delay, 0)) * -1s)`). So a `0% → 100%` entrance
+takes the *entire beat* to arrive. Compress the motion into low percentages and hold:
+
+```css
+@keyframes fall {
+  0%   { transform: translateY(-78%); opacity: 0 }
+  12%  { transform: translateY(11%) }            /* overshoot */
+  19%  { transform: translateY(0) }              /* landed, ~a fifth of the way in */
+  100% { transform: translateY(0); opacity: 1 }  /* hold for the rest of the beat */
+}
+```
+
+**`--kino-delay` is in progress units (`0..1` = the beat), not seconds.** `--kino-delay: .1` means
+"start a tenth of the way through this beat" — on a 4s beat that's 400ms, on a 2s beat 200ms. A
+keyframe stop `X%` therefore fires at `progress = delay + X/100`.
+
 ## Staggering reveals
 
 Don't let everything land at once. Three idioms:
@@ -211,7 +283,8 @@ Don't let everything land at once. Three idioms:
 .a { opacity: clamp(0, calc(var(--progress) * 10), 1); }
 .b { opacity: clamp(0, calc((var(--progress) - .12) * 10), 1); }
 
-/* 3. Stagger scrubbed @keyframes with --kino-delay (pairs with sibling-index) */
+/* 3. Stagger scrubbed @keyframes with --kino-delay (pairs with sibling-index).
+      Units are PROGRESS (0..1 = the whole beat), not seconds: .1 = a tenth of the beat. */
 .kw { animation-name:rise; --kino-delay: calc((sibling-index() - 1) * .1); }
 ```
 

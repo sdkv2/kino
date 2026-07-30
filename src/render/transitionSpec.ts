@@ -5,6 +5,9 @@
 // confines shader transitions to frames that were already crossfading by opacity.
 import type { KinoProps } from "./props.js";
 import { motionHandoff, motionXfadeFrames, pickTransition, type Transition } from "./motion.js";
+import { isWipe, resolveWipeParams, type WipeParams } from "./wipeSpec.js";
+import { assembleTransitionSource, transitionParamNames } from "./transitionSource.js";
+import { resolveCamera, type CameraParams } from "./cameraSpec.js";
 
 const CHAIN_HOLD_FRAMES = 12;
 
@@ -82,5 +85,70 @@ export function transitionKindForWindow(props: KinoProps, win: TransitionWindow)
     const isVideo = /\.(mp4|mov)$/i.test(seg.source ?? "");
     return pickTransition(appIdx, seg.transition as Transition | undefined, isVideo);
   }
-  return pickTransition(0, seg.transition as Transition | undefined, false);
+  // Motion beats are NOT part of the app cut-in auto-vary. They used to fall through to
+  // `pickTransition(0, …)`, which returns TRANSITIONS[0] — "fly-left" — so every motion→motion
+  // handoff in every spec got a punchy horizontal slide, contradicting both the schema comment on
+  // `transition` and docs/motion-graphics.md, which promise a dissolve. Worse, the index was
+  // hard-coded to 0, so it wasn't even varying; it was one fixed slide everywhere. A motion beat
+  // owns its whole frame, so shoving that frame sideways reads as the compositor mishandling the
+  // cut rather than as an authored move. Dissolve is the documented default; anything else is opt-in.
+  return (seg.transition as Transition | undefined) ?? "dissolve";
+}
+
+/**
+ * Wipe uniforms for an overlap window, or `undefined` when the transition isn't a wipe.
+ *
+ * Read off the INCOMING beat, same as the kind — a transition belongs to the beat arriving, so a
+ * beat can be reused in another cut without dragging its neighbour's handoff along.
+ */
+export function transitionWipeForWindow(props: KinoProps, win: TransitionWindow): WipeParams | undefined {
+  const kind = transitionKindForWindow(props, win);
+  if (!isWipe(kind)) return undefined;
+  const seg = props.segments[parseInt(win.to.slice(4), 10)];
+  return resolveWipeParams(kind, seg?.transitionParams, props.theme.mint);
+}
+
+/**
+ * Assembled source + uniform values for an author-supplied transition, or `undefined` when the
+ * window's transition is a built-in.
+ *
+ * Assembled here rather than at build time so the author's file stays exactly what they wrote — the
+ * wrapper (uniform header, kinoFrom/kinoTo helpers, entry point) is regenerated from the params the
+ * beat actually declares, which is what makes the `u_<name>` aliases line up with the slots.
+ */
+export function transitionCustomForWindow(
+  props: KinoProps,
+  win: TransitionWindow,
+): { source: string; params: number[] } | undefined {
+  if (transitionKindForWindow(props, win) !== "custom") return undefined;
+  const seg = props.segments[parseInt(win.to.slice(4), 10)];
+  if (!seg?.transitionSource) return undefined;
+  const declared = (seg.transitionParams ?? {}) as Record<string, number | string>;
+  const names = transitionParamNames(declared);
+  return {
+    source: assembleTransitionSource(seg.transitionSource, names),
+    params: names.map((n) => Number(declared[n]) || 0),
+  };
+}
+
+/**
+ * Whether this window's transition runs backwards. Read off the INCOMING beat, like the kind and
+ * the params, so a beat carries its own arrival and can be re-cut without dragging a neighbour's.
+ *
+ * Applies to EVERY transition — built-in or author-supplied — because inversion is implemented in
+ * the compositor (swap the two inputs, feed 1-p), not in any shader.
+ */
+export function transitionInvertForWindow(props: KinoProps, win: TransitionWindow): boolean {
+  return props.segments[parseInt(win.to.slice(4), 10)]?.transitionInvert === true;
+}
+
+/**
+ * Camera carried through this window, or `undefined` when the beat asks for none.
+ *
+ * Read off the INCOMING beat like everything else about the handoff, and applied inside the shared
+ * `kinoFrom` / `kinoTo` helpers — so it composes with every transition, built-in or authored, and
+ * with `transitionInvert`.
+ */
+export function transitionCameraForWindow(props: KinoProps, win: TransitionWindow): CameraParams | undefined {
+  return resolveCamera(props.segments[parseInt(win.to.slice(4), 10)]?.transitionCamera);
 }

@@ -243,7 +243,24 @@ don't reintroduce per-caption `y` offsets to compensate.
   Override per segment with `"shot"` (`push-in`/`pull-out`/`pan-left`/`pan-right`/`tilt-up`/`static`,
   plus `scroll`/`scroll-up` to pan vertically through a **tall** app still — a simulated scroll that
   reveals content below the frame; opt-in, so it's never auto-picked)
-  and, on `app` segments, `"transition"` (`fade`/`dissolve`/`fly-left`/`fly-up`/`pop`/`cut`).
+  and `"transition"` (`fade`/`dissolve`/`fly-left`/`fly-up`/`pop`/`cut`, plus the `wipe` family) on
+  `app` **and `motion`** segments — set it on the *incoming* beat. Motion beats are not in the
+  auto-vary rotation: they default to `dissolve`. The **wipe family** (`wipe-down`/`-up`/`-left`/
+  `-right`, or bare `wipe` + `transitionParams.angle` for a diagonal) travels a lit edge across the
+  frame and *uncovers* the incoming beat — that's the one that reads as motion graphics rather than
+  a cross-fade, especially when consecutive beats share a layout skeleton. Tune it with
+  `transitionParams` (`angle`/`softness`/`edgeWidth`/`edgeColor`/`edgeGain`; `edgeWidth: 0` = unlit).
+  Don't hand-roll a sweeping band inside the graphic to fake this: a CSS band can only draw *over*
+  the outgoing beat — it cannot reveal the incoming one, which is a separate page.
+  Carry a camera through the cut with `"transitionCamera": { "move": "push" }` (also `pull`,
+  `pan-*`, `tilt-*`, `whip-*`, or a raw zoom/pan vector) — the outgoing beat keeps moving as it
+  leaves and the incoming arrives in motion, so the cut reads as one shot. Stacks on any transition.
+  Reverse any of them with `"transitionInvert": true` (a reveal becomes a conceal) — works on
+  built-ins and custom shaders alike.
+  **Need a shape the built-ins don't cover?** `transition: "custom"` + `transitionSource` (bare id
+  from `assets-lib/transitions/`, or an `assets/` path) runs your own `.frag` — author a ShaderToy
+  `mainImage()` with `kinoFrom(uv)`/`kinoTo(uv)`/`uP` in scope. Run `kino transitions` for the full
+  contract and the library list; copy `iris.frag` as a starting point.
   Auto-vary is asset-aware: video b-roll defaults to the soft pair (`dissolve`/`fade`) and UI stills
   to the punchy rotation — match that instinct when overriding (footage wants a natural fade, not a
   spring fly-in). **Plan shot variety before writing the spec, not after seeing the storyboard**: for

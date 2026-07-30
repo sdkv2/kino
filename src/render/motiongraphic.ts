@@ -4,7 +4,7 @@ import { resolveMotionSource } from "../media/motionLib.js";
 import { attachLensShaders, type EffectResolveProject } from "../media/effectsLib.js";
 import { sanitizeMotionHtml } from "./sanitizeMotion.js";
 import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
-import { lintDeadVisuals } from "./motionLint.js";
+import { lintDeadVisuals, lintAnimScrubClass, lintUnresolvedFilterRefs } from "./motionLint.js";
 import { lintPathMorphs } from "./pathMorph.js";
 
 // Re-exported for back-compat (callers/tests import it from here).
@@ -40,8 +40,21 @@ const BANNED: { re: RegExp; msg: string }[] = [
   },
 ];
 
+/**
+ * Which surface a motion source is bound to. It changes what is checkable, not what is safe.
+ *
+ * `beat` — a `kind:"motion"` beat or a motionOverlay. @keyframes here are scrubbed per element via
+ * the `.kino-anim` class, so scrub placement is a real, checkable requirement.
+ *
+ * `texture` — HTML rasterized into a shader channel (`regionShader.textures`, `backgroundTextures`).
+ * These are re-rasterized every frame at a background param's value, which advances the page's own
+ * 1s @keyframes externally — bare `animation-name` with no scrub class is CORRECT there, so the
+ * placement check must not run.
+ */
+export type MotionSurface = "beat" | "texture";
+
 // Returns a list of human-readable violations (empty = clean). Pure; no DOMPurify needed.
-export function lintMotionHtml(html: string): string[] {
+export function lintMotionHtml(html: string, surface: MotionSurface = "beat"): string[] {
   // SMIL is allowed inside `.kino-lens-shape` (scrubbed via svg.setCurrentTime + --progress).
   const forLint = html.replace(
     /<svg\b[^>]*\bkino-lens-shape\b[^>]*>[\s\S]*?<\/svg>/gi,
@@ -51,10 +64,15 @@ export function lintMotionHtml(html: string): string[] {
   // them — resolveMotionGraphic lints via this function directly, and that is the path a render takes.
   // Path-morph structure is checkable without a frame, so it fails at authoring time rather than as a
   // mid-render fatal (the in-page reportFatal backstop stays, for markup a Tier-2 proc emits).
+  // Scrub-placement and unresolved-fragment checks run on the HTML tier only: both need literal
+  // markup to be decidable. A Tier-2 proc builds class attributes and filter ids at runtime, so the
+  // same scan there would flag correct code (a literal url(#gA) whose <filter id> is concatenated).
   return [
     ...BANNED.filter((b) => b.re.test(forLint)).map((b) => b.msg),
     ...lintDeadVisuals(html),
     ...lintPathMorphs(html),
+    ...(surface === "beat" ? lintAnimScrubClass(html) : []),
+    ...lintUnresolvedFilterRefs(html),
   ];
 }
 
@@ -84,6 +102,12 @@ const BANNED_JS: { re: RegExp; msg: string }[] = [
   // `return ''\n  + '<b'` is fine (expression still open). See speech-synced-ui.
   { re: /;\s*\n\s*\+\s*['"`]/, msg: "`;` then newline `+ '…'` is unary plus → NaN; keep one binary + chain or use out +=" },
   { re: /\breturn\s*\n\s*\+\s*['"`]/, msg: "`return` then newline `+ '…'` is ASI unary plus → NaN; put the first string on the return line" },
+  // The same trap one step further along a concat chain, and the one the two rules above miss: a
+  // continuation line that starts with TWO pluses. `'x' + + f()` applies unary plus to f()'s return,
+  // coercing the markup to a Number and emitting the literal string "NaN". If that markup was a
+  // <filter> def, every element referencing it then renders nothing — a silently deleted layer.
+  // Matches a line-leading `+` followed by whitespace and another `+`; `++i` (no gap) is untouched.
+  { re: /^[ \t]*\+[ \t]+\+/m, msg: "a continuation line starting `+ +` is unary plus → the value becomes NaN; use a single binary + per line" },
 ];
 
 // Blank comments + string/template literal *contents* before scanning so banned access patterns that
@@ -235,7 +259,7 @@ export function lintMotionJs(src: string): string[] {
 // assertMotionGraphics (validation-only). Returns violations (empty = clean); a Lottie parse failure
 // is surfaced as a violation rather than thrown, so callers format their own error. Keep the branch
 // set in sync with resolveMotionGraphic if a new extension is added.
-export function lintMotionSource(source: string, raw: string): string[] {
+export function lintMotionSource(source: string, raw: string, surface: MotionSurface = "beat"): string[] {
   const ext = source.toLowerCase();
   if (ext.endsWith(".js")) return lintMotionJs(raw);
   if (ext.endsWith(".json")) {
@@ -248,7 +272,7 @@ export function lintMotionSource(source: string, raw: string): string[] {
   }
   // Dead-visual checks live inside lintMotionHtml/lintMotionJs so the render path gets them too.
   // Lottie is a compiled asset — no CSS to read.
-  if (ext.endsWith(".html")) return lintMotionHtml(raw);
+  if (ext.endsWith(".html")) return lintMotionHtml(raw, surface);
   return ["motion source must be .html, .js, or .json"];
 }
 

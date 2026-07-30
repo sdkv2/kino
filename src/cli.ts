@@ -50,6 +50,11 @@ program
   .action(async () => (await import("./commands/update.js")).update());
 
 program
+  .command("transitions")
+  .description("List beat transitions (incl. the wipe family) and the contract for authoring your own")
+  .action(async () => (await import("./commands/transitions.js")).transitions());
+
+program
   .command("still <spec>")
   .description("Render still(s) fast (no encode): --at | --segment | --around <sec> | (per beat)")
   .option("--at <list>", "comma-separated timestamps in seconds")
@@ -58,7 +63,7 @@ program
   .option("--count <n>", "frames in the --around window (default 5)")
   .option("--montage", "tile multiple stills into one contact sheet")
   .option("--quality <preset>", "standard (default) | very-high — very-high supersamples the composite 2× (4× fill)")
-  .option("--segment <n>", "render the midpoint of segment n")
+  .option("--segment <list>", "render the midpoint of segment n (comma list for several: 0,1,2)")
   .option("--word <word>", "center the sheet on a spoken word's start (with --segment; implies montage)")
   .option("--format <fmt>", "9:16 | 3:4 | 16:9 | 9:16-4k | 3:4-4k | 16:9-4k")
   .option("--font <name>", "override brand.font (see `kino fonts`)")
@@ -67,6 +72,7 @@ program
   .option("--platform <name>", "overlay in-feed safe zones (guide only): tiktok | reels | shorts")
   .option("--grid", "overlay a rule-of-thirds grid for composition QA")
   .option("--measure", "print exact geometry (center X/Y + Δ-from-center) of every [data-measure] element — deterministic alignment QA")
+  .option("--dump-html", "write the exact markup each motion graphic emitted at these frames (Tier-2 procs included)")
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
 program

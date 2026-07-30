@@ -20,7 +20,8 @@ import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
 import { presenterBeats, resolvePresenterPin } from "../avatar/source.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
-import { lookupFont } from "../fonts/registry.js";
+import { lookupFont, resolveFontCuts } from "../fonts/registry.js";
+import { resolveTransitionSource } from "../media/transitionLib.js";
 import { ensureFont } from "../fonts/manager.js";
 import { resolveCaptionBackplate } from "../render/elements.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
@@ -306,6 +307,17 @@ export interface PrepareResult {
   words: WordTiming[][]; // per-segment word timings, absolute on the main timeline
 }
 
+
+/** `transition: "custom"` → the author's shader body, resolved and read at build time so the render
+ *  page never touches the filesystem. Absent for every built-in transition. */
+function readTransitionSource(
+  seg: { transition?: string; transitionSource?: string },
+  project: Project,
+): string | undefined {
+  if (seg.transition !== "custom" || !seg.transitionSource) return undefined;
+  return readFileSync(resolveTransitionSource(seg.transitionSource, project), "utf8");
+}
+
 // Everything build does up to (but not including) the final video render. Reused by the
 // inspection commands (still/storyboard/inspect) so they share the exact pipeline.
 export async function prepare(
@@ -528,11 +540,10 @@ export async function prepare(
       copyFileSync(ttf, join(publicDir, "font.ttf"));
       fontUrl = "font.ttf";
       themeFont = `"KinoBrandFont", "${fontDef.family}", Helvetica, Arial, sans-serif`;
-      // Opt-in extra cuts. The caption weight is always in the set, so a page that asks for it still
-      // resolves; a cut that fails to download is skipped rather than failing the build.
-      const wanted = brand.fontWeights?.length
-        ? [...new Set([fontDef.weight, ...brand.fontWeights])].sort((a, b) => a - b)
-        : [];
+      // Opt-in extra cuts, spec overriding brand. The caption weight is always in the set, so a page
+      // that asks for it still resolves; a cut that fails to download is skipped rather than failing
+      // the build.
+      const wanted = resolveFontCuts(fontDef.weight, spec.fontWeights, brand.fontWeights);
       for (const w of wanted) {
         const cut = w === fontDef.weight ? ttf : await ensureFont(fontDef.name, w);
         if (!cut) {
@@ -628,6 +639,10 @@ export async function prepare(
         ...base,
         shot,
         transition,
+        transitionParams: seg.transitionParams,
+        transitionSource: readTransitionSource(seg, project),
+        transitionInvert: seg.transitionInvert,
+        transitionCamera: seg.transitionCamera,
         clipFrom: seg.clipFrom,
         clipTo: seg.clipTo,
         speed: seg.speed,
@@ -658,6 +673,10 @@ export async function prepare(
     return {
       ...base,
       transition: seg.transition,
+      transitionParams: seg.transitionParams,
+      transitionSource: readTransitionSource(seg, project),
+      transitionInvert: seg.transitionInvert,
+      transitionCamera: seg.transitionCamera,
       motion: {
         ...resolveMotionGraphic(
           anchorMotion({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, `segment[${i}]`),

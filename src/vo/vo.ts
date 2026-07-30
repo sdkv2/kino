@@ -18,7 +18,10 @@ import { pickSttEngine, resolveWhisper, whisperTranscribe } from "./whisper.js";
 
 // Seconds of silence inserted between segments in the stitched track. Also part of the track
 // cache key (contentHash({clips, GAP})) — changing it re-stitches but does not re-bill TTS.
-export const GAP = 0.32;
+// Re-exported so existing `from "../vo/vo.js"` imports keep working; see gap.ts for why
+// the visual length of a beat is dur + GAP while its audio length is just dur.
+import { GAP } from "./gap.js";
+export { GAP };
 
 export function computeTimings(durations: number[], gap: number): SegmentTiming[] {
   const out: SegmentTiming[] = [];

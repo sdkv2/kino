@@ -71,15 +71,64 @@ const GPU_PIXEL_TESTS = [
 // them was. The fixtures live under gitignored `projects/`, which is why a repo-wide rename missed
 // them silently and why no CI run could have caught it.
 
+// CoreML segmentation tests. These drive CoreML → Espresso → MetalPerformanceShadersGraph, i.e. a
+// SECOND heavyweight Metal consumer alongside the Electron GL hosts the render tests spin up. Run
+// them concurrently on one machine and CoreML dies: SIGABRT out of
+//
+//   MTLReportFailure → __assert_rtn → abort
+//   ← -[MPSGraphTensorData initWithMTLBuffer:shape:strides:interleaves:dataType:]
+//   ← E5RT::Ops::MpsGraphInferenceOperation::Impl::EncodeMemoryBuffers
+//
+// (seven Python crash reports on 2026-07-30, every one that signature). It is a Metal resource
+// failure inside Apple's frameworks, not a kino defect and not a flaky assertion — the test's own
+// expectations never even run.
+//
+// Not fixable by avoiding Metal: `KINO_SAM_COMPUTE` already exposes the compute unit, and both
+// non-GPU settings are worse — CPU_ONLY and CPU_AND_NE each SIGSEGV outright on this model. Only
+// CPU_AND_GPU and ALL produce a mask at all.
+//
+// So they get their own project with a later `groupOrder`, which vitest runs strictly after group 0
+// rather than alongside it. That keeps them RUNNING (they are the only coverage of the real CoreML
+// pipeline) instead of excluding them, which is what the note above says to avoid. Isolated, the
+// image test has been green across full-suite runs; concurrent, it failed roughly two runs in three.
+const METAL_TESTS = [
+  "tests/segment-coreml.test.ts",
+  "tests/segment-coreml-track.test.ts",
+  "tests/segment-coreml-video.test.ts",
+];
+
+const exclude =
+  process.env.KINO_TEST_SCOPE === "light"
+    ? [...configDefaults.exclude, ...GPU_PIXEL_TESTS]
+    : configDefaults.exclude;
+
 export default defineConfig({
   test: {
     globals: true,
-    include: ["tests/**/*.test.ts"],
-    exclude:
-      process.env.KINO_TEST_SCOPE === "light"
-        ? [...configDefaults.exclude, ...GPU_PIXEL_TESTS]
-        : configDefaults.exclude,
     globalSetup: ["tests/setup/scratchSweep.ts"],
     env: { KINO_GPU: "0" },
+    projects: [
+      {
+        test: {
+          name: "suite",
+          globals: true,
+          env: { KINO_GPU: "0" },
+          include: ["tests/**/*.test.ts"],
+          exclude: [...exclude, ...METAL_TESTS],
+          sequence: { groupOrder: 0 },
+        },
+      },
+      {
+        // A LATER groupOrder, so this never overlaps the suite above rather than being excluded.
+        test: {
+          name: "metal",
+          globals: true,
+          env: { KINO_GPU: "0" },
+          include: METAL_TESTS,
+          exclude,
+          sequence: { groupOrder: 1 },
+        },
+      },
+    ],
   },
 });

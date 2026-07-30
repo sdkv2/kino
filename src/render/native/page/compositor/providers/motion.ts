@@ -1,7 +1,6 @@
 // Motion-graphic layers: beat-relative vars, Tier-2 proc, post-raster backdrop lenses.
 import type { MotionEnv, MotionGraphicProps, Theme } from "../../../../props.js";
-import { paramsAt, pulseAt, progressCurves } from "../../../../bgparams.js";
-import { buildMotionVars, cameraBlurVars } from "../../../../motionVars.js";
+import { motionFrameState } from "../../../../motionVars.js";
 import { annotateVelocityTargets, hasVelocityTargets, implySmearOptIn } from "../../../../motionVelocity.js";
 import { applyPathMorphs, hasPathMorph } from "../../../../pathMorph.js";
 import { sanitizeMotionHtml } from "../../../../sanitizeMotion.js";
@@ -88,68 +87,21 @@ export function createMotionSource(opts: {
    * free of order effects.
    */
   function motionFrame(local: number): { vars: Record<string, string>; html: string; velCount: number } {
-    const tt = opts.fps > 0 ? local / opts.fps : 0;
     const durationFrames = opts.beatDur;
-    const resolved = paramsAt(opts.data.params, opts.data.keyframes, tt, { implicitBase: true });
-    const prevResolved =
-      local > 0 ? paramsAt(opts.data.params, opts.data.keyframes, tt - 1 / opts.fps, { implicitBase: true }) : undefined;
-    const nextResolved =
-      local < durationFrames - 1
-        ? paramsAt(opts.data.params, opts.data.keyframes, tt + 1 / opts.fps, { implicitBase: true })
-        : undefined;
-    const hasCam = "cam" in opts.data.params || opts.data.keyframes.some((k: { params: Record<string, unknown> }) => "cam" in k.params);
-    const pulse = pulseAt(opts.data.triggers, tt);
-    const progress = durationFrames > 0 ? Math.min(1, Math.max(0, local / durationFrames)) : 0;
-    const curves = progressCurves(progress);
-    const { camVel, camBlur } = cameraBlurVars(resolved, prevResolved, nextResolved, opts.fps, hasCam);
-    const vars = buildMotionVars(opts.theme, {
-      frame: local,
-      t: tt,
-      progress,
-      pulse,
-      params: resolved,
+    // Shared with `kino still --dump-html` (motionVars.ts) so a dumped frame is byte-identical to
+    // the one that rendered — two definitions of `env` would make the dump a fiction.
+    const { env, vars } = motionFrameState(opts.data, {
+      local,
       fps: opts.fps,
-      prevParams: prevResolved,
-      nextParams: nextResolved,
-      hasCam,
-      captionBottom: opts.captionBottom,
-      wordsShown: 0,
-      wordCount: opts.data.words?.length ?? 0,
+      durationFrames,
+      theme: opts.theme,
       width: opts.width,
       height: opts.height,
-      durationFrames,
+      captionBottom: opts.captionBottom,
     });
 
     let html = opts.data.html;
     if (procFn) {
-      const env: MotionEnv = {
-        frame: local,
-        t: tt,
-        progress,
-        in: curves.in,
-        out: curves.out,
-        inout: curves.inout,
-        overshoot: curves.overshoot,
-        spring: curves.spring,
-        edge: curves.edge,
-        pulse,
-        params: resolved,
-        camVel,
-        camBlur,
-        palette: {
-          mint: opts.theme.mint,
-          green: opts.theme.green,
-          night: opts.theme.night,
-          white: opts.theme.white,
-          gold: opts.theme.gold,
-          font: opts.theme.font,
-        },
-        width: opts.width,
-        height: opts.height,
-        words: opts.data.words ?? [],
-        durationFrames,
-        duration: opts.fps > 0 ? durationFrames / opts.fps : 0,
-      };
       prof.sync("motion:proc", () => {
         try {
           html = sanitizeMotionHtml(String(procFn(env) ?? ""));

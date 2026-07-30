@@ -28,70 +28,6 @@ Edit real `assets/motion/*` (or bare-id library sources). Prove with `kino still
 Character burst typing / retune → `speech-synced-ui`. Overlap with captions/logo →
 `adversarial-critique`.
 
-## Beat job first (composition follows work)
-
-Name the **job of this beat** before drawing boxes. Layout and motion follow that job.
-
-| Job | What the frame must do | Typical motion |
-|---|---|---|
-| **Hook** | Category + product readable in ~1s | Fast entrance, one hero mass, little chrome noise |
-| **Demonstrate** | Show a real product artifact (prompt, editor, pipeline, digest…) | Speech-locked reveals; camera serves the artifact |
-| **Prove** | Make a claim believable (number, before/after, named steps) | Stagger only what the VO enumerates |
-| **Orient** | Teach a surface (where to look next) | Soft life; avoid competing pulses |
-| **CTA / settle** | End or loop-ready poster | Native scale, calm field, no leftover entrance energy |
-
-A centered stack of equal pills is fine **only** when the job is “compare N equal steps.”
-It is wrong when the job is “one claim + one proof object.”
-
-### Prompt invariants (refuse drift)
-
-Extract before drawing:
-
-- **Name** — product/brand as given (on-screen chrome, not a smoother rename)
-- **Category** — what kind of thing this is (first readable second)
-- **Audience pressure** — skim vs inspect (TikTok skim ≠ product demo inspect)
-- **Artifact** — the concrete object of the domain (journal entry, deploy log, JSON spec…)
-- **Evidence** — what would make a skeptic trust the beat
-- **Refuse** — leftover chrome, copy, or palette habits from the last project
-
-If the hero object could drop into an unrelated ad without looking wrong, it is too generic.
-Rebuild around the artifact.
-
-## Register: brand film vs product instrument
-
-- **Brand film** — the graphic *is* the ad moment. Expressive camera, statement color, art-directed
-  chrome OK. Arrival feeling is part of the deliverable.
-- **Product instrument** — spoof UI that must read as a real tool. Consistency, legibility, and
-  speech lock beat flourish. Operators (even fictional ones) should parse the surface instantly.
-
-Most kino beats are brand film *using* a product instrument as proof. Let the instrument stay
-honest; put flourish in camera, wash, and pulse — not in fake buttons that fight the product.
-
-## Color (mood with brand tokens)
-
-Kino injects `--kino-mint` `--kino-green` `--kino-night` `--kino-white` `--kino-gold` (and fonts).
-Build atmosphere from those roles — do not invent a parallel rainbow unless brand.md demands it.
-
-Decide the **emotional arc of the beat** before saturating:
-
-1. Arrival feel (calm / urgency / play)
-2. Where attention must spike (accent rarity)
-3. Rest surfaces (field that does not compete with type)
-
-Commitment levels (pick one per beat):
-
-- **Whisper** — night/neutral field; one role color does the work (default for dense UI spoofs)
-- **Statement** — one hue owns a large plane (wash, hero numeral, CTA field)
-- **Conversation** — a few roles with jobs (status / accent / mute) — pipelines, multi-chip digests
-- **Flood** — the surface *is* the color (rare; cold opens and logo locks)
-
-Accent that appears everywhere stops meaning anything. Tint “gray” UI chrome toward brand hue so
-panels feel related, not stock dark-mode. Avoid the reflex blue-violet / indigo-cyan energy wash —
-if the palette could belong to any AI startup after removing the wordmark, rechoose.
-
-Contrast still matters on a phone in sunlight: light type on dark needs weight + tracking; thin
-mint hairlines vanish on encode.
-
 ## Type (shape of the claim)
 
 Use `--kino-font` / `--kino-label-font`. Size in **`vw`** so 9:16 and preview panes stay honest.
@@ -99,7 +35,6 @@ Use `--kino-font` / `--kino-label-font`. Size in **`vw`** so 9:16 and preview pa
 Hierarchy: usually **three** levels on a beat — hook (hero), bridge (kicker/unit), detail (chips,
 gutter, foot meta). Flat scales look uncommitted; more than three fights the VO.
 
-Short labels (chips, kickers): tight leading, letter-space for uppercase brand chrome.
 Hero numerals / italic display: optically heavy enough to survive H.264.
 
 System/default stacks are fine for product spoofs when brand.md says so; brand film should not
@@ -108,46 +43,6 @@ default to the same safe sans every project.
 Keep graphic text clear of the caption band: `--kino-caption-bottom`. Prefer omitting captions on
 dense typed beats (`speech-synced-ui`).
 
-## Layout (directing a 9:16 shot)
-
-You are staging one composition, not a dashboard.
-
-- **Squint / still test** — `kino still --segment N` then blur the PNG. Can you name the three most
-  important masses? If not, hierarchy failed.
-- **One proof object** owns the middle third; chrome (title bar, feet, chips) supports it.
-- **Planes** — background (`.bg` / wash), content (window + type), attention (caret, pulse, CTA).
-  When planes fight, the beat feels noisy. For loops, background must be seam-safe (static `.bg` or
-  life gated by `sin(progress·π)`).
-- **Rhythm** — pick a small spacing ladder in `vw` (micro / component / section) and stick to it.
-  Random gaps read as unfinished.
-- **Cards** — only when the content is truly card-shaped (discrete, scannable units). Nested cards
-  and equal feature tiles are usually habit. Prefer type + dividers + one window.
-- **Safe zones** — `still --platform` / storyboard overlays show where TikTok/Reels chrome tends to
-  sit — **a guide, not a mandate**. Keep hooks, CTAs, hero captions, and kickers inside the readable
-  column. Non-important chrome (tab bars, nav icons, decorative docks) may live in the shaded bands.
-- **Mass** — a heavy hero bottom-right needs a counterweight (kicker, mark, or negative space) so the
-  frame does not tip.
-- **Fill budget** — name the container, name what fills it. If content occupies less than ~half the
-  container, either shrink the container to the content or add a rest plane *with a stated reason*.
-  No accidental voids — a background band ≥25% of the frame with nothing in it is a bug, not breathing
-  room, unless you can say why it rests there.
-- **Alignment axis** — every repeated group (list rows, chips, steps, icon+label pairs) shares one
-  declared axis; nothing floats a few px off. Dynamic/revealed lists **group-center in their available
-  space** — never top-align rows inside a fixed-tall shell (they sink and open a void below the title).
-- **Measure, don't eyeball centering** — vision misreads sub-10% offsets (a card at 55% "looks
-  centered"). Tag panels `data-measure="name"` and run `kino still --segment N --measure`: it prints
-  each tagged element's center X/Y and signed Δ-from-frame-center (%), walking into shadow roots.
-  `Δx +0.0` = dead center; any number IS the misalignment. Trust that readout over a screenshot for
-  alignment QA.
-- **kino-`*` entrances own `transform`** (footgun) — `.kino-rise` / `.kino-pop` / … animate `transform`
-  and settle it to `none`, which **clobbers any `transform` you set for layout**. Never center with
-  `transform: translateX(-50%)` on an element that also carries a kino entrance class — it snaps back to
-  `left:50%` and is shoved right by half its width. Center with `left:0; right:0; margin-inline:auto`
-  (or a flex parent), and set `box-sizing: border-box` so `width:%` panels don't overflow their column
-  and drift. (`--measure` catches both instantly.)
-
-Wrappers that exist only to “contain” create dead margins. If removing a shell does not hurt
-reading, remove it.
 
 ## Motion is character (frame-scrubbed)
 

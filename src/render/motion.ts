@@ -3,7 +3,12 @@
 // `scroll`/`scroll-up` traverse a tall app still vertically (simulated scroll) — opt-in only, so
 // they're excluded from the auto-vary rotation below.
 export type Shot = "push-in" | "pull-out" | "pan-left" | "pan-right" | "tilt-up" | "scroll" | "scroll-up" | "static";
-export type Transition = "fade" | "dissolve" | "fly-left" | "fly-up" | "pop" | "cut";
+export type Transition =
+  | "fade" | "dissolve" | "fly-left" | "fly-up" | "pop" | "cut"
+  // Reveal family — one shader, direction is an angle. See wipeSpec.ts.
+  | "wipe" | "wipe-down" | "wipe-up" | "wipe-left" | "wipe-right"
+  // Author-supplied shader, paired with `transitionSource`. See transitionSource.ts.
+  | "custom";
 
 export const SHOTS: readonly Shot[] = ["push-in", "pan-right", "pull-out", "pan-left", "tilt-up"];
 // Punchy CapCut-style rotation for UI stills: spring fly-ins + a zoom pop, with fade as a breather.

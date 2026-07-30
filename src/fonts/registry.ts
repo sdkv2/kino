@@ -18,6 +18,25 @@ export interface FontDef {
  *  fetching four cuts for a project that never asks would multiply that payload for nothing. */
 export const SELECTABLE_WEIGHTS = [200, 300, 400, 500, 600, 700, 800, 900] as const;
 
+/** Which cuts of the brand font to stage, given the caption weight and the two places that may ask.
+ *
+ *  Spec `fontWeights` **overrides** brand `fontWeights` rather than merging with it: the spec is the
+ *  more specific declaration (same precedence as `background` / `captionMode`), and a merge would
+ *  make it impossible to ask for *fewer* cuts than the brand stages. That is why an explicit empty
+ *  array is meaningful — it opts a lean spec out of a type-heavy brand's set.
+ *
+ *  The caption weight is always in a non-empty result, so a page that asks for it still resolves.
+ *  Empty result = today's default: one staged face answering every `font-weight`. */
+export function resolveFontCuts(
+  captionWeight: number,
+  specWeights: number[] | undefined,
+  brandWeights: number[] | undefined,
+): number[] {
+  const declared = specWeights ?? brandWeights;
+  if (!declared?.length) return [];
+  return [...new Set([captionWeight, ...declared])].sort((a, b) => a - b);
+}
+
 export const FONTS: FontDef[] = [
   { name: "Inter", family: "Inter", description: "Clean, neutral UI sans — safe default for body + captions.", weight: 800 },
   { name: "Poppins", family: "Poppins", description: "Rounded geometric sans — friendly, modern, very popular.", weight: 700 },

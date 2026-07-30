@@ -19,6 +19,10 @@ import { mixGroups } from "./transitions/index.js";
 import {
   groupSpans,
   transitionKindForWindow,
+  transitionWipeForWindow,
+  transitionCustomForWindow,
+  transitionInvertForWindow,
+  transitionCameraForWindow,
   transitionProgress,
   type TransitionWindow,
 } from "../../../transitionSpec.js";
@@ -468,7 +472,11 @@ export class StageRenderer {
     const fromTarget = this.compositeLayersToTarget(side(transition.from), sources, frame, maskTargets);
     const toTarget = this.compositeLayersToTarget(side(transition.to), sources, frame, maskTargets);
     const kind = transitionKindForWindow(props, transition);
-    const mixed = mixGroups(gl, this.pool, fromTarget, toTarget, kind, transition.p);
+    const wipe = transitionWipeForWindow(props, transition);
+    const custom = transitionCustomForWindow(props, transition);
+    const invert = transitionInvertForWindow(props, transition);
+    const camera = transitionCameraForWindow(props, transition);
+    const mixed = mixGroups(gl, this.pool, fromTarget, toTarget, kind, transition.p, wipe, custom, invert, camera);
     this.blitTarget(accum, mixed, 1, "normal");
     // mixGroups binds `to` on unit 1 and leaves it selected. Every other draw here binds on unit
     // 0 after selecting it, but the walk continues past this point now, so restore the invariant

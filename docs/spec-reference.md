@@ -27,6 +27,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `format` | `("9:16"\|"3:4"\|"16:9"\|"9:16-4k"\|"3:4-4k"\|"16:9-4k")[]` | — | Output formats. Default `["9:16"]` (1080-class). `*-4k` = UHD **output** (e.g. `9:16-4k` → 2160×3840) composed at the 1080-class canvas — same frame, 4× the pixels. Motion layouts adapt via `--kino-aspect`. |
 | `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
 | `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. |
+| `fontWeights` | int[] 100–900 | — | Extra cuts of the brand font to stage, so `font-weight` in a motion page selects a real face instead of silently reusing the single caption cut. The caption weight is always included. **Overrides** brand `fontWeights` rather than merging — pass `[]` to opt a lean spec out of a type-heavy brand's set. Each cut is base64-inlined into every raster, so ask only for what you use. |
 | `voiceModel` | string | — | ElevenLabs TTS model. Default is v3 (inline audio tags `[excited]`, `[whispers]`, `[short pause]`, … work in segment `text`; tags are stripped from word-synced captions). Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads. |
 | `film` | number | — | Cinematic-finish intensity (vignette + grain over photographic/app beats), `0..1`. Default `1` (graded film look). Set `0` for clean flat edges — e.g. a light "paper" video where the edge vignette reads as a dark border. Motion-graphic beats are never graded. |
 | `avatarLook` | string | — | HeyGen: look alias/id · Hedra/Replicate: portrait image path/url. |
@@ -65,7 +66,13 @@ Every segment is one beat. `kind` selects the beat type; **omit it for a `scene`
 
 - **`text`** — the **spoken** voiceover for the beat (drives VO + timing). **Optional.** Omit it for a
   purely visual beat — a title card, a logo sting, a shape morph — and give **`dur`** instead: the beat
-  then speaks nothing, produces no words and no caption, and lasts exactly `dur`. Under real TTS an
+  then speaks nothing, produces no words and no caption, and occupies `dur` on the audio timeline.
+  **`dur` is not the beat's rendered length.** Beats are separated by a fixed **0.32s** gap, and a
+  beat's visuals are held until the next beat starts so nothing blinks off during that silence — so
+  every beat except the last renders for `dur + 0.32`, and `--progress` spans that longer window.
+  `"dur": 3.4` renders for 3.72s, which is what `kino inspect` reports as `durSec` (alongside
+  `interBeatGapSec`); derive `--around` times and keyframe `at` values from that, not from `dur`.
+  Under real TTS an
   omitted `text` makes no API call, so a spec can speak on some beats and stay silent on others.
   A beat with neither `text` nor `dur` (nor a `voFile`) is rejected — nothing would define its length.
   Note that an unspoken beat also has no word timings, so nothing anchored to words (`atWord`,
@@ -486,9 +493,147 @@ Three things authors trip on:
 ### Enums
 
 - **Shot:** `push-in`, `pull-out`, `pan-left`, `pan-right`, `tilt-up`, `scroll`, `scroll-up`, `static`
-- **Transition:** `fade`, `dissolve`, `fly-left`, `fly-up`, `pop`, `cut`. Auto-vary is asset-aware:
-  video assets (`.mp4`/`.mov`) rotate through the soft pair (`dissolve`/`fade` — footage with a
-  punchy fly/pop entrance reads as a glitch), stills keep the punchy rotation. Override wins either way.
+- **Transition:** `fade`, `dissolve`, `fly-left`, `fly-up`, `wipe-down`, `pop`, `cut`. Auto-vary is
+  asset-aware: video assets (`.mp4`/`.mov`) rotate through the soft pair (`dissolve`/`fade` — footage
+  with a punchy fly/pop entrance reads as a glitch), stills keep the punchy rotation. Override wins
+  either way. **`motion` beats are not in the auto-vary rotation at all** — they default to
+  `dissolve` and only change if the beat sets `transition` explicitly.
+  The **wipe family** is the reveal: a lit edge travels across the frame and uncovers the incoming
+  beat behind it, instead of sliding a whole frame in from off-screen (`fly-*`) or cross-fading two
+  layouts on top of each other (`fade`/`dissolve`). Set it on the **incoming** beat.
+
+### Wipe transitions
+
+`wipe-down` / `wipe-up` / `wipe-left` / `wipe-right` are shorthands for a direction; bare `wipe` plus
+an `angle` covers everything else, diagonals included. One shader serves them all, and every part of
+the edge is tunable via a sibling **`transitionParams`** object (all fields optional):
+
+| Field | Range | Default | Meaning |
+|---|---|---|---|
+| `angle` | degrees | from the name | Direction of travel: `0` down, `90` right, `180` up, `270` left. Any angle is valid — the projection is normalised per-angle, so a diagonal still starts and finishes fully off-frame instead of clipping mid-sweep. Overrides the direction implied by a `wipe-<dir>` name. |
+| `softness` | `0..0.5` | `0.018` | Feather on the reveal edge, as a fraction of the frame. Small = a crisp cut-in; large = closer to a gradient wipe. Floored just above `0` — a literal hard edge aliases into a staircase on a diagonal. |
+| `edgeWidth` | `0..0.5` | `0.013` | Width of the lit band riding the edge. **`0` = no lit band**, i.e. a clean, invisible reveal. |
+| `edgeColor` | hex | brand `mint` | Colour of the lit band. |
+| `edgeGain` | `0..4` | `0.55` | Brightness of the lit band. `0` also disables it. |
+
+```jsonc
+{ "kind": "motion", "source": "motion/b.html", "dur": 3,
+  "transition": "wipe-down" }                                  // brand-mint edge, defaults
+
+{ "kind": "motion", "source": "motion/c.html", "dur": 3,
+  "transition": "wipe",                                        // 55° diagonal, wide gold edge
+  "transitionParams": { "angle": 55, "softness": 0.06, "edgeWidth": 0.05,
+                        "edgeColor": "#d99a20", "edgeGain": 1.6 } }
+
+{ "kind": "video", "source": "screens/x.png",
+  "transition": "wipe-left", "transitionParams": { "edgeWidth": 0 } }   // unlit, works on video too
+```
+
+The lit band's strength is scaled by `sin(π·p)`, so it is exactly zero at both ends of the window —
+the transition still resolves to precisely the outgoing frame at `p=0` and the incoming one at `p=1`,
+with no hairline of light left behind to pop on the next beat.
+
+### Reversing a transition
+
+**`transitionInvert: true`** runs any transition backwards — a reveal becomes a conceal. An iris that
+opens instead closes; `wipe-down` sweeps up; `geo-facade`'s flip wave runs the other way. It sits
+beside `transition` on the incoming beat and works on **every** transition, built-in or custom:
+
+```jsonc
+{ "kind": "motion", "source": "motion/b.html", "dur": 3,
+  "transition": "custom", "transitionSource": "iris", "transitionInvert": true }
+```
+
+It is implemented in the compositor as a *double* flip — the two beats are swapped **and** the
+shader is fed `1 - p` — never inside a shader. Two things follow, and both are the reason it is done
+this way. Every transition gets a reverse for free, including author-supplied ones: no shader knows
+it is being inverted, so none of them can implement it wrongly. And the endpoint contract survives
+by construction — at `p=0` the shader sees `p=1` and returns its `uTo`, which *is* the real outgoing
+beat. A shader that is exact at its own endpoints is automatically exact at the inverted ones.
+
+### Carrying a camera through the cut
+
+**`transitionCamera`** keeps the camera moving across the boundary: the outgoing beat continues as
+it leaves, and the incoming beat arrives already in motion and settles. That is what makes a cut read
+as one shot rather than two clips. It is a different thing from a camera move *inside* a beat (a
+`.cam` transform in a motion graphic), which starts and ends within one composition and so dies at
+every cut.
+
+```jsonc
+{ "kind": "motion", "source": "motion/b.html", "dur": 3,
+  "transition": "custom", "transitionSource": "organic-inkbleed",
+  "transitionCamera": { "move": "tilt-down", "amount": 1.4 } }
+```
+
+| Field | Meaning |
+|---|---|
+| `move` | `push` · `pull` · `pan-left` · `pan-right` · `tilt-up` · `tilt-down` · `whip-left` · `whip-right` |
+| `zoom` | `-0.9..2`; `>0` pushes in, `<0` pulls out. Overrides the preset's zoom. |
+| `panX` / `panY` | `-1.5..1.5`, fraction of the frame. Overrides the preset's pan. |
+| `amount` | `0..4`, scales the whole move. |
+| `blur` | `0..4` directional smear along the travel. `0` = a clean move. A whip defaults to double, since the smear *is* the whip. |
+| `hold` | `0..0.95`, default `0.5`. Fraction of each side spent **at** full extent rather than travelling to it. |
+
+**It composes with everything** — every built-in, every custom shader, and `transitionInvert` — because
+it is applied inside the shared `kinoFrom` / `kinoTo` sampling helpers that all transitions read their
+two beats through. No shader knows a camera is present, so none of them can conflict with one.
+
+Both sides carry the **same zoom sign** so the camera never reverses at the boundary (a push that
+became a pull halfway is exactly the artefact that gives a fake cut away), while pan is **mirrored**
+so the incoming beat arrives from the opposite edge — one direction of travel, two offsets.
+
+**`hold` is what makes it a punch rather than a drift.** With `hold: 0` the move ramps across the
+whole side, so it only reaches full extent exactly at the boundary and immediately starts back — the
+frame never sits anywhere. A hold splits each side into ramp / plateau / ramp: the camera pushes in,
+**stays there through the cut**, then eases out. The smear follows suit automatically, because it is
+derived from how far the frame actually moves at that instant rather than from elapsed time — so it
+peaks on the ramps and disappears during the hold, instead of blurring a stationary frame.
+
+Adding a camera cannot break a transition's endpoint contract. Each side is scaled by its own
+distance from its own endpoint — the outgoing by `p`, the incoming by `1 - p` — so at each endpoint
+the transform is exactly identity and the sample is the untouched beat.
+
+### Authoring your own transition
+
+`transition: "custom"` + **`transitionSource`** runs a shader you wrote. `transitionSource` resolves
+exactly like `backgroundComponent`: a **bare id** from `assets-lib/transitions/`, or a path under the
+project's `assets/`. Run **`kino transitions`** for the built-in list plus this contract.
+
+```jsonc
+{ "kind": "motion", "source": "motion/b.html", "dur": 3,
+  "transition": "custom",
+  "transitionSource": "iris",                        // bare id, or "transitions/my.frag"
+  "transitionParams": { "softness": 0.04 } }         // numeric keys → u_<name> uniforms
+```
+
+Write a ShaderToy-style `mainImage` — the same entry point background shaders use, so there is one
+shader dialect to learn, not two:
+
+```glsl
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = kinoUv(fragCoord);
+  fragColor = mix(kinoFrom(uv), kinoTo(uv), step(uv.x, uP));
+}
+```
+
+In scope:
+
+| | |
+|---|---|
+| `kinoFrom(uv)` / `kinoTo(uv)` | the outgoing / incoming beat, already composited |
+| `kinoUv(fragCoord)` | `fragCoord` → normalised uv |
+| `uP` | `0` at the first overlapping frame, `1` at the last |
+| `uRes` / `iResolution` | framebuffer size |
+| `u_<name>` | every **numeric** `transitionParams` key, up to 8, aliased in sorted order |
+
+**The endpoint contract is yours to keep: exactly `kinoFrom` at `uP=0`, exactly `kinoTo` at `uP=1`.**
+A transition that is a hair off at either end pops on every beat boundary. Reach both ends
+deliberately — `assets-lib/transitions/iris.frag` starts its radius below zero and finishes past the
+far corner for exactly this reason. Copy it as a starting point.
+
+`transitionParams` accepts unknown keys so a custom shader can name its own uniforms, so validation
+catches typos by *transition kind* instead: an unrecognised knob on a `wipe` fails the build rather
+than being silently ignored, and `transitionSource` without `transition: "custom"` is an error too.
 - **Provider:** `none`, `heygen`, `hedra`, `replicate`
 
 ## Captions

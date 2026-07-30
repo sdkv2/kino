@@ -37,7 +37,9 @@ describe("lintMotionHtml", () => {
     expect(lintMotionHtml(`<style>.b{background:url(https://x/y.png)}</style>`).length).toBe(1);
     expect(lintMotionHtml(`<style>.b{background:url(foo.png)}</style>`).length).toBe(1);
     expect(lintMotionHtml(`<style>.b{background:url(data:image/png;base64,AA==)}</style>`)).toEqual([]);
-    expect(lintMotionHtml(`<style>.b{fill:url(#grad)}</style>`)).toEqual([]);
+    // A #fragment is same-document, so it isn't an external ref. The id has to actually exist —
+    // that's lintUnresolvedFilterRefs' job, checked separately below — so the fixture defines it.
+    expect(lintMotionHtml(`<defs><linearGradient id="grad"/></defs><style>.b{fill:url(#grad)}</style>`)).toEqual([]);
     // the injected SVG-texture filters are referenced by #fragment, so they pass the lint
     expect(lintMotionHtml(`<style>.b{filter:url(#kino-grain)}.c{filter:url(#kino-displace)}</style>`)).toEqual([]);
     // percent-encoded #fragment inside a data: URI SVG (liquid-glass feImage map references its own
@@ -45,6 +47,15 @@ describe("lintMotionHtml", () => {
     expect(lintMotionHtml(`<filter><feImage href="data:image/svg+xml,%3Crect%20fill='url(%23rx)'/%3E"/></filter>`)).toEqual([]);
     // but a real encoded external path must still be rejected
     expect(lintMotionHtml(`<style>.b{background:url(%2Fx.png)}</style>`).length).toBe(1);
+  });
+
+  it("rejects a #fragment whose id is defined nowhere — the element renders NOTHING", () => {
+    // The complement of the rule above: a fragment ref is the right SHAPE but still dangles. Per
+    // SVG an element whose filter points at a missing id paints nothing at all (not unfiltered), so
+    // one typo'd id silently deletes a layer with no error anywhere.
+    const found = lintMotionHtml(`<style>.b{filter:url(#gC)}</style><div class="b"></div>`);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/#gC/);
   });
   it("rejects each remaining non-deterministic / network construct", () => {
     for (const bad of [

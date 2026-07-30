@@ -1,4 +1,5 @@
 import type { KinoProps, KinoSegment } from "./props.js";
+import { GAP } from "../vo/gap.js";
 
 export interface SegmentSummary {
   index: number;
@@ -16,6 +17,13 @@ export interface InspectPlan {
   durationSec: number;
   presenter: boolean; // a provider-generated presenter is composited over this build
   background: string;
+  /**
+   * Seconds of silence between beats. Reported because it makes each beat's `durSec` add up:
+   * visuals are held to the next beat's start so nothing blinks off during that silence, so every
+   * beat except the last renders for its authored length PLUS this gap, and `--progress` spans the
+   * longer span. A beat authored `"dur": 3.4` shows up here as `durSec: 3.72`.
+   */
+  interBeatGapSec: number;
   segments: SegmentSummary[];
 }
 
@@ -38,6 +46,7 @@ export function inspectPlan(props: KinoProps): InspectPlan {
     durationSec: round2(Math.max(0, ...props.segments.map((s) => s.endSec))),
     presenter: props.avatar !== null,
     background: props.background.kind,
+    interBeatGapSec: GAP,
     segments,
   };
 }
@@ -55,7 +64,7 @@ export interface FramePick {
   label: string;
 }
 
-type FrameSelection = { at?: number[]; segment?: number };
+type FrameSelection = { at?: number[]; segment?: number | number[] };
 type SegLike = Pick<KinoSegment, "kind" | "startSec" | "endSec">;
 
 const mid = (s: SegLike, fps: number) => Math.round(((s.startSec + s.endSec) / 2) * fps);
@@ -66,9 +75,15 @@ export function pickFrames(segments: SegLike[], fps: number, sel: FrameSelection
     return sel.at.map((t) => ({ frame: Math.round(t * fps), label: `${t}s` }));
   }
   if (sel.segment != null) {
-    const s = segments[sel.segment];
-    if (!s) throw new Error(`--segment ${sel.segment} out of range (spec has ${segments.length} segments, 0-indexed 0..${segments.length - 1})`);
-    return [{ frame: mid(s, fps), label: `${sel.segment} ${s.kind}` }];
+    // A list so several beats can be checked in ONE run: each run wipes the stills dir (so a stale
+    // PNG is never read by path), which meant a per-beat loop of single --segment calls deleted
+    // everything but the last beat's frame.
+    const wanted = Array.isArray(sel.segment) ? sel.segment : [sel.segment];
+    return wanted.map((idx) => {
+      const s = segments[idx];
+      if (!s) throw new Error(`--segment ${idx} out of range (spec has ${segments.length} segments, 0-indexed 0..${segments.length - 1})`);
+      return { frame: mid(s, fps), label: `${idx} ${s.kind}` };
+    });
   }
   // Default (storyboard): perBeat frames per beat. perBeat===1 keeps the legacy single midpoint.
   // For perBeat>1 we sample from 0.45→0.9 of each beat so the LAST frame shows the caption fully

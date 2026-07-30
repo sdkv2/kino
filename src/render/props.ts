@@ -4,6 +4,8 @@ import type { CaptionStyle, CaptionAnimation, CaptionReveal, ResolvedText } from
 import type { Ease } from "./bgparams.js";
 import type { LayerEffect, LayerMask } from "./maskSpec.js";
 import type { PostFx } from "./postSpec.js";
+import type { WipeSpec } from "./wipeSpec.js";
+import type { CameraSpec } from "./cameraSpec.js";
 // Type-only: a value import here would create a runtime cycle. layerSpec.ts value-imports Z from
 // layers.js, and RESERVED_Z runs `Object.values(Z)` at module top level — see layerSpec.ts's own
 // header comment. `import type` is erased at compile time, so it cannot participate in that cycle.
@@ -103,6 +105,10 @@ export interface KinoSegment {
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
   transition?: string; // video cut-ins + motion handoffs (`cut` = hard abut)
+  transitionParams?: WipeSpec & Record<string, number | string>; // wipe knobs, or a custom shader's uniforms
+  transitionSource?: string; // transition:"custom" — the RESOLVED shader body, read at build time
+  transitionInvert?: boolean; // run the transition backwards
+  transitionCamera?: CameraSpec; // camera carried through the cut
   clipFrom?: number; // seconds into source asset
   clipTo?: number;
   speed?: number; // playbackRate; default 1

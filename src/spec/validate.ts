@@ -3,9 +3,11 @@ import type { Brand } from "../config/brand.js";
 import type { Spec } from "./schema.js";
 import type { Project } from "../config/project.js";
 import type { Provider } from "../avatar/provider.js";
-import { lintMotionSource } from "../render/motiongraphic.js";
+import { lintMotionSource, type MotionSurface } from "../render/motiongraphic.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveMotionSource } from "../media/motionLib.js";
+import { resolveTransitionSource } from "../media/transitionLib.js";
+import { CAMERA_MOVES } from "../render/cameraSpec.js";
 import { log } from "../log.js";
 import { KINO_VERSION } from "../version.js";
 import { validateSegmentFx } from "../render/maskSpec.js";
@@ -94,19 +96,23 @@ export function assertAssetsExist(spec: Spec, project: Project): void {
 // Motion graphics: every referenced file must resolve (library bare id or project asset) and pass
 // the determinism/safety lint. Runs before VO generation so a bad graphic fails the build cheaply.
 export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: string): string }): void {
-  const refs: { source: string; where: string }[] = [];
+  const refs: { source: string; where: string; surface: MotionSurface }[] = [];
   spec.segments.forEach((seg, i) => {
-    if (seg.kind === "motion") refs.push({ source: seg.source, where: `segment[${i}]` });
+    if (seg.kind === "motion") refs.push({ source: seg.source, where: `segment[${i}]`, surface: "beat" });
     const ov = (seg as { motionOverlay?: { source?: string } }).motionOverlay;
-    if (ov?.source) refs.push({ source: ov.source, where: `segment[${i}].motionOverlay` });
+    if (ov?.source) refs.push({ source: ov.source, where: `segment[${i}].motionOverlay`, surface: "beat" });
     // regionShader texture channels take the same motion sources (a .html rasterized into uTexN),
     // so they get the same resolve + lint here rather than only at build time. Image channels are
     // plain assets and are checked where every other beat asset is.
     (seg as { regionShader?: { textures?: string[] } }).regionShader?.textures?.forEach((source, j) => {
-      if (!/\.(png|jpe?g|webp)$/i.test(source)) refs.push({ source, where: `segment[${i}].regionShader.textures[${j}]` });
+      // `texture` surface: a rasterized channel advances its own @keyframes via the re-raster param,
+      // so it must not be held to the per-element `.kino-anim` scrub rule a beat is held to.
+      if (!/\.(png|jpe?g|webp)$/i.test(source)) {
+        refs.push({ source, where: `segment[${i}].regionShader.textures[${j}]`, surface: "texture" });
+      }
     });
   });
-  for (const { source, where } of refs) {
+  for (const { source, where, surface } of refs) {
     let abs: string;
     let fileName: string;
     let display: string;
@@ -116,7 +122,7 @@ export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: strin
       throw new Error(`Missing motion graphic for ${where}: ${(e as Error).message}`);
     }
     const raw = readFileSync(abs, "utf8");
-    const violations = lintMotionSource(fileName, raw);
+    const violations = lintMotionSource(fileName, raw, surface);
     if (violations.length) throw new Error(`Motion graphic ${where} (${display}): ${violations.join("; ")}`);
   }
 }
@@ -277,10 +283,73 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertBeatLengths(spec);
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);
+  assertTransitions(spec, project);
   assertAudioSources(spec, project);
   assertSeamlessLoop(spec, brand);
   assertBackgroundChoice(spec, brand);
   assertCaptionModes(spec, brand);
   assertVoiceTags(spec, brand);
   assertKinoVersion(spec);
+}
+
+/** Knobs the `wipe` family understands. Anything else on a wipe is a typo, not a feature. */
+const WIPE_KEYS = ["angle", "softness", "edgeWidth", "edgeColor", "edgeGain"];
+
+/**
+ * Transitions: a `custom` shader must resolve, and a built-in must not be handed params it will
+ * silently ignore.
+ *
+ * The second half matters more than it looks. `transitionParams` has to accept unknown keys so a
+ * custom shader can name its own uniforms — which means a misspelled `softnes` on a wipe would
+ * otherwise parse fine and do nothing, the exact silent-no-op class this codebase keeps getting
+ * bitten by. So the strictness moves here, where the transition kind is known.
+ */
+export function assertTransitions(spec: Spec, project: { assetPath(rel: string): string; workspaceRoot: string }): void {
+  spec.segments.forEach((seg, i) => {
+    const s = seg as { transition?: string; transitionSource?: string; transitionParams?: Record<string, unknown> };
+    const where = `segment[${i}]`;
+    // A misspelled move would silently render a still camera — the same silent-no-op class as a
+    // misspelled wipe knob, so it fails here where the name is known.
+    const cam = (seg as { transitionCamera?: { move?: string } }).transitionCamera;
+    if (cam?.move && !(cam.move in CAMERA_MOVES)) {
+      throw new Error(
+        `${where}: transitionCamera.move "${cam.move}" is not a known move ` +
+          `(${Object.keys(CAMERA_MOVES).join(", ")}). Run \`kino transitions\`.`,
+      );
+    }
+    if (s.transitionSource && s.transition !== "custom") {
+      throw new Error(
+        `${where}: transitionSource needs transition:"custom" (got ${s.transition ? `"${s.transition}"` : "no transition"}). ` +
+          `Built-in transitions ignore it — run \`kino transitions\` for the list.`,
+      );
+    }
+    if (s.transition === "custom") {
+      if (!s.transitionSource) {
+        throw new Error(`${where}: transition:"custom" needs transitionSource (a bare library id or an assets/ path to a .frag). See \`kino transitions\`.`);
+      }
+      try {
+        resolveTransitionSource(s.transitionSource, project);
+      } catch (e) {
+        throw new Error(`${where}: ${(e as Error).message}`);
+      }
+      return; // a custom shader names its own params — nothing to police
+    }
+    const params = s.transitionParams;
+    if (!params) return;
+    const isWipeKind = s.transition === "wipe" || (s.transition ?? "").startsWith("wipe-");
+    const unknown = Object.keys(params).filter((k) => !WIPE_KEYS.includes(k));
+    if (isWipeKind && unknown.length) {
+      throw new Error(
+        `${where}: transitionParams ${unknown.map((k) => `"${k}"`).join(", ")} ` +
+          `${unknown.length === 1 ? "is not a knob" : "are not knobs"} the wipe family understands ` +
+          `(${WIPE_KEYS.join(", ")}). A wipe would ignore it silently.`,
+      );
+    }
+    if (!isWipeKind) {
+      throw new Error(
+        `${where}: transitionParams only applies to the wipe family or transition:"custom" — ` +
+          `"${s.transition ?? "the default"}" would ignore it. Run \`kino transitions\`.`,
+      );
+    }
+  });
 }

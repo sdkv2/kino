@@ -28,7 +28,43 @@ const TextOverlaySpec = z.object({
 
 const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });
 const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "scroll", "scroll-up", "static"]);
-const Transition = z.enum(["fade", "dissolve", "fly-left", "fly-up", "pop", "cut"]);
+/** Camera carried through a transition — composes with ANY transition kind. */
+const TransitionCamera = z
+  .object({
+    // Named move: push | pull | pan-left | pan-right | tilt-up | tilt-down | whip-left | whip-right
+    move: z.string().optional(),
+    zoom: z.number().min(-0.9).max(2).optional(),   // >0 push in, <0 pull out
+    panX: z.number().min(-1.5).max(1.5).optional(), // fraction of the frame
+    panY: z.number().min(-1.5).max(1.5).optional(),
+    amount: z.number().min(0).max(4).optional(),    // scales the whole move
+    blur: z.number().min(0).max(4).optional(),      // directional smear along the travel
+    // Fraction of each side spent AT full extent rather than travelling to it. 0 = a continuous
+    // drift that only peaks at the boundary; higher = ramp, plateau, ramp — a punch that HOLDS.
+    hold: z.number().min(0).max(0.95).optional(),
+  })
+  .strict();
+
+/** Knobs for the `wipe` family, and free-form uniforms for `transition: "custom"`.
+ *  Unknown keys are allowed here so a custom shader can name its own params; `assertTransitions`
+ *  rejects an unknown key on a BUILT-IN transition, where it would silently do nothing. */
+const TransitionParams = z
+  .object({
+    // Degrees of travel: 0 = down, 90 = right, 180 = up, 270 = left. Any angle is valid — the
+    // shader normalises its projection axis, so a diagonal still runs fully off both edges.
+    angle: z.number().optional(),
+    softness: z.number().min(0).max(0.5).optional(), // reveal-edge feather, fraction of the frame
+    edgeWidth: z.number().min(0).max(0.5).optional(), // lit band width; 0 = unlit, a clean reveal
+    edgeColor: z.string().optional(), // hex; defaults to the brand mint
+    edgeGain: z.number().min(0).max(4).optional(), // lit band brightness; 0 = unlit
+  })
+  .catchall(z.union([z.number(), z.string()]));
+
+const Transition = z.enum([
+  "fade", "dissolve", "fly-left", "fly-up", "pop", "cut",
+  "wipe", "wipe-down", "wipe-up", "wipe-left", "wipe-right",
+  // Author-supplied shader; pair with `transitionSource`. See `kino transitions`.
+  "custom",
+]);
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "solid", "custom"]);
 const CaptionMode = z.enum(["phrase", "words"]);
@@ -190,6 +226,10 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     kicker: Kicker.optional(),
     shot: Shot.optional(),
     transition: Transition.optional(),
+    transitionParams: TransitionParams.optional(), // wipe knobs, or a custom shader's own uniforms
+    transitionSource: z.string().min(1).optional(), // with transition:"custom" — bare id or assets/ path to a .frag
+    transitionInvert: z.boolean().optional(), // run the transition backwards (a reveal becomes a conceal)
+    transitionCamera: TransitionCamera.optional(), // camera carried through the cut
     // Source-footage slice + retiming (importing-footage skill). Seconds into the asset.
     clipFrom: z.number().min(0).optional(),
     clipTo: z.number().min(0).optional(),
@@ -302,7 +342,12 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     caption: z.string().optional(),
     cta: z.boolean().default(false), // semantic end-card marker; a full-screen wordmark motion beat is itself the CTA
     // Motion→motion handoff. Default = dissolve (hold + xfade). `"cut"` abuts with no backdrop gap.
+    // `"wipe-down"` (and the rest of the wipe family) uncovers this beat behind a travelling edge.
     transition: Transition.optional(),
+    transitionParams: TransitionParams.optional(), // wipe knobs, or a custom shader's own uniforms
+    transitionSource: z.string().min(1).optional(), // with transition:"custom" — bare id or assets/ path to a .frag
+    transitionInvert: z.boolean().optional(), // run the transition backwards (a reveal becomes a conceal)
+    transitionCamera: TransitionCamera.optional(), // camera carried through the cut
 
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
@@ -334,6 +379,11 @@ export const SpecSchema = z
     // it, since every frame is a real browser paint.
     fps: z.number().int().min(1).max(120).optional(),
     voice: z.string().optional(),
+    // Extra cuts of the brand font to stage, so `font-weight` in a motion page selects a real face
+    // instead of silently reusing the single caption cut. Overrides brand `fontWeights` (it does not
+    // merge) — an empty array opts this spec out of a type-heavy brand's set. Each cut is
+    // base64-inlined into every raster, so ask for what you use.
+    fontWeights: z.array(z.number().int().min(100).max(900)).optional(),
     // TTS model. Default eleven_v3 (audio tags like [excited] work). Opt into
     // eleven_multilingual_v2 for metronome-critical / timing-stable reads.
     voiceModel: z.string().optional(),
@@ -439,6 +489,7 @@ const TOP_LEVEL_KEYS: Record<string, string> = {
   music: "music is top-level — not a segment field",
   sfx: "sfx is top-level — not a segment field",
   voice: "voice is top-level (or brand.md) — not a segment field",
+  fontWeights: "fontWeights is top-level (or brand.md) — not a segment field",
   voiceModel: "voiceModel is top-level — not a segment field",
   provider: "provider is top-level (or brand/project) — not a segment field",
   avatarLook: "avatarLook is top-level (or brand.md) — not a segment field",
