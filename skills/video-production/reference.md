@@ -14,7 +14,8 @@
 - `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
-- `kino fonts` — list curated fonts (with descriptions + cache status)
+- `kino fonts [--search <term>] [--preview <family> [--brand <b>] [--format <list>]] [--refresh]` —
+  curated shortlist, full-catalog search, or a specimen still in 9:16 + 16:9
 - `kino projects [--new <name>] [--brand <brand>]` — list or scaffold projects (brand optional)
 - `kino pexels "<query>" [--get n --project]` — stock b-roll (local thumbs cached on search)
 - `kino music [query] [--get n --project]` — bundled beds or Freesound CC0 search (15–90s short-form)
@@ -149,11 +150,18 @@ Provider-specific:
 Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
 
 ## Fonts
-- `brand.font` is either a **registry font name** (`kino fonts` — e.g. `"Anton"`, `"Poppins"`) or a raw
-  CSS family string (back-compat). A registry name is **downloaded on demand** (Google Fonts → real TTF,
-  cached globally in `~/.kino/fonts/`) and loaded into the render via `FontFace`; offline → system fallback.
-- `brand.labelFont` (registry name) sets the storyboard/montage label font (defaults to the caption
-  font) **and** is staged as a second render-page typeface motion beats can reach via `--kino-label-font`
+- `brand.font` is either **any Google Fonts family name** (`kino fonts` lists a curated shortlist with
+  tuned caption weights — but any family works, e.g. `"Space Mono"`) or a raw CSS font stack, which is
+  anything containing a comma (back-compat, passes through untouched). A family name is **downloaded on
+  demand** (Google Fonts → real TTF, cached globally in `~/.kino/fonts/`) and loaded into the render via
+  `FontFace`; offline or unknown family → system fallback with a build warning.
+- **Preview before you commit:** `kino fonts --preview "<family>"` renders a specimen still in 9:16 and
+  16:9 through the real caption pipeline (brand colours, caption size, stroke) and prints the PNG paths —
+  read them to judge a font rather than guessing from its name. `--brand <name>` to use a brand's palette.
+- `kino fonts --search <term>` searches the full Google Fonts catalog, but needs `GOOGLE_FONTS_API_KEY`.
+  Everything else (including previewing and building with any family) works without a key.
+- `brand.labelFont` (same resolution as `font`) sets the storyboard/montage label font (defaults to the
+  caption font) **and** is staged as a second render-page typeface motion beats can reach via `--kino-label-font`
   (falls back to `--kino-font` when unset) — use it for a mono/label face that shouldn't inherit the
   caption font's display weight (e.g. a boarding-pass-style chip inside a `kind:"motion"` beat).
 

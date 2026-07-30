@@ -4,12 +4,29 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **Any Google Fonts family:** `brand.font`, `brand.labelFont`, `project.json`'s `font`, `--font` and
+  `kino glyphs --font` now accept **any** family on Google Fonts, not just the 14 curated names. The
+  curated list was never a technical limit — the downloader could always fetch any family — so it is
+  now what it always claimed to be: a shortlist with hand-tuned caption weights. An unknown family
+  downloads at weight 700, falling back to its regular face if it ships nothing that heavy. A value
+  with a comma in it is treated as a raw CSS stack and passes through untouched, as before.
 - **Fixed: the brand font never reached any caption.** Every text surface in the compositor
   (`captionMarkup`, `kickerMarkup`, `textMarkup`, `disclosureMarkup`) wrapped the whole font *stack*
   in single quotes, so `font-family` asked for one family literally named `"KinoBrandFont", "Anton",
   …` — which matches nothing, silently dropping every caption, kicker, overlay and disclosure to
   `sans-serif`. Brand fonts now actually render. **Expect captions to look different** (correctly so)
   in any build whose brand sets a `font`.
+- **`kino fonts --preview <family>`:** renders a type specimen still in 9:16 and 16:9 through the real
+  caption pipeline — the brand's own colours, caption size and stroke — and prints the PNG paths, so a
+  font can be judged before committing it to a build. `--brand` picks the palette, `--format` the
+  aspect ratios.
+- **`GOOGLE_FONTS_API_KEY` (optional):** with a key, `kino fonts --search <term>` searches the full
+  ~1800-family catalog by name and category, family names are casing-corrected, an unresolvable name
+  gets a "did you mean", and a family's real available weights pick the caption cut instead of the
+  flat 700 default. Everything else works without a key. `kino fonts --refresh` re-fetches the
+  7-day-cached catalog; `kino doctor` reports the key as optional.
+- Font cache files are now named per cut (`~/.kino/fonts/<family>-<weight>.ttf`). Pre-existing
+  unsuffixed files are still read, so no font re-downloads on upgrade.
 - **Role-keyed brand palette:** `brand.md` colors are now named by role — `bg`, `fg`, `accent`,
   `accent2`, `deep` — instead of the old literal hues (`night/white/mint/gold/green`), which
   lied the moment a brand's accent wasn't mint. The literal names remain accepted in brand.md,

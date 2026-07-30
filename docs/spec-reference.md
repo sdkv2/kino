@@ -848,8 +848,8 @@ The frontmatter fields:
 |---|---|---|---|
 | `name` | string | — | Brand name. |
 | `colors` | `{ bg, fg, accent, accent2, deep }` | — | Palette, keyed by ROLE: `bg` page base · `fg` text ink · `accent` primary · `accent2` secondary/bright · `deep` deep fill / active word. The pre-rename literal names (`night/white/mint/gold/green`) are accepted forever as aliases for the same slots; a role key wins over its alias. |
-| `font` | string | — | Registry font name (downloaded) or raw CSS family. Default `Helvetica, ...`. |
-| `labelFont` | string | — | Registry font for storyboard/montage labels (default: caption font). |
+| `font` | string | — | **Any Google Fonts family name** (downloaded on demand), or a raw CSS font stack (anything with a comma) which passes through untouched. Default `Helvetica, ...`. See [Fonts](#fonts). |
+| `labelFont` | string | — | Second family, for storyboard/montage labels and `--kino-label-font` (default: caption font). Same resolution as `font`. |
 | `captionStyle` | `{ fontSize?, strokeWidth?, background?, style?, animation? }` | — | `fontSize` 74, `strokeWidth` 9; `background` = the caption backplate `{ color?, opacity? (0..1, def .82), appOnly? (def true) }`; `style`/`animation` = brand-level defaults for [caption look/entrance](#captions) (segment/spec override). |
 | `disclosure` | string | — | AI disclosure shown on ordinary beats. |
 | `presenterDisclosure` | string | — | Disclosure shown instead whenever a presenter is composited (falls back to `disclosure`). |
@@ -864,6 +864,43 @@ The frontmatter fields:
 | `avatarImage` | string | — | Portrait source for Hedra/Replicate. |
 | `hedraModelId`, `replicateModel`, `replicateImageField`, `replicateAudioField`, `replicateInput` | — | Engine-specific avatar settings. |
 | `voiceAliases` / `lookAliases` | `Record<string,string>` | — | Friendly-name → id maps for `voice` / `avatarLook`. Default `{}`. |
+
+## Fonts
+
+`brand.font`, `brand.labelFont`, `project.json`'s `font` and the `--font` flag all take **any Google
+Fonts family name**. The family's TTF is downloaded once into `~/.kino/fonts/` and staged into the
+build, so nothing is checked into the repo and it works offline after the first fetch. A value with a
+comma in it (`Helvetica, Arial, sans-serif`) is treated as a raw CSS stack and passes straight
+through — kino stages nothing and the system resolves it.
+
+`kino fonts` lists a curated shortlist of 14 families with hand-tuned caption weights. That list is a
+**recommendation, not a whitelist** — a name outside it works exactly the same, at weight 700.
+
+```bash
+kino fonts --preview "Space Mono"
+```
+
+`--preview <family>` renders a specimen still in 9:16 and 16:9 through the real caption pipeline — the
+brand's own colours, caption size and stroke — and prints the PNG paths, so a font can be judged
+before a build. Add `--brand <name>` to preview against a specific brand, `--format` to pick other
+aspect ratios.
+
+### GOOGLE_FONTS_API_KEY (optional)
+
+Everything above works without a key. Setting one (free, from the Google Cloud console: enable the
+Web Fonts Developer API → create an API key) additionally unlocks:
+
+- `kino fonts --search <term>` over the full ~1800-family catalog, by name and category
+- correct casing for a family typed loosely, and a "did you mean" when a name resolves to nothing
+- the family's real available weights, so the caption cut is chosen rather than assumed to be 700
+
+The catalog is cached for 7 days; `kino fonts --refresh` re-fetches it.
+
+### Weights
+
+One face per family is staged by default, at the caption weight. `fontWeights` (brand or spec) opts
+into extra cuts so `font-weight` inside a motion page selects a real face instead of reusing the
+caption cut — see [`fontWeights`](#top-level-fields).
 
 ## project.json
 
