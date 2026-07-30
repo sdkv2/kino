@@ -196,6 +196,16 @@ program
   .action(async () => (await import("./commands/fonts.js")).fonts());
 
 program
+  .command("glyphs <text>")
+  .description("Letterform outlines as SVG path data (for data-kino-morph-stops, stroke-dash, clips)")
+  .option("--font <name>", "curated font name (default Inter) — see `kino fonts`")
+  .option("--size <px>", "em size the outlines are scaled to (default 100)")
+  .option("--letter-spacing <px>", "extra advance per glyph, in the same units")
+  .option("--combined", "one <path> for the whole run instead of one per glyph")
+  .option("--json", "machine-readable: advances, positions, metrics, path data")
+  .action(async (text: string, opts) => (await import("./commands/glyphs.js")).glyphs(text, opts));
+
+program
   .command("backgrounds")
   .description("List animated backgrounds + their agent-controllable params/actions")
   .action(async () => (await import("./commands/backgrounds.js")).backgrounds());
