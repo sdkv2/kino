@@ -143,6 +143,31 @@ more scale changes.
 
 Also available in CSS: `--kino-in`, `--kino-out`, `--kino-inout`, `--kino-ease-in`, `--kino-ease-out`.
 
+## The startframe beat (frame 0 is the thumbnail)
+
+Feeds show **frame 0** as the cover. A piece whose first beat fades in from a blank field ships a
+blank thumbnail — the most-seen frame of the video is the one nobody designed. When the piece needs
+a real cover (any feed placement, any "poster first" brief), open with a **startframe beat**: a
+short beat (~1.5–2.5s) that is a fully-dressed poster from its very first frame.
+
+The discipline inverts every entrance rule above:
+
+- **Nothing enters.** Every element renders at full opacity, final position, final size at
+  `env.frame === 0` / `--progress: 0`. No rises, no fades, no draw-ons.
+- **Numbers are final.** A count-up on a poster is a spoiler of its own beat — bake the end values.
+  Let the *next* beat re-reveal them with motion if the piece needs the ceremony.
+- **Life is ambient only.** Drive everything from `env.t` / `--t` and `env.edge`: speck drift,
+  slow ramp-hue drift, a breathing halo. The poster must read alive in motion yet complete as a
+  still — both are shipping surfaces.
+- **Compose it as the piece's index.** Sample the hero claim plus one artifact from each act
+  (the stat, the chart motif, the mark) — a cover that could only belong to this video.
+- **Hand off with a shaped transition.** If the next beat shares the poster's layout, a plain
+  dissolve overlaps two same-position lockups into mud for several frames — cut through an `iris`
+  or another shaped reveal instead.
+
+QA: `kino still <spec> --at 0` — judge frame 0 as a poster (hierarchy, balance, legibility at
+thumbnail size), then `--around` the handoff to confirm the poster never visibly "arrives".
+
 ## Spoof UI as interaction theater
 
 Ads are not clickable, but the surface still needs **readable states** across the beat:
