@@ -1,5 +1,6 @@
 import type { Theme, BgParamValue, WordTiming, MotionEnv, MotionGraphicProps } from "./props.js";
 import { progressCurves, paramsAt, pulseAt } from "./bgparams.js";
+import { procLib } from "./procLib.js";
 import { velocityRestVars } from "./motionVelocity.js";
 
 export interface MotionVarDynamics {
@@ -245,6 +246,7 @@ export function motionFrameState(
     words: data.words ?? [],
     durationFrames,
     duration: fps > 0 ? durationFrames / fps : 0,
+    lib: procLib,
   };
   return { env, vars };
 }

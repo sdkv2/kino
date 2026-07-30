@@ -4,6 +4,11 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **Tier-2 proc stdlib (`env.lib`):** d3-shape (`env.lib.shape`), culori (`env.lib.color`), and
+  deterministically seeded simplex noise (`env.lib.noise2D/3D/4D`, `env.lib.seedNoise`) are bundled
+  into the render page and handed to every `render(env)`. All three are pure and add no new engine
+  surface — same eval site, same per-frame sanitizer; noise is seeded from a fixed PRNG so renders
+  stay reproducible.
 
 ## [3.0.0] — Electron renderer and GL compositor
 - **BREAKING: Puppeteer renderer removed.** Electron offscreen capture is the only render path on

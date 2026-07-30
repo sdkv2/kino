@@ -64,6 +64,13 @@ chips, rings), or drive `var(--pulse)` in your own CSS for subtle reacts. **Neve
 always-visible primary chrome — it sets `opacity: var(--pulse, 0)` and hides the control between
 triggers. Do not hand-roll `(1-p)*(1-p)` when `env.out` / `--kino-out` already exists.
 
+**Tier-2 stdlib (`env.lib`)** — don't hand-roll geometry, easing ramps of color, or wobble either:
+`env.lib.shape` (d3-shape line/area/arc/pie + `curve*` factories, returns SVG path strings),
+`env.lib.color` (culori — `interpolate([...], "oklch")` for perceptual ramps, `formatHex`), and
+`env.lib.noise2D(x, y)` / `seedNoise(seed)` (deterministic simplex — organic drift with zero
+`Math.random`). A real chart is `env.lib.shape.line().curve(...)` over data, not 40 lines of
+hand-built `<div>` bars.
+
 ### Real-time clocks (`--t`, not `--progress`)
 
 **`--progress`** spans `0 → 1` over the **whole beat** — right for entrances, camera, and ambient

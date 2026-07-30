@@ -190,6 +190,24 @@ export interface MotionGraphicProps {
   lensShaders?: Record<string, string>;
 }
 
+// One deterministic simplex-noise field per dimensionality. Same seed → same field, always.
+export interface ProcNoiseSet {
+  noise2D: (x: number, y: number) => number;
+  noise3D: (x: number, y: number, z: number) => number;
+  noise4D: (x: number, y: number, z: number, w: number) => number;
+}
+
+// The Tier-2 standard library on env.lib — three pure, bundled libraries (no imports in procs).
+// Implemented by src/render/procLib.ts; attached to env in motionFrameState (page + dump-html).
+export interface ProcLib extends ProcNoiseSet {
+  /** d3-shape: line/area/arc/pie/stack generators, curve + symbol factories. Headless (path strings). */
+  shape: typeof import("d3-shape");
+  /** culori: color parsing, conversion, mixing, interpolation (oklch et al.). */
+  color: typeof import("culori");
+  /** Mint an independent deterministic noise field (e.g. one per series). */
+  seedNoise(seed: string | number): ProcNoiseSet;
+}
+
 // The argument passed to a Tier-2 procedural graphic's render(env) every frame.
 export interface MotionEnv {
   frame: number; // integer frame within the beat
@@ -219,6 +237,7 @@ export interface MotionEnv {
   words: WordTiming[]; // beat's spoken words, beat-relative (start/end in seconds from beat start); [] when none
   durationFrames: number; // total frames in the beat; last frame index = durationFrames - 1
   duration: number; // beat length in seconds
+  lib: ProcLib; // bundled chart/noise/color stdlib — see ProcLib
 }
 
 // A staged sound-effect event (staticFile-relative src, absolute timeline seconds).

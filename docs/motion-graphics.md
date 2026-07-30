@@ -608,10 +608,33 @@ return data.map((h, i) =>
   transform-origin:bottom;transform:scaleY(var(--progress))}</style>`;
 ```
 
-`env = { frame, t, progress, out, inout, overshoot, spring, edge, pulse, params, palette:{mint,green,night,white,gold,font}, width, height, words?, durationFrames, duration }`.
+`env = { frame, t, progress, out, inout, overshoot, spring, edge, pulse, params, palette:{mint,green,night,white,gold,font}, width, height, words?, durationFrames, duration, lib }`.
 `words` is the beat-relative VO timing array (same as the caption engine); omit/empty when the beat has no speech.
 End-of-beat / seam logic should still prefer `env.progress` / `env.edge` thresholds (e.g. `progress > 0.95`) —
 `progress` never equals exactly `1.0` (max ≈ `(frames - 1) / frames`).
+
+`env.lib` is the proc standard library — three pure, pre-bundled libraries (procs still can't
+`import` anything):
+
+- **`env.lib.shape`** — [d3-shape](https://d3js.org/d3-shape): `line`/`area`/`arc`/`pie`/`stack`
+  generators plus curve factories (`curveCatmullRom`, `curveBasis`, …) and `symbol`s. Headless —
+  generators return SVG path strings, no DOM.
+- **`env.lib.color`** — [culori](https://culorijs.org): parse, convert, `mix`, `interpolate`
+  (perceptual `"oklch"` ramps beat naive hex-lerp for chart scales and gradients), `formatHex`.
+- **`env.lib.noise2D/3D/4D(x, …)`** — simplex noise in [−1, 1], pre-seeded deterministically (same
+  spec → same field on every machine). `env.lib.seedNoise(seed)` mints an independent field, e.g.
+  one per series.
+
+```js
+// assets/motion/spark.js — a real chart in a few lines
+const data = [12, 30, 22, 44, 38, 52];
+const pts = data.map((v, i) => [60 + i * 60, 240 - v * 3 * env.out]);
+const d = env.lib.shape.line().curve(env.lib.shape.curveCatmullRom)(pts);
+const tint = env.lib.color.formatHex(
+  env.lib.color.interpolate([env.palette.mint, env.palette.gold], "oklch")(env.progress));
+return `<svg viewBox="0 0 480 270" style="position:absolute;inset:0;width:100%;height:100%">
+  <path d="${d}" fill="none" stroke="${tint}" stroke-width="4"/></svg>`;
+```
 
 It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
 the build lints the source and rejects `Date.now`/`Math.random`/timers/`fetch`/`import`/`require`/`process`
