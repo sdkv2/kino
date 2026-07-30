@@ -1,35 +1,52 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 // Files that drive a real Chrome + SwiftShader WebGL context and probe the resulting pixels with
-// ImageMagick. They are 24 of ~168 test files but ~93% of the suite's cost (545s of 586s on a
-// 4-core runner), and they are platform-independent by construction: KINO_GPU=0 below pins every
-// one of them to SwiftShader, so a Windows runner renders the same frames a Linux runner does.
+// ImageMagick (or, for the compositor-* entries, with the glProbe helper's direct pixel reads).
+// They are ~93% of the suite's cost, and platform-independent by construction: KINO_GPU=0 below
+// pins every one of them to SwiftShader, so a Windows runner renders the same frames a Linux
+// runner does. (Counts used to be quoted here and drifted three times — read the array instead.)
 //
 // THEY ARE OFF THE DEFAULT PATH. `npm test` excludes them; `npm run test:gpu` is the only thing
 // that runs them, and it runs them with fileParallelism OFF. That split exists because the cost was
 // never the whole problem — CONTENTION was. Vitest runs test files in parallel, so N of these files
 // meant N Electron GL hosts rasterising SwiftShader at once, and the loser of that fight failed on
 // whichever assertion it happened to be holding. compositor-orientation is the worked example: 4 of
-// its 6 tests fail reproducibly in a full parallel run and pass 6/6 when the file runs alone.
-// KINO_CONCURRENCY=1 does not fix this — it caps workers WITHIN one render call, not the number of
-// concurrent render calls. Serialising the files does.
+// its 6 tests failed reproducibly in a full parallel run and passed 6/6 when the file ran alone;
+// serialised, the whole scope is green. KINO_CONCURRENCY=1 does not fix this — it caps workers
+// WITHIN one render call, not the number of concurrent render calls. Serialising the files does.
 //
 // So: do not "fix" a flaky pixel test by deleting it or by loosening its threshold until the
 // serialised run also fails. See the 2026-07-28 quarantine note below — three files were excluded
 // as flaky GPU tests and all three were real, different bugs.
 //
+// Adding to this list is the right move for any test that drives a real render: whatever lands here
+// stops costing PR time entirely, so the bar is "does it render pixels", not "is it slow enough".
+//
 // segment-mock is deliberately NOT in this list. It is one full Chrome render -> ffmpeg encode ->
 // magick probe, and that single path is what catches the per-OS integration breaks this matrix
-// exists to find (binary discovery, argv quoting, sandbox flags) — the other 24 only re-prove
+// exists to find (binary discovery, argv quoting, sandbox flags) — the rest only re-prove
 // compositor maths that SwiftShader already makes identical everywhere.
+//
+// draft-canvas-render / format-4k-render are split out of draft-canvas / format-4k-parity: those
+// two files also carry cheap pure-logic unit tests (scaledDims, compDims) that light scope should
+// still run, so only the render+magick half moved here.
+//
+// capture-path / compositor-transitions / compositor-film-pass were added 2026-07-30: they were
+// always real-render/glProbe pixel tests (together with the two split-out above, ~137s of a
+// ~307s light-scope run on this machine) but had been missed when this list was first curated.
 const GPU_PIXEL_TESTS = [
   "tests/appclip-frames.test.ts",
+  "tests/capture-path.test.ts",
   "tests/compositor-effects.test.ts",
+  "tests/compositor-film-pass.test.ts",
   "tests/compositor-glass-composite.test.ts",
   "tests/compositor-layer-mask.test.ts",
   "tests/compositor-orientation.test.ts",
   "tests/compositor-ss.test.ts",
   "tests/compositor-stage.test.ts",
+  "tests/compositor-transitions.test.ts",
+  "tests/draft-canvas-render.test.ts",
+  "tests/format-4k-render.test.ts",
   "tests/layers-declared-pixel.test.ts",
   "tests/postfx-integration.test.ts",
   "tests/render-compositor-parity.test.ts",
