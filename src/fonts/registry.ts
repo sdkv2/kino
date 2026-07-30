@@ -7,6 +7,17 @@ export interface FontDef {
   weight: number;
 }
 
+/** Extra cuts a brand may opt into with `fontWeights`, beyond the caption weight above.
+ *
+ *  Only one cut per family is staged by default, and it is a heavy one because captions want heft.
+ *  That makes `font-weight` a silent no-op inside a motion page: there is a single face, so a page
+ *  asking for Medium gets the 800 anyway. Two independent authors hit this trying to match a
+ *  reference's lighter geometric sans and had to compensate with letter-spacing.
+ *
+ *  Opt-in rather than staged always: the face bytes are base64-inlined into every SVG raster, so
+ *  fetching four cuts for a project that never asks would multiply that payload for nothing. */
+export const SELECTABLE_WEIGHTS = [200, 300, 400, 500, 600, 700, 800, 900] as const;
+
 export const FONTS: FontDef[] = [
   { name: "Inter", family: "Inter", description: "Clean, neutral UI sans — safe default for body + captions.", weight: 800 },
   { name: "Poppins", family: "Poppins", description: "Rounded geometric sans — friendly, modern, very popular.", weight: 700 },

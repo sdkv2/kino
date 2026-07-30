@@ -521,12 +521,28 @@ export async function prepare(
   const fontDef = lookupFont(fontName);
   let themeFont = fontName;
   let fontUrl: string | null = null;
+  const fontFaces: { weight: number; url: string }[] = [];
   if (fontDef) {
     const ttf = await ensureFont(fontDef.name);
     if (ttf) {
       copyFileSync(ttf, join(publicDir, "font.ttf"));
       fontUrl = "font.ttf";
       themeFont = `"KinoBrandFont", "${fontDef.family}", Helvetica, Arial, sans-serif`;
+      // Opt-in extra cuts. The caption weight is always in the set, so a page that asks for it still
+      // resolves; a cut that fails to download is skipped rather than failing the build.
+      const wanted = brand.fontWeights?.length
+        ? [...new Set([fontDef.weight, ...brand.fontWeights])].sort((a, b) => a - b)
+        : [];
+      for (const w of wanted) {
+        const cut = w === fontDef.weight ? ttf : await ensureFont(fontDef.name, w);
+        if (!cut) {
+          log.warn(`Font "${fontDef.name}" weight ${w} unavailable — that cut will fall back`);
+          continue;
+        }
+        const rel = `font-${w}.ttf`;
+        copyFileSync(cut, join(publicDir, rel));
+        fontFaces.push({ weight: w, url: rel });
+      }
     } else {
       log.warn(`Font "${fontDef.name}" unavailable (offline?) — using system fallback`);
       themeFont = `"${fontDef.family}", Helvetica, Arial, sans-serif`;
@@ -659,6 +675,7 @@ export async function prepare(
     theme: {
       font: themeFont,
       fontUrl,
+      fontFaces: fontFaces.length ? fontFaces : null,
       labelFont: themeLabelFont,
       labelFontUrl,
       night: c.night,

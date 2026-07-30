@@ -24,13 +24,74 @@
 export const MORPH_FROM = "data-kino-morph-from";
 export const MORPH_TO = "data-kino-morph-to";
 export const MORPH_T = "data-kino-morph-t";
+export const MORPH_STOPS = "data-kino-morph-stops";
 
 /** Driver used when `data-kino-morph-t` is omitted — the beat's linear 0→1. */
 export const MORPH_T_DEFAULT = "var(--progress)";
 
 /** Cheap gate so a page with no morphs pays nothing (no parse, no rewrite). */
 export function hasPathMorph(html: string): boolean {
-  return html.includes(MORPH_FROM);
+  return html.includes(MORPH_FROM) || html.includes(MORPH_STOPS);
+}
+
+export interface MorphStop {
+  at: number;
+  d: string;
+}
+
+/**
+ * Parse `data-kino-morph-stops` — a shape SEQUENCE, `"0: M… | 0.55: M… | 1: M…"`.
+ *
+ * Why a sequence exists at all: from/to is two endpoints, and a shape whose profile changes more than
+ * once across a beat cannot be expressed with two. The workaround is separate path elements
+ * cross-faded by opacity, which is fine on a normal fill and *wrong* inside a `<mask>` — during a
+ * handoff both copies sit near half opacity, so a region covered by only one reads as luminance ~0.5
+ * and whatever the mask protects renders half-visible. An author hit exactly that and had to abandon
+ * a morphing erase edge. One path carrying N stops is always fully opaque and never hands off, so the
+ * mask case just works.
+ *
+ * `|` separates stops and `:` splits position from path data; neither character appears in SVG path
+ * syntax, so this stays unambiguous without quoting rules.
+ */
+export function parseMorphStops(spec: string): MorphStop[] {
+  const raw = spec.split("|").map((s) => s.trim()).filter(Boolean);
+  if (raw.length < 2) {
+    throw new Error(`needs at least 2 stops separated by "|", got ${raw.length}`);
+  }
+  const stops: MorphStop[] = raw.map((chunk, i) => {
+    const cut = chunk.indexOf(":");
+    if (cut < 0) throw new Error(`stop ${i + 1} ("${clip(chunk)}") has no ":" — write it as "0.4: M0,0 …"`);
+    const at = Number(chunk.slice(0, cut).trim());
+    const d = chunk.slice(cut + 1).trim();
+    if (!Number.isFinite(at)) throw new Error(`stop ${i + 1} has a non-numeric position "${chunk.slice(0, cut).trim()}"`);
+    if (at < 0 || at > 1) throw new Error(`stop ${i + 1} is at ${at}; positions are 0..1 across the driver`);
+    if (!d) throw new Error(`stop ${i + 1} (at ${at}) has no path data`);
+    return { at, d };
+  });
+  // Sorted so the author may list them in any order, and so bracketing is a simple scan. A duplicate
+  // position would make the segment zero-width and its local t infinite.
+  stops.sort((x, y) => x.at - y.at);
+  for (let i = 1; i < stops.length; i++) {
+    if (stops[i].at === stops[i - 1].at) throw new Error(`two stops share position ${stops[i].at}`);
+  }
+  return stops;
+}
+
+/**
+ * Interpolate a stop sequence at `t` (clamped 0..1): find the bracketing pair and lerp within it.
+ * Before the first stop and after the last, the sequence holds that end shape, so a driver that
+ * starts late or overshoots cannot produce a shape the author never wrote.
+ */
+export function morphStopsD(stops: MorphStop[], t: number): string {
+  const k = Math.min(1, Math.max(0, t));
+  if (k <= stops[0].at) return formatPathD(parsePathD(stops[0].d));
+  const last = stops[stops.length - 1];
+  if (k >= last.at) return formatPathD(parsePathD(last.d));
+  let i = 0;
+  while (i < stops.length - 2 && k > stops[i + 1].at) i++;
+  const a = stops[i];
+  const b = stops[i + 1];
+  return morphPathD(a.d, b.d, (k - a.at) / (b.at - a.at));
 }
 
 export interface PathCmd {
@@ -370,19 +431,25 @@ export function applyPathMorphs(html: string, vars: Record<string, string>): Pat
   if (!hasPathMorph(html)) return { html, errors: [] };
   const errors: string[] = [];
   const out = html.replace(TAG_RE, (whole, tag: string, attrs: string, slash: string) => {
+    const stopSpec = attrValue(attrs, MORPH_STOPS);
     const from = attrValue(attrs, MORPH_FROM);
-    if (from === null) return whole;
-    const to = attrValue(attrs, MORPH_TO);
-    if (to === null) {
-      errors.push(`<${tag} ${MORPH_FROM}="${clip(from)}"> has no ${MORPH_TO} — a morph needs both endpoints`);
-      return whole;
-    }
+    if (stopSpec === null && from === null) return whole;
     const driver = attrValue(attrs, MORPH_T) ?? MORPH_T_DEFAULT;
     let d: string;
     try {
-      d = morphPathD(from, to, evalMorphDriver(driver, vars));
+      const t = evalMorphDriver(driver, vars);
+      if (stopSpec !== null) {
+        d = morphStopsD(parseMorphStops(stopSpec), t);
+      } else {
+        const to = attrValue(attrs, MORPH_TO);
+        if (to === null) {
+          errors.push(`<${tag} ${MORPH_FROM}="${clip(from!)}"> has no ${MORPH_TO} — a morph needs both endpoints`);
+          return whole;
+        }
+        d = morphPathD(from!, to, t);
+      }
     } catch (err) {
-      errors.push(`<${tag} ${MORPH_T}="${driver}">: ${(err as Error).message}`);
+      errors.push(`<${tag} ${stopSpec !== null ? MORPH_STOPS : MORPH_T}>: ${(err as Error).message}`);
       return whole;
     }
     return `<${tag}${attrs.replace(D_ATTR_RE, "$1")} d="${d}"${slash}>`;
@@ -400,19 +467,34 @@ export function lintPathMorphs(html: string): string[] {
   const problems: string[] = [];
   for (const m of html.matchAll(TAG_RE)) {
     const attrs = m[2];
+    const stopSpec = attrValue(attrs, MORPH_STOPS);
     const from = attrValue(attrs, MORPH_FROM);
-    if (from === null) continue;
-    const to = attrValue(attrs, MORPH_TO);
-    if (to === null) {
-      problems.push(`${MORPH_FROM}="${clip(from)}" has no ${MORPH_TO} — a morph needs both endpoints`);
-      continue;
-    }
-    try {
-      // Any t exercises the same parse + structure check; 0.5 also proves the lerp itself runs.
-      morphPathD(from, to, 0.5);
-    } catch (err) {
-      problems.push(`${MORPH_FROM}/${MORPH_TO} cannot be interpolated: ${(err as Error).message}`);
-      continue;
+    if (stopSpec === null && from === null) continue;
+    if (stopSpec !== null) {
+      try {
+        const stops = parseMorphStops(stopSpec);
+        // Check EVERY consecutive pair: a sequence is only interpolable if each segment is, and a
+        // mismatch three stops in would otherwise surface as a mid-render fatal on one frame.
+        for (let i = 1; i < stops.length; i++) {
+          morphPathD(stops[i - 1].d, stops[i].d, 0.5);
+        }
+      } catch (err) {
+        problems.push(`${MORPH_STOPS} cannot be interpolated: ${(err as Error).message}`);
+        continue;
+      }
+    } else {
+      const to = attrValue(attrs, MORPH_TO);
+      if (to === null) {
+        problems.push(`${MORPH_FROM}="${clip(from!)}" has no ${MORPH_TO} — a morph needs both endpoints`);
+        continue;
+      }
+      try {
+        // Any t exercises the same parse + structure check; 0.5 also proves the lerp itself runs.
+        morphPathD(from!, to, 0.5);
+      } catch (err) {
+        problems.push(`${MORPH_FROM}/${MORPH_TO} cannot be interpolated: ${(err as Error).message}`);
+        continue;
+      }
     }
     const driver = attrValue(attrs, MORPH_T);
     if (driver !== null) {

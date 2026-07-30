@@ -109,13 +109,18 @@ export function seekVideo(vid: HTMLVideoElement, t: number): Promise<void> {
 const fontFaceCache = new Map<string, string>();
 
 /** Pure cache key: theme font paths determine the inlined @font-face CSS bytes. */
-export function fontFaceCacheKey(theme: Pick<KinoProps["theme"], "fontUrl" | "labelFontUrl">): string {
-  return `${theme.fontUrl ?? ""}\0${theme.labelFontUrl ?? ""}`;
+export function fontFaceCacheKey(
+  theme: Pick<KinoProps["theme"], "fontUrl" | "labelFontUrl" | "fontFaces">,
+): string {
+  // fontFaces is part of the key: the inlined bytes differ per cut, so omitting it would serve one
+  // brand's face set for another's.
+  const cuts = (theme.fontFaces ?? []).map((f) => `${f.weight}:${f.url}`).join(",");
+  return `${theme.fontUrl ?? ""}\0${theme.labelFontUrl ?? ""}\0${cuts}`;
 }
 
 async function buildFontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   const faces: string[] = [];
-  const inline = async (family: string, rel: string | null | undefined) => {
+  const inline = async (family: string, rel: string | null | undefined, weight?: number) => {
     if (!rel) return;
     try {
       const buf = await (await fetch("/public/" + rel)).arrayBuffer();
@@ -124,12 +129,20 @@ async function buildFontFaceCss(theme: KinoProps["theme"]): Promise<string> {
       for (let i = 0; i < bytes.length; i += 0x8000) {
         bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
       }
-      faces.push(`@font-face{font-family:'${family}';src:url(data:font/ttf;base64,${btoa(bin)})}`);
+      // A weight descriptor only when there is more than one cut: with a single face, declaring a
+      // weight would make every other weight a synthetic-bold miss instead of just using the face.
+      const desc = weight == null ? "" : `font-weight:${weight};`;
+      faces.push(`@font-face{font-family:'${family}';${desc}src:url(data:font/ttf;base64,${btoa(bin)})}`);
     } catch {
       // Missing font → system fallback inside the raster; same tradeoff as a broken <Img>.
     }
   };
-  await inline("KinoBrandFont", theme.fontUrl);
+  const extra = theme.fontFaces ?? [];
+  if (extra.length) {
+    for (const f of extra) await inline("KinoBrandFont", f.url, f.weight);
+  } else {
+    await inline("KinoBrandFont", theme.fontUrl);
+  }
   await inline("KinoLabelFont", theme.labelFontUrl);
   return faces.join("");
 }

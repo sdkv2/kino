@@ -41,7 +41,24 @@ describe("fontFaceCacheKey", () => {
   });
 
   it("treats missing paths as empty", () => {
-    expect(fontFaceCacheKey({ fontUrl: null, labelFontUrl: undefined })).toBe("\0");
+    // Three segments now: brand font, label font, and the opt-in extra cuts.
+    expect(fontFaceCacheKey({ fontUrl: null, labelFontUrl: undefined })).toBe("\0\0");
+  });
+
+  it("keys on the extra font cuts, so one brand's face set is not served for another's", () => {
+    const base = { fontUrl: "fonts/a.ttf", labelFontUrl: null };
+    const one = fontFaceCacheKey({ ...base, fontFaces: [{ weight: 400, url: "font-400.ttf" }] });
+    const same = fontFaceCacheKey({ ...base, fontFaces: [{ weight: 400, url: "font-400.ttf" }] });
+    const more = fontFaceCacheKey({
+      ...base,
+      fontFaces: [
+        { weight: 400, url: "font-400.ttf" },
+        { weight: 800, url: "font-800.ttf" },
+      ],
+    });
+    expect(one).toBe(same);
+    expect(one).not.toBe(more);
+    expect(one).not.toBe(fontFaceCacheKey(base));
   });
 });
 

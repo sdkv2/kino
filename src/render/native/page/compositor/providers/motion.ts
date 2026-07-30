@@ -197,26 +197,31 @@ export function createMotionSource(opts: {
       const vars = frameState.vars;
       let html = frameState.html;
 
-      // Per-element velocity. Two layout passes, and only for a page that asked: the reference frame
-      // is the one before this one, or (on the opening frame) the one after — the same lookahead
-      // cameraBlurVars uses so frame 0 is not silently velocity-free.
+      // Per-element velocity. Two layout passes, and only for a page that asked. The pair straddles
+      // this frame — N-1 and N+1, a central difference — so an easing that decelerates into a
+      // keyframe does not blink every velocity-driven effect off for a frame. At a beat edge only one
+      // neighbour exists, so it falls back to the one-frame difference on whichever side is there.
       if (frameState.velCount > 0 && durationFrames > 1) {
-        const forward = local <= 0;
-        const refLocal = forward ? Math.min(local + 1, durationFrames - 1) : local - 1;
-        const ref = refLocal === local ? null : motionFrame(refLocal);
+        const last = durationFrames - 1;
+        const aLocal = Math.max(0, local - 1);
+        const bLocal = Math.min(last, local + 1);
+        const span = bLocal - aLocal;
+        const a = aLocal === local ? frameState : motionFrame(aLocal);
+        const b = bLocal === local ? frameState : motionFrame(bLocal);
         // A Tier-2 proc whose element count changes between frames has no stable element identity, so
         // there is nothing to diff; the markup keeps its indices and the resting zeros apply.
-        if (ref && ref.velCount === frameState.velCount) {
+        if (span > 0 && a.velCount === frameState.velCount && b.velCount === frameState.velCount) {
           html = prof.sync("motion:vel", () =>
             measureVelocity({
               html,
-              refHtml: ref.html,
-              vars,
-              refVars: ref.vars,
+              aHtml: a.html,
+              aVars: a.vars,
+              bHtml: b.html,
+              bVars: b.vars,
+              span,
               theme: opts.theme,
               width: opts.width,
               height: opts.height,
-              forward,
               count: frameState.velCount,
             }),
           );

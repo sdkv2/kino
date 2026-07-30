@@ -13,6 +13,9 @@ import type { BlendMode } from "./native/page/compositor/graph.js";
 export interface Theme {
   font: string;
   fontUrl?: string | null; // staticFile-relative TTF to load (registry font), else system font
+  /** Extra brand-font cuts (spec/brand `fontWeights`), so `font-weight` in a motion page selects a
+   *  real face instead of silently reusing the single caption cut. Empty/absent = today's behaviour. */
+  fontFaces?: { weight: number; url: string }[] | null;
   labelFont?: string; // second typeface (brand.labelFont, defaults to `font`) for motion beats — --kino-label-font
   labelFontUrl?: string | null; // staticFile-relative TTF to load for labelFont, else system font
   night: string;

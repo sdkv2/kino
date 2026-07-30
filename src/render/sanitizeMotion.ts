@@ -28,7 +28,13 @@ function restoreGlassShapeSmil(html: string, blocks: string[]): string {
 export function sanitizeMotionHtml(html: string): string {
   const { html: stripped, blocks } = stashGlassShapeSmil(html);
   const clean = DOMPurify.sanitize(stripped, {
-    ADD_TAGS: ["style"],
+    // `use` is dropped by DOMPurify's default profile, which silently empties any layer built on it —
+    // an author who factors a shape set into <defs> and instances it three times gets three blank
+    // groups and no diagnostic. It is inert markup: a same-document reference that paints an existing
+    // node. Only #fragment / %23 targets survive the url() rule in the determinism lint, and the
+    // ALLOWED_URI_REGEXP below already blocks javascript: and data:text/html on `href`, so an
+    // instanced node cannot reach anything the original could not.
+    ADD_TAGS: ["style", "use"],
     // Keep href on SVG filter primitives (feImage) — DOMPurify would otherwise drop it.
     ADD_ATTR: ["href"],
     FORBID_TAGS: ["script", "iframe", "object", "embed", "link", "meta", "base"],

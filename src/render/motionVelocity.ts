@@ -61,19 +61,32 @@ const r3 = (v: number): string => {
 };
 
 /**
- * The custom properties for one element, given where it sits on this frame and on the reference
- * frame. `forward` flips the sign for frame 0, where the reference is frame 1 rather than frame -1 —
- * the same lookahead `cameraBlurVars` uses so an opening frame is not silently velocity-free.
+ * The custom properties for one element, from its box at two sampled frames — `a` the earlier, `b`
+ * the later — `span` frames apart. Velocity is the CENTRAL difference (b − a) / span.
+ *
+ * A central difference rather than the obvious backward one, and this is the whole reason the
+ * signature looks like this. Sampling frame N against N-1 measures the element's instantaneous
+ * speed, which is mathematically right and visually wrong: an easing that decelerates into a
+ * keyframe and accelerates out of it has a genuine velocity ZERO at that boundary, so every effect
+ * driven by `--kino-vel` blinks off for one frame in the middle of a move. It shipped that way, and
+ * an author hit it — a two-segment collapse easing put a velocity zero exactly on a reference frame
+ * and silently deleted the smear that was the point of the beat. Nothing warned, because nothing was
+ * wrong: the element really was stationary for an instant.
+ *
+ * Straddling the frame (N-1 → N+1) removes the hole without costing a third layout pass, since the
+ * two samples were already being taken — only *which* frames changed. True rest still reads exactly
+ * zero, because a parked element has the same box at both samples. The trade is one frame of
+ * half-speed smear where a move genuinely starts or stops, which is what a real shutter does anyway.
  *
  * Units are composition px per FRAME, which is what a smear wants: the distance travelled while the
  * shutter is open. `-x`/`-y` are unsigned speeds (safe inside `blur()`, where a negative length
  * invalidates the whole declaration — the exact way effects went invisible in the review this came
  * from), matching the existing unsigned `--cam-vel`. Signed direction is `-dx`/`-dy`.
  */
-export function velocityVarDecls(cur: VelBox | undefined, ref: VelBox | undefined, forward: boolean): string {
-  const sign = forward ? -1 : 1;
-  let dx = cur && ref ? (cur.cx - ref.cx) * sign : 0;
-  let dy = cur && ref ? (cur.cy - ref.cy) * sign : 0;
+export function velocityVarDecls(a: VelBox | undefined, b: VelBox | undefined, span: number): string {
+  const per = span > 0 ? span : 1;
+  let dx = a && b ? (b.cx - a.cx) / per : 0;
+  let dy = a && b ? (b.cy - a.cy) / per : 0;
   let mag = Math.hypot(dx, dy);
   if (!Number.isFinite(mag) || mag < VEL_EPSILON) {
     dx = 0;

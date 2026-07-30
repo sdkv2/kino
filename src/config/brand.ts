@@ -29,6 +29,10 @@ export const BrandFrontmatterSchema = z
       })
       .optional(),
     font: z.string().optional(),
+    // Extra cuts of `font` to stage, so `font-weight` in a motion page selects a real face. Opt-in:
+    // each cut's bytes are base64-inlined into every SVG raster, so staging four by default would
+    // multiply that payload for projects that never ask. The caption cut is always included.
+    fontWeights: z.array(z.number().int().min(100).max(900)).optional(),
     labelFont: z.string().optional(),
     captionStyle: z
       .object({
@@ -75,6 +79,7 @@ export interface Brand {
   name: string;
   colors: { night: string; mint: string; green: string; white: string; gold: string };
   font: string;
+  fontWeights?: number[];
   labelFont?: string;
   captionStyle: {
     fontSize: number;

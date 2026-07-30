@@ -29,6 +29,15 @@ const BANNED: { re: RegExp; msg: string }[] = [
   // encodeURIComponent turns into url(%23id) — a self-contained fragment, not an external fetch.
   { re: /url\(\s*['"]?(?!data:|#|%23)[^)\s'"]/i, msg: "url(...) must be a data: URI or #fragment (raw or %23-encoded) — external/relative refs don't resolve" },
   { re: /@import\b/i, msg: "@import is not allowed — bundle all styles inline (no external CSS)" },
+  // `use` is allowed through the sanitizer (it instances a node already in the document), but only
+  // as a same-document reference. The url(...) rule above covers CSS url(), not an SVG href
+  // attribute, so an external <use href> would otherwise be the one network reference that slips
+  // past. Browsers block cross-origin <use> anyway; this makes the failure an authoring error with
+  // a message instead of a shape that silently never paints.
+  {
+    re: /<use\b[^>]*?\b(?:xlink:)?href\s*=\s*['"]?(?!#|%23)/i,
+    msg: "<use href> must be a #fragment in the same document (raw or %23-encoded) — an external or relative reference does not resolve during render",
+  },
 ];
 
 // Returns a list of human-readable violations (empty = clean). Pure; no DOMPurify needed.

@@ -72,9 +72,21 @@ declare global {
 const loadedFonts = new Map<string, FontFace>();
 
 async function syncFonts(props: KinoProps): Promise<void> {
-  const desired = new Map<string, string>();
-  if (props.theme.fontUrl) desired.set("KinoBrandFont", "/public/" + props.theme.fontUrl);
-  if (props.theme.labelFontUrl) desired.set("KinoLabelFont", "/public/" + props.theme.labelFontUrl);
+  // Keyed by family+weight, not family: a brand that opts into several cuts registers one FontFace
+  // per cut, and they must not evict each other. A single cut carries no weight descriptor, so it
+  // keeps matching every requested weight exactly as before.
+  const desired = new Map<string, { url: string; family: string; weight?: number }>();
+  const extra = props.theme.fontFaces ?? [];
+  if (extra.length) {
+    for (const f of extra) {
+      desired.set(`KinoBrandFont@${f.weight}`, { url: "/public/" + f.url, family: "KinoBrandFont", weight: f.weight });
+    }
+  } else if (props.theme.fontUrl) {
+    desired.set("KinoBrandFont", { url: "/public/" + props.theme.fontUrl, family: "KinoBrandFont" });
+  }
+  if (props.theme.labelFontUrl) {
+    desired.set("KinoLabelFont", { url: "/public/" + props.theme.labelFontUrl, family: "KinoLabelFont" });
+  }
   const fontSet = document.fonts as unknown as { delete: (f: FontFace) => void; add: (f: FontFace) => void };
   for (const [family, ff] of loadedFonts) {
     if (!desired.has(family)) {
@@ -82,18 +94,22 @@ async function syncFonts(props: KinoProps): Promise<void> {
       loadedFonts.delete(family);
     }
   }
-  for (const [family, url] of desired) {
-    const existing = loadedFonts.get(family);
-    if (existing && (existing as FontFace & { __url?: string }).__url === url) continue;
+  for (const [key, want] of desired) {
+    const existing = loadedFonts.get(key);
+    if (existing && (existing as FontFace & { __url?: string }).__url === want.url) continue;
     if (existing) {
       fontSet.delete(existing);
-      loadedFonts.delete(family);
+      loadedFonts.delete(key);
     }
-    const ff = new FontFace(family, `url(${url})`);
-    (ff as FontFace & { __url?: string }).__url = url;
+    const ff = new FontFace(
+      want.family,
+      `url(${want.url})`,
+      want.weight == null ? undefined : { weight: String(want.weight) },
+    );
+    (ff as FontFace & { __url?: string }).__url = want.url;
     await ff.load();
     fontSet.add(ff);
-    loadedFonts.set(family, ff);
+    loadedFonts.set(key, ff);
   }
   await document.fonts.ready;
 }
