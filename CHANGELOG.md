@@ -3,12 +3,24 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
-## [Unreleased]
+## [3.1.0] — Custom beat transitions and motion authoring feedback
+- **Custom beat transitions:** a shader transition library (`kino transitions`) — CRT collapse, film
+  scorch, geo facade, iris, optic prism, organic inkbleed, paper tear, print halftone — plus
+  camera-carry across beat boundaries and richer authoring feedback (motion lint, motion QA,
+  velocity probing/dumping) surfaced through `kino motion` and `kino still`.
+- **Glyph outlines as SVG path data:** `kino glyphs` extracts font glyph outlines for use as motion
+  paths.
+- **Declarative path morphing:** multi-stop path morphing, central-difference velocity, `<use>`
+  support, and opt-in font cuts for Tier-1 motion.
+- **`kino-smear` helper class** and velocity annotation scoped to tags; injected `kino` filter defs
+  for SVG attribute references.
 - **Tier-2 proc stdlib (`env.lib`):** d3-shape (`env.lib.shape`), culori (`env.lib.color`), and
   deterministically seeded simplex noise (`env.lib.noise2D/3D/4D`, `env.lib.seedNoise`) are bundled
   into the render page and handed to every `render(env)`. All three are pure and add no new engine
   surface — same eval site, same per-frame sanitizer; noise is seeded from a fixed PRNG so renders
   stay reproducible.
+- Segment `text` is now optional so a purely visual beat can set its own length; default-on camera
+  motion blur and a directional smear / RGB-split filter library.
 
 ## [3.0.0] — Electron renderer and GL compositor
 - **BREAKING: Puppeteer renderer removed.** Electron offscreen capture is the only render path on
