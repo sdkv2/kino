@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { FFMPEG_PATH } from "../media/binPaths.js";
 import { containedPath } from "../config/project.js";
 
@@ -19,9 +19,14 @@ export function isImageSegmentInput(input: string): boolean {
   return IMAGE_EXT.test(input);
 }
 
-/** Project-relative path under assets/ for a transparent subject PNG. */
+/** Project-relative path under assets/ for a transparent subject PNG.
+ *
+ * POSIX separators, not the platform's: this string is written into manifest.json and read back
+ * as a spec `source`, so it has to mean the same thing on every machine. `join` would emit
+ * `cutouts\name.png` on Windows — a manifest that only resolves on the OS that produced it, and
+ * which the CLI then prints as the mixed `assets/cutouts\name.png`. */
 export function cutoutRelPath(outName: string): string {
-  return join("cutouts", `${outName}.png`);
+  return posix.join("cutouts", `${outName}.png`);
 }
 
 /** Bake mask luminance into the source image alpha → RGBA PNG at the mask canvas size. */
