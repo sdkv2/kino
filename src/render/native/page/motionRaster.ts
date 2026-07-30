@@ -166,8 +166,13 @@ function probePlateDupes(plates: MotionPaintPlates): void {
   }
 }
 
-function needsMotionDefs(html: string): boolean {
-  return /\bkino-(grain|vignette)\b|filter:\s*url\(#kino-/.test(html);
+export function needsMotionDefs(html: string): boolean {
+  // `[:=]` matches BOTH reference forms. This only looked for the CSS property (`filter: url(#kino-…)`),
+  // so a reference from an SVG presentation attribute (`<text filter="url(#kino-rgb)">`) never pulled
+  // the defs in — the filter id resolved to nothing and the element rendered completely unfiltered,
+  // with no error. Author-defined filters worked, which made it look like the engine's were broken
+  // rather than absent.
+  return /\bkino-(grain|vignette)\b|filter\s*[:=]\s*['"]?\s*url\(\s*['"]?#kino-/.test(html);
 }
 
 export function motionNeedsLensLayers(html: string): boolean {
