@@ -22,9 +22,26 @@ structural preview for free. Real voiceover/avatar runs need keys in a project `
 
 ```bash
 npm run dev -- <args>   # run the CLI from source via tsx
-npm test                # vitest, single run
+npm test                # vitest, single run — everything except the GPU/CoreML scopes
 npm run test:watch      # watch mode
 ```
+
+`npm test` is what CI runs on every PR and what must pass before you push. The two heavyweight
+GPU consumers live in their own scopes so they never compete for one machine's GPU — running them
+together is what made them flaky, not the assertions themselves:
+
+```bash
+npm run test:gpu     # the 24 pixel test files (real Chrome + SwiftShader + ImageMagick), one at a time
+npm run test:metal   # CoreML segmentation; needs a Mac with a SAM venv, skips elsewhere
+npm run test:full    # everything at once — the combination that produces the contention failures
+```
+
+`test:gpu` also runs in CI on every push to `main`. To run it against a branch before merging:
+`gh workflow run ci.yml --ref <branch>`.
+
+If a pixel test fails, do **not** reach for deleting it or loosening its threshold until it also
+fails in the serialised `npm run test:gpu` — see the quarantine notes in `vitest.config.ts` for
+three occasions when "flaky GPU test" turned out to be a real bug.
 
 The CLI runs from compiled `dist/` — rebuild (`npm run build`) before testing a change
 through the `kino` binary rather than `npm run dev`.

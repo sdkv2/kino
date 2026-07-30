@@ -1,3 +1,17 @@
+// EVERY renderVideo CALL HERE PASSES `draft: true`. Read this before removing it.
+//
+// This file was 52% of the entire GPU scope on its own — eight full 1080x1920 encodes at 24-44s
+// each, against two stills tests at ~2s. `draft` renders the SAME composition onto a 720p-class
+// canvas with a veryfast encode preset: same frame, same frame count, same fps, fewer pixels.
+//
+// That is safe here specifically because none of the eight video tests looks at a pixel. They
+// assert output count, file existence, and probed duration — they are integration smoke tests for
+// "this composition encodes to an mp4 of the right length without crashing", and every one of them
+// still does a real render and a real ffmpeg encode to prove it.
+//
+// So the rule: if you add a test to this file that PROBES PIXELS, do not give it `draft` — put it
+// with the stills tests below (`magick` sampling at absolute coordinates, which a 720p canvas would
+// silently move). Draft is a lever for the encode-smoke tests, not a default for the file.
 import { describe, it, expect } from "vitest";
 import { renderVideo, renderStills } from "../src/render/render.js";
 import { probeDuration } from "../src/media/ffmpeg.js";
@@ -36,7 +50,7 @@ describe("renderVideo", () => {
         },
       ],
     };
-    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "t" });
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "t", draft: true });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
@@ -54,7 +68,7 @@ describe("renderVideo", () => {
       disclosure: "test",
       segments: [{ kind: "scene", caption: "on camera", startSec: 0, endSec: 2 }],
     };
-    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "av" });
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "av", draft: true });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
@@ -76,7 +90,7 @@ describe("renderVideo", () => {
         { kind: "video", source: "app.mp4", caption: "cut-in", startSec: 1, endSec: 2, shot: "static", transition: "fly-left" },
       ],
     };
-    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "app" });
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "app", draft: true });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
@@ -118,7 +132,7 @@ describe("renderVideo", () => {
         },
       ],
     };
-    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "clip" });
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "clip", draft: true });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
@@ -135,7 +149,7 @@ describe("renderVideo", () => {
       disclosure: "test",
       segments: [{ kind: "scene", caption: "hello", startSec: 0, endSec: 2 }],
     };
-    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "bg" });
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "bg", draft: true });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
@@ -162,7 +176,7 @@ describe("renderVideo", () => {
         },
       ],
     };
-    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "wc" });
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "wc", draft: true });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
@@ -227,7 +241,7 @@ describe("renderVideo", () => {
         },
       ],
     };
-    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "style" });
+    const outs = await renderVideo({ props, publicDir: outDir, formats: ["9:16"], outDir, title: "style", draft: true });
     expect(outs).toHaveLength(1);
     expect(await probeDuration(outs[0])).toBeCloseTo(2, 0);
   }, 180000);
@@ -253,7 +267,7 @@ describe("renderVideo with sfx + music", () => {
         { kind: "scene", caption: "hello", startSec: 0, endSec: 3 },
       ],
     };
-    const outs = await renderVideo({ props, publicDir, formats: ["9:16"], outDir, title: "sfx-check" });
+    const outs = await renderVideo({ props, publicDir, formats: ["9:16"], outDir, title: "sfx-check", draft: true });
     expect(outs.length).toBe(1);
     expect(existsSync(outs[0])).toBe(true);
     expect(await probeDuration(outs[0])).toBeCloseTo(3.0, 0);

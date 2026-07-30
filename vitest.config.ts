@@ -1,15 +1,26 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 // Files that drive a real Chrome + SwiftShader WebGL context and probe the resulting pixels with
-// ImageMagick. They are 26 of ~136 test files but ~93% of the suite's cost (545s of 586s on a
+// ImageMagick. They are 24 of ~168 test files but ~93% of the suite's cost (545s of 586s on a
 // 4-core runner), and they are platform-independent by construction: KINO_GPU=0 below pins every
 // one of them to SwiftShader, so a Windows runner renders the same frames a Linux runner does.
-// KINO_TEST_SCOPE=light skips them; CI runs the light scope on the macOS/Windows PR jobs and the
-// full scope on Linux and on every push to main (see .github/workflows/ci.yml).
+//
+// THEY ARE OFF THE DEFAULT PATH. `npm test` excludes them; `npm run test:gpu` is the only thing
+// that runs them, and it runs them with fileParallelism OFF. That split exists because the cost was
+// never the whole problem — CONTENTION was. Vitest runs test files in parallel, so N of these files
+// meant N Electron GL hosts rasterising SwiftShader at once, and the loser of that fight failed on
+// whichever assertion it happened to be holding. compositor-orientation is the worked example: 4 of
+// its 6 tests fail reproducibly in a full parallel run and pass 6/6 when the file runs alone.
+// KINO_CONCURRENCY=1 does not fix this — it caps workers WITHIN one render call, not the number of
+// concurrent render calls. Serialising the files does.
+//
+// So: do not "fix" a flaky pixel test by deleting it or by loosening its threshold until the
+// serialised run also fails. See the 2026-07-28 quarantine note below — three files were excluded
+// as flaky GPU tests and all three were real, different bugs.
 //
 // segment-mock is deliberately NOT in this list. It is one full Chrome render -> ffmpeg encode ->
 // magick probe, and that single path is what catches the per-OS integration breaks this matrix
-// exists to find (binary discovery, argv quoting, sandbox flags) — the other 26 only re-prove
+// exists to find (binary discovery, argv quoting, sandbox flags) — the other 24 only re-prove
 // compositor maths that SwiftShader already makes identical everywhere.
 const GPU_PIXEL_TESTS = [
   "tests/appclip-frames.test.ts",
@@ -84,48 +95,69 @@ const GPU_PIXEL_TESTS = [
 // non-GPU settings are worse — CPU_ONLY and CPU_AND_NE each SIGSEGV outright on this model. Only
 // CPU_AND_GPU and ALL produce a mask at all.
 //
-// So they get their own project with a later `groupOrder`, which vitest runs strictly after group 0
-// rather than alongside it. That keeps them RUNNING (they are the only coverage of the real CoreML
-// pipeline) instead of excluding them, which is what the note above says to avoid. Isolated, the
-// image test has been green across full-suite runs; concurrent, it failed roughly two runs in three.
+// A later `groupOrder` was the first attempt and was not enough: even with group 0 carrying no GPU
+// pixel tests at all, the image test still took the SIGABRT in a default run and still passed on its
+// own. Running strictly after group 0's assertions finish is not the same as running after every
+// Electron host group 0 started has actually released the GPU.
+//
+// So they now get the same treatment as the GPU pixel tests: off the default path, in their own
+// scope (`npm run test:metal`). They stay RUNNABLE — they are the only coverage of the real CoreML
+// pipeline, and the note above is explicit that excluding a test is not how you fix one. Nothing is
+// lost in CI either way: these self-skip unless the machine is a Mac with a SAM venv configured, so
+// they have never executed on a runner. This is about `npm test` being trustworthy on a dev Mac.
 const METAL_TESTS = [
   "tests/segment-coreml.test.ts",
   "tests/segment-coreml-track.test.ts",
   "tests/segment-coreml-video.test.ts",
 ];
 
-const exclude =
-  process.env.KINO_TEST_SCOPE === "light"
-    ? [...configDefaults.exclude, ...GPU_PIXEL_TESTS]
-    : configDefaults.exclude;
+/** Which slice of the suite to run. The two heavyweight GPU consumers each get their own scope, so
+ *  the default run never has two of them competing for one machine's GPU.
+ *
+ *  default — everything except the GPU pixel tests and the CoreML tests. `npm test`, every CI job.
+ *  gpu     — ONLY the GPU pixel tests, one file at a time (`npm run test:gpu`).
+ *  metal   — ONLY the CoreML tests (`npm run test:metal`). Mac with a SAM venv; skips elsewhere.
+ *  full    — everything in one parallel run. Kept for a deliberate local sweep; this is the
+ *            combination that produces the contention failures described above, so it is not what
+ *            CI runs and not what to trust a red result from.
+ *
+ *  `light` is accepted as a synonym of the default: it was the opt-in name back when GPU tests ran
+ *  by default, and old invocations should not silently start running something else. */
+type Scope = "default" | "gpu" | "metal" | "full";
+const SCOPES: Scope[] = ["gpu", "metal", "full"];
+const asked = process.env.KINO_TEST_SCOPE;
+const scope: Scope = SCOPES.find((s) => s === asked) ?? "default";
+
+const exclude = scope === "full" ? configDefaults.exclude : [...configDefaults.exclude, ...GPU_PIXEL_TESTS];
 
 export default defineConfig({
   test: {
     globals: true,
     globalSetup: ["tests/setup/scratchSweep.ts"],
     env: { KINO_GPU: "0" },
-    projects: [
-      {
-        test: {
-          name: "suite",
-          globals: true,
-          env: { KINO_GPU: "0" },
-          include: ["tests/**/*.test.ts"],
-          exclude: [...exclude, ...METAL_TESTS],
-          sequence: { groupOrder: 0 },
-        },
-      },
-      {
-        // A LATER groupOrder, so this never overlaps the suite above rather than being excluded.
-        test: {
-          name: "metal",
-          globals: true,
-          env: { KINO_GPU: "0" },
-          include: METAL_TESTS,
-          exclude,
-          sequence: { groupOrder: 1 },
-        },
-      },
-    ],
+    projects: projectsFor(scope),
   },
 });
+
+function projectsFor(s: Scope) {
+  const base = { globals: true, env: { KINO_GPU: "0" } };
+  // Both dedicated scopes run one file at a time — serialising the files is the actual fix for the
+  // contention, and it is affordable because nothing on the PR path waits for either of them.
+  if (s === "gpu") {
+    return [{ test: { ...base, name: "gpu", include: GPU_PIXEL_TESTS, fileParallelism: false } }];
+  }
+  if (s === "metal") {
+    return [{ test: { ...base, name: "metal", include: METAL_TESTS, fileParallelism: false } }];
+  }
+  // default / full. `full` keeps the old shape — metal in a later group — because that is the
+  // "run absolutely everything on this machine" escape hatch, and a later group is still better
+  // than none. `default` excludes METAL_TESTS outright (see the note above them).
+  const suiteExclude = s === "full" ? exclude : [...exclude, ...METAL_TESTS];
+  const projects: Array<{ test: Record<string, unknown> }> = [
+    { test: { ...base, name: "suite", include: ["tests/**/*.test.ts"], exclude: suiteExclude, sequence: { groupOrder: 0 } } },
+  ];
+  if (s === "full") {
+    projects.push({ test: { ...base, name: "metal", include: METAL_TESTS, exclude, sequence: { groupOrder: 1 } } });
+  }
+  return projects;
+}

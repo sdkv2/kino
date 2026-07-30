@@ -73,8 +73,27 @@ afterAll(() => {
   else process.env.KINO_SHADER_SSAA = prevSS;
 });
 
+// WHY SS=2 RUNS ONE TEST, NOT ALL THREE.
+//
+// This file used to run its whole body at both supersample factors: 8 renders, 4 of them at SS=2
+// and therefore 4x the pixels, which made it the single most expensive file in the suite (~180s,
+// roughly a fifth of the GPU scope).
+//
+// Orientation is a property of the OFFSCREEN-TARGET BLIT, and the supersample factor changes that
+// target — a mirror could be introduced in the downsample step at SS=2 alone. So SS=2 keeps the
+// test that would see exactly that: the plain upright check, whose two independent markers at
+// different heights are what makes a flip unmistakable.
+//
+// What SS=2 does NOT need to re-prove is orientation through the effect chain and through
+// defocus(): those two ask whether a filtered layer and a focal axis are right-way-up, and neither
+// claim is supersample-dependent. Their SS-sensitivity is a measurement detail the focusY test
+// already handles by asserting a RATIO rather than a level (see its note below). Everything else
+// about SS=2 — antialiasing and determinism — is compositor-ss.test.ts's job, not this file's.
+const SS_ALL = ["1", "2"];
+const SS_ORIENTATION_ONLY = ["1"];
+
 describe("compositor orientation", () => {
-  for (const ss of ["1", "2"]) {
+  for (const ss of SS_ALL) {
     it(`keeps backdrop and motion rasters upright at SS=${ss}`, async () => {
       const png = await render(propsFor(), ss);
       // Backdrop red band is authored across rows 0–240.
@@ -84,7 +103,9 @@ describe("compositor orientation", () => {
       expect(band(png, 480, "g")).toBeGreaterThan(0.8);
       expect(band(png, 1200, "g")).toBeLessThan(0.05);
     }, 180000);
+  }
 
+  for (const ss of SS_ORIENTATION_ONLY) {
     it(`keeps effect-filtered motion layers upright at SS=${ss}`, async () => {
       const png = await render(propsFor({ effect: true }), ss);
       expect(band(png, 480, "g")).toBeGreaterThan(0.8);

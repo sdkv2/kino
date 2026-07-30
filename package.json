@@ -44,7 +44,10 @@
     "prepare": "npm run build",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
-    "test:light": "KINO_TEST_SCOPE=light vitest run",
+    "test:gpu": "KINO_TEST_SCOPE=gpu vitest run",
+    "test:metal": "KINO_TEST_SCOPE=metal vitest run",
+    "test:full": "KINO_TEST_SCOPE=full vitest run",
+    "test:light": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
