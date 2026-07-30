@@ -36,7 +36,9 @@ const INTER = join(homedir(), ".kino", "fonts", "inter.ttf");
 const haveFont = existsSync(INTER);
 
 describe.skipIf(!haveFont)("parseTtf + textOutlines (cached Inter)", () => {
-  const font = parseTtf(readFileSync(INTER));
+  // describe.skipIf still runs this body to discover the nested its even when the suite is
+  // skipped, so this read must not fire unless the font is actually there.
+  const font = haveFont ? parseTtf(readFileSync(INTER)) : (undefined as unknown as ReturnType<typeof parseTtf>);
 
   it("reads the head/hhea/maxp metrics", () => {
     expect(font.unitsPerEm).toBeGreaterThan(0);
