@@ -189,6 +189,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Same unprivileged-userns re-allow the `test` job does. Without it the probe's Electron dies
+      # before it reports anything — "SUID sandbox helper ... is not configured correctly", SIGTRAP —
+      # so the ubuntu leg of this matrix was failing without ever producing a measurement.
+      - name: Allow Chromium sandbox userns (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Start Xvfb (Linux)
         if: runner.os == 'Linux'
         run: |

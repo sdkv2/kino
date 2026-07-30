@@ -59,7 +59,10 @@ describe("resolveTransitionSource", () => {
 
   it("resolves a bare id against the shipped library", () => {
     expect(listTransitionIds()).toContain("iris");
-    expect(resolveTransitionSource("iris", project)).toMatch(/assets-lib\/transitions\/iris\.frag$/);
+    // Separators normalised before matching: resolveTransitionSource returns a NATIVE path, so on
+    // Windows this is `...\assets-lib\transitions\iris.frag` and a forward-slash pattern can never
+    // match it. The assertion is about which file was resolved, not how the OS spells a path.
+    expect(resolveTransitionSource("iris", project).replace(/\\/g, "/")).toMatch(/assets-lib\/transitions\/iris\.frag$/);
   });
 
   it("names the library contents when an id is unknown", () => {
