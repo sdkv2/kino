@@ -673,4 +673,18 @@ text and pull frames so you can see what's said and shown.
 Never use them on our own rendered output (we already have word timings from TTS — use `kino
 inspect`), and never inside the build pipeline. See `reference.md` for flags.
 
-See `reference.md` for command flags, brand config, and troubleshooting.
+## Related
+
+The **Spec schema** above is the common-case subset — for a field not covered here (masks/effects,
+layers, keyframes/triggers, transitions, post FX, `brand.md` frontmatter, `project.json`), check
+`docs/spec-reference.md` before guessing at a shape or inventing a field name. `docs/cli-reference.md`
+has every command and flag, including ones this skill doesn't call out by name.
+
+- `docs/spec-reference.md` — full JSON spec schema, `brand.md`, `project.json`
+- `docs/cli-reference.md` — every `kino` command + flag
+- `reference.md` — command flags, brand config, troubleshooting (this skill's own companion)
+- `skills/ad-voice` — segment `text`/`caption`/CTA copy
+- `skills/motion-design` — visual craft for motion graphics
+- `skills/speech-synced-ui` — VO-locked typed/typing UI
+- `skills/importing-footage` — long recordings → beat map + clip windows
+- `skills/adversarial-critique` — layout QA gate before shipping

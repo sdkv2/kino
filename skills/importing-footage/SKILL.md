@@ -106,6 +106,9 @@ Same `asset`, different windows:
 VO still drives beat duration. If the clip (at `speed`) ends early, the last frame holds
 (via freeze — do not rely on a source-frame `trimAfter` cutoff; it unmounts early under slow-mo).
 
+The table above is the fields this skill uses most; `docs/spec-reference.md` § `video` segment has
+the full field list (including ones you won't need for a straightforward clip/frame/retime job).
+
 **`clipTo` is a soft freeze-ceiling, not a trim.** The beat plays `clipFrom → min(clipTo, clipFrom +
 beatLen·speed)`: VO *longer* than the window freezes on the `clipTo` frame; VO *shorter* cuts
 mid-window before reaching `clipTo`. So size the window ≥ the beat — `clipTo` will **not** trim an
