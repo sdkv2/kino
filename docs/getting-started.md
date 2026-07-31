@@ -56,16 +56,26 @@ kino update      # later: pull + rebuild a repo install (or npm -g @latest for a
 ## Scaffold a project
 
 ```bash
-kino init acme        # scaffold .env, a brand.md, and projects/acme/
+kino init             # scaffold .env + projects/default/ with a ready-to-build sample spec
 ```
 
 Every build runs inside a **project**:
 
-- `kino init <brand>` scaffolds the workspace plus a first project named after the brand: `projects/<brand>/` with its own `specs/`, `assets/`, and `out/`, plus a `project.json` that assigns the brand.
-- `kino projects --new <name> [--brand <brand>]` adds more projects (omit `--brand` for a brandless project on kino defaults); `kino projects` lists what exists.
+- `kino init` scaffolds the workspace plus `projects/default/` with its own `specs/`, `assets/`, and `out/`. Name a brand (`kino init acme`) to also scaffold `brands/acme/brand.md` and a project that assigns it.
+- `kino projects --new <name> [--brand <brand>]` adds more projects; `kino projects` lists what exists.
 - A spec must live under a project's `specs/`. Building a spec that isn't inside a project fails with a message telling you to create one.
 
-A **brand** (`brand.md`) is YAML frontmatter (an optional subset of palette/font/voice/disclosure and other settings) followed by a free-form guidelines body. The frontmatter holds the palette, fonts, disclosures, default presenter provider, voice/look aliases, and banned phrases; the body is prose for the driving agent. Everything is optional and falls back to kino defaults — see [Spec reference → brand.md](spec-reference.md#brandmd).
+## Pick a colour scheme
+
+Every build declares one — there is no silent house palette. The cheapest version is one line in the spec:
+
+```jsonc
+"colors": "midnight"   // or "noir" | "paper", or { "bg": "#…", "accent": "#…", … }
+```
+
+`kino colors` lists the presets, the five roles (`bg`, `fg`, `accent`, `accent2`, `deep`), and what each role paints. See [Spec reference → Colour scheme](spec-reference.md#colour-scheme).
+
+A **brand** is optional and is the other place a palette can live. `brand.md` is YAML frontmatter (palette, fonts, disclosures, default presenter provider, voice/look aliases, banned phrases) followed by a free-form guidelines body for the driving agent — reach for one when several specs should share that context, not just to set colours. A brand whose frontmatter declares `colors` satisfies the requirement for every spec under it. See [Spec reference → brand.md](spec-reference.md#brandmd).
 
 ## Write a spec and render it
 
@@ -74,6 +84,7 @@ A spec is a JSON file describing the video as a list of **beats** (segments). Ea
 ```json
 {
   "title": "lie-test",
+  "colors": "noir",
   "background": "aurora",
   "segments": [
     { "kind": "motion", "source": "motion/hook.html", "text": "Most cover letters get rejected in six seconds." },
@@ -82,7 +93,7 @@ A spec is a JSON file describing the video as a list of **beats** (segments). Ea
 }
 ```
 
-`title` must be kebab-case; `segments` needs at least one beat. Full field list in the [Spec reference](spec-reference.md).
+`title` must be kebab-case; `segments` needs at least one beat; `colors` is required unless a brand declares them. Full field list in the [Spec reference](spec-reference.md).
 
 The render loop is built for tight iteration — every preview step is free:
 

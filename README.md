@@ -50,12 +50,14 @@ No LLM inside the CLI: every step is deterministic, so the same spec renders the
 ## Quickstart
 ```bash
 cd <your-project>
-npx @sdkv2/kino init acme                                     # scaffold .env, brand.md, dirs + a sample spec
-npx @sdkv2/kino build projects/acme/specs/sample.json --draft  # free structural preview, no API spend
-npx @sdkv2/kino build projects/acme/specs/sample.json         # real render → projects/acme/out/sample/
+npx @sdkv2/kino init                                              # scaffold .env, dirs + a sample spec
+npx @sdkv2/kino build projects/default/specs/sample.json --draft  # free structural preview, no API spend
+npx @sdkv2/kino build projects/default/specs/sample.json          # real render → projects/default/out/sample/
 ```
 `init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with
-no editing. Swap in your own spec once the preview looks right.
+no editing. Swap in your own spec once the preview looks right. Every spec declares a colour scheme —
+`"colors": "midnight" | "noir" | "paper"`, or your own roles (`kino colors`); name a brand
+(`kino init acme`) when several specs should also share tone, fonts and disclosures.
 
 Needs Node 22+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Real voiceover needs
 an [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project);
@@ -86,11 +88,13 @@ Details: [`skills/README.md`](skills/README.md).
 - **Animated everything** — backgrounds, logo, captions, and kickers tween on one keyframe layer.
 - **Fonts & stock media** — any Google font by name (`kino fonts`); Pexels video and stills
   (`kino pexels`, `kino photos`) pulled straight into project assets.
-- **Branding & compliance** — brand-wide palette, fonts, logo, AI `disclosure`, and
+- **Colour schemes** — three stock palettes or your own five roles, set per spec (`kino colors`).
+  No silent default: a build with no scheme fails validation.
+- **Branding & compliance** — optional brand-wide palette, fonts, logo, AI `disclosure`, and
   `bannedPhrases` that fail the build.
 - **Inspect & iterate** — `inspect` (plan as JSON), `still`/`storyboard` (free previews),
   `frames` (extract from a render). Built for tight agent loops.
-- **Brands & projects** — a shared `brand.md` per brand; every build runs inside its own
+- **Brands & projects** — an optional shared `brand.md` per brand; every build runs inside its own
   `projects/<name>/` with separate specs, assets, and output.
 
 ## How kino drives motion graphics

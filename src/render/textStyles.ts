@@ -2,6 +2,7 @@
 // (compiled-land, like captionLayout.ts): the CLI resolves specs through it and the render-page
 // components style words with it. Presets draw only from the resolved brand palette.
 import type { CSSProperties } from "react";
+import { strokeInk } from "./contrast.js";
 
 export const CAPTION_STYLES = ["stroke", "highlight", "gradient", "minimal"] as const;
 export const CAPTION_ANIMATIONS = ["pop", "rise", "typewriter", "wave", "blur-in", "none"] as const;
@@ -56,11 +57,13 @@ export function wordStyle(style: CaptionStyle, t: TextTheme, flags: WordFlags = 
     case "minimal":
       return { color: highlight ? t.accent : t.fg, fontWeight: 700, textShadow: "0 4px 14px rgba(0,0,0,.35)" };
     default:
-      // "stroke" — the legacy look, byte-for-byte.
+      // "stroke" — the legacy look. The halo is derived rather than hardcoded black: on a light
+      // scheme, black behind near-black ink is a blob. Any light `fg` (every palette that predates
+      // spec-level colours) still yields "#000".
       return {
         color: highlight ? t.accent : t.fg,
         fontWeight: 900,
-        WebkitTextStroke: `${t.captionStroke}px #000`,
+        WebkitTextStroke: `${t.captionStroke}px ${strokeInk(t.fg)}`,
         paintOrder: "stroke fill" as CSSProperties["paintOrder"],
         textShadow: emph ? `0 0 26px ${t.accent}` : shadow,
       };

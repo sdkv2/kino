@@ -10,6 +10,8 @@ import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
+import { resolvePalette, type Palette } from "../config/palettes.js";
+import { readableInk } from "../render/contrast.js";
 import { loadSpec, parseSpec, type Spec } from "../spec/schema.js";
 import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
@@ -45,13 +47,15 @@ import { checkLoopSeam } from "../media/loopSeam.js";
 import { holdLastFrameToMatchAudio } from "../media/avSync.js";
 import { log } from "../log.js";
 
-// Foreground (text) colour for a kicker pill, keyed by the kicker's brand background colour: a
-// near-black ink on the light accent/accent2 chips, white on the deep chip — each picked for
-// contrast. The background colours themselves come from the brand palette (see DEFAULT_BRAND.colors
-// in config/brand.ts). Kicker colour names: roles are canonical, the literal names are the
-// pre-rename aliases for the same slots.
+// Which palette role a kicker pill takes its chip colour from. Roles are canonical; the literal
+// names are the pre-rename aliases for the same slots.
 const KICKER_SLOT = { accent: "accent", mint: "accent", deep: "deep", green: "deep", accent2: "accent2", gold: "accent2" } as const;
-const KICKER_FG: Record<string, string> = { accent: "#06210f", deep: "#ffffff", accent2: "#0b1020" };
+
+// The pill's text colour is DERIVED from the chip, not tabulated per role: a table keyed by role
+// only holds while the palette is kino's own (light accents, dark base). Under `paper` — or any
+// scheme with a saturated accent — a hardcoded near-black ink lands on dark blue and disappears.
+// Every dark-base palette still resolves to the near-black/white pair the old table hardcoded.
+const kickerFg = (chip: string, colors: Palette): string => readableInk(chip, colors.fg, colors.bg);
 
 // Resolve an app beat's regionShader spec → RegionShaderProps: read each mask's manifest for kind +
 // the chosen object's channel, stage the mask file into /public (like frame.src / asset), and load
@@ -347,6 +351,9 @@ export async function prepare(
   const rawBrand = brandName ? loadBrand(project.brandDir(brandName)) : DEFAULT_BRAND;
   const brand: Brand = {
     ...rawBrand,
+    // The spec's colour scheme lands here, so every downstream reader of brand.colors — captions,
+    // motion vars, background gradients, kicker chips, the film pass — picks it up unchanged.
+    colors: resolvePalette(spec.colors, rawBrand.colors),
     defaultProvider: pc?.provider ?? rawBrand.defaultProvider,
     background: pc?.background ?? rawBrand.background,
     font: pc?.font ?? rawBrand.font,
@@ -656,7 +663,7 @@ export async function prepare(
         kickerKeyframes: seg.kickerKeyframes,
         zoomKeyframes: seg.zoomKeyframes,
         kicker: seg.kicker
-          ? { text: seg.kicker.text, color: c[KICKER_SLOT[seg.kicker.color]], fg: KICKER_FG[KICKER_SLOT[seg.kicker.color]] }
+          ? { text: seg.kicker.text, color: c[KICKER_SLOT[seg.kicker.color]], fg: kickerFg(c[KICKER_SLOT[seg.kicker.color]], c) }
           : undefined,
         motionOverlay: seg.motionOverlay
           ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }

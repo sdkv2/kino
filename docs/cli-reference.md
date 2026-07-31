@@ -9,7 +9,7 @@ Most commands resolve their **project** automatically from the spec's path (`pro
 - Build & preview — [`build`](#build) · [`still`](#still) · [`storyboard`](#storyboard) · [`retune`](#retune) · [`batch`](#batch) · [`inspect`](#inspect)
 - Project setup — [`init`](#init) · [`projects`](#projects) · [`doctor`](#doctor) · [`skills`](#skills) · [`update`](#update)
 - Assets — [`segment`](#segment) · [`pexels`](#pexels) · [`photos`](#photos) · [`music`](#music)
-- Discovery (what you can use) — [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion)
+- Discovery (what you can use) — [`colors`](#colors) · [`brand`](#brand) · [`voices`](#voices) · [`avatars`](#avatars) · [`fonts`](#fonts) · [`backgrounds`](#backgrounds) · [`elements`](#elements) · [`motion`](#motion)
 - Reference-video analysis (research only) — [`transcribe`](#transcribe) · [`scan`](#scan) · [`frames`](#frames)
 - Audio analysis — [`audio-markers`](#audio-markers)
 
@@ -174,14 +174,17 @@ kino inspect specs/lie-test.json --real   # true ElevenLabs word timings
 ## Project setup
 
 ### `init [brand]`
-Scaffold the workspace (`.env`, `brands/<brand>/brand.md`) plus a first project `projects/<brand>/` (with `specs/`, `assets/`, `out/`, and a `project.json` assigning the brand). Builds require a project, so this produces a ready-to-build layout. Defaults the brand/project name to `default`.
+Scaffold the workspace (`.env`) plus a first project (with `specs/`, `assets/`, `out/`, a `project.json`, and a ready-to-build `specs/sample.json`). Builds require a project, so this produces a ready-to-build layout.
+
+Naming a brand also scaffolds `brands/<brand>/brand.md` and assigns it in the project's `project.json`; the project is named after it. With no name, the project is `projects/default/` and **no brand is created** — the sample spec sets its own [`colors`](spec-reference.md#colour-scheme), which is all a build needs.
 
 ```
 kino init [brand]
 ```
 
 ```bash
-kino init acme
+kino init                 # projects/default/, no brand
+kino init acme            # brands/acme/brand.md + projects/acme/
 ```
 
 ### `projects`
@@ -194,12 +197,12 @@ kino projects [--new <name>] [--brand <brand>]
 | Option | Value | Meaning |
 |---|---|---|
 | `--new <name>` | name | Scaffold a new project under `projects/`. |
-| `--brand <brand>` | brand | Brand to assign to the new project (omit for kino defaults). |
+| `--brand <brand>` | brand | Brand to assign to the new project (omit for a brandless project). |
 
 ```bash
 kino projects                               # list
 kino projects --new acme --brand acme
-kino projects --new scratch                 # no brand — kino house defaults
+kino projects --new scratch                 # no brand — each spec sets its own `colors`
 ```
 
 ### `doctor`
@@ -295,6 +298,13 @@ List animated backgrounds and their agent-controllable params + actions. See [Ba
 
 ```
 kino backgrounds
+```
+
+### `colors`
+List the stock colour schemes (`midnight`, `noir`, `paper`) with truecolor swatches, the five palette roles and what each paints, and the ways a spec sets one. Every build must declare a scheme — on the spec or on a brand. See [Spec reference → Colour scheme](spec-reference.md#colour-scheme).
+
+```
+kino colors
 ```
 
 ### `elements`

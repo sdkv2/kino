@@ -41,7 +41,7 @@ program
   .command("projects")
   .description("List projects, or scaffold one: --new <name> [--brand <brand>]")
   .option("--new <name>", "scaffold a new project under projects/")
-  .option("--brand <brand>", "brand to assign to the new project (omit for kino defaults)")
+  .option("--brand <brand>", "brand to assign to the new project (omit — each spec then sets `colors`)")
   .action(async (o) => (await import("./commands/projects.js")).projects(o));
 
 program
@@ -236,6 +236,11 @@ program
   .action(async () => (await import("./commands/backgrounds.js")).backgrounds());
 
 program
+  .command("colors")
+  .description("List the stock colour schemes + the palette roles a spec/brand can set")
+  .action(async () => (await import("./commands/colors.js")).colors());
+
+program
   .command("elements")
   .description("List overlay elements (caption, kicker, zoom …) + their layout/tween controls")
   .action(async () => (await import("./commands/elements.js")).elements());
@@ -252,7 +257,7 @@ program
 
 program
   .command("init [brand]")
-  .description("Scaffold .env, a brand, and a first project under projects/<brand>")
+  .description("Scaffold .env + a first project (naming a brand also scaffolds brands/<brand>/)")
   .action(async (b) => (await import("./commands/init.js")).init(b));
 
 program

@@ -106,7 +106,8 @@ describe("resolveVoice (lazy)", () => {
 
 describe("validateSpec (no eager look requirement)", () => {
   it("does not throw for a faceless spec with no voice/look", () => {
-    const spec = { segments: [{ kind: "scene", text: "hi", caption: "c" }] } as unknown as Spec;
+    // `colors` because a build must declare a scheme and DEFAULT_BRAND declares none.
+    const spec = { colors: "midnight", segments: [{ kind: "scene", text: "hi", caption: "c" }] } as unknown as Spec;
     const project = { assetPath: (r: string) => "/nope/" + r } as unknown as Parameters<typeof validateSpec>[2];
     expect(() => validateSpec(spec, DEFAULT_BRAND, project)).not.toThrow();
   });

@@ -13,6 +13,8 @@ import { KINO_VERSION } from "../version.js";
 import { validateSegmentFx } from "../render/maskSpec.js";
 import { validatePostFx } from "../render/postSpec.js";
 import { validateLayers } from "../render/layerSpec.js";
+import { PALETTE_PRESET_NAMES, PALETTE_ROLES } from "../config/palettes.js";
+import { isLightSurface } from "../render/contrast.js";
 
 export interface ComplianceHit { phrase: string; where: string; }
 
@@ -262,6 +264,33 @@ export function assertVoiceTags(spec: Spec, brand: Brand): void {
   );
 }
 
+/**
+ * A build must declare a colour scheme — on the spec, or on a brand that actually sets `colors`.
+ *
+ * Falling back to the house palette was the failure this closes: a spec with no brand rendered in
+ * kino's own navy/mint and looked deliberate, so the cheapest way to get five hex values of your
+ * own was to scaffold an entire brand you had no other use for. Nothing warned, because there was
+ * nothing to warn about — the fallback was total and silent.
+ */
+export function assertColorScheme(spec: Spec, brand: Brand): void {
+  if (spec.colors != null || brand.colorsDeclared) return;
+  throw new Error(
+    `No colour scheme. Set "colors" on the spec — a preset (${PALETTE_PRESET_NAMES.map((n) => `"${n}"`).join(" | ")}), ` +
+      `or the roles { ${PALETTE_ROLES.join(", ")} } — or assign a brand whose brand.md declares colors. ` +
+      "Run `kino colors` to see the presets.",
+  );
+}
+
+/** The cinematic finish darkens frame edges — on a light base that reads as a dirty border. */
+export function assertLightSchemeFinish(spec: Spec, brand: Brand): void {
+  const film = resolveFilm(spec, brand);
+  if (!isLightSurface(brand.colors.bg) || film === 0) return;
+  log.warn(
+    `Light colour scheme (bg ${brand.colors.bg}) with the cinematic finish on — the vignette reads ` +
+      'as a dirty border on a light base. Set "film": 0 for a clean, flat render.',
+  );
+}
+
 /** Soft warning when the spec was authored/built against a different kino version. */
 export function assertKinoVersion(spec: Spec): void {
   if (spec.kinoVersion && spec.kinoVersion !== KINO_VERSION) {
@@ -270,6 +299,8 @@ export function assertKinoVersion(spec: Spec): void {
 }
 
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
+  // First: a missing palette is cheap to fix and fails before any asset walk or API spend.
+  assertColorScheme(spec, brand);
   const hits = complianceScan(spec, brand);
   if (hits.length) {
     throw new Error("Compliance: banned phrases found — " + hits.map((h) => `"${h.phrase}" @ ${h.where}`).join("; "));
@@ -289,6 +320,7 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertBackgroundChoice(spec, brand);
   assertCaptionModes(spec, brand);
   assertVoiceTags(spec, brand);
+  assertLightSchemeFinish(spec, brand);
   assertKinoVersion(spec);
 }
 

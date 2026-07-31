@@ -5,14 +5,19 @@ import { installAllSkills } from "../config/skills.js";
 import { log } from "../log.js";
 import { KINO_VERSION } from "../version.js";
 
-// Scaffold a workspace + a first project named after the brand. kino requires a project, so init
-// produces a ready-to-build one: brands/<brand>/brand.md, .env, and projects/<brand>/ with specs/,
-// assets/, out/, and a project.json that assigns the brand.
-export async function init(brand = "default"): Promise<void> {
+// Scaffold a workspace + a ready-to-build first project: .env and projects/<name>/ with specs/,
+// assets/, out/, and a project.json.
+//
+// A brand is only scaffolded when one is NAMED (`kino init acme`). Bare `kino init` produces a
+// project whose sample spec carries `"colors": "midnight"` and no brands/ directory at all — a
+// brand is for shared tone/voice, fonts, disclosures and voice aliases, not the price of admission
+// for setting five colours.
+export async function init(brand?: string): Promise<void> {
+  const name = brand ?? "default";
   const ws = resolveWorkspace(process.cwd(), { create: true });
-  const projectRoot = join(ws.workspaceRoot, "projects", brand);
+  const projectRoot = join(ws.workspaceRoot, "projects", name);
   for (const d of [
-    ws.brandDir(brand),
+    ...(brand ? [ws.brandDir(brand)] : []),
     join(projectRoot, "assets", "screens"),
     join(projectRoot, "assets", "recordings"),
     join(projectRoot, "specs"),
@@ -34,9 +39,10 @@ export async function init(brand = "default"): Promise<void> {
     );
   }
   const cfg = join(projectRoot, "project.json");
-  if (!existsSync(cfg)) writeFileSync(cfg, JSON.stringify({ brand }, null, 2) + "\n");
+  if (!existsSync(cfg)) writeFileSync(cfg, JSON.stringify(brand ? { brand } : {}, null, 2) + "\n");
   // A ready-to-build sample so the quickstart's first `kino build` works with no editing:
-  // no presenter (provider none → no avatar spend), builds free with --mock.
+  // no presenter (provider none → no avatar spend), builds free with --mock. It carries `colors`
+  // whether or not a brand exists — a spec that declares its own scheme is the shape to copy.
   const specf = join(projectRoot, "specs", "sample.json");
   if (!existsSync(specf)) {
     writeFileSync(
@@ -47,6 +53,7 @@ export async function init(brand = "default"): Promise<void> {
           kinoVersion: KINO_VERSION,
           provider: "none",
           background: "glow",
+          colors: "midnight",
           segments: [
             {
               text: "This is a kino build — voice over a background, and no API spend in mock mode.",
@@ -64,14 +71,16 @@ export async function init(brand = "default"): Promise<void> {
       ) + "\n",
     );
   }
-  const bf = join(ws.brandDir(brand), "brand.md");
-  if (!existsSync(bf)) {
+  const bf = brand ? join(ws.brandDir(brand), "brand.md") : null;
+  if (bf && !existsSync(bf)) {
     writeFileSync(
       bf,
       [
         "---",
         `name: ${brand}`,
-        'colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64" }',
+        '# colors: every spec in this project inherits these — drop the block to let each spec set',
+        '# its own (a preset name or roles). Roles: bg, fg, accent, accent2, deep. `kino colors`.',
+        'colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64" }',
         "# disclosure: AI-generated   # optional — shown on every video when set",
         "# defaultVoice: <elevenlabs-voice-id>   # or set per spec",
         "bannedPhrases: [get the job, guaranteed interview, land more interviews]",
@@ -117,7 +126,8 @@ export async function init(brand = "default"): Promise<void> {
   }
 
   log.ok(
-    `Initialised project '${brand}'. Fill .env + brands/${brand}/brand.md, then build the sample: ` +
-      `kino build projects/${brand}/specs/sample.json --mock`,
+    `Initialised project '${name}'. Fill .env${brand ? ` + brands/${brand}/brand.md` : ""}, then build the sample: ` +
+      `kino build projects/${name}/specs/sample.json --mock` +
+      (brand ? "" : "\n  The sample sets \"colors\": \"midnight\" — `kino colors` lists the schemes."),
   );
 }

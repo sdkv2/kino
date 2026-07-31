@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS, type CaptionStyle, type CaptionAnimation } from "../render/textStyles.js";
+import { PALETTE_PRESETS, declaresColors, normalizeColors, type Palette } from "./palettes.js";
 
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "solid", "custom"]);
@@ -19,9 +20,12 @@ const CaptionStyleBg = z.object({ color: z.string().optional(), opacity: z.numbe
 export const BrandFrontmatterSchema = z
   .object({
     name: z.string().optional(),
+    // Optional, like everything else here — but with a consequence the other fields don't have:
+    // omitting it leaves the brand with no declared palette, so every spec under it must set its
+    // own `colors` (see assertColorScheme). A spec's `colors` overrides this block either way.
     colors: z
       .object({
-        // Role keys (canonical since the palette-role rename).
+        // Role keys (canonical since the palette-role rename); see config/palettes.ts.
         bg: z.string().optional(), // page/background base
         fg: z.string().optional(), // text ink
         accent: z.string().optional(), // primary accent
@@ -85,7 +89,15 @@ export type BrandFrontmatter = z.infer<typeof BrandFrontmatterSchema>;
 // merge over DEFAULT_BRAND — the resolved half of the brand split noted above).
 export interface Brand {
   name: string;
-  colors: { bg: string; fg: string; accent: string; accent2: string; deep: string };
+  colors: Palette;
+  /**
+   * Whether a brand.md actually declared `colors`, as opposed to inheriting the house palette by
+   * omission. Provenance, not a colour — it sits here rather than inside `colors` because every
+   * consumer of `colors` wants five hexes. `assertColorScheme` is the only reader: without this bit
+   * a colourless brand.md is indistinguishable downstream from a real palette choice, which is the
+   * silent fall-through spec-level colours exist to close.
+   */
+  colorsDeclared: boolean;
   font: string;
   fontWeights?: number[];
   labelFont?: string;
@@ -122,21 +134,14 @@ export interface Brand {
 
 // kino house defaults — used when no brand is set and to fill any field a brand.md omits.
 //
-// THE PALETTE (canonical home). The five-slot brand colour set lives here; every other site that
-// needs a palette colour reads it from a resolved Brand.colors (which is DEFAULT_BRAND.colors merged
-// with any brand.md overrides) rather than redefining it. Slots are named by ROLE — the pre-rename
-// literal names (night/mint/green/white/gold, the house theme's original hues) remain accepted in
-// brand.md and emitted as CSS-var/env aliases, but internally only the roles exist:
-//   bg      — page/background base (the dark canvas everything sits on).      [was: night]
-//   accent  — primary accent; highlights, kicker chips, background tint.      [was: mint]
-//   deep    — deep fill / active-word highlight (brand name + spoken word).   [was: green]
-//   fg      — foreground text and the default caption ink.                    [was: white]
-//   accent2 — secondary/bright accent; reserved emphasis, kicker chips.       [was: gold]
-// If you add or repurpose a slot, do it here and update Brand.colors + BrandFrontmatterSchema.colors
-// + normalizeColors + the alias emission in render/motionVars.ts.
+// The palette itself lives in config/palettes.ts (roles, presets, aliases, resolver); the house set
+// is the `midnight` preset. `colorsDeclared: false` is the point of the flag: these colours are a
+// floor for unset roles, never a scheme anyone chose, so they don't satisfy the requirement that a
+// build declare one.
 export const DEFAULT_BRAND: Brand = {
   name: "",
-  colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64", fg: "#ffffff", accent2: "#d99a20" },
+  colors: { ...PALETTE_PRESETS.midnight },
+  colorsDeclared: false,
   font: 'Helvetica, "Helvetica Neue", Arial, sans-serif',
   captionStyle: { fontSize: 74, strokeWidth: 9 },
   disclosure: "", // none unless a brand/spec sets it
@@ -171,27 +176,14 @@ function normalizeDisclosures(fm: BrandFrontmatter): BrandFrontmatter {
   return out;
 }
 
-/**
- * Map a brand.md colors block onto the role keys. Legacy literal names (mint/gold/…) are the
- * pre-rename vocabulary — still accepted, but a role key wins over its own alias so a half-migrated
- * brand behaves predictably.
- */
-const LEGACY_COLOR_ALIASES = { night: "bg", white: "fg", mint: "accent", gold: "accent2", green: "deep" } as const;
-function normalizeColors(colors: NonNullable<BrandFrontmatter["colors"]>): Partial<Brand["colors"]> {
-  const out: Partial<Brand["colors"]> = {};
-  for (const [legacy, role] of Object.entries(LEGACY_COLOR_ALIASES) as Array<[keyof typeof LEGACY_COLOR_ALIASES, keyof Brand["colors"]]>) {
-    const v = colors[role] ?? colors[legacy];
-    if (v != null) out[role] = v;
-  }
-  return out;
-}
-
 function mergeBrand(base: Brand, fmRaw: BrandFrontmatter): Brand {
   const fm = normalizeDisclosures(fmRaw);
   return {
     ...base,
     ...fm,
     colors: { ...base.colors, ...normalizeColors(fm.colors ?? {}) },
+    // Sticky: a brand that declares colours keeps that provenance even where it leaves roles unset.
+    colorsDeclared: base.colorsDeclared || declaresColors(fm.colors),
     captionStyle: { ...base.captionStyle, ...(fm.captionStyle ?? {}) },
   } as Brand;
 }

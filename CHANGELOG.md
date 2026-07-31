@@ -4,6 +4,25 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **Colour schemes in the spec — and brands are no longer the only way to set a palette.** A spec now
+  carries `colors`: a preset name (`"midnight"`, `"noir"`, `"paper"`), a block of roles
+  (`{ bg, fg, accent, accent2, deep }`, legacy names still accepted), or a preset with per-role
+  overrides. A named preset replaces all five roles; role keys layer on top. `kino colors` lists them
+  with swatches. A brand is now for what several specs should *share* — tone/voice, fonts,
+  disclosures, voice aliases — not the price of admission for five hex values.
+- **BREAKING: a build must declare a colour scheme.** Validation fails when a spec sets no `colors`
+  **and** no brand declares any (including a `brand.md` with no `colors` block — inheriting the house
+  palette by omission is not a choice). Previously a brandless spec silently rendered in kino's own
+  navy-and-mint and looked deliberate. The check runs first, before any asset walk or API spend; the
+  message names both fixes. Add `"colors": "midnight"` to keep the old look exactly.
+- **`kino init` no longer scaffolds a brand unless you name one.** Bare `kino init` creates `.env` +
+  `projects/default/` with a sample spec that sets its own `colors`, and no `brands/` directory.
+  `kino init acme` behaves as before.
+- **Kicker ink and caption stroke are derived from the palette** instead of hardcoded around a dark
+  base: a pill's text colour now comes from the chip's contrast, and the `stroke` caption halo from
+  the ink's. Both were near-black constants that turned a light scheme into black-on-black. Every
+  palette with a light `fg` — i.e. every one predating this change — resolves to exactly the old
+  values, so existing renders are unaffected.
 - **Any Google Fonts family:** `brand.font`, `brand.labelFont`, `project.json`'s `font`, `--font` and
   `kino glyphs --font` now accept **any** family on Google Fonts, not just the 14 curated names. The
   curated list was never a technical limit — the downloader could always fetch any family — so it is

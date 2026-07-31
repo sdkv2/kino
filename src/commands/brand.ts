@@ -17,7 +17,10 @@ export function brandText(brandDir: string): string {
   const { brand, body } = loadBrandDoc(brandDir);
   const lines = [
     `name: ${brand.name || "(unset)"}`,
-    `colors: bg ${brand.colors.bg} · fg ${brand.colors.fg} · accent ${brand.colors.accent} · accent2 ${brand.colors.accent2} · deep ${brand.colors.deep}`,
+    // Flag an undeclared palette: these are the house floor, not this brand's choice, and specs
+    // under such a brand must set their own `colors`.
+    `colors: bg ${brand.colors.bg} · fg ${brand.colors.fg} · accent ${brand.colors.accent} · accent2 ${brand.colors.accent2} · deep ${brand.colors.deep}` +
+      (brand.colorsDeclared ? "" : "\n  ⚠ no `colors:` block — every spec under this brand must set its own (`kino colors`)"),
     `font: ${brand.font}`,
     `captionMode: ${brand.captionMode ?? "phrase (default)"}    background: ${brand.background ?? "glow (default)"}`,
     `voice: ${brand.defaultVoice ?? "(unset — set spec.voice)"}    disclosure: ${brand.disclosure || "(none)"}`,
