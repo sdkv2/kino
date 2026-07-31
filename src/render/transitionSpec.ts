@@ -6,7 +6,8 @@
 import type { KinoProps } from "./props.js";
 import { motionHandoff, motionXfadeFrames, pickTransition, type Transition } from "./motion.js";
 import { isWipe, resolveWipeParams, type WipeParams } from "./wipeSpec.js";
-import { assembleTransitionSource, transitionParamNames } from "./transitionSource.js";
+import { assembleTransitionSource, transitionParamNames, transitionColorNames, parseHexColor } from "./transitionSource.js";
+import { hexToVec3 } from "./shaderSource.js";
 import { resolveCamera, type CameraParams } from "./cameraSpec.js";
 
 const CHAIN_HOLD_FRAMES = 12;
@@ -119,15 +120,39 @@ export function transitionWipeForWindow(props: KinoProps, win: TransitionWindow)
 export function transitionCustomForWindow(
   props: KinoProps,
   win: TransitionWindow,
-): { source: string; params: number[] } | undefined {
+): { source: string; params: number[]; colors: Array<[number, number, number]>; brand: BrandPalette } | undefined {
   if (transitionKindForWindow(props, win) !== "custom") return undefined;
   const seg = props.segments[parseInt(win.to.slice(4), 10)];
   if (!seg?.transitionSource) return undefined;
   const declared = (seg.transitionParams ?? {}) as Record<string, number | string>;
   const names = transitionParamNames(declared);
+  const colorNames = transitionColorNames(declared);
   return {
-    source: assembleTransitionSource(seg.transitionSource, names),
+    source: assembleTransitionSource(seg.transitionSource, names, colorNames),
     params: names.map((n) => Number(declared[n]) || 0),
+    colors: colorNames.map((n) => parseHexColor(String(declared[n]))!),
+    brand: brandPalette(props.theme),
+  };
+}
+
+/** The five palette roles as shader-ready rgb, so a custom transition can pigment itself with the
+ *  brand instead of a hard-coded hue. Same source of truth as every other colour on the frame —
+ *  a resolved `Theme`, which is DEFAULT_BRAND merged with the brand.md overrides. */
+export interface BrandPalette {
+  bg: [number, number, number];
+  fg: [number, number, number];
+  accent: [number, number, number];
+  accent2: [number, number, number];
+  deep: [number, number, number];
+}
+
+export function brandPalette(theme: KinoProps["theme"]): BrandPalette {
+  return {
+    bg: hexToVec3(theme.bg),
+    fg: hexToVec3(theme.fg),
+    accent: hexToVec3(theme.accent),
+    accent2: hexToVec3(theme.accent2),
+    deep: hexToVec3(theme.deep),
   };
 }
 

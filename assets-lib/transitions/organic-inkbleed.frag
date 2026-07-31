@@ -22,6 +22,10 @@
 //                          jump ahead of the front. 0 = smooth round blots.
 //   glow       0.0 … 1.5   brightness of the pigment filament sitting on the front.
 //   softness   0.01 … 0.06 feather of the front itself, in field units (1 unit = whole frame).
+//   ink        hex         pigment on the leading edge. Default: the brand's accent.
+//   pool       hex         the deep pool behind the front. Default: the brand's deep.
+//   stain      hex         damp-paper tint ahead of the front. Default: the brand's deep.
+//              (original mint look: "ink": "#4DFFAD", "pool": "#0A6152", "stain": "#215747")
 //
 // ENDPOINTS — how both ends are reached exactly
 //   The field F is normalised and CLAMPED to [0,1], so every pixel's arrival time is inside that
@@ -97,6 +101,26 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float fing  = u_fingering > 0.0 ? u_fingering : 1.0;
   float bleed = u_bleed     > 0.0 ? u_bleed     : 0.8;
   float glow  = u_glow      > 0.0 ? u_glow      : 0.9;
+
+  // ---- ink colour -------------------------------------------------------------------------------
+  // THE COLOUR RULE (see `kino transitions`): pigment from the brand, let the spec override.
+  // `kinoPick(u_<name>, <brand role>)` is the whole convention — a spec that sets `"ink": "#ff00aa"`
+  // gets that colour, and one that says nothing gets the brand's, so this transition looks like the
+  // brand it ships in without being configured per project.
+  //
+  // These used to be hard-coded: the pigment was vec3(0.30, 1.00, 0.68), which is the house mint, so
+  // on any brand that wasn't mint a "brand" transition quietly bled someone else's green across the
+  // cut. To get the original look back, ask for it: "ink": "#4DFFAD".
+  //
+  //   ink    the pigment filament piled up on the leading edge, at full strength;
+  //   pool   the deep pool just behind the front — `deep` is the role for exactly this, a dark fill
+  //          of the same hue family, scaled right down since it is ADDED to a darkened copy of the
+  //          incoming beat;
+  //   stain  what damp paper multiplies down to ahead of the front. Multiplicative, so it is clamped
+  //          well under 1 — otherwise "soaked" paper reads lighter than the dry sheet.
+  vec3 kinoInk = kinoPick(u_ink, uBrandAccent);
+  vec3 kinoInkPool = kinoPick(u_pool, uBrandDeep) * 0.08;
+  vec3 kinoInkStain = clamp(kinoPick(u_stain, uBrandDeep) * 1.3, vec3(0.05), vec3(0.55));
 
   // Square metric, so blots are round in pixels rather than stretched by the 9:16 frame.
   float ar = uRes.x / uRes.y;
@@ -187,16 +211,16 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   // wet zone looks soaked-through rather than airbrushed).
   float mottle = 0.40 + 0.85 * inkFbm(pw * 6.5 + 91.0);
   float soak = clamp((halo * 0.55 + collar * 1.35) * mottle * min(bleed, 1.4), 0.0, 1.0);
-  vec3 dampen = mix(vec3(1.0), vec3(0.13, 0.34, 0.28), soak);
+  vec3 dampen = mix(vec3(1.0), kinoInkStain, soak);
   vec3 col = from.rgb * dampen;
 
   // Ink side: pooled and deep right behind the front, drying into the incoming beat.
-  vec3 pooled = to.rgb * 0.42 + vec3(0.004, 0.024, 0.019);
+  vec3 pooled = to.rgb * 0.42 + kinoInkPool;
   col = mix(col, mix(to.rgb, pooled, wet * 0.9), mask);
 
   // Pigment: the filament on the front, plus feathering — the ridge lines the ink ran along stay
   // visible in the fresh pool for a moment, like dye caught in the fibre.
-  vec3 pigment = vec3(0.30, 1.00, 0.68);
+  vec3 pigment = kinoInk;
   col += pigment * (core * 0.70 + bloom * 0.14) * grit * glow;
   col += pigment * veins * veins * wet * 0.16 * glow;
 
