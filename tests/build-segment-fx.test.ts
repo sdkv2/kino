@@ -50,6 +50,7 @@ function writeSpec(): string {
   const spec = {
     title: "build-fx-threading",
     format: ["9:16"],
+    colors: "midnight", // this project assigns no brand, and a build must declare a palette
     segments: [
       {
         kind: "video",

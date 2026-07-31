@@ -263,6 +263,11 @@ program
   .action(async (o) => (await import("./commands/backgrounds.js")).backgrounds(o));
 
 program
+  .command("colors")
+  .description("List the stock colour schemes and the palette roles a spec/brand can set")
+  .action(async () => (await import("./commands/colors.js")).colors());
+
+program
   .command("elements")
   .description("List the overlay elements (caption, kicker, zoom …) and their layout controls")
   .addOption(asOpt(["json"]))
@@ -321,14 +326,14 @@ program
 
 program
   .command("init [brand]")
-  .description("Set up .env, a brand, and a first project")
+  .description("Set up .env + a first project (naming a brand also scaffolds brands/<brand>/)")
   .action(async (b) => (await import("./commands/init.js")).init(b));
 
 program
   .command("projects")
   .description("List the projects, or scaffold a new one")
   .addOption(new Option("--new <name>", "scaffold a new project under projects/"))
-  .addOption(new Option("--brand <brand>", "brand to assign to the new project (omit for kino defaults)"))
+  .addOption(new Option("--brand <brand>", "brand to assign to the new project (omit — each spec then sets `colors`)"))
   .action(async (o) => (await import("./commands/projects.js")).projects(o));
 
 program

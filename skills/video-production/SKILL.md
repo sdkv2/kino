@@ -8,9 +8,30 @@ description: Use when producing short-form vertical marketing videos for an app 
 `kino` turns a JSON **spec you author** into a finished 9:16 (and optional 3:4) video.
 You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) → composite (kino's frame engine).
 
-## Brand discovery (before creating a new brand)
+## Colour scheme (every spec declares one)
 
-**Don't scaffold an empty brand and invent a personality.** When a spec needs a brand that doesn't exist yet:
+**Declare one — an unset scheme still builds (falls back to kino's `midnight`) but validate warns.** Cheapest form is one line:
+
+```jsonc
+"colors": "midnight"                                  // or "noir" | "paper"
+"colors": { "bg": "#0a0a0c", "accent": "#e6b34a" }    // roles: bg fg accent accent2 deep
+"colors": { "preset": "noir", "accent": "#ff0055" }   // preset with one role deviating
+```
+
+`kino colors` lists the presets + what each role paints. A named preset replaces all five roles; role
+keys layer on top. **Read the real palette off the product** (app stills in `projects/<name>/assets/`,
+the logo, the store listing) before reaching for a preset — a preset is the honest default when you
+have no brand colours yet, not a substitute for ones you could have looked up.
+
+Light scheme (`paper`, or any light `bg`) → also set `"film": 0`; the cinematic vignette reads as a
+dirty border on a light base.
+
+## Brand discovery (only when a spec needs more than colours)
+
+**A brand is not required, and colours alone do not justify one.** `spec.colors` covers the palette;
+a brand is for what several specs must *share* — Tone / Voice guidelines, fonts, disclosures,
+voice/look aliases, banned phrases. **Don't scaffold an empty brand and invent a personality.** When a
+spec genuinely needs one that doesn't exist yet:
 
 1. **Reuse first.** `kino brand` lists existing brands — if one fits, use it (`spec.brand`/`project.json`)
    or copy the nearest `brands/<name>/brand.md` as a starting point. A new brand is for a genuinely new
@@ -36,8 +57,8 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
    (`kino fonts` lists fonts settable as `brand.font`/`brand.labelFont` — downloaded on demand.)
    Brands are **optional markdown** — `brands/<name>/brand.md` (YAML frontmatter for palette/font/voice/
    disclosure + a free-form guidelines body with a **Tone / Voice** section). Run `kino brand <name>` to
-   read a brand's styling + tone rules; with no brand, kino uses its defaults. (Set the brand via
-   `spec.brand` or a project's `project.json`.) **New brand? Do Brand discovery (above) first.**
+   read a brand's styling + tone rules; with no brand, the spec's own `colors` carries the look. (Set the
+   brand via `spec.brand` or a project's `project.json`.) **New brand? Do Brand discovery (above) first.**
 2. Author a spec (schema below). **Opener:** prefer a cold open on your strongest footage (see Trailer
    shape) before a mesh caption card. **Copy:** read `ad-voice` skill before writing segment `text`/`caption`
    — follow the brand's Tone / Voice dial, then the anti-slop rules. Keep captions short.
@@ -88,7 +109,9 @@ re-bill. One presenter clip is generated per build, so every presenter beat must
 
 ## Spec schema
 ```jsonc
-{ "brand": "<brand>", "title": "kebab-case", "format": ["9:16"], "voice": "<alias>",
+{ "title": "kebab-case", "format": ["9:16"], "voice": "<alias>",
+  "colors": "midnight",          // recommended unless a brand declares colors — `kino colors`
+  "brand": "<brand>",            // optional — tone/voice, fonts, disclosures, aliases
   "provider": "none",            // none | heygen | hedra | replicate (else brand.defaultProvider)
   "background": "custom",        // prefer custom+backgroundComponent over mesh for brand identity
   "backgroundComponent": "brand-wash", // bare id → assets-lib/backgrounds/ (or path / brand field)

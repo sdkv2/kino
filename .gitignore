@@ -2,6 +2,7 @@ node_modules/
 .kino-cache/
 out/
 .env
+.env.bak
 *.log
 dist/
 __pycache__/

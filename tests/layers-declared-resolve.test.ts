@@ -57,6 +57,7 @@ function writeSpec(specsDir: string, layers?: unknown[]): string {
   const spec: Record<string, unknown> = {
     title: "declared-layer-resolve",
     format: ["9:16"],
+    colors: "midnight", // these projects assign no brand, and a build must declare a palette
     segments: [{ kind: "scene", text: "hook", caption: "hook" }],
   };
   if (layers !== undefined) spec.layers = layers;

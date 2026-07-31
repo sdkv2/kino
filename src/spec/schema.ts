@@ -8,9 +8,38 @@ import { z } from "zod";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS } from "../render/textStyles.js";
 import { EASE_NAMES } from "../render/bgparams.js";
 import { EXTRA_PARAM_SLOTS } from "../render/shaderSource.js";
+import { PALETTE_PRESET_NAMES } from "../config/palettes.js";
 import { LAYER_SOURCE_KINDS } from "../render/layerSpec.js";
 
 const EaseEnum = z.enum(EASE_NAMES);
+
+const PalettePresetEnum = z.enum(PALETTE_PRESET_NAMES);
+const Hex = z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "colour must be a hex like #1d4ed8");
+/**
+ * The spec's colour scheme: a preset name, or a block of roles that may name a preset to start
+ * from. Legacy literal names (night/white/mint/gold/green) are accepted alongside the roles, same
+ * as brand.md — one colour vocabulary across both files. Strict, so a typo'd role is an error
+ * rather than a silently-ignored key.
+ */
+const SpecColors = z.union([
+  PalettePresetEnum,
+  z
+    .object({
+      preset: PalettePresetEnum.optional(),
+      bg: Hex.optional(),
+      fg: Hex.optional(),
+      accent: Hex.optional(),
+      accent2: Hex.optional(),
+      deep: Hex.optional(),
+      night: Hex.optional(),
+      white: Hex.optional(),
+      mint: Hex.optional(),
+      gold: Hex.optional(),
+      green: Hex.optional(),
+    })
+    .strict()
+    .refine((c) => Object.keys(c).length > 0, "colors: {} declares nothing — name a preset or set roles"),
+]);
 
 const CaptionStyle = z.enum(CAPTION_STYLES);
 const CaptionAnimation = z.enum(CAPTION_ANIMATIONS);
@@ -461,6 +490,10 @@ const Segment = z.preprocess(normalizeSegment, SegmentUnion);
 const SpecObject = z
   .object({
     brand: z.string().optional(), // falls back to the project's project.json brand
+    // Colour scheme: "midnight" | "noir" | "paper", or { preset?, bg?, fg?, accent?, accent2?, deep? }.
+    // A named preset replaces all five roles; role keys in the same block override it. Required
+    // unless a brand declares colours — see assertColorScheme in spec/validate.ts. `kino colors`.
+    colors: SpecColors.optional(),
     title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
     kinoVersion: z.string().optional(), // kino version this spec was authored/built against — mismatch warns, doesn't fail
     // `*-4k` = UHD canvas (e.g. 9:16-4k → 2160×3840). Same aspect as the 1080-class twin.

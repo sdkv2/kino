@@ -14,22 +14,8 @@ import { KINO_VERSION } from "../version.js";
 import { validateSegmentFx } from "../render/maskSpec.js";
 import { validatePostFx } from "../render/postSpec.js";
 import { validateLayers } from "../render/layerSpec.js";
-
-export interface ComplianceHit { phrase: string; where: string; }
-
-export function complianceScan(spec: Spec, brand: Brand): ComplianceHit[] {
-  const hits: ComplianceHit[] = [];
-  spec.segments.forEach((seg, i) => {
-    for (const field of ["text", "caption"] as const) {
-      const val = (seg as Record<string, unknown>)[field];
-      if (typeof val !== "string") continue;
-      for (const p of brand.bannedPhrases) {
-        if (val.toLowerCase().includes(p.toLowerCase())) hits.push({ phrase: p, where: `segment[${i}].${field}` });
-      }
-    }
-  });
-  return hits;
-}
+import { PALETTE_PRESET_NAMES, PALETTE_ROLES } from "../config/palettes.js";
+import { isLightSurface } from "../render/contrast.js";
 
 // The resolver trio below collapses spec + brand defaults into the concrete values the pipeline
 // needs, applying the brand-alias passthrough (an alias resolves via brand.voiceAliases /
@@ -263,6 +249,33 @@ export function assertVoiceTags(spec: Spec, brand: Brand): void {
   );
 }
 
+/**
+ * Nudge toward declaring a colour scheme — on the spec, or on a brand that actually sets `colors`.
+ *
+ * Falling back to the house palette used to be totally silent: a spec with no brand rendered in
+ * kino's own navy/mint and looked deliberate, so the cheapest way to get five hex values of your
+ * own was to scaffold an entire brand you had no other use for. This is only a warning (not a
+ * throw) so an existing brandless spec keeps building — but the fallback now says so out loud.
+ */
+export function assertColorScheme(spec: Spec, brand: Brand): void {
+  if (spec.colors != null || brand.colorsDeclared) return;
+  log.warn(
+    `No colour scheme — rendering in kino's house palette. Set "colors" on the spec — a preset ` +
+      `(${PALETTE_PRESET_NAMES.map((n) => `"${n}"`).join(" | ")}), or the roles { ${PALETTE_ROLES.join(", ")} } ` +
+      "— or assign a brand whose brand.md declares colors. Run `kino colors` to see the presets.",
+  );
+}
+
+/** The cinematic finish darkens frame edges — on a light base that reads as a dirty border. */
+export function assertLightSchemeFinish(spec: Spec, brand: Brand): void {
+  const film = resolveFilm(spec, brand);
+  if (!isLightSurface(brand.colors.bg) || film === 0) return;
+  log.warn(
+    `Light colour scheme (bg ${brand.colors.bg}) with the cinematic finish on — the vignette reads ` +
+      'as a dirty border on a light base. Set "film": 0 for a clean, flat render.',
+  );
+}
+
 /** Soft warning when the spec was authored/built against a different kino version. */
 export function assertKinoVersion(spec: Spec): void {
   if (spec.kinoVersion && spec.kinoVersion !== KINO_VERSION) {
@@ -271,10 +284,7 @@ export function assertKinoVersion(spec: Spec): void {
 }
 
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
-  const hits = complianceScan(spec, brand);
-  if (hits.length) {
-    throw new Error("Compliance: banned phrases found — " + hits.map((h) => `"${h.phrase}" @ ${h.where}`).join("; "));
-  }
+  assertColorScheme(spec, brand);
   const fxErrors = spec.segments.flatMap((seg, i) => validateSegmentFx(seg, i));
   if (fxErrors.length) throw new Error(fxErrors.join("\n"));
   const layerErrors = validateLayers((spec as { layers?: unknown }).layers, spec.segments.length);
@@ -290,6 +300,7 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertBackgroundChoice(spec, brand);
   assertCaptionModes(spec, brand);
   assertVoiceTags(spec, brand);
+  assertLightSchemeFinish(spec, brand);
   assertKinoVersion(spec);
 }
 

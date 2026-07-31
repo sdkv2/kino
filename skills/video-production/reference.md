@@ -70,7 +70,7 @@ voiceover, add `--real` for true timing. Stills/storyboards land in `out/<title>
 
 ## Brand config (`brands/<name>/brand.md` YAML frontmatter)
 `name, colors{night,mint,green,white,gold}, font, labelFont?, captionStyle{fontSize,strokeWidth,background?,style?,animation?},
-disclosure, presenterDisclosure?, bannedPhrases[], defaultVoice, defaultLook,
+disclosure, presenterDisclosure?, defaultVoice, defaultLook,
 defaultProvider?, captionMode?, voiceAliases{}, lookAliases{}` (+ the logo/background/provider fields below).
 
 Frontmatter is validated **strict** — an unknown key throws at parse, not silently ignored. The

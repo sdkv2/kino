@@ -5,6 +5,7 @@ A **spec** is the JSON file that describes one video. kino validates it, generat
 The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) — invalid specs fail the build with a precise error.
 
 - [Top-level fields](#top-level-fields)
+- [Colour scheme](#colour-scheme)
 - [Segments](#segments) — [scene](#scene-segment) · [video](#video-segment) · [motion](#motion-segment)
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
@@ -23,7 +24,8 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 |---|---|---|---|
 | `title` | string (kebab-case) | ✅ | Output basename; must match `^[a-z0-9-]+$`. |
 | `segments` | [Segment](#segments)[] | ✅ | The beats, in order (≥ 1). |
-| `brand` | string | — | Brand name; falls back to the project's `project.json` brand. |
+| `colors` | preset name \| roles object | — | The [colour scheme](#colour-scheme): `"midnight"`/`"noir"`/`"paper"`, or `{ preset?, bg?, fg?, accent?, accent2?, deep? }`. Recommended: unset (and no brand `colors`) still builds, but warns and falls back to kino's house palette (`midnight`). |
+| `brand` | string | — | Brand name; falls back to the project's `project.json` brand. Optional: a brand is for shared tone/voice, fonts, disclosures and voice aliases — colours alone don't need one. |
 | `format` | `("9:16"\|"3:4"\|"16:9"\|"9:16-4k"\|"3:4-4k"\|"16:9-4k")[]` | — | Output formats. Default `["9:16"]` (1080-class). `*-4k` = UHD **output** (e.g. `9:16-4k` → 2160×3840) composed at the 1080-class canvas — same frame, 4× the pixels. Motion layouts adapt via `--kino-aspect`. |
 | `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
 | `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. |
@@ -59,6 +61,44 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 >   "keyframes": [{ "at": 0, "params": { "opacity": 0 } }]
 > }]
 > ```
+
+## Colour scheme
+
+Declare a palette with `colors` on the spec, or on a brand whose `brand.md` has a `colors` block. A build with neither still renders — on kino's own `midnight` palette — but validate warns, so the fallback is no longer silent.
+
+**Five roles**, named for what each slot does. Run `kino colors` to see the presets with swatches.
+
+| Role | Job | Pre-rename alias |
+|---|---|---|
+| `bg` | Page/background base — the canvas everything sits on | `night` |
+| `fg` | Text ink; the default caption colour | `white` |
+| `accent` | Primary accent — highlights, kicker chips, background tint | `mint` |
+| `accent2` | Secondary/bright accent — reserved emphasis | `gold` |
+| `deep` | Deep fill / active-word highlight | `green` |
+
+The literal names are the palette's pre-role vocabulary. They still work in both `brand.md` and `colors`; a role key wins over its own alias when a block carries both.
+
+**Three ways to set it:**
+
+```jsonc
+"colors": "noir"                                     // a preset — all five roles
+"colors": { "bg": "#0a0a0c", "accent": "#e6b34a" }   // roles; unset ones keep the brand/house value
+"colors": { "preset": "noir", "accent": "#ff0055" }  // a preset with one role deviating
+```
+
+**Presets:**
+
+| Preset | Look | Roles |
+|---|---|---|
+| `midnight` | The historic kino house palette: dark navy, mint accent, gold secondary | `bg #0b1020` `fg #ffffff` `accent #80e2b4` `accent2 #d99a20` `deep #0c8d64` |
+| `noir` | Editorial/luxury: near-black, warm amber, cream secondary | `bg #0c0c0e` `fg #f4f0e6` `accent #e0a83c` `accent2 #f2dfb4` `deep #a85a1e` |
+| `paper` | Light: warm paper base, near-black ink, saturated blue | `bg #f4f1ea` `fg #16130f` `accent #1d4ed8` `accent2 #d9463b` `deep #0f2a7a` |
+
+**Resolution**, weakest first: house defaults ‹ `brand.md` `colors` ‹ a preset the spec names ‹ the spec's own role keys. Naming a preset **replaces all five roles** rather than merging over the brand — `"noir"` under a mint-accented brand should be noir, not a hybrid. Per-role keys in the same block are how you deviate on purpose.
+
+Palette colours reach motion graphics as `--kino-bg` / `--kino-fg` / `--kino-accent` / `--kino-accent2` / `--kino-deep` (plus the legacy `--kino-night`-style aliases), and drive caption ink, kicker chips, and the default background gradient (`[accent, deep, accent2]`).
+
+> **Light schemes:** pair `paper` (or any light `bg`) with `"film": 0`. The cinematic finish darkens frame edges, which reads as a dirty border on a light base — validate warns if you don't.
 
 ## Segments
 
@@ -864,7 +904,11 @@ voiceover, ducking model, sourcing beds — see [Audio](audio.md).
 
 ## brand.md
 
+Brands are **optional**. A spec that sets [`colors`](#colour-scheme) needs no brand at all — reach for one when several specs should share tone/voice guidelines, fonts, disclosures, voice/look aliases, or banned phrases. A brand's `colors` block covers every spec in the project, and each spec can still override it.
+
 The brand config lives at `brands/<name>/brand.md`: a YAML **frontmatter** block (between `---` fences) followed by a free-form **guidelines body**. The frontmatter supplies palette, typography, disclosures, and avatar/voice defaults (validated by [`src/config/brand.ts`](../src/config/brand.ts)); the body is prose for the driving agent. The frontmatter is merged over `DEFAULT_BRAND`, so every field is optional — anything omitted uses kino's defaults. The guidelines body carries no schema and is surfaced to the agent via `kino brand <name>`.
+
+> A `brand.md` with **no** `colors` block does not count as a declared [colour scheme](#colour-scheme) — specs under it fall back to kino's `midnight` palette (with a validate warning) unless they set their own `colors`.
 
 ```md
 ---
@@ -872,7 +916,6 @@ name: acme
 colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64" }
 # disclosure: AI-generated   # optional — shown on every video when set
 # defaultVoice: <elevenlabs-voice-id>   # or set per spec
-bannedPhrases: [get the job, guaranteed interview, land more interviews]
 ---
 # acme — brand guidelines
 
@@ -888,7 +931,7 @@ bannedPhrases: [get the job, guaranteed interview, land more interviews]
   - "Paste the job post. We'll rebuild the bullets that actually match."
 - **Never say like this:**
   - "Unlock your career potential with our innovative platform."
-- **Banned (brand):** passionate, journey, dream job
+- **Banned (brand):** passionate, journey, dream job, get the job, guaranteed interview, land more interviews
 - **Preferred words:** match, paste, rebuild, callbacks, bullets
 
 _Tone / Voice is agent guidance (see `skills/ad-voice`). Not parsed by the renderer._
@@ -919,7 +962,6 @@ The frontmatter fields:
 | `backgroundColors` | string[] | — | Palette for animated backgrounds (else accent/deep/accent2). |
 | `backgroundIntensity` | number | — | 0..1 motion strength (default 0.5). |
 | `captionMode` | `phrase\|words` | — | Default caption style. |
-| `bannedPhrases` | string[] | — | Phrases that **fail the build** (compliance). Default `[]`. |
 | `defaultVoice` / `defaultLook` / `defaultProvider` | string / string / provider | — | Avatar/voice defaults. |
 | `avatarImage` | string | — | Portrait source for Hedra/Replicate. |
 | `hedraModelId`, `replicateModel`, `replicateImageField`, `replicateAudioField`, `replicateInput` | — | Engine-specific avatar settings. |
@@ -964,11 +1006,11 @@ caption cut — see [`fontWeights`](#top-level-fields).
 
 ## project.json
 
-Assigns a brand to a project and sets default overrides (validated by [`src/config/projectConfig.ts`](../src/config/projectConfig.ts)).
+Optionally assigns a brand to a project and sets default overrides (validated by [`src/config/projectConfig.ts`](../src/config/projectConfig.ts)). A project with `{}` is valid — its specs then set their own [`colors`](#colour-scheme).
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `brand` | string | ✅ | Brand to use for specs in this project. |
+| `brand` | string | — | Brand to use for specs in this project. Omit for a brandless project. |
 | `provider` | provider | — | Default presenter engine. |
 | `background` | preset | — | Default background. |
 | `font` | string | — | Default font override. |
@@ -981,6 +1023,7 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
 ```json
 {
   "title": "lie-test",
+  "colors": "noir",
   "background": "aurora",
   "segments": [
     { "kind": "motion", "source": "motion/hook.html", "text": "Most cover letters get rejected in six seconds." },
@@ -995,6 +1038,7 @@ Assigns a brand to a project and sets default overrides (validated by [`src/conf
 {
   "title": "acme-demo",
   "format": ["9:16", "3:4"],
+  "colors": { "preset": "midnight", "accent": "#2563eb" },
   "background": "aurora",
   "backgroundIntensity": 0.6,
   "backgroundKeyframes": [

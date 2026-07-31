@@ -4,6 +4,37 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **One-line installer:** `bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)`
+  clones kino (or updates an existing checkout) and hands off to `setup.mjs`. Fixes the stdin trap
+  that a plain `curl | bash` has for any installer with interactive prompts — piping into `bash`
+  consumes stdin as the script text, so `setup.mjs` would see no TTY and silently skip every
+  question; `install.sh` re-attaches `/dev/tty` before the handoff. Also: `setup.mjs`'s TTS and
+  avatar-provider keys are no longer asked one by one — each is a yes/no gate first (avatar
+  defaults no, matching kino's own `provider: none` default), and saying yes to an avatar shows a
+  numbered multi-select for which provider(s) to set up. Non-interactive runs are unaffected.
+- **BREAKING: `brand.md`'s `bannedPhrases` is removed — compliance is no longer build-enforced.**
+  The frontmatter field and the `complianceScan` check it drove are gone; a segment using a banned
+  phrase no longer fails the build. Author banned phrases in the existing prose **Banned (brand):**
+  bullet (Tone / Voice section) instead — it was always read by the `ad-voice` skill, and is now the
+  only place the list lives. `kino init`'s scaffold moved its example phrases there.
+- **Colour schemes in the spec — and brands are no longer the only way to set a palette.** A spec now
+  carries `colors`: a preset name (`"midnight"`, `"noir"`, `"paper"`), a block of roles
+  (`{ bg, fg, accent, accent2, deep }`, legacy names still accepted), or a preset with per-role
+  overrides. A named preset replaces all five roles; role keys layer on top. `kino colors` lists them
+  with swatches. A brand is now for what several specs should *share* — tone/voice, fonts,
+  disclosures, voice aliases — not the price of admission for five hex values.
+- **Validate now warns when nothing declares a colour scheme** — a spec with no `colors` and no brand
+  `colors` (including a `brand.md` with no `colors` block) still builds, falling back to kino's own
+  `midnight` palette exactly as before, but the fallback is no longer silent. Add `"colors"` (or a
+  brand) to quiet the warning.
+- **`kino init` no longer scaffolds a brand unless you name one.** Bare `kino init` creates `.env` +
+  `projects/default/` with a sample spec that sets its own `colors`, and no `brands/` directory.
+  `kino init acme` behaves as before.
+- **Kicker ink and caption stroke are derived from the palette** instead of hardcoded around a dark
+  base: a pill's text colour now comes from the chip's contrast, and the `stroke` caption halo from
+  the ink's. Both were near-black constants that turned a light scheme into black-on-black. Every
+  palette with a light `fg` — i.e. every one predating this change — resolves to exactly the old
+  values, so existing renders are unaffected.
 - **Any Google Fonts family:** `brand.font`, `brand.labelFont`, `project.json`'s `font`, `--font` and
   `kino glyphs --font` now accept **any** family on Google Fonts, not just the 14 curated names. The
   curated list was never a technical limit — the downloader could always fetch any family — so it is
