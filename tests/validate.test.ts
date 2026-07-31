@@ -29,8 +29,8 @@ describe("assertCaptionModes", () => {
     const spec = {
       segments: [
         { kind: "video", source: "a.png", text: "Spoken.", caption: "Different hook", captionMode: "phrase" },
-        { kind: "scene", text: "No caption here.", cta: false },
-        { kind: "scene", text: "Same words.", caption: "Same words.", cta: false },
+        { kind: "scene", text: "No caption here." },
+        { kind: "scene", text: "Same words.", caption: "Same words." },
       ],
     } as unknown as Spec;
     expect(warns(spec, wordsBrand)).toBe("");

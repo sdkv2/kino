@@ -19,9 +19,6 @@ describe("captionBandBottom", () => {
   it("returns 0 for a presenter-less scene beat (hero caption is centered, not in the bottom band)", () => {
     expect(captionBandBottom(seg({ kind: "scene", caption: "hook" }), false)).toBe(0);
   });
-  it("returns 0 for a presenter-less CTA beat (end card is hero-centered, not lower-third)", () => {
-    expect(captionBandBottom(seg({ kind: "scene", caption: "download free", cta: true }), false)).toBe(0);
-  });
   it("returns the band for an app beat with a caption", () => {
     expect(captionBandBottom(seg({ kind: "video", source: "x.png", caption: "look" }), true)).toBe(CAPTION_BOTTOM);
   });
@@ -39,9 +36,8 @@ describe("hasCaptionContent", () => {
 });
 
 describe("isHeroCaption", () => {
-  it("is true for all presenter-less scene beats (hooks and CTA end cards)", () => {
+  it("is true for all presenter-less scene beats (hooks and end cards)", () => {
     expect(isHeroCaption({ kind: "scene" }, false)).toBe(true);
-    expect(isHeroCaption({ kind: "scene", cta: true }, false)).toBe(true);
     expect(isHeroCaption({ kind: "scene" }, true)).toBe(false);
     expect(isHeroCaption({ kind: "video" }, false)).toBe(false);
   });

@@ -5,8 +5,8 @@ import type { KinoSegment } from "./props.js";
 // graphics as the --kino-caption-bottom CSS var so authors can keep their own text clear of it.
 export const CAPTION_BOTTOM = 470;
 
-/** Presenter-less talking beats (including CTA end cards) centre the caption as the hero. */
-export function isHeroCaption(s: Pick<KinoSegment, "kind" | "cta">, hasAvatar: boolean): boolean {
+/** Presenter-less talking beats centre the caption as the hero. */
+export function isHeroCaption(s: Pick<KinoSegment, "kind">, hasAvatar: boolean): boolean {
   return !hasAvatar && s.kind === "scene";
 }
 

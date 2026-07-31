@@ -40,12 +40,11 @@ Brand defaults: `brand.defaultLook` (fallback look/portrait), `brand.avatarImage
 An `avatar` segment speaks its `text` on camera:
 
 ```json
-{ "source": "avatar:", "text": "Paste the job post — we rebuild the bullets.", "cta": true }
+{ "source": "avatar:", "text": "Paste the job post — we rebuild the bullets.", "caption": "we rebuild the bullets" }
 ```
 
 - **`text`** — spoken VO (required); drives lip-sync + caption timing.
 - **`caption`** — on-screen line. Omit → no caption this beat (VO still speaks `text`).
-- **`cta`** — avatar-only; marks the call-to-action beat.
 - Also honors the shared beat controls: `shot`, `emphasis`, `caption*` overrides, `captionKeyframes`, `texts`, and `motionOverlay` (a motion graphic composited over the presenter). See [Captions](spec-reference.md#captions) and [Motion graphics](motion-graphics.md).
 
 Mix freely with `app` and `motion` beats — the pipeline trims VO to the contiguous on-camera runs, lip-syncs only those, and stitches everything back on one timeline.
