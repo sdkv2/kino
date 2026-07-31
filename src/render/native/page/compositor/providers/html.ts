@@ -25,9 +25,12 @@ export function createHtmlSource(opts: {
   fps: number;
   hasTier2: boolean;
   scale: number;
+  /** Force the raster cadence when the caller knows it (e.g. word-keyed captions, whose
+   *  markup carries no CSS vars for classifyRaster to detect). */
+  cadence?: RasterCadence;
 }): TextureSource {
   const sampleHtml = typeof opts.html === "function" ? opts.html(0) : opts.html;
-  const cadence = classifyRaster(sampleHtml, { hasTier2: opts.hasTier2 });
+  const cadence = opts.cadence ?? classifyRaster(sampleHtml, { hasTier2: opts.hasTier2 });
   const cache = new Map<string, HTMLCanvasElement>();
   const templates = new Map<string, HtmlTemplate>();
   let tex: WebGLTexture | null = null;
