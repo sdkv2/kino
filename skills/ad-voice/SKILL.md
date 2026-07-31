@@ -31,6 +31,8 @@ the owner before you write a personality. Then:
 
 Lives in `brands/<name>/brand.md` **guidelines body** (not frontmatter — kino never parses tone).
 `kino init` scaffolds this. Agents must respect filled fields; never invent a personality that contradicts them.
+Frontmatter itself (palette, fonts, `defaultVoice`, `disclosure`, look/voice aliases) is a separate
+concern — see `docs/spec-reference.md` § `brand.md` for that full field list.
 
 ```markdown
 ## Tone / Voice
