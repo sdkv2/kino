@@ -56,6 +56,16 @@ class ElectronHostProc {
     if (process.platform === "win32") {
       this.ready = new Promise((resolve, reject) => {
         const server = createServer((sock: Socket) => {
+          // A socket 'error' with no listener is re-thrown as an UNCAUGHT EXCEPTION, and this one
+          // fires on the normal shutdown path: close() ends the socket and, a second later,
+          // SIGKILLs the child, so Windows resets the connection and the pending read returns
+          // ECONNRESET. Nothing is wrong — we are the ones terminating the peer — but with no
+          // listener it took down the whole process. In CI that surfaced as vitest reporting
+          // "Uncaught Exception: read ECONNRESET" and failing a run in which every one of the 1373
+          // tests had passed. The worker side of this socket has always had a handler
+          // (electron/worker.ts); the host side did not. Swallow it: `alive`, the child's `exit`
+          // event and the send() timeouts already model a dead host.
+          sock.on("error", () => {});
           this.cmd = sock;
           server.close();
           resolve();
