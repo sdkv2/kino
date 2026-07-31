@@ -55,9 +55,10 @@ npx @sdkv2/kino build projects/default/specs/sample.json --draft  # free structu
 npx @sdkv2/kino build projects/default/specs/sample.json          # real render → projects/default/out/sample/
 ```
 `init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with
-no editing. Swap in your own spec once the preview looks right. Every spec declares a colour scheme —
-`"colors": "midnight" | "noir" | "paper"`, or your own roles (`kino colors`); name a brand
-(`kino init acme`) when several specs should also share tone, fonts and disclosures.
+no editing. Swap in your own spec once the preview looks right. Set a colour scheme with
+`"colors": "midnight" | "noir" | "paper"`, or your own roles (`kino colors`) — recommended on every
+spec (unset falls back to `midnight` with a warning); name a brand (`kino init acme`) when several
+specs should also share tone, fonts and disclosures.
 
 Needs Node 22+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Real voiceover needs
 an [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project);
@@ -89,7 +90,7 @@ Details: [`skills/README.md`](skills/README.md).
 - **Fonts & stock media** — any Google font by name (`kino fonts`); Pexels video and stills
   (`kino pexels`, `kino photos`) pulled straight into project assets.
 - **Colour schemes** — three stock palettes or your own five roles, set per spec (`kino colors`).
-  No silent default: a build with no scheme fails validation.
+  An unset scheme still builds, on kino's house palette, but validate warns about it.
 - **Branding & compliance** — optional brand-wide palette, fonts, logo, AI `disclosure`, and
   `bannedPhrases` that fail the build.
 - **Inspect & iterate** — `inspect` (plan as JSON), `still`/`storyboard` (free previews),

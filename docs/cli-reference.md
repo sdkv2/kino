@@ -301,7 +301,7 @@ kino backgrounds
 ```
 
 ### `colors`
-List the stock colour schemes (`midnight`, `noir`, `paper`) with truecolor swatches, the five palette roles and what each paints, and the ways a spec sets one. Every build must declare a scheme — on the spec or on a brand. See [Spec reference → Colour scheme](spec-reference.md#colour-scheme).
+List the stock colour schemes (`midnight`, `noir`, `paper`) with truecolor swatches, the five palette roles and what each paints, and the ways a spec sets one. A build with no scheme (on the spec or a brand) still renders, on `midnight`, but validate warns about it. See [Spec reference → Colour scheme](spec-reference.md#colour-scheme).
 
 ```
 kino colors

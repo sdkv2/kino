@@ -75,39 +75,52 @@ describe("spec.colors schema", () => {
 });
 
 describe("assertColorScheme", () => {
+  afterEach(() => vi.restoreAllMocks());
   const noColors = { ...DEFAULT_BRAND };
 
-  it("throws when neither the spec nor the brand declares a palette", () => {
-    expect(() => assertColorScheme(specOf({}), noColors)).toThrow(/No colour scheme/);
+  it("warns (does not throw) when neither the spec nor the brand declares a palette", () => {
+    const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+    expect(() => assertColorScheme(specOf({}), noColors)).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/No colour scheme/));
   });
 
-  it("passes on a spec preset, and on spec roles", () => {
-    expect(() => assertColorScheme(specOf({ colors: "noir" }), noColors)).not.toThrow();
-    expect(() => assertColorScheme(specOf({ colors: { accent: "#ff0055" } }), noColors)).not.toThrow();
+  it("stays quiet on a spec preset, and on spec roles", () => {
+    const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+    assertColorScheme(specOf({ colors: "noir" }), noColors);
+    assertColorScheme(specOf({ colors: { accent: "#ff0055" } }), noColors);
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  it("passes when a brand.md declares colors", () => {
+  it("stays quiet when a brand.md declares colors", () => {
+    const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
     const brand = loadBrand(brandDirWith('---\nname: acme\ncolors: { accent: "#2563eb" }\n---\nguide\n'));
     expect(brand.colorsDeclared).toBe(true);
-    expect(() => assertColorScheme(specOf({}), brand)).not.toThrow();
+    assertColorScheme(specOf({}), brand);
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  it("throws for a brand.md with no colors block — the house palette is not a choice", () => {
+  it("warns for a brand.md with no colors block — the house palette is not a choice", () => {
+    const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
     const brand = loadBrand(brandDirWith("---\nname: acme\nfont: Inter\n---\nguide\n"));
     expect(brand.colorsDeclared).toBe(false);
     expect(brand.colors).toEqual(DEFAULT_BRAND.colors);
-    expect(() => assertColorScheme(specOf({}), brand)).toThrow(/No colour scheme/);
+    assertColorScheme(specOf({}), brand);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/No colour scheme/));
   });
 
   it("names both escapes and every preset", () => {
-    expect(() => assertColorScheme(specOf({}), noColors)).toThrow(/"midnight" \| "noir" \| "paper"/);
-    expect(() => assertColorScheme(specOf({}), noColors)).toThrow(/brand/);
+    const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+    assertColorScheme(specOf({}), noColors);
+    const msg = warn.mock.calls[0][0] as string;
+    expect(msg).toMatch(/"midnight" \| "noir" \| "paper"/);
+    expect(msg).toMatch(/brand/);
   });
 
-  it("runs before the asset walk, so a missing palette fails cheaper than a missing file", () => {
-    const spec = { segments: [{ kind: "video", source: "nope.mp4" }] } as unknown as Spec;
+  it("does not fail the build — a brandless, colourless spec still validates", () => {
+    const spec = { title: "t", segments: [{ text: "hi" }] } as unknown as Spec;
     const project = { assetPath: (r: string) => "/nope/" + r } as unknown as Parameters<typeof validateSpec>[2];
-    expect(() => validateSpec(spec, noColors, project)).toThrow(/No colour scheme/);
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    expect(() => validateSpec(SpecSchema.parse(spec), noColors, project)).not.toThrow();
   });
 });
 

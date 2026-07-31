@@ -10,7 +10,7 @@ You supply the creative; the CLI handles VO (ElevenLabs) → avatar (optional) �
 
 ## Colour scheme (every spec declares one)
 
-**A build has no default palette — declare one or it fails validation.** Cheapest form is one line:
+**Declare one — an unset scheme still builds (falls back to kino's `midnight`) but validate warns.** Cheapest form is one line:
 
 ```jsonc
 "colors": "midnight"                                  // or "noir" | "paper"
@@ -106,7 +106,7 @@ re-bill. One presenter clip is generated per build, so every presenter beat must
 ## Spec schema
 ```jsonc
 { "title": "kebab-case", "format": ["9:16"], "voice": "<alias>",
-  "colors": "midnight",          // REQUIRED unless a brand declares colors — `kino colors`
+  "colors": "midnight",          // recommended unless a brand declares colors — `kino colors`
   "brand": "<brand>",            // optional — tone/voice, fonts, disclosures, aliases
   "provider": "none",            // none | heygen | hedra | replicate (else brand.defaultProvider)
   "background": "custom",        // prefer custom+backgroundComponent over mesh for brand identity

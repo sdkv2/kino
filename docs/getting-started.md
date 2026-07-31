@@ -67,7 +67,7 @@ Every build runs inside a **project**:
 
 ## Pick a colour scheme
 
-Every build declares one — there is no silent house palette. The cheapest version is one line in the spec:
+Recommended on every build — an unset scheme still renders (on kino's `midnight` house palette) but validate warns about it. The cheapest version is one line in the spec:
 
 ```jsonc
 "colors": "midnight"   // or "noir" | "paper", or { "bg": "#…", "accent": "#…", … }
@@ -93,7 +93,7 @@ A spec is a JSON file describing the video as a list of **beats** (segments). Ea
 }
 ```
 
-`title` must be kebab-case; `segments` needs at least one beat; `colors` is required unless a brand declares them. Full field list in the [Spec reference](spec-reference.md).
+`title` must be kebab-case; `segments` needs at least one beat; `colors` is recommended unless a brand declares them (falls back to `midnight` with a warning otherwise). Full field list in the [Spec reference](spec-reference.md).
 
 The render loop is built for tight iteration — every preview step is free:
 

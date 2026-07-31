@@ -23,7 +23,8 @@ function swatch(hex: string, palette: Palette): string {
 // / `kino transitions`.
 export async function colors(): Promise<void> {
   const w = process.stdout.write.bind(process.stdout);
-  w("Colour schemes — every build must declare one, on the spec or on a brand.\n\n");
+  w("Colour schemes — declare one on the spec or on a brand. Unset falls back to kino's own\n");
+  w('"midnight" palette, with a validate warning.\n\n');
 
   w("  Roles:\n");
   for (const role of PALETTE_ROLES) w(`    ${role.padEnd(9)} ${ROLE_NOTES[role]}\n`);

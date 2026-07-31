@@ -265,19 +265,19 @@ export function assertVoiceTags(spec: Spec, brand: Brand): void {
 }
 
 /**
- * A build must declare a colour scheme — on the spec, or on a brand that actually sets `colors`.
+ * Nudge toward declaring a colour scheme — on the spec, or on a brand that actually sets `colors`.
  *
- * Falling back to the house palette was the failure this closes: a spec with no brand rendered in
+ * Falling back to the house palette used to be totally silent: a spec with no brand rendered in
  * kino's own navy/mint and looked deliberate, so the cheapest way to get five hex values of your
- * own was to scaffold an entire brand you had no other use for. Nothing warned, because there was
- * nothing to warn about — the fallback was total and silent.
+ * own was to scaffold an entire brand you had no other use for. This is only a warning (not a
+ * throw) so an existing brandless spec keeps building — but the fallback now says so out loud.
  */
 export function assertColorScheme(spec: Spec, brand: Brand): void {
   if (spec.colors != null || brand.colorsDeclared) return;
-  throw new Error(
-    `No colour scheme. Set "colors" on the spec — a preset (${PALETTE_PRESET_NAMES.map((n) => `"${n}"`).join(" | ")}), ` +
-      `or the roles { ${PALETTE_ROLES.join(", ")} } — or assign a brand whose brand.md declares colors. ` +
-      "Run `kino colors` to see the presets.",
+  log.warn(
+    `No colour scheme — rendering in kino's house palette. Set "colors" on the spec — a preset ` +
+      `(${PALETTE_PRESET_NAMES.map((n) => `"${n}"`).join(" | ")}), or the roles { ${PALETTE_ROLES.join(", ")} } ` +
+      "— or assign a brand whose brand.md declares colors. Run `kino colors` to see the presets.",
   );
 }
 
@@ -299,7 +299,6 @@ export function assertKinoVersion(spec: Spec): void {
 }
 
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
-  // First: a missing palette is cheap to fix and fails before any asset walk or API spend.
   assertColorScheme(spec, brand);
   const hits = complianceScan(spec, brand);
   if (hits.length) {

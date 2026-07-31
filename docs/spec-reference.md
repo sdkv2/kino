@@ -24,7 +24,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 |---|---|---|---|
 | `title` | string (kebab-case) | ✅ | Output basename; must match `^[a-z0-9-]+$`. |
 | `segments` | [Segment](#segments)[] | ✅ | The beats, in order (≥ 1). |
-| `colors` | preset name \| roles object | ✅* | The [colour scheme](#colour-scheme): `"midnight"`/`"noir"`/`"paper"`, or `{ preset?, bg?, fg?, accent?, accent2?, deep? }`. *Required unless a brand declares `colors` — a build must choose a palette rather than inherit kino's. |
+| `colors` | preset name \| roles object | — | The [colour scheme](#colour-scheme): `"midnight"`/`"noir"`/`"paper"`, or `{ preset?, bg?, fg?, accent?, accent2?, deep? }`. Recommended: unset (and no brand `colors`) still builds, but warns and falls back to kino's house palette (`midnight`). |
 | `brand` | string | — | Brand name; falls back to the project's `project.json` brand. Optional: a brand is for shared tone/voice, fonts, disclosures and voice aliases — colours alone don't need one. |
 | `format` | `("9:16"\|"3:4"\|"16:9"\|"9:16-4k"\|"3:4-4k"\|"16:9-4k")[]` | — | Output formats. Default `["9:16"]` (1080-class). `*-4k` = UHD **output** (e.g. `9:16-4k` → 2160×3840) composed at the 1080-class canvas — same frame, 4× the pixels. Motion layouts adapt via `--kino-aspect`. |
 | `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
@@ -64,7 +64,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 
 ## Colour scheme
 
-Every build declares a palette. Set `colors` on the spec, or assign a brand whose `brand.md` has a `colors` block — a build with neither fails validation before any TTS or render spend. There is no silent default: inheriting kino's own navy-and-mint used to look deliberate, which is why declaring is now mandatory.
+Declare a palette with `colors` on the spec, or on a brand whose `brand.md` has a `colors` block. A build with neither still renders — on kino's own `midnight` palette — but validate warns, so the fallback is no longer silent.
 
 **Five roles**, named for what each slot does. Run `kino colors` to see the presets with swatches.
 
@@ -848,7 +848,7 @@ Brands are **optional**. A spec that sets [`colors`](#colour-scheme) needs no br
 
 The brand config lives at `brands/<name>/brand.md`: a YAML **frontmatter** block (between `---` fences) followed by a free-form **guidelines body**. The frontmatter supplies palette, typography, disclosures, and avatar/voice defaults (validated by [`src/config/brand.ts`](../src/config/brand.ts)); the body is prose for the driving agent. The frontmatter is merged over `DEFAULT_BRAND`, so every field is optional — anything omitted uses kino's defaults. The guidelines body carries no schema and is surfaced to the agent via `kino brand <name>`.
 
-> One exception to "every field is optional": a `brand.md` with **no** `colors` block does not satisfy the [colour-scheme requirement](#colour-scheme) — specs under it must set their own `colors`. Inheriting the house palette by omission is the silent default that requirement exists to stop.
+> A `brand.md` with **no** `colors` block does not count as a declared [colour scheme](#colour-scheme) — specs under it fall back to kino's `midnight` palette (with a validate warning) unless they set their own `colors`.
 
 ```md
 ---
