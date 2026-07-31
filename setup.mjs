@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, copyFileSync, appendFileSync, chmodSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 
 const KINO_DIR = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,32 @@ function run(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: "utf8", shell: WIN, ...opts });
 }
 const hasCmd = (cmd, args = ["-version"]) => run(cmd, args).status === 0;
+
+// npm on Debian/Raspberry Pi OS is commonly reconfigured to a user-owned prefix
+// (e.g. ~/.npm-global) so `npm link` doesn't need sudo — but that bin dir isn't on PATH by
+// default, so the link succeeds while `kino` still resolves to nothing. Detect that exact case
+// and patch PATH (this process + the user's shell rc) instead of just telling them to fix it.
+export function fixPathAndRetryKino() {
+  if (WIN) return null;
+  const prefix = run("npm", ["config", "get", "prefix"]).stdout?.trim();
+  if (!prefix) return null;
+  const binDir = resolve(prefix, "bin");
+  if (!existsSync(resolve(binDir, "kino"))) return null; // link isn't there — a different problem
+
+  process.env.PATH = `${binDir}:${process.env.PATH}`;
+  const retry = run("kino", ["--version"]);
+  if (retry.status !== 0) return null;
+
+  const shell = process.env.SHELL ?? "";
+  const rc = resolve(homedir(), shell.includes("zsh") ? ".zshrc" : shell.includes("bash") ? ".bashrc" : ".profile");
+  const rcContent = existsSync(rc) ? readFileSync(rc, "utf8") : "";
+  if (!rcContent.includes(binDir)) {
+    appendFileSync(rc, `${rcContent && !rcContent.endsWith("\n") ? "\n" : ""}export PATH="${binDir}:$PATH"  # added by kino setup\n`);
+    warn(`npm's global bin dir (${binDir}) wasn't on PATH — added it to ${rc}`);
+    note(`this shell is patched already; open a new one (or run "source ${rc}") elsewhere to pick it up`);
+  }
+  return retry;
+}
 
 // yes/no prompt, default yes; non-interactive runs answer yes only when FORCE=1
 async function ask(q) {
@@ -159,7 +186,8 @@ async function main() {
       fail(`npm ${args.join(" ")} failed in ${KINO_DIR}`);
     }
   }
-  const v = run("kino", ["--version"]);
+  let v = run("kino", ["--version"]);
+  if (v.status !== 0) v = fixPathAndRetryKino() ?? v;
   if (v.status !== 0) fail("'kino' is not on your PATH — check that npm's global bin dir is on PATH.");
   ok(`kino ${v.stdout.trim()}`);
 
