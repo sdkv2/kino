@@ -16,22 +16,6 @@ import { validateLayers } from "../render/layerSpec.js";
 import { PALETTE_PRESET_NAMES, PALETTE_ROLES } from "../config/palettes.js";
 import { isLightSurface } from "../render/contrast.js";
 
-export interface ComplianceHit { phrase: string; where: string; }
-
-export function complianceScan(spec: Spec, brand: Brand): ComplianceHit[] {
-  const hits: ComplianceHit[] = [];
-  spec.segments.forEach((seg, i) => {
-    for (const field of ["text", "caption"] as const) {
-      const val = (seg as Record<string, unknown>)[field];
-      if (typeof val !== "string") continue;
-      for (const p of brand.bannedPhrases) {
-        if (val.toLowerCase().includes(p.toLowerCase())) hits.push({ phrase: p, where: `segment[${i}].${field}` });
-      }
-    }
-  });
-  return hits;
-}
-
 // The resolver trio below collapses spec + brand defaults into the concrete values the pipeline
 // needs, applying the brand-alias passthrough (an alias resolves via brand.voiceAliases /
 // lookAliases; an unknown alias is passed through verbatim as a raw id). Note the deliberate
@@ -300,10 +284,6 @@ export function assertKinoVersion(spec: Spec): void {
 
 export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   assertColorScheme(spec, brand);
-  const hits = complianceScan(spec, brand);
-  if (hits.length) {
-    throw new Error("Compliance: banned phrases found — " + hits.map((h) => `"${h.phrase}" @ ${h.where}`).join("; "));
-  }
   const fxErrors = spec.segments.flatMap((seg, i) => validateSegmentFx(seg, i));
   if (fxErrors.length) throw new Error(fxErrors.join("\n"));
   const layerErrors = validateLayers((spec as { layers?: unknown }).layers, spec.segments.length);

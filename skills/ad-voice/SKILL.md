@@ -43,7 +43,7 @@ Lives in `brands/<name>/brand.md` **guidelines body** (not frontmatter — kino 
 - **CTA style:** <direct | soft recommend | urgency> — still name the action
 - **Say like this:** 2–4 sample lines on-voice (real product truth)
 - **Never say like this:** 2–4 off-voice lines (same claim, wrong tone)
-- **Banned (brand):** phrases this brand never uses (beyond kino `bannedPhrases`)
+- **Banned (brand):** phrases this brand never uses
 - **Preferred words:** product nouns / verbs this brand actually says
 ```
 
@@ -107,7 +107,7 @@ line names an observable act, not a promised outcome.
 5. **Max one superlative per spec** unless the brand's proof style demands a named benchmark.
 6. **Could a competitor paste this?** If yes, add product-specific detail or kill the line.
 7. **Captions ≠ VO dump.** Caption = the one line a silent scroller needs; VO can carry the rest.
-8. **Respect brand `bannedPhrases`.** Brand bans still fail the build when set.
+8. **Respect the brand's Banned (brand) list.** Advisory, not enforced — the build won't catch a slip, so treat it as a hard rule anyway.
 
 ## The AI-cadence tells (rhythm, not vocabulary)
 

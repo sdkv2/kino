@@ -66,7 +66,6 @@ export const BrandFrontmatterSchema = z
     backgroundColors: z.array(z.string()).optional(),
     backgroundIntensity: z.number().optional(),
     captionMode: z.enum(["phrase", "words"]).optional(),
-    bannedPhrases: z.array(z.string()).optional(),
     defaultVoice: z.string().optional(),
     defaultLook: z.string().optional(),
     defaultProvider: Provider.optional(),
@@ -116,7 +115,6 @@ export interface Brand {
   backgroundColors?: string[];
   backgroundIntensity?: number;
   captionMode?: "phrase" | "words";
-  bannedPhrases: string[];
   defaultVoice?: string;
   defaultLook?: string;
   defaultProvider?: z.infer<typeof Provider>;
@@ -145,7 +143,6 @@ export const DEFAULT_BRAND: Brand = {
   font: 'Helvetica, "Helvetica Neue", Arial, sans-serif',
   captionStyle: { fontSize: 74, strokeWidth: 9 },
   disclosure: "", // none unless a brand/spec sets it
-  bannedPhrases: [],
   voiceAliases: {},
   lookAliases: {},
 };

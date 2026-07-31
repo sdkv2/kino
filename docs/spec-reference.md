@@ -856,7 +856,6 @@ name: acme
 colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64" }
 # disclosure: AI-generated   # optional — shown on every video when set
 # defaultVoice: <elevenlabs-voice-id>   # or set per spec
-bannedPhrases: [get the job, guaranteed interview, land more interviews]
 ---
 # acme — brand guidelines
 
@@ -872,7 +871,7 @@ bannedPhrases: [get the job, guaranteed interview, land more interviews]
   - "Paste the job post. We'll rebuild the bullets that actually match."
 - **Never say like this:**
   - "Unlock your career potential with our innovative platform."
-- **Banned (brand):** passionate, journey, dream job
+- **Banned (brand):** passionate, journey, dream job, get the job, guaranteed interview, land more interviews
 - **Preferred words:** match, paste, rebuild, callbacks, bullets
 
 _Tone / Voice is agent guidance (see `skills/ad-voice`). Not parsed by the renderer._
@@ -903,7 +902,6 @@ The frontmatter fields:
 | `backgroundColors` | string[] | — | Palette for animated backgrounds (else accent/deep/accent2). |
 | `backgroundIntensity` | number | — | 0..1 motion strength (default 0.5). |
 | `captionMode` | `phrase\|words` | — | Default caption style. |
-| `bannedPhrases` | string[] | — | Phrases that **fail the build** (compliance). Default `[]`. |
 | `defaultVoice` / `defaultLook` / `defaultProvider` | string / string / provider | — | Avatar/voice defaults. |
 | `avatarImage` | string | — | Portrait source for Hedra/Replicate. |
 | `hedraModelId`, `replicateModel`, `replicateImageField`, `replicateAudioField`, `replicateInput` | — | Engine-specific avatar settings. |

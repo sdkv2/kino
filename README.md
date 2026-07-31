@@ -91,8 +91,8 @@ Details: [`skills/README.md`](skills/README.md).
   (`kino pexels`, `kino photos`) pulled straight into project assets.
 - **Colour schemes** — three stock palettes or your own five roles, set per spec (`kino colors`).
   An unset scheme still builds, on kino's house palette, but validate warns about it.
-- **Branding & compliance** — optional brand-wide palette, fonts, logo, AI `disclosure`, and
-  `bannedPhrases` that fail the build.
+- **Branding** — optional brand-wide palette, fonts, logo, AI `disclosure`, and a Tone/Voice style
+  guide (banned phrases included) for the authoring agent to follow.
 - **Inspect & iterate** — `inspect` (plan as JSON), `still`/`storyboard` (free previews),
   `frames` (extract from a render). Built for tight agent loops.
 - **Brands & projects** — an optional shared `brand.md` per brand; every build runs inside its own

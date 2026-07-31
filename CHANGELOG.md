@@ -4,6 +4,11 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **BREAKING: `brand.md`'s `bannedPhrases` is removed — compliance is no longer build-enforced.**
+  The frontmatter field and the `complianceScan` check it drove are gone; a segment using a banned
+  phrase no longer fails the build. Author banned phrases in the existing prose **Banned (brand):**
+  bullet (Tone / Voice section) instead — it was always read by the `ad-voice` skill, and is now the
+  only place the list lives. `kino init`'s scaffold moved its example phrases there.
 - **Colour schemes in the spec — and brands are no longer the only way to set a palette.** A spec now
   carries `colors`: a preset name (`"midnight"`, `"noir"`, `"paper"`), a block of roles
   (`{ bg, fg, accent, accent2, deep }`, legacy names still accepted), or a preset with per-role
