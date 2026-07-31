@@ -45,6 +45,28 @@ async function ask(q) {
   return !/^(n|no)$/i.test(a.trim());
 }
 
+// yes/no prompt, default NO (for opt-in extras like the avatar providers); non-interactive
+// runs answer yes only when FORCE=1
+async function askDefaultNo(q) {
+  if (!TTY) return process.env.FORCE === "1";
+  const a = await question(`  ${q} [y/N] `);
+  return /^(y|yes)$/i.test(a.trim());
+}
+
+// numbered multi-select — no TUI dependency, just a list + comma-separated indices. Returns
+// the chosen subset of `items`, in `items`' own order (not the order typed).
+async function selectMulti(promptText, items, labelOf) {
+  items.forEach((it, i) => console.log(`    ${i + 1}) ${BOLD}${labelOf(it)}${RST}`));
+  const ans = await question(`  ${promptText} ${DIM}(comma-separated numbers, blank = none)${RST} > `);
+  const picked = new Set(
+    ans
+      .split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n >= 1 && n <= items.length),
+  );
+  return items.filter((_, i) => picked.has(i + 1));
+}
+
 // readline prompt; hidden=true suppresses the echo of typed characters
 function question(prompt, { hidden = false } = {}) {
   return new Promise((res) => {
@@ -174,12 +196,52 @@ async function main() {
       skipped.push(name);
     }
   }
+  // Silent skip — for a key the gate below decided not to even ask about (as opposed to
+  // addKey's "asked, but left blank").
+  function skipKey(name) {
+    skipped.push(name);
+  }
 
-  await addKey("ELEVENLABS_API_KEY", "required", "voiceover (every real build)", "https://elevenlabs.io → Profile → API keys");
+  const AVATAR_PROVIDERS = [
+    { key: "HEYGEN_API_KEY", provider: "heygen", label: "HeyGen", desc: "Avatar-IV hosted look — highest quality, most expensive (~20 credits/min)", url: "https://app.heygen.com → Settings → API" },
+    { key: "HEDRA_API_KEY", provider: "hedra", label: "Hedra", desc: "Character-3 — cheap API + free monthly tier", url: "https://www.hedra.com/api-profile" },
+    { key: "REPLICATE_API_TOKEN", provider: "replicate", label: "Replicate", desc: "open-source lip-sync (SadTalker) — pennies/clip", url: "https://replicate.com/account/api-tokens" },
+  ];
+
+  // TTS gate: skip the prompt only when a human actively declines it. A non-interactive run
+  // (CI, FORCE=1) falls straight through to addKey exactly as before — env-var/existing-.env
+  // resolution, no question asked.
+  if (
+    !TTY ||
+    (await ask("Set up voiceover — ElevenLabs (TTS)? Needed for any real, non-mock build with spoken lines."))
+  ) {
+    await addKey("ELEVENLABS_API_KEY", "required", "voiceover (every real build)", "https://elevenlabs.io → Profile → API keys");
+  } else {
+    note("skipping ELEVENLABS_API_KEY — real builds will need --mock, or a silent/music-only spec");
+    skipKey("ELEVENLABS_API_KEY");
+  }
+
   await addKey("PEXELS_API_KEY", "optional", "stock b-roll via 'kino pexels'", "https://www.pexels.com/api");
-  await addKey("HEYGEN_API_KEY", "optional", "HeyGen avatars (provider: heygen)", "https://app.heygen.com → Settings → API");
-  await addKey("HEDRA_API_KEY", "optional", "Hedra avatars (provider: hedra)", "https://www.hedra.com/api-profile");
-  await addKey("REPLICATE_API_TOKEN", "optional", "open-source lip-sync (provider: replicate)", "https://replicate.com/account/api-tokens");
+
+  // Avatar gate: same non-interactive fallthrough as TTS, but default NO — kino's own default
+  // provider is "none" ($0, shows the product itself), so an avatar is opt-in, not assumed.
+  if (!TTY) {
+    for (const p of AVATAR_PROVIDERS) await addKey(p.key, "optional", `${p.desc} (provider: ${p.provider})`, p.url);
+  } else if (
+    await askDefaultNo(
+      "Set up an AI avatar/presenter? kino defaults to no presenter ($0, shows the product itself) — say yes only if you want a talking-head.",
+    )
+  ) {
+    const chosen = await selectMulti("Which provider(s)?", AVATAR_PROVIDERS, (p) => `${p.label} — ${p.desc}`);
+    if (!chosen.length) note("no provider selected");
+    for (const p of AVATAR_PROVIDERS) {
+      if (chosen.includes(p)) await addKey(p.key, "optional", p.desc, p.url);
+      else skipKey(p.key);
+    }
+  } else {
+    note("skipping avatar keys — kino build defaults to provider: none");
+    for (const p of AVATAR_PROVIDERS) skipKey(p.key);
+  }
 
   writeFileSync(ENV_FILE, lines.join("\n") + "\n");
   chmodSync(ENV_FILE, 0o600);
