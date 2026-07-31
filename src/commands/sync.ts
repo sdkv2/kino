@@ -42,7 +42,7 @@ export async function sync(specPath: string, opts: SyncOpts = {}): Promise<void>
   // Resolve the real timeline. Spoken specs need the actual VO lengths (mock paces lie),
   // which prepare() serves from the content-hash cache — free after the first real build.
   log.step(`sync (${spoken ? "real VO timeline" : "visual timeline"})`);
-  const { props, project, spec } = await prepare(absPath, { mock: !spoken, project: opts.project });
+  const { props, project, spec } = await prepare(absPath, { real: spoken, project: opts.project });
   const segs = props.segments;
   const total = segs[segs.length - 1].endSec;
 

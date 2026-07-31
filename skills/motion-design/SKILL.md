@@ -245,7 +245,7 @@ explains speech or settle, and a first frame that could only be this product.
    For centering/alignment specifically, add `--measure` (with `data-measure` tags) and read the exact
    Δ-from-center — don't eyeball it.
 4. `kino still … --around <t>` (or harness) — entrance, speech lock, camera, pulse.
-5. Real VO → `inspect --real` → `retune` → `frames <mp4> --around <t>`.
+5. Real VO → `build --tts` (caches it) → `inspect --real` → `retune` → `frames <mp4> --around <t>`.
 6. Loop ads: still at 0 vs settle end; trust PSNR/seam, not raw AE.
 7. Only claim “improved hierarchy / motion / color” when the sheet or mp4 shows it.
 

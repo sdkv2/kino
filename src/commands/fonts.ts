@@ -6,8 +6,10 @@ import { DEFAULT_BRAND, loadBrand, type Brand } from "../config/brand.js";
 import { resolveWorkspace } from "../config/project.js";
 import { parseFormatList } from "../render/formats.js";
 import { log } from "../log.js";
+import { emitJson, wantsJson } from "./emit.js";
 
 export interface FontsOpts {
+  as?: string;
   search?: string;
   preview?: string;
   brand?: string;
@@ -31,7 +33,7 @@ function listCurated(): void {
   );
 }
 
-async function search(term: string, refresh: boolean): Promise<void> {
+async function search(term: string, refresh: boolean, as?: string): Promise<void> {
   const catalog = await loadCatalog({ refresh });
   if (!catalog) {
     // Not an error: the catalog is the only thing a key unlocks, and every other font path works
@@ -47,6 +49,9 @@ async function search(term: string, refresh: boolean): Promise<void> {
     return;
   }
   const hits = searchCatalog(catalog, term);
+  if (as === "json") {
+    return emitJson({ kind: "fonts", query: term, searched: catalog.length, results: hits });
+  }
   if (!hits.length) {
     process.stdout.write(`No families match "${term}" (searched ${catalog.length} families).\n`);
     return;
@@ -89,12 +94,29 @@ async function preview(name: string, opts: FontsOpts): Promise<void> {
 // List the curated fonts, search the full Google Fonts catalog, or render a specimen still.
 export async function fonts(opts: FontsOpts = {}): Promise<void> {
   if (opts.preview) return preview(opts.preview, opts);
-  if (opts.search) return search(opts.search, !!opts.refresh);
+  if (opts.search) return search(opts.search, !!opts.refresh, opts.as);
   if (opts.refresh) {
     const catalog = await loadCatalog({ refresh: true });
     if (!catalog) throw new Error("Could not refresh the font catalog — set GOOGLE_FONTS_API_KEY and check the network");
     log.ok(`Font catalog refreshed: ${catalog.length} families`);
     return;
+  }
+  if (wantsJson(opts)) {
+    // `cached` is the one fact the registry does not carry: whether a first use will download.
+    return emitJson({
+      kind: "fonts",
+      curated: FONTS.map((f) => ({
+        name: f.name,
+        family: f.family,
+        weight: f.weight,
+        description: f.description,
+        cached: !!cachedFontPath(f.family, f.weight),
+      })),
+      notes: [
+        "The curated list is a recommendation, not a whitelist — ANY Google Fonts family works in brand.font.",
+        "kino fonts --search <term> searches the full catalog (needs GOOGLE_FONTS_API_KEY).",
+      ],
+    });
   }
   listCurated();
   if (!googleFontsKey()) {
