@@ -17,6 +17,7 @@ import { createRegionCompositorSource } from "./regionHost.js";
 import { createShaderDraw } from "./shaderHost.js";
 import { getPreset, type DrawFn } from "../../../backgrounds/presets.js";
 import { glowDraw, scrimDraw } from "../../../backgrounds/glow.js";
+import { relativeLuminance } from "../../../contrast.js";
 import { gridDraw, platformGuideDraw } from "../../../backgrounds/guides.js";
 
 /**
@@ -108,6 +109,9 @@ export function buildRegistry(
         params: {
           ...props.background.params,
           night: props.theme.bg,
+          // scrimDraw's light-base alphas key off this — without it every light scheme got the
+          // dark-base 61% wash, which reads as a white radial blob over the backdrop.
+          nightLuminance: relativeLuminance(props.theme.bg),
         },
         keyframes: [],
         triggers: [],
@@ -207,7 +211,9 @@ export function buildRegistry(
         createHtmlSource({
           html: (frame: number, key?: string) => {
             const activeWord = key && key.startsWith("w") ? parseInt(key.slice(1), 10) : null;
-            const tAbs = s.startSec + frame / props.fps;
+            // `frame` is the global timeline frame (Stage.seek), and s.words are absolute on the
+            // main timeline — adding s.startSec on top double-counts and marks every word spoken.
+            const tAbs = frame / props.fps;
             return captionMarkup({
               text: s.caption ?? "",
               words: s.words,
@@ -222,6 +228,10 @@ export function buildRegistry(
           fps: props.fps,
           hasTier2: false,
           scale,
+          // Captions are keyed by the active word (layers.ts §9). classifyRaster can't see that
+          // from the markup (no CSS vars), so without the override the raster classifies static
+          // and freezes on whichever word the page was created at.
+          cadence: "keyed",
         }),
       );
     }

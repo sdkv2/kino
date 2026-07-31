@@ -110,7 +110,7 @@ The backdrop is always the base layer (even in avatar mode), so app cut-in trans
 background rather than black — the avatar covers it on camera.
 - `glow` — animated CSS brand glows (zero-config default).
 - `image` — static `backdrop` with a slow Ken-Burns.
-- `solid` — static night + glow (**loop-safe**; no global-frame drift).
+- `solid` — flat palette-`bg` fill (**loop-safe**; no global-frame drift).
 - `mesh` / `aurora` / `particles` / `grid` — built-in Canvas2D presets (draft-friendly; mesh is an easy generic tell).
 - `custom` — your own Canvas2D `draw` fn. Set `backgroundComponent` on the **spec** (overrides brand) or
   brand frontmatter. Bare id → `assets-lib/backgrounds/` (start with `"brand-wash"`); path → project

@@ -301,7 +301,6 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     voFile: VoFile.optional(),
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(), // omit → no on-screen line for this beat (VO still speaks `text`)
-    cta: z.boolean().default(false),
     shot: Shot.optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
@@ -452,7 +451,6 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     voFile: VoFile.optional(),
     dur: z.number().positive().optional(), // fixed beat length (s) when no speech drives it (a silent build — the default). Real TTS length wins under --tts when the beat speaks.
     caption: z.string().optional(),
-    cta: z.boolean().default(false), // semantic end-card marker; a full-screen wordmark motion beat is itself the CTA
     // Motion→motion handoff. Default = dissolve (hold + xfade). `"cut"` abuts with no backdrop gap.
     // `"wipe-down"` (and the rest of the wipe family) uncovers this beat behind a travelling edge.
     transition: Transition.optional(),
@@ -642,7 +640,6 @@ const SEGMENT_KIND_HINTS: Record<string, string> = {
   keyframes: "keyframes are motion-only (or motionOverlay)",
   params: "params are motion-only (or motionOverlay)",
   loop: "loop is motion/Lottie-only",
-  cta: "cta is scene/motion-only",
   motionOverlay: "motionOverlay layers a second motion graphic on this beat (video/scene/motion)",
 };
 

@@ -62,7 +62,6 @@ export async function init(brand?: string): Promise<void> {
             {
               text: "Edit this spec, then run kino build to render your first video.",
               caption: "edit, then render",
-              cta: true,
             },
           ],
         },

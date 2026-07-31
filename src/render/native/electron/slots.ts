@@ -114,6 +114,11 @@ class ElectronHostProc {
       windowsHide: true,
     });
     liveHosts.add(this.child);
+    // Same reasoning as the cmd socket's handler above, for the other half of the channel: close()
+    // calls stdin.end() on a child it is about to (or already did) kill, and a pipe write to a dead
+    // peer fails with EPIPE. Unlistened, that is an uncaught exception rather than a no-op — the
+    // posix twin of the win32 ECONNRESET this class already guards against.
+    this.child.stdin.on("error", () => {});
     this.child.once("exit", (code, signal) => {
       this.alive = false;
       liveHosts.delete(this.child);

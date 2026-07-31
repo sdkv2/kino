@@ -16,6 +16,9 @@ describe("contrast primitives", () => {
   it("expands 3-digit hex and reads unparseable input as black", () => {
     expect(relativeLuminance("#fff")).toBeCloseTo(relativeLuminance("#ffffff"), 9);
     expect(relativeLuminance("rebeccapurple")).toBe(0);
+    // A missing value must read as black, not throw — hand-built test props routinely carry a
+    // partial theme, and registry.ts now derives scrim luminance from theme.bg unconditionally.
+    expect(relativeLuminance(undefined as unknown as string)).toBe(0);
   });
 
   it("flags only the light preset as a light surface", () => {

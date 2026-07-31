@@ -39,6 +39,44 @@ const PROBE_TIMEOUT_MS = 120_000;
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout };
 
+/** Commands reach the child over TCP on Windows, where Electron closes piped stdin immediately.
+ *  KINO_GLHOST_FORCE_TCP=1 picks the same path on posix — the child dials back identically there,
+ *  so the socket's lifecycle (and its shutdown race) can be exercised off a Windows runner. */
+function useTcpCmd(): boolean {
+  return process.platform === "win32" || process.env.KINO_GLHOST_FORCE_TCP === "1";
+}
+
+/**
+ * Swallow errors on the command channel. A stream 'error' with no listener is re-thrown as an
+ * UNCAUGHT EXCEPTION, and this one fires on the NORMAL shutdown path: close() writes `quit` and
+ * then kills the child, so the peer dies with the connection still open. On Windows kill() is
+ * TerminateProcess — abrupt, no graceful close — and Windows answers the parent's pending read with
+ * RST, i.e. ECONNRESET. Nothing is wrong; we are the ones terminating the peer.
+ *
+ * Unguarded, that took down the whole vitest process, which reported
+ *
+ *   Uncaught Exception: read ECONNRESET
+ *    ❯ TCP.onStreamRead node:internal/stream_base_commons:216:20
+ *
+ * and failed a run in which all 166 files and 1431 tests had passed. It blamed whichever glProbe
+ * file happened to be finishing — the error has no user frames, so vitest attributes it to the file
+ * that was running, not the one that caused it. That is why it looked like a different flaky test
+ * each time and like a Windows-only, node-22-only fluke. It is Windows-specific — only win32 uses
+ * this socket at all — but nothing here is version-specific: node 24 runs the same unguarded
+ * socket and simply had not lost the race in the runs we saw.
+ *
+ * `src/render/native/electron/slots.ts` grew exactly this guard for exactly this reason; the test
+ * harness is the other half of that split and never got it. The stdin path is guarded too — a
+ * killed child makes writes there fail with EPIPE, same fatal-by-default shape.
+ *
+ * The child's `exit` event and send()'s timeouts already model a dead host, so nothing is lost by
+ * dropping these.
+ */
+export function guardCmdStream<T extends NodeJS.WritableStream>(stream: T): T {
+  stream.on("error", () => {});
+  return stream;
+}
+
 class GlHost {
   private child!: ChildProcessWithoutNullStreams;
   private pending = new Map<number, Pending>();
@@ -60,7 +98,7 @@ class GlHost {
         onReady();
       };
 
-      if (process.platform === "win32") {
+      if (useTcpCmd()) {
         // Electron closes piped stdin immediately on Windows, so commands go over TCP instead —
         // the same split src/render/native/electron/slots.ts makes for the render host.
         //
@@ -76,7 +114,7 @@ class GlHost {
           if (ready && connected) afterReady();
         };
         const server = createServer((sock: Socket) => {
-          this.cmd = sock;
+          this.cmd = guardCmdStream(sock);
           connected = true;
           server.close();
           readyWhenBothLand();
@@ -99,7 +137,7 @@ class GlHost {
         });
       } else {
         this.spawnChild({}, afterReady, fail);
-        this.cmd = this.child.stdin;
+        this.cmd = guardCmdStream(this.child.stdin);
       }
     });
   }
@@ -183,7 +221,11 @@ class GlHost {
     if (this.closed) return;
     this.closed = true;
     try {
-      this.cmd?.write(JSON.stringify({ cmd: "quit" }) + "\n");
+      // end(), not write(): flush `quit` and then close our side, so the channel is already
+      // shutting down before the kill below rather than sitting in a pending read the dying peer
+      // can reset. guardCmdStream is still the backstop — the child can lose the race and die with
+      // the connection open — but this keeps the normal path from depending on it.
+      this.cmd?.end(JSON.stringify({ cmd: "quit" }) + "\n");
     } catch {
       /* already gone */
     }

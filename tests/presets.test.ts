@@ -50,6 +50,7 @@ describe("background presets", () => {
     for (const name of PRESET_NAMES) {
       const s = PRESET_SCHEMAS[name];
       expect(s.params.length).toBeGreaterThan(0);
+      if (name === "solid") continue; // flat fill: no motion to drive, so no pulse/intensity
       expect(s.actions).toContain("pulse");
       expect(s.params.map((p) => p.name)).toContain("intensity");
     }
@@ -79,5 +80,17 @@ describe("background presets", () => {
     draw(b.ctx, env(75)); // a different frame
     expect(a.log).toEqual(b.log); // identical ops regardless of frame → static
     expect(a.log.length).toBeGreaterThan(0);
+  });
+
+  // Regression: `"background": "solid"` + a spec scheme (e.g. colors.bg #ffffff) must come out as
+  // that flat colour. The old draw hardcoded the house navy and painted a colorA radial over it —
+  // visually the default glow look, regardless of the resolved palette.
+  it("solid is a FLAT fill of the palette bg (night param) — no hardcoded base, no tint radial", () => {
+    const draw = getPreset("solid")!;
+    const { ctx, log } = recordCtx();
+    draw(ctx, { ...env(0), params: { ...env(0).params, night: "#ffffff" } });
+    expect(log).toContain("fillStyle=#ffffff");
+    expect(log.join("\n")).not.toContain("#0b1020");
+    expect(log.filter((l) => l.startsWith("createRadialGradient"))).toEqual([]);
   });
 });

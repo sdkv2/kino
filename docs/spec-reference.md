@@ -129,7 +129,6 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 | `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
-| `cta` | boolean | — | Mark as a call-to-action / end-card beat. With no presenter: centered hero (not lower-third). Default `false`. |
 | `shot` | [Shot](#enums) | — | Camera move. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Words to emphasise in `words` mode. |

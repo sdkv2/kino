@@ -224,8 +224,8 @@ export function encoderInputArgs(captureCodec: CaptureCodec, fps: number): strin
 }
 
 // Stream captured frames into ffmpeg. H.264 builds are already annex-B all-intra — remux with
-// copy; JPEG builds use image2pipe mjpeg → libx264.
-function startEncoder(opts: {
+// copy; JPEG builds use image2pipe mjpeg → libx264. Exported for the failure-semantics tests.
+export function startEncoder(opts: {
   fps: number;
   out: string;
   audio: string | null;
@@ -254,11 +254,22 @@ function startEncoder(opts: {
   ];
   const proc = spawn(FFMPEG_PATH, args, { stdio: ["pipe", "ignore", "pipe"] });
   let stderr = "";
+  proc.stderr.on("data", (d) => (stderr += d));
+  // ffmpeg dying mid-stream EPIPEs the frame writes. Unlistened, that stream 'error' is re-thrown
+  // as an uncaught exception that beats the diagnostic-carrying `done` rejection to the console —
+  // the exit reason (with stderr) is the report, the broken pipe is just its echo.
+  proc.stdin.on("error", () => {});
   const done = new Promise<void>((resolve, reject) => {
-    proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg encode failed (${code}): ${stderr}`))));
+    proc.on("close", (code, signal) =>
+      code === 0 ? resolve() : reject(new Error(`ffmpeg encode failed (${signal ?? code}): ${stderr.trim()}`)),
+    );
     proc.on("error", reject);
   });
   const kill = () => {
+    // Deliberate teardown after an upstream failure: observe `done` first, so the SIGKILL's own
+    // rejection can't crash the process as an unhandled rejection and mask the error that caused
+    // the teardown (it printed as `ffmpeg encode failed (null)` with no trace of the real one).
+    done.catch(() => {});
     try {
       proc.kill("SIGKILL");
     } catch {}
@@ -630,7 +641,18 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         try {
           captureMs = 0;
           clearCaptureBuffers();
-          await renderFrameRange(handles, total, enc.stdin, cache, { pipeline: true });
+          // First failure wins: if ffmpeg dies mid-stream, surface ITS rejection (which carries
+          // stderr) instead of waiting on a frame loop whose backpressure no exited process will
+          // ever drain. The loser stays observed — `render` via the no-op catch (its workers get
+          // torn down by releaseElectronWorkers below), `enc.done` via kill() in the catch path.
+          const render = renderFrameRange(handles, total, enc.stdin, cache, { pipeline: true });
+          render.catch(() => {});
+          await Promise.race([
+            render,
+            enc.done.then(() => {
+              throw new Error("ffmpeg exited before the frame stream ended");
+            }),
+          ]);
           lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
           if (process.env.KINO_PROFILE === "1" && handles[0]?.dumpProfile) {
             await handles[0].dumpProfile(total, captureMs);

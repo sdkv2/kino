@@ -692,7 +692,6 @@ export async function prepare(
     if (seg.kind === "scene") {
       return {
         ...base,
-        cta: seg.cta || undefined,
         shot: seg.shot as Shot | undefined,
         motionOverlay: seg.motionOverlay
           ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }

@@ -100,8 +100,6 @@ export interface KinoSegment {
   caption: string; // "" = no caption for this beat (spec caption is optional; build coalesces)
   startSec: number;
   endSec: number;
-  /** Presenter-less scene beats (including cta:true end cards) use centered hero captions. */
-  cta?: boolean;
   kicker?: { text: string; color: string; fg: string };
   shot?: string; // resolved camera shot (see render/motion)
   transition?: string; // video cut-ins + motion handoffs (`cut` = hard abut)
