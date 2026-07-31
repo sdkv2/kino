@@ -21,7 +21,7 @@ Select the engine with `background` (spec) / `--background` (CLI) / `brand.backg
 | `aurora` | ✅ | Drifting aurora ribbons. |
 | `particles` | ✅ | Floating brand-coloured particles. |
 | `grid` | ✅ | Perspective/▦ grid motion. |
-| `solid` | — | Static night + glow (**loop-safe**; ignores frame drift). |
+| `solid` | — | Flat palette-`bg` fill (**loop-safe**; ignores frame drift). |
 | `custom` | ✅ | Canvas2D draw fn **or** WebGL `.frag`/`.glsl` (`backgroundComponent`). |
 
 The four animated presets (`mesh`, `aurora`, `particles`, `grid`) share the same controllable params and one action:

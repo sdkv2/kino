@@ -52,20 +52,14 @@ const mesh: DrawFn = (ctx, e) => {
   ctx.globalCompositeOperation = "source-over";
 };
 
-// Static night base + a subtle static radial glow. Deliberately reads NEITHER e.frame nor e.pulse —
-// a loop-safe backdrop for beats that must tile seamlessly (mesh/aurora drift on the global frame,
-// breaking the seam at the loop point). Colour-only: still resolves colorA/intensity per keyframe tween.
+// A flat fill of the palette's bg role (`night` in params — the registry passes it; the fallback is
+// the house base for direct callers). Deliberately reads NEITHER e.frame nor e.pulse — a loop-safe
+// backdrop for beats that must tile seamlessly (mesh/aurora drift on the global frame, breaking the
+// seam at the loop point). No accent tint: an authored scheme like a white `bg` must come out as
+// exactly that colour, not the house navy with a glow blob over it.
 const solid: DrawFn = (ctx, e) => {
-  const { width, height } = e;
-  const intensity = num(e, "intensity", 0.5);
-  const c = col(e, "colorA");
-  ctx.fillStyle = "#0b1020";
-  ctx.fillRect(0, 0, width, height);
-  const g = ctx.createRadialGradient(width * 0.5, height * 0.42, 0, width * 0.5, height * 0.42, Math.max(width, height) * 0.62);
-  g.addColorStop(0, withAlpha(c, 0.16 * (0.4 + intensity)));
-  g.addColorStop(1, withAlpha(c, 0));
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = col(e, "night", "#0b1020");
+  ctx.fillRect(0, 0, e.width, e.height);
 };
 
 const aurora: DrawFn = (ctx, e) => {

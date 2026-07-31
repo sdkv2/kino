@@ -28,5 +28,9 @@ export const PRESET_SCHEMAS: Record<string, PresetSchema> = {
   aurora: { params: COMMON, actions: ["pulse"] },
   particles: { params: COMMON, actions: ["pulse"] },
   grid: { params: COMMON, actions: ["pulse"] },
-  solid: { params: COMMON, actions: ["pulse"] }, // loop-safe: static night base + glow, ignores frame/pulse motion
+  // loop-safe: flat palette-bg fill; ignores frame/pulse motion, so no colour/intensity knobs
+  solid: {
+    params: [{ name: "night", type: "color", default: "#0b1020", doc: "flat fill — defaults to the palette bg role" }],
+    actions: [],
+  },
 };

@@ -8,8 +8,10 @@
 // the palette makes any scheme work; the pickers below are shaped so every dark-base palette still
 // resolves to exactly the colours the old constants hardcoded.
 
-/** Parse #rgb / #rrggbb into 0..1 channels. Unparseable input reads as black (the old default). */
+/** Parse #rgb / #rrggbb into 0..1 channels. Unparseable input reads as black (the old default) —
+ *  including a missing value entirely, so hand-built props without a full theme can't throw here. */
 function channels(hex: string): [number, number, number] {
+  if (typeof hex !== "string") return [0, 0, 0];
   const h = hex.trim().replace(/^#/, "");
   const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
   if (!/^[0-9a-f]{6}$/i.test(full)) return [0, 0, 0];

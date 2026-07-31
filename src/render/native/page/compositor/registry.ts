@@ -17,6 +17,7 @@ import { createRegionCompositorSource } from "./regionHost.js";
 import { createShaderDraw } from "./shaderHost.js";
 import { getPreset, type DrawFn } from "../../../backgrounds/presets.js";
 import { glowDraw, scrimDraw } from "../../../backgrounds/glow.js";
+import { relativeLuminance } from "../../../contrast.js";
 import { gridDraw, platformGuideDraw } from "../../../backgrounds/guides.js";
 
 /**
@@ -108,6 +109,9 @@ export function buildRegistry(
         params: {
           ...props.background.params,
           night: props.theme.bg,
+          // scrimDraw's light-base alphas key off this — without it every light scheme got the
+          // dark-base 61% wash, which reads as a white radial blob over the backdrop.
+          nightLuminance: relativeLuminance(props.theme.bg),
         },
         keyframes: [],
         triggers: [],

@@ -121,6 +121,13 @@ the edge it is docked to, anchor a hero numeral at its baseline. Both read as in
 uniform scale reads as a default. Neither is free — one focal move per beat, same budget as camera.
 Spec surface: `docs/spec-reference.md` § Timed effects / blur focal region / Tween channels.
 
+**Glows follow alpha, not the visible shape.** CSS `drop-shadow()` blurs the element's full
+alpha silhouette — on an image plane that carries a baked or feathered shadow (a render
+extract, a matte with soft falloff), the glow halos the whole soft rectangle, not the
+artwork inside it. Spotlight such planes with a shaped sibling (a `border-radius` div +
+`box-shadow`) hugging the real content box; keep `drop-shadow()` for elements whose alpha
+IS their visible shape (text, tight-cut sprites, full rects).
+
 Stagger only when order must be understood (pipeline steps, chip list synced to VO). Uniform
 mechanical delays feel generated — vary slightly or drive from word starts.
 

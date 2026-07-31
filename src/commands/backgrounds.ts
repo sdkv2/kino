@@ -10,7 +10,7 @@ import { emitJson, wantsJson, type Choice } from "./emit.js";
 
 export const CHOICES: Choice[] = [
   { label: "custom + backgroundComponent", ids: ["custom"], note: "authored brand stage (preferred when identity matters)" },
-  { label: "solid", ids: ["solid"], note: "loop-safe static wash (seamlessLoop / settle)" },
+  { label: "solid", ids: ["solid"], note: "loop-safe flat palette-bg fill (seamlessLoop / settle)" },
   { label: "image", ids: ["image"], note: "brand.backdrop still + slow Ken Burns" },
   { label: "glow", ids: ["glow"], note: "calm CSS (cheap default)" },
   {
