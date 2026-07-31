@@ -1,7 +1,7 @@
 // Custom transition shader resolution: bare id ("iris") → assets-lib/transitions/<id>.{frag,glsl};
 // otherwise a project assets/ path, then workspace-relative. Deliberately the same shape as
 // backgroundLib so `transitionSource` behaves exactly like `backgroundComponent` — one rule to learn.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import type { Project } from "../config/project.js";
@@ -21,6 +21,26 @@ export function listTransitionIds(): string[] {
     .filter((f) => LIB_EXTS.includes(extname(f).toLowerCase()))
     .map((f) => f.slice(0, -extname(f).length))
     .sort();
+}
+
+// Every shipped shader opens with `// <id> — <intro paragraph>`, ending at the first blank
+// comment line (see assets-lib/transitions/iris.frag). Pull the first sentence of that intro as
+// the one-line description `kino transitions` prints — no separate description file to keep in
+// sync with the shader.
+export function describeTransition(id: string): string | undefined {
+  const hit = LIB_EXTS.map((ext) => join(TRANSITION_LIB_DIR, `${id}${ext}`)).find((p) => existsSync(p));
+  if (!hit) return undefined;
+
+  const intro: string[] = [];
+  for (const line of readFileSync(hit, "utf8").split("\n")) {
+    const m = line.match(/^\/\/ ?(.*)$/);
+    if (!m || m[1].trim() === "") break;
+    intro.push(m[1]);
+  }
+
+  const paragraph = intro.join(" ").replace(/^\S+\s+—\s+/, "");
+  const sentence = paragraph.match(/^.*?[.!]($|\s)/)?.[0].trim();
+  return sentence || paragraph || undefined;
 }
 
 export function resolveTransitionSource(src: string, project: Pick<Project, "assetPath" | "workspaceRoot">): string {

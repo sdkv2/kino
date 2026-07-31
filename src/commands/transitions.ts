@@ -1,4 +1,4 @@
-import { listTransitionIds } from "../media/transitionLib.js";
+import { describeTransition, listTransitionIds } from "../media/transitionLib.js";
 import { WIPE_ANGLES, WIPE_DEFAULTS } from "../render/wipeSpec.js";
 import { CAMERA_MOVES } from "../render/cameraSpec.js";
 import { choiceLines, emitJson, wantsJson, type Choice } from "./emit.js";
@@ -100,7 +100,7 @@ export async function transitions(opts: { as?: string } = {}): Promise<void> {
       kind: "transitions",
       builtIn: BUILT_IN.map(({ ids, label, note }) => ({ ids, label, note })),
       ids: BUILT_IN.flatMap((c) => c.ids),
-      library: lib,
+      library: lib.map((id) => ({ id, description: describeTransition(id) })),
       transitionParams: { wipe: WIPE_KNOBS },
       transitionCamera: { moves: Object.keys(CAMERA_MOVES), knobs: CAMERA_KNOBS },
       transitionInvert: "boolean sibling flag; reverses any transition",
@@ -143,8 +143,13 @@ export async function transitions(opts: { as?: string } = {}): Promise<void> {
   w('    e.g. "transitionCamera": { "move": "whip-left" }   or  { "zoom": 0.2, "blur": 0 }\n\n');
 
   w("  Custom library (bare transitionSource ids):\n");
-  if (lib.length) for (const id of lib) w(`    · ${id}\n`);
-  else w("    · (empty assets-lib/transitions/)\n");
+  if (lib.length) {
+    const idw = Math.max(...lib.map((id) => id.length));
+    for (const id of lib) {
+      const desc = describeTransition(id);
+      w(`    · ${id.padEnd(idw)}${desc ? `  ${desc}` : ""}\n`);
+    }
+  } else w("    · (empty assets-lib/transitions/)\n");
   w("\n");
 
   w("  Author your own — a .frag in assets-lib/transitions/ or the project's assets/:\n");
