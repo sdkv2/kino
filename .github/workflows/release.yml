@@ -1,9 +1,13 @@
 name: Auto release on version bump
 
 # Watches the CI workflow for a green run on main, then checks whether
-# package.json's version has already been tagged. If not, cuts a tag +
-# GitHub Release, which in turn triggers publish.yml (release: published)
-# to build and publish to npm.
+# package.json's version has already been tagged. If not, cuts a tag + GitHub Release, then
+# explicitly dispatches publish.yml — a release created with the default GITHUB_TOKEN does NOT
+# trigger other workflows' `release` events (GitHub's anti-recursion rule), so publish.yml's
+# `on: release: types: [published]` trigger silently never fires on its own. v3.1.0 and v3.1.1
+# both shipped a tag + GitHub Release with npm never actually getting the new version until a
+# human noticed and ran `gh workflow run publish.yml` by hand. Don't remove this dispatch step
+# and rely on the release event alone — that's the exact bug this fixes.
 on:
   workflow_run:
     workflows: [CI]
@@ -17,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write # to dispatch publish.yml ourselves, see note above
     steps:
       - uses: actions/checkout@v5
         with:
@@ -37,3 +42,4 @@ jobs:
           git tag "$tag"
           git push origin "$tag"
           gh release create "$tag" --title "$tag" --generate-notes --target "${{ github.event.workflow_run.head_sha || github.sha }}"
+          gh workflow run publish.yml --ref "$tag"
