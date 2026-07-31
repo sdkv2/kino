@@ -27,6 +27,8 @@
 //              0.7 = a long travelling ripple where one edge has landed before the other starts.
 //     align    0..1 hinge coherence. 0 = every panel hinges on a different random axis,
 //              1 = every hinge is square to the wave, so it reads as blinds.
+//     bevel    hex — colour of the lit chamfer on a turning panel. Default: the brand's accent.
+//              (original mint look: "bevel": "#6BFFB8")
 //
 //   endpoint contract
 //     Per-panel progress is clamp((uP - delay) / window, 0, 1) with delay in [0, stagger] and
@@ -213,7 +215,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   // only the edge turned into the light takes the full hit.
   float lit = dot(sign(qn) * nrm, KINO_LIGHT);
   float bev = smoothstep(KINO_BEVEL_W, 0.0, bd) * s * cov;
-  panel += vec3(0.42, 1.0, 0.72) * bev * KINO_BEVEL_GAIN * (0.28 + 0.72 * clamp(lit, 0.0, 1.0));
+  // THE COLOUR RULE (see `kino transitions`): pigment from the brand, let the spec override. The
+  // bevel is the one thing this shader paints rather than samples — the lit chamfer on a turning
+  // panel — and it was hard-coded to vec3(0.42, 1.0, 0.72), the house mint, so every brand's wall
+  // caught a green highlight. ("#6BFFB8" restores it.)
+  vec3 bevelCol = kinoPick(u_bevel, uBrandAccent);
+  panel += bevelCol * bev * KINO_BEVEL_GAIN * (0.28 + 0.72 * clamp(lit, 0.0, 1.0));
 
   // The seam again, in the panel's own space so it lines up with — and dissolves into — the real
   // slit as the panel turns. Continuous with the not-yet-started branch above at e=0.

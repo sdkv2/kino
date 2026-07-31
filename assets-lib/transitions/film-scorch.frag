@@ -21,6 +21,7 @@
 //   char      0.2..1.6  width of the charred rim left behind the front (default 1.0)
 //   ember     0.0..1.5  incandescent rim + ember fleck brightness (default 1.0)
 //   softness  0.006..0.06 feather of the burn edge itself, in field units (default 0.016)
+//   fire      hex       colour of the burn. Default: the brand's accent2. ("#FF7319" = the original amber)
 //
 // ENDPOINTS
 //   Same construction organic-inkbleed proves out: the field is normalised and CLAMPED to [0,1],
@@ -137,26 +138,43 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec4 from = kinoFrom(clamp(uv + shim * toast * toast, 0.0, 1.0));
   vec4 to   = kinoTo(clamp(uv + shim * charB * vec2(0.4, 1.0), 0.0, 1.0));
 
+  // ---- fire colour ------------------------------------------------------------------------------
+  // THE COLOUR RULE (see `kino transitions`): pigment from the brand, let the spec override.
+  // `"fire": "#ff7722"` sets the burn explicitly; omitted, it takes the brand's SECOND accent — the
+  // "secondary/bright" role, which is what a brand reserves for emphasis and the only palette slot
+  // that reads as heat. One hue then runs through a temperature ramp, so a brand recolours the fire
+  // without any of the four physical cues losing its meaning. (Original amber: "fire": "#FF7319".)
+  //
+  // NORMALISED first: fire is defined by hue, not by how light the brand happens to have set that
+  // swatch. A dark accent2 would otherwise burn dimmer than the unburnt film, which reads as a stain
+  // rather than a flame.
+  vec3 fireSrc = kinoPick(u_fire, uBrandAccent2);
+  vec3 fire = fireSrc / max(max(fireSrc.r, max(fireSrc.g, fireSrc.b)), 1e-4);
+
   // Film side: amber warming into a deep pre-ignition umber.
   float soak = clamp((toast * 0.6 + collar * 1.2) * (0.5 + 0.8 * mottle), 0.0, 1.0);
-  vec3 toasted = from.rgb * mix(vec3(1.0), vec3(0.86, 0.52, 0.24), soak * 0.7);
-  toasted = mix(toasted, vec3(0.24, 0.10, 0.045), soak * soak * 0.55);
+  vec3 toasted = from.rgb * mix(vec3(1.0), fire * 0.88, soak * 0.7);
+  toasted = mix(toasted, fire * 0.26, soak * soak * 0.55);
 
-  // Hole side: char crumbles over the incoming beat, cooling as the front moves away.
-  vec3 charCol = mix(to.rgb, vec3(0.055, 0.028, 0.02), charB * (0.55 + 0.45 * grit));
+  // Hole side: char crumbles over the incoming beat, cooling as the front moves away. Char stays
+  // near-black whatever the brand — burnt acetate is burnt acetate — but keeps a trace of the hue
+  // so the rim belongs to the same fire.
+  vec3 charCol = mix(to.rgb, fire * 0.05, charB * (0.55 + 0.45 * grit));
   // Live embers in the fresh char: sparse flecks that flicker as the burn advances and die as it
   // cools. uP only modulates the flicker; the charB factor keeps the support compact.
   float fleck = schHash(floor(pw * 90.0) + floor(uP * 24.0) * 0.37);
   float embers = step(0.965, fleck) * charB * charB;
-  charCol += vec3(1.0, 0.38, 0.08) * embers * 1.4 * ember;
+  charCol += fire * embers * 1.4 * ember;
 
   vec3 col = mix(toasted, charCol, mask);
 
   // The incandescent front: white-hot core in an orange bloom, broken by the grit.
   float core  = 1.0 - smoothstep(0.0, rimW * 0.30, abs(e));
   float bloom = 1.0 - smoothstep(0.0, rimW, abs(e));
-  col += vec3(1.0, 0.93, 0.78) * core * 1.1 * grit * ember;
-  col += vec3(1.0, 0.45, 0.10) * bloom * bloom * 0.65 * grit * ember;
+  // The core stays close to white on any brand: incandescence goes white as it gets hotter, so a
+  // fully hue-tinted core would read as a coloured outline instead of something burning.
+  col += mix(fire, vec3(1.0), 0.72) * core * 1.1 * grit * ember;
+  col += fire * bloom * bloom * 0.65 * grit * ember;
 
   fragColor = vec4(col, mix(from.a, to.a, mask));
 }

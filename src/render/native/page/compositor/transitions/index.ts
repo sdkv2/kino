@@ -7,6 +7,7 @@ import type { RenderTarget, TargetPool } from "../targets.js";
 import type { Transition } from "../../../../motion.js";
 import type { WipeParams } from "../../../../wipeSpec.js";
 import type { CameraParams } from "../../../../cameraSpec.js";
+import type { BrandPalette } from "../../../../transitionSpec.js";
 
 const VERT = `#version 300 es
 void main() {
@@ -213,7 +214,9 @@ function compile(gl: WebGL2RenderingContext, kind: Transition, customSource?: st
   }
   const loc: Record<string, WebGLUniformLocation | null> = {};
   const NAMES = ["uFrom", "uTo", "uRes", "uP", "uAngle", "uSoft", "uBand", "uEdge", "uGain", "iResolution",
-    "uCamFrom", "uCamTo", "uCamBlur", "uCamHold"];
+    "uCamFrom", "uCamTo", "uCamBlur", "uCamHold",
+    "uBrandBg", "uBrandFg", "uBrandAccent", "uBrandAccent2", "uBrandDeep",
+    ...Array.from({ length: 4 }, (_, i) => `uColor${i}`)];
   for (const n of [...NAMES, ...Array.from({ length: 8 }, (_, i) => `uParam${i}`)]) {
     // Null for transitions that do not declare it — GL drops unused uniforms. uniform*() ignores a
     // null location, so the wipe block below is a no-op for fade/dissolve/fly/pop/cut.
@@ -245,7 +248,7 @@ export function mixGroups(
   kind: Transition,
   p: number,
   wipe?: WipeParams,
-  custom?: { source: string; params: number[] },
+  custom?: { source: string; params: number[]; colors?: Array<[number, number, number]>; brand?: BrandPalette },
   invert = false,
   camera?: CameraParams,
 ): RenderTarget {
@@ -276,6 +279,20 @@ export function mixGroups(
   if (custom) {
     gl.uniform3f(loc.iResolution, out.w, out.h, 1);
     custom.params.forEach((v, i) => gl.uniform1f(loc[`uParam${i}`], v));
+    // Author colours (hex values in transitionParams). Unset slots stay at GL's zero-initialised
+    // vec3, which the shader never reads: an omitted name is #define'd to the vec3(-1.0) sentinel,
+    // so kinoPick() takes the fallback branch and the slot is not consulted at all.
+    (custom.colors ?? []).forEach((c, i) => gl.uniform3f(loc[`uColor${i}`], c[0], c[1], c[2]));
+    // Brand palette. Only the custom path declares these — the built-ins take their one colour
+    // (the wipe edge) through uEdge, which resolveWipeParams already defaults to the accent.
+    const b = custom.brand;
+    if (b) {
+      gl.uniform3f(loc.uBrandBg, b.bg[0], b.bg[1], b.bg[2]);
+      gl.uniform3f(loc.uBrandFg, b.fg[0], b.fg[1], b.fg[2]);
+      gl.uniform3f(loc.uBrandAccent, b.accent[0], b.accent[1], b.accent[2]);
+      gl.uniform3f(loc.uBrandAccent2, b.accent2[0], b.accent2[1], b.accent2[2]);
+      gl.uniform3f(loc.uBrandDeep, b.deep[0], b.deep[1], b.deep[2]);
+    }
   }
   // Inversion already swapped the textures and flipped p, so the two camera sides swap with them —
   // otherwise a reversed push would pull, and the "one continuous camera" property would break.
