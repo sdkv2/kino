@@ -270,10 +270,24 @@ kino avatars [--gender <g>]
 ```
 
 ### `fonts`
-List the curated fonts (downloaded on demand) with descriptions + cache status.
+List the curated shortlist, search all of Google Fonts, or render a type specimen. Any Google Fonts
+family works as `brand.font` — the shortlist is a recommendation, not a whitelist. See
+[Fonts](spec-reference.md#fonts).
 
 ```
 kino fonts
+```
+
+| Flag | Meaning |
+|---|---|
+| `--preview <family>` | Render a specimen still in 9:16 + 16:9 through the real caption pipeline and print the PNG paths. |
+| `--brand <name>` | Preview against this brand's palette + caption size (default: kino house). |
+| `--format <list>` | Preview formats (default `9:16,16:9`). |
+| `--search <term>` | Search the full ~1800-family catalog by name/category. Needs `GOOGLE_FONTS_API_KEY`. |
+| `--refresh` | Re-fetch the catalog instead of using the 7-day cache. |
+
+```
+kino fonts --preview "Space Mono"
 ```
 
 ### `backgrounds`

@@ -20,9 +20,9 @@ import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
 import { presenterBeats, resolvePresenterPin } from "../avatar/source.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
-import { lookupFont, resolveFontCuts } from "../fonts/registry.js";
+import { resolveFontCuts } from "../fonts/registry.js";
 import { resolveTransitionSource } from "../media/transitionLib.js";
-import { ensureFont } from "../fonts/manager.js";
+import { ensureFont, resolveFont } from "../fonts/manager.js";
 import { resolveCaptionBackplate } from "../render/elements.js";
 import { probeDuration, stitchAudio } from "../media/ffmpeg.js";
 import { resolveAudioSource } from "../media/sfx.js";
@@ -46,10 +46,12 @@ import { holdLastFrameToMatchAudio } from "../media/avSync.js";
 import { log } from "../log.js";
 
 // Foreground (text) colour for a kicker pill, keyed by the kicker's brand background colour: a
-// near-black ink on the light mint/gold chips, white on the green chip — each picked for contrast.
-// The background colours themselves come from the brand palette (see DEFAULT_BRAND.colors in
-// config/brand.ts).
-const KICKER_FG: Record<string, string> = { mint: "#06210f", green: "#ffffff", gold: "#0b1020" };
+// near-black ink on the light accent/accent2 chips, white on the deep chip — each picked for
+// contrast. The background colours themselves come from the brand palette (see DEFAULT_BRAND.colors
+// in config/brand.ts). Kicker colour names: roles are canonical, the literal names are the
+// pre-rename aliases for the same slots.
+const KICKER_SLOT = { accent: "accent", mint: "accent", deep: "deep", green: "deep", accent2: "accent2", gold: "accent2" } as const;
+const KICKER_FG: Record<string, string> = { accent: "#06210f", deep: "#ffffff", accent2: "#0b1020" };
 
 // Resolve an app beat's regionShader spec → RegionShaderProps: read each mask's manifest for kind +
 // the chosen object's channel, stage the mask file into /public (like frame.src / asset), and load
@@ -528,27 +530,27 @@ export async function prepare(
     triggers: spec.backgroundTriggers ?? [],
   };
 
-  // Brand font: a registry name downloads + stages a TTF for the captions; a raw CSS family passes
-  // through. --font overrides brand.font for quick A/B.
+  // Brand font: any Google Fonts family name downloads + stages a TTF for the captions; a raw CSS
+  // stack passes through. --font overrides brand.font for quick A/B.
   const fontName = opts.font ?? brand.font;
-  const fontDef = lookupFont(fontName);
+  const font = await resolveFont(fontName);
   let themeFont = fontName;
   let fontUrl: string | null = null;
   const fontFaces: { weight: number; url: string }[] = [];
-  if (fontDef) {
-    const ttf = await ensureFont(fontDef.name);
+  if (font) {
+    const ttf = await ensureFont(font.family, font.weight);
     if (ttf) {
       copyFileSync(ttf, join(publicDir, "font.ttf"));
       fontUrl = "font.ttf";
-      themeFont = `"KinoBrandFont", "${fontDef.family}", Helvetica, Arial, sans-serif`;
+      themeFont = `"KinoBrandFont", "${font.family}", Helvetica, Arial, sans-serif`;
       // Opt-in extra cuts, spec overriding brand. The caption weight is always in the set, so a page
       // that asks for it still resolves; a cut that fails to download is skipped rather than failing
-      // the build.
-      const wanted = resolveFontCuts(fontDef.weight, spec.fontWeights, brand.fontWeights);
+      // the build. `exact` so a missing cut is reported, not silently staged as the regular face.
+      const wanted = resolveFontCuts(font.weight, spec.fontWeights, brand.fontWeights);
       for (const w of wanted) {
-        const cut = w === fontDef.weight ? ttf : await ensureFont(fontDef.name, w);
+        const cut = w === font.weight ? ttf : await ensureFont(font.family, w, { exact: true });
         if (!cut) {
-          log.warn(`Font "${fontDef.name}" weight ${w} unavailable — that cut will fall back`);
+          log.warn(`Font "${font.family}" weight ${w} unavailable — that cut will fall back`);
           continue;
         }
         const rel = `font-${w}.ttf`;
@@ -556,15 +558,16 @@ export async function prepare(
         fontFaces.push({ weight: w, url: rel });
       }
     } else {
-      log.warn(`Font "${fontDef.name}" unavailable (offline?) — using system fallback`);
-      themeFont = `"${fontDef.family}", Helvetica, Arial, sans-serif`;
+      const hint = font.suggestion ? ` Did you mean "${font.suggestion}"?` : "";
+      log.warn(`Font "${font.family}" unavailable (unknown family, or offline?) — using system fallback.${hint}`);
+      themeFont = `"${font.family}", Helvetica, Arial, sans-serif`;
     }
   }
   // Label font for storyboard/montage labels (defaults to the caption font); also staged as a
   // second render-page typeface (themeLabelFont/labelFontUrl below) so motion beats can reach it via
   // --kino-label-font without re-resolving the brand's font choice.
-  const labelDef = lookupFont(brand.labelFont ?? fontName);
-  const labelFont = labelDef ? await ensureFont(labelDef.name) : null;
+  const labelDef = await resolveFont(brand.labelFont ?? fontName);
+  const labelFont = labelDef ? await ensureFont(labelDef.family, labelDef.weight) : null;
   let themeLabelFont: string | undefined;
   let labelFontUrl: string | null = null;
   if (labelDef) {
@@ -653,7 +656,7 @@ export async function prepare(
         kickerKeyframes: seg.kickerKeyframes,
         zoomKeyframes: seg.zoomKeyframes,
         kicker: seg.kicker
-          ? { text: seg.kicker.text, color: c[seg.kicker.color], fg: KICKER_FG[seg.kicker.color] }
+          ? { text: seg.kicker.text, color: c[KICKER_SLOT[seg.kicker.color]], fg: KICKER_FG[KICKER_SLOT[seg.kicker.color]] }
           : undefined,
         motionOverlay: seg.motionOverlay
           ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
@@ -698,15 +701,15 @@ export async function prepare(
       fontFaces: fontFaces.length ? fontFaces : null,
       labelFont: themeLabelFont,
       labelFontUrl,
-      night: c.night,
-      mint: c.mint,
-      green: c.green,
-      gold: c.gold,
-      white: c.white,
+      bg: c.bg,
+      accent: c.accent,
+      deep: c.deep,
+      accent2: c.accent2,
+      fg: c.fg,
       brandName: brand.name,
       captionFontSize: brand.captionStyle.fontSize,
       captionStroke: brand.captionStyle.strokeWidth,
-      captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.night),
+      captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.bg),
       film: resolveFilm(spec, brand),
     },
     fps: spec.fps ?? 30,

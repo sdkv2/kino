@@ -11,10 +11,9 @@ permissions:
 
 jobs:
   test:
-    # PRs: 3 jobs — ubuntu node 22 runs the full suite (incl. GPU pixel tests); macOS/Windows node 22
-    # run KINO_TEST_SCOPE=light (segment-mock + unit only — see vitest.config.ts). main / dispatch:
-    # full 3×2 matrix, every job full scope.
-    name: test (${{ matrix.os }}, node ${{ matrix.node }}${{ github.event_name == 'pull_request' && matrix.os != 'ubuntu-latest' && ', light' || '' }})
+    # No GPU pixel tests in this job on any OS — they live in `gpu` below. PRs: 3 jobs, node 22.
+    # main / dispatch: the full 3×2 matrix.
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -117,9 +116,62 @@ jobs:
       - run: npm test
         env:
           KINO_CONCURRENCY: 1
-          KINO_TEST_SCOPE: ${{ github.event_name == 'pull_request' && matrix.os != 'ubuntu-latest' && 'light' || '' }}
       # CLI smoke test: verifies compiled dist/ actually boots on this OS/node
       - run: node bin/kino.mjs --version
+
+  gpu:
+    # The GPU pixel test files, serialised (vitest fileParallelism is off in this scope). They are
+    # ~93% of the suite's cost AND its only real flake source: run in parallel they put N Electron
+    # SwiftShader hosts on one runner and the loser fails on whatever assertion it was holding.
+    #
+    # Off the PR path on purpose — a PR should not go red because two GL hosts collided. They are
+    # platform-independent by construction (KINO_GPU=0 pins SwiftShader everywhere), so one Linux
+    # runner covers what the 3-OS matrix would have, and main still gates on them.
+    #
+    # Run them on a branch before merging with: gh workflow run ci.yml --ref <branch>
+    name: gpu pixel tests (ubuntu, serialised)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install ffmpeg 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url=$(gh api repos/BtbN/FFmpeg-Builds/releases/latest \
+            --jq '[.assets[] | select(.name | test("linux64-gpl-8\\.[0-9.]+\\.tar\\.xz$"))][0].browser_download_url')
+          curl -fsSL "$url" | sudo tar -xJ -C /opt
+          sudo ln -s /opt/ffmpeg-*/bin/ffmpeg /opt/ffmpeg-*/bin/ffprobe /usr/local/bin/
+          ffmpeg -version | head -1
+      # Ubuntu 24.04 blocks unprivileged user namespaces, which kills the Chromium sandbox the
+      # Electron render host spawns under.
+      - name: Allow Chromium sandbox userns
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # Electron needs a real X display: --ozone-platform=headless boots but yields no WebGL2 on
+      # any ANGLE backend (see src/render/native/sandbox.ts), so Xvfb is the only configuration
+      # that binds a GL context.
+      - name: Start Xvfb
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1280x1024x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+      - name: Install ImageMagick
+        run: |
+          if ! command -v magick >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y libfuse2
+            sudo curl -fsSL https://github.com/ImageMagick/ImageMagick/releases/download/7.1.2-27/ImageMagick-7.1.2-27-gcc-x86_64.AppImage -o /usr/local/bin/magick
+            sudo chmod +x /usr/local/bin/magick
+          fi
+          magick -version
+      - run: npm ci --allow-git=all
+      - run: npm run test:gpu
+        env:
+          KINO_CONCURRENCY: 1
 
   # TEMPORARY diagnostic job — remove with scripts/osr-size-probe.*. tests/format-4k-parity gets a
   # 1024x720 PNG out of a 2160x3840 render on windows-latest and nowhere else; this reports what
@@ -137,6 +189,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Same unprivileged-userns re-allow the `test` job does. Without it the probe's Electron dies
+      # before it reports anything — "SUID sandbox helper ... is not configured correctly", SIGTRAP —
+      # so the ubuntu leg of this matrix was failing without ever producing a measurement.
+      - name: Allow Chromium sandbox userns (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Start Xvfb (Linux)
         if: runner.os == 'Linux'
         run: |

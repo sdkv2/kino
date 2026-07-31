@@ -15,10 +15,10 @@ export type CaptionReveal = (typeof CAPTION_REVEALS)[number];
 
 // Structural subset of Theme (props.ts) — kept import-free so props.ts can import from here.
 export interface TextTheme {
-  night: string;
-  mint: string;
-  green: string;
-  white: string;
+  bg: string; // [was: night]
+  accent: string; // [was: mint]
+  deep: string; // [was: green]
+  fg: string; // [was: white]
   captionStroke: number;
 }
 
@@ -41,28 +41,28 @@ export function wordStyle(style: CaptionStyle, t: TextTheme, flags: WordFlags = 
       // padding so the box is paint-only: a padding delta on just the active word moves the
       // flex wrap point and makes words jump between rows as the highlight travels.
       return highlight
-        ? { color: t.night, backgroundColor: t.mint, borderRadius: 6, padding: "0px 16px", fontWeight: 900 }
-        : { color: t.white, borderRadius: 6, padding: "0px 16px", fontWeight: 900, textShadow: shadow };
+        ? { color: t.bg, backgroundColor: t.accent, borderRadius: 6, padding: "0px 16px", fontWeight: 900 }
+        : { color: t.fg, borderRadius: 6, padding: "0px 16px", fontWeight: 900, textShadow: shadow };
     case "gradient":
       // background-clip fill conflicts with text stroke and textShadow — legibility comes from a
       // drop-shadow filter instead.
       return {
         fontWeight: 900,
-        backgroundImage: `linear-gradient(100deg, ${t.mint}, ${t.green})`,
+        backgroundImage: `linear-gradient(100deg, ${t.accent}, ${t.deep})`,
         WebkitBackgroundClip: "text",
         WebkitTextFillColor: "transparent",
-        filter: emph ? `drop-shadow(0 0 18px ${t.mint})` : "drop-shadow(0 6px 14px rgba(0,0,0,.5))",
+        filter: emph ? `drop-shadow(0 0 18px ${t.accent})` : "drop-shadow(0 6px 14px rgba(0,0,0,.5))",
       };
     case "minimal":
-      return { color: highlight ? t.mint : t.white, fontWeight: 700, textShadow: "0 4px 14px rgba(0,0,0,.35)" };
+      return { color: highlight ? t.accent : t.fg, fontWeight: 700, textShadow: "0 4px 14px rgba(0,0,0,.35)" };
     default:
       // "stroke" — the legacy look, byte-for-byte.
       return {
-        color: highlight ? t.mint : t.white,
+        color: highlight ? t.accent : t.fg,
         fontWeight: 900,
         WebkitTextStroke: `${t.captionStroke}px #000`,
         paintOrder: "stroke fill" as CSSProperties["paintOrder"],
-        textShadow: emph ? `0 0 26px ${t.mint}` : shadow,
+        textShadow: emph ? `0 0 26px ${t.accent}` : shadow,
       };
   }
 }
@@ -70,7 +70,7 @@ export function wordStyle(style: CaptionStyle, t: TextTheme, flags: WordFlags = 
 // Whole-line box: highlight style gets an opaque night plate; otherwise the legacy translucent
 // backplate when configured (absorbs components.tsx plateStyle). {} = unchanged look.
 export function lineBoxStyle(style: CaptionStyle, t: TextTheme, backplateBg?: string | null): CSSProperties {
-  if (style === "highlight") return { display: "inline-block", backgroundColor: t.night, padding: "12px 32px", borderRadius: 12 };
+  if (style === "highlight") return { display: "inline-block", backgroundColor: t.bg, padding: "12px 32px", borderRadius: 12 };
   if (backplateBg) return { display: "inline-block", backgroundColor: backplateBg, padding: "12px 32px", borderRadius: 12 };
   return {};
 }

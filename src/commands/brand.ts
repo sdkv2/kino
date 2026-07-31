@@ -17,7 +17,7 @@ export function brandText(brandDir: string): string {
   const { brand, body } = loadBrandDoc(brandDir);
   const lines = [
     `name: ${brand.name || "(unset)"}`,
-    `colors: night ${brand.colors.night} · mint ${brand.colors.mint} · green ${brand.colors.green} · white ${brand.colors.white} · gold ${brand.colors.gold}`,
+    `colors: bg ${brand.colors.bg} · fg ${brand.colors.fg} · accent ${brand.colors.accent} · accent2 ${brand.colors.accent2} · deep ${brand.colors.deep}`,
     `font: ${brand.font}`,
     `captionMode: ${brand.captionMode ?? "phrase (default)"}    background: ${brand.background ?? "glow (default)"}`,
     `voice: ${brand.defaultVoice ?? "(unset — set spec.voice)"}    disclosure: ${brand.disclosure || "(none)"}`,

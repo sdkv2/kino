@@ -21,6 +21,14 @@ export const BrandFrontmatterSchema = z
     name: z.string().optional(),
     colors: z
       .object({
+        // Role keys (canonical since the palette-role rename).
+        bg: z.string().optional(), // page/background base
+        fg: z.string().optional(), // text ink
+        accent: z.string().optional(), // primary accent
+        accent2: z.string().optional(), // secondary/bright accent
+        deep: z.string().optional(), // deep fill / active-word highlight
+        // Legacy literal-color names (the original house theme's hues) — accepted forever,
+        // mapped onto the roles by normalizeColors; a role key wins over its alias.
         night: z.string().optional(),
         mint: z.string().optional(),
         green: z.string().optional(),
@@ -77,7 +85,7 @@ export type BrandFrontmatter = z.infer<typeof BrandFrontmatterSchema>;
 // merge over DEFAULT_BRAND — the resolved half of the brand split noted above).
 export interface Brand {
   name: string;
-  colors: { night: string; mint: string; green: string; white: string; gold: string };
+  colors: { bg: string; fg: string; accent: string; accent2: string; deep: string };
   font: string;
   fontWeights?: number[];
   labelFont?: string;
@@ -116,16 +124,19 @@ export interface Brand {
 //
 // THE PALETTE (canonical home). The five-slot brand colour set lives here; every other site that
 // needs a palette colour reads it from a resolved Brand.colors (which is DEFAULT_BRAND.colors merged
-// with any brand.md overrides) rather than redefining it. The slots and their roles:
-//   night  — page/background base (the dark canvas everything sits on).
-//   mint   — primary accent (light); highlights, kicker chips, default background tint.
-//   green  — brand colour / active-word highlight (the brand name + the currently-spoken word).
-//   white  — foreground text and the default caption ink.
-//   gold   — secondary accent; reserved emphasis (--kino-gold), gold kicker chips.
-// If you add or repurpose a slot, do it here and update Brand.colors + BrandFrontmatterSchema.colors.
+// with any brand.md overrides) rather than redefining it. Slots are named by ROLE — the pre-rename
+// literal names (night/mint/green/white/gold, the house theme's original hues) remain accepted in
+// brand.md and emitted as CSS-var/env aliases, but internally only the roles exist:
+//   bg      — page/background base (the dark canvas everything sits on).      [was: night]
+//   accent  — primary accent; highlights, kicker chips, background tint.      [was: mint]
+//   deep    — deep fill / active-word highlight (brand name + spoken word).   [was: green]
+//   fg      — foreground text and the default caption ink.                    [was: white]
+//   accent2 — secondary/bright accent; reserved emphasis, kicker chips.       [was: gold]
+// If you add or repurpose a slot, do it here and update Brand.colors + BrandFrontmatterSchema.colors
+// + normalizeColors + the alias emission in render/motionVars.ts.
 export const DEFAULT_BRAND: Brand = {
   name: "",
-  colors: { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", white: "#ffffff", gold: "#d99a20" },
+  colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64", fg: "#ffffff", accent2: "#d99a20" },
   font: 'Helvetica, "Helvetica Neue", Arial, sans-serif',
   captionStyle: { fontSize: 74, strokeWidth: 9 },
   disclosure: "", // none unless a brand/spec sets it
@@ -160,12 +171,27 @@ function normalizeDisclosures(fm: BrandFrontmatter): BrandFrontmatter {
   return out;
 }
 
+/**
+ * Map a brand.md colors block onto the role keys. Legacy literal names (mint/gold/…) are the
+ * pre-rename vocabulary — still accepted, but a role key wins over its own alias so a half-migrated
+ * brand behaves predictably.
+ */
+const LEGACY_COLOR_ALIASES = { night: "bg", white: "fg", mint: "accent", gold: "accent2", green: "deep" } as const;
+function normalizeColors(colors: NonNullable<BrandFrontmatter["colors"]>): Partial<Brand["colors"]> {
+  const out: Partial<Brand["colors"]> = {};
+  for (const [legacy, role] of Object.entries(LEGACY_COLOR_ALIASES) as Array<[keyof typeof LEGACY_COLOR_ALIASES, keyof Brand["colors"]]>) {
+    const v = colors[role] ?? colors[legacy];
+    if (v != null) out[role] = v;
+  }
+  return out;
+}
+
 function mergeBrand(base: Brand, fmRaw: BrandFrontmatter): Brand {
   const fm = normalizeDisclosures(fmRaw);
   return {
     ...base,
     ...fm,
-    colors: { ...base.colors, ...(fm.colors ?? {}) },
+    colors: { ...base.colors, ...normalizeColors(fm.colors ?? {}) },
     captionStyle: { ...base.captionStyle, ...(fm.captionStyle ?? {}) },
   } as Brand;
 }

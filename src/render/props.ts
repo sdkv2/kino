@@ -20,12 +20,12 @@ export interface Theme {
   fontFaces?: { weight: number; url: string }[] | null;
   labelFont?: string; // second typeface (brand.labelFont, defaults to `font`) for motion beats — --kino-label-font
   labelFontUrl?: string | null; // staticFile-relative TTF to load for labelFont, else system font
-  night: string;
-  mint: string;
-  green: string;
-  gold: string;
-  white: string;
-  brandName?: string; // brand name token; rendered green wherever it appears in word captions
+  bg: string; // page/background base            [was: night]
+  accent: string; // primary accent               [was: mint]
+  deep: string; // deep fill / active-word colour [was: green]
+  accent2: string; // secondary/bright accent     [was: gold]
+  fg: string; // text ink                         [was: white]
+  brandName?: string; // brand name token; rendered in `deep` wherever it appears in word captions
   captionFontSize: number;
   captionStroke: number;
   captionBg?: { bg: string; appOnly: boolean } | null; // translucent plate behind lower-third captions (opt-in)
@@ -231,7 +231,12 @@ export interface MotionEnv {
   camVel: number;
   /** px-ready blur strength for `.kino-camera` (0 when settled or no `cam` param). */
   camBlur: number;
-  palette: { mint: string; green: string; night: string; white: string; gold: string; font: string };
+  palette: {
+    bg: string; fg: string; accent: string; accent2: string; deep: string;
+    // Legacy literal-name aliases (pre-rename Tier-2 pages) — same values as the roles.
+    mint: string; green: string; night: string; white: string; gold: string;
+    font: string;
+  };
   width: number; // canvas px (1080 for 9:16)
   height: number; // canvas px (1920 for 9:16)
   words: WordTiming[]; // beat's spoken words, beat-relative (start/end in seconds from beat start); [] when none

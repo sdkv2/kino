@@ -212,13 +212,18 @@ program
 
 program
   .command("fonts")
-  .description("List the curated fonts (downloaded on demand) with descriptions + cache status")
-  .action(async () => (await import("./commands/fonts.js")).fonts());
+  .description("List the curated fonts, search all of Google Fonts, or render a specimen still")
+  .option("--search <term>", "search the full Google Fonts catalog (needs GOOGLE_FONTS_API_KEY)")
+  .option("--preview <family>", "render a caption specimen still in 9:16 + 16:9 and print the paths")
+  .option("--brand <name>", "brand whose colours/caption size the preview uses (default: kino house)")
+  .option("--format <list>", "preview formats (default 9:16,16:9)")
+  .option("--refresh", "re-fetch the Google Fonts catalog instead of using the cached copy")
+  .action(async (o) => (await import("./commands/fonts.js")).fonts(o));
 
 program
   .command("glyphs <text>")
   .description("Letterform outlines as SVG path data (for data-kino-morph-stops, stroke-dash, clips)")
-  .option("--font <name>", "curated font name (default Inter) — see `kino fonts`")
+  .option("--font <name>", "any Google Fonts family (default Inter) — see `kino fonts`")
   .option("--size <px>", "em size the outlines are scaled to (default 100)")
   .option("--letter-spacing <px>", "extra advance per glyph, in the same units")
   .option("--combined", "one <path> for the whole run instead of one per glyph")

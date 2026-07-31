@@ -26,7 +26,12 @@ const TextOverlaySpec = z.object({
   effects: z.unknown().optional(),
 });
 
-const Kicker = z.object({ text: z.string(), color: z.enum(["mint", "green", "gold"]).default("mint") });
+const Kicker = z.object({
+  text: z.string(),
+  // Role names are canonical; the literal names are the pre-rename aliases (accent/mint,
+  // deep/green, accent2/gold) — resolved to the same palette slots at render.
+  color: z.enum(["accent", "deep", "accent2", "mint", "green", "gold"]).default("accent"),
+});
 const Shot = z.enum(["push-in", "pull-out", "pan-left", "pan-right", "tilt-up", "scroll", "scroll-up", "static"]);
 /** Camera carried through a transition — composes with ANY transition kind. */
 const TransitionCamera = z

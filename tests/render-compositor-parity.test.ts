@@ -15,8 +15,8 @@ const PARITY_THRESHOLD = 0.01;
 const UPDATE_GOLDEN = process.env.KINO_UPDATE_GOLDEN === "1";
 
 const theme = {
-  font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64",
-  gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9,
+  font: "Arial", bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64",
+  accent2: "#d99a20", fg: "#fff", captionFontSize: 74, captionStroke: 9,
   film: 0,
 };
 const canvasBg = {

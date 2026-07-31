@@ -84,10 +84,10 @@ export function buildRegistry(
         draw,
         params: {
           ...props.background.params,
-          night: props.theme.night,
-          green: props.theme.green,
-          mint: props.theme.mint,
-          gold: props.theme.gold,
+          night: props.theme.bg,
+          green: props.theme.deep,
+          mint: props.theme.accent,
+          gold: props.theme.accent2,
         },
         keyframes: props.background.keyframes,
         triggers: props.background.triggers,
@@ -107,7 +107,7 @@ export function buildRegistry(
         draw: scrimDraw,
         params: {
           ...props.background.params,
-          night: props.theme.night,
+          night: props.theme.bg,
         },
         keyframes: [],
         triggers: [],

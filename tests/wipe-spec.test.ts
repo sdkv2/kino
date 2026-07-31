@@ -63,7 +63,7 @@ describe("resolveWipeParams", () => {
 
 describe("transitionWipeForWindow", () => {
   const props = (segs: unknown[]) =>
-    ({ fps: 30, theme: { mint: MINT }, segments: segs }) as unknown as KinoProps;
+    ({ fps: 30, theme: { accent: MINT }, segments: segs }) as unknown as KinoProps;
   const win = { from: "beat0", to: "beat1", p: 0.5 };
 
   it("is undefined for a non-wipe transition, so other shaders get no uniforms", () => {
@@ -114,7 +114,7 @@ describe("transitionInvertForWindow", () => {
   const props = (seg1: Record<string, unknown>) =>
     ({
       fps: 30,
-      theme: { mint: MINT },
+      theme: { accent: MINT },
       segments: [{ kind: "motion", startSec: 0, endSec: 3, motion: {} }, { kind: "motion", startSec: 3, endSec: 6, motion: {}, ...seg1 }],
     }) as unknown as KinoProps;
   const win = { from: "beat0", to: "beat1", p: 0.5 };

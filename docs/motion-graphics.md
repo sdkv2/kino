@@ -45,14 +45,14 @@ kino sets these custom properties on the graphic's host **every frame**. Read th
 | `--kino-edge` | `sin(progress·π)` — `0` at beat start/end, `1` mid (seam-safe wash/breath) |
 | `--pulse` | `0 → 1` envelope fired by spec triggers (`{ at, action: "pulse" }`) — fast attack (~45ms) then exponential decay |
 | `--<param>` | every key in the spec's `params`, tweened by `keyframes` (e.g. `--pct`) |
-| `--kino-mint` `--kino-green` `--kino-night` `--kino-white` `--kino-gold` | brand palette |
+| `--kino-accent` `--kino-accent2` `--kino-deep` `--kino-bg` `--kino-fg` | brand palette, by role (primary accent · secondary/bright · deep fill · page base · text ink). The legacy literal names (`--kino-mint/-gold/-green/-night/-white`) stay injected as aliases for the same slots. |
 | `--kino-font` | brand font family |
 | `--kino-label-font` | brand `labelFont` (falls back to `--kino-font`) |
 | `--kino-caption-bottom` | px from the frame bottom where kino's caption band sits (`0px` when this beat has no caption) — keep your own text clear of it, e.g. `bottom:calc(var(--kino-caption-bottom) + 24px)` |
 | `--kino-words-shown` | **continuous** count of the beat's spoken words shown at this frame — each word contributes its elapsed fraction (0→1 across its spoken span), reaching exactly *k* when word *k* finishes. Gated reveals like `clamp(0, calc(var(--kino-words-shown) - i), 1)` ease through the word instead of stepping at its start |
 | `--kino-word-count` | total spoken words in this beat |
 
-> The gold accent **is** auto-injected as `--kino-gold`. You don't need to pass it as a param.
+> The secondary accent **is** auto-injected as `--kino-accent2` (alias `--kino-gold`). You don't need to pass it as a param.
 
 ### Typed-in-sync text (the caption engine can't style; this can)
 

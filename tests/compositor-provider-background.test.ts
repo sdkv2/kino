@@ -4,7 +4,7 @@ import { glProbe, closeGlHost } from "./helpers/glHost.js";
 afterAll(closeGlHost);
 
 describe("canvas2d background source", () => {
-  it("paints the night colour before running the preset draw", async () => {
+  it("paints the bg colour before running the preset draw", async () => {
     const px = await glProbe<[], number[]>({
       entry: "src/render/native/page/compositor/providers/canvas2d.ts",
       globalName: "KinoBg",
@@ -14,7 +14,7 @@ describe("canvas2d background source", () => {
         const src = (window as any).KinoBg.createCanvas2dSource({
           draw: () => {},
           params: {}, keyframes: [], triggers: [],
-          theme: { night: "#0b1020" },
+          theme: { bg: "#0b1020" },
           width: 64, height: 64, fps: 30,
         });
         await src.prepare(0);

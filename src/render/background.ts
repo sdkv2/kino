@@ -10,7 +10,7 @@ export function resolveBackgroundKind(brand: Brand, spec: Spec): BackgroundKind 
 }
 
 export function resolveBackgroundColors(brand: Brand): string[] {
-  return brand.backgroundColors ?? [brand.colors.mint, brand.colors.green, brand.colors.gold];
+  return brand.backgroundColors ?? [brand.colors.accent, brand.colors.deep, brand.colors.accent2];
 }
 
 export function resolveBackgroundIntensity(brand: Brand, spec: Spec): number {

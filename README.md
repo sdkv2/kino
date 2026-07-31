@@ -134,6 +134,7 @@ Longer guides are in [`docs/`](docs/):
 ```bash
 npm run build     # tsc → dist/
 npm test          # vitest (run once);  npm run test:watch to watch
+                  # GPU pixel + CoreML tests are separate: npm run test:gpu / test:metal
 npm run dev -- <args>   # run the CLI from source via tsx
 ```
 Work on a feature branch (`feat/…`, `fix/…`, `chore/…`), bump `version` in `package.json` for

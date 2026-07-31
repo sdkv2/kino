@@ -163,6 +163,9 @@ export async function doctor(): Promise<void> {
     ["REPLICATE_API_TOKEN (provider: replicate)", !!process.env.REPLICATE_API_TOKEN],
     ["PEXELS_API_KEY (kino pexels — stock b-roll)", !!process.env.PEXELS_API_KEY],
     ["FREESOUND_API_KEY (kino music search — optional)", !!process.env.FREESOUND_API_KEY],
+    // Optional: any Google Fonts family already downloads without a key. This only unlocks
+    // `kino fonts --search` and real per-family weight lists.
+    ["GOOGLE_FONTS_API_KEY (kino fonts --search — optional)", !!process.env.GOOGLE_FONTS_API_KEY],
   ];
   for (const [n, ok] of checks) ok ? log.ok(n) : log.warn(`${n} missing`);
 

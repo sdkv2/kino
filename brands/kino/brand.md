@@ -6,11 +6,11 @@ defaultProvider: none
 defaultVoice: "21m00Tcm4TlvDq8ikWAM" # calm narrator
 background: mesh
 colors:
-  night: "#0b1020"
-  mint: "#80e2b4"
-  green: "#0c8d64"
-  white: "#ffffff"
-  gold: "#d99a20"
+  bg: "#0b1020"
+  fg: "#ffffff"
+  accent: "#80e2b4"
+  accent2: "#d99a20"
+  deep: "#0c8d64"
 ---
 
 # kino

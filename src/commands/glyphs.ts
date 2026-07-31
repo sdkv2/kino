@@ -9,8 +9,7 @@
 // card's copy does not change per frame, so resolving outlines at author time keeps the render path
 // untouched and makes the result inspectable before it ships.
 import { readFileSync } from "node:fs";
-import { ensureFont } from "../fonts/manager.js";
-import { lookupFont } from "../fonts/registry.js";
+import { ensureFont, resolveFont } from "../fonts/manager.js";
 import { parseTtf, textOutlines } from "../fonts/glyf.js";
 import { log } from "../log.js";
 
@@ -24,13 +23,14 @@ export interface GlyphsOpts {
 
 export async function glyphs(text: string, opts: GlyphsOpts): Promise<void> {
   const name = opts.font ?? "Inter";
-  const def = lookupFont(name);
+  const def = await resolveFont(name);
   if (!def) {
-    throw new Error(`Unknown font "${name}" — run \`kino fonts\` for the curated list`);
+    throw new Error(`"${name}" is a CSS font stack — outlines need a single family name (run \`kino fonts\` for the shortlist)`);
   }
-  const ttf = await ensureFont(def.name);
+  const ttf = await ensureFont(def.family, def.weight);
   if (!ttf) {
-    throw new Error(`Font "${def.name}" could not be downloaded (offline?) — outlines need the TTF`);
+    const hint = def.suggestion ? ` Did you mean "${def.suggestion}"?` : "";
+    throw new Error(`Font "${def.family}" could not be downloaded (unknown family, or offline?) — outlines need the TTF.${hint}`);
   }
   const font = parseTtf(readFileSync(ttf));
   const size = opts.size ? Number(opts.size) : 100;
@@ -49,7 +49,7 @@ export async function glyphs(text: string, opts: GlyphsOpts): Promise<void> {
   const width = Math.ceil(run.advance);
   const drawn = run.glyphs.filter((g) => g.d);
 
-  log.info(`${def.name} · ${size}px em · advance ${run.advance.toFixed(1)} · ${drawn.length}/${run.glyphs.length} glyphs with outlines`);
+  log.info(`${def.family} ${def.weight} · ${size}px em · advance ${run.advance.toFixed(1)} · ${drawn.length}/${run.glyphs.length} glyphs with outlines`);
   log.info(`viewBox="0 ${top} ${width} ${height}"   (baseline is y=0; ascender is negative)`);
   console.log("");
   if (opts.combined) {

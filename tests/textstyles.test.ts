@@ -4,7 +4,7 @@ import {
   TEXT_POSITIONS, TEXT_SIZES,
 } from "../src/render/textStyles.js";
 
-const t = { night: "#0b1020", mint: "#80e2b4", green: "#0c8d64", white: "#ffffff", captionStroke: 9 };
+const t = { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64", fg: "#ffffff", captionStroke: 9 };
 
 describe("wordStyle", () => {
   it("stroke reproduces the legacy caption ink exactly", () => {
