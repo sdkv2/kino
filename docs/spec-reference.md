@@ -335,6 +335,12 @@ full-frame grade over the footage but under the type, a persistent brand mark, a
 survives a beat's crossfade untouched: each is one entry, positioned by z rather than by where it
 sits in the array.
 
+The field set below is **closed**: an unrecognized key on a layer, on its `source`, or on its
+`rect` is an error naming the near miss (`unrecognized key 'fromsec' — did you mean 'fromSec'?`),
+rather than a key the renderer silently never reads. Shape is checked when the spec loads;
+the rules that need context — reserved ids and z values, `source`/`adjust` exclusivity, beat
+ranges, mask support — are checked right after, by `validateLayers`.
+
 ```json
 "layers": [
   {
@@ -544,6 +550,31 @@ beside `transition` on the incoming beat and works on **every** transition, buil
   "transition": "custom", "transitionSource": "iris", "transitionInvert": true }
 ```
 
+**`carryMotion: true`** keeps a motion beat's graphic **moving through the transition that follows
+it**. By default an outgoing motion beat is held on its last authored frame for the whole handoff —
+which is right for most beats, since a graphic that has finished saying its piece should settle
+under the cut rather than tween on through it. But the hold pins the *raster*, not just the clock,
+so a graphic still in motion at the boundary stops dead the moment the transition starts, and no
+CSS in the page can escape it — the frame is simply never re-rendered.
+
+Set it on the **outgoing** beat when the motion should carry into the cut — a spin that whips away
+under the ink, drift that keeps drifting:
+
+```jsonc
+{ "kind": "motion", "source": "motion/spin.html", "dur": 2, "carryMotion": true }
+```
+
+`--progress` and every eased curve (`--kino-in/out/inout/edge`) still settle at 1 either way, so
+carrying never restarts or overshoots an entrance. Only the **unclamped real-time clock** — `--t` /
+`env.t` — keeps advancing, which is the clock a carry-through flourish must be written against:
+
+```css
+/* keeps turning through the handoff; --kino-in would freeze at the boundary */
+.spin { transform: rotate(calc(var(--t) * var(--t) * var(--t) * 90deg)); }
+```
+
+Costs one extra raster per handoff frame, which is why it is opt-in rather than the default.
+
 It is implemented in the compositor as a *double* flip — the two beats are swapped **and** the
 shader is fed `1 - p` — never inside a shader. Two things follow, and both are the reason it is done
 this way. Every transition gets a reverse for free, including author-supplied ones: no shader knows
@@ -624,7 +655,36 @@ In scope:
 | `kinoUv(fragCoord)` | `fragCoord` → normalised uv |
 | `uP` | `0` at the first overlapping frame, `1` at the last |
 | `uRes` / `iResolution` | framebuffer size |
+| `uBrandBg` / `uBrandFg` / `uBrandAccent` / `uBrandAccent2` / `uBrandDeep` | the resolved brand palette as rgb — the same five roles `brand.md` names |
 | `u_<name>` | every **numeric** `transitionParams` key, up to 8, aliased in sorted order |
+
+**The colour rule.** Never hard-code a hue for anything the shader *paints* — ink, fire, an edge
+glow, a bevel. Take it from the brand and let the spec override it, in one line:
+
+```glsl
+vec3 ink = kinoPick(u_ink, uBrandAccent);   // spec "ink": "#ff00aa" wins; else the brand's accent
+```
+
+`kinoPick(colour, fallback)` covers all three cases an author needs: **brand by default**, so a
+transition looks like the brand it ships in without being configured; **per-spec override**, by
+naming the param with a hex value; and a **literal fallback** for a colour that is physical rather
+than editorial — a white-hot core or black char stays a literal, because it isn't the brand's to
+choose. The sentinel is a negative channel, so black (`#000`) is still a colour you can ask for.
+
+`transitionParams` values that are hex strings become `u_<name>` **vec3** uniforms (up to 4); numeric
+values become `u_<name>` floats (up to 8). A malformed hex fails the build rather than silently
+falling back to the brand.
+
+```jsonc
+"transitionParams": { "fire": "#ff2200", "heat": 1.2 }   // colour + numeric knob together
+```
+
+The shipped shaders follow this: `organic-inkbleed` takes `ink` / `pool` / `stain`, `film-scorch`
+takes `fire`, `geo-facade` takes `bevel`. Each header names the hex that restores its original look.
+
+Default to `0` for that kind of knob: the engine zero-fills any `u_<name>` the spec omits, so `0`
+is the value an author gets for free, and it should mean "the sensible default" rather than a
+degenerate one.
 
 **The endpoint contract is yours to keep: exactly `kinoFrom` at `uP=0`, exactly `kinoTo` at `uP=1`.**
 A transition that is a hair off at either end pops on every beat boundary. Reach both ends

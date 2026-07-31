@@ -3,272 +3,350 @@
 // keeps startup fast (only the invoked command's module + its heavy deps like the render engine load) and
 // isolates a broken command from crashing the whole CLI. Not a mistake; do not hoist these to
 // top-level imports.
-import { Command } from "commander";
+//
+// Flags shared by more than one command come from cliOptions.ts so the same word always means the
+// same thing; see that file for the vocabulary. Commands are registered in the order you use them
+// (make something → look at it → fix the timing → fetch assets → look things up → set up), because
+// that registration order is the order `kino --help` prints.
+import { Command, Option } from "commander";
 import { log } from "./log.js";
 import { formatCliError } from "./cliError.js";
 import { KINO_VERSION } from "./version.js";
+import {
+  aroundOpt,
+  asOpt,
+  assetNameOpt,
+  atOpt,
+  draftAnalysisOpt,
+  draftOpt,
+  dryRunOpt,
+  firstOf,
+  fontOpt,
+  formatAliasOpt,
+  formatListOpt,
+  formatOneOpt,
+  getOpt,
+  landscapeOpt,
+  mockAliasOpt,
+  montageOpt,
+  outAliasOpt,
+  outDirOpt,
+  platformOpt,
+  projectOpt,
+  projectTargetOpt,
+  qualityOpt,
+  realOpt,
+  resultCountOpt,
+  spanOpt,
+} from "./cliOptions.js";
 
 const program = new Command();
 program.name("kino").description("Spec driven video development").version(KINO_VERSION);
 
+/* ─── make ───────────────────────────────────────────────────────────────────────────────────── */
+
 program
   .command("build <spec>")
-  .description("Generate a video from a spec (vo → avatar → render)")
-  .option("--draft", "fast, free preview: 720p canvas + low-quality encode (silent, no presenter)")
-  .option("--tts", "add real ElevenLabs voiceover — THE ONLY FLAG THAT SPENDS. Off by default: a plain build is silent, full quality, $0")
-  .option("--no-avatar", "with --tts: keep the voiceover but skip the presenter")
-  .option("--mock", "alias of --draft (deprecated)")
-  .option("--format <list>", "comma-separated formats, e.g. 9:16,16:9-4k (add -4k for UHD)")
-  .option("--provider <name>", "override avatar engine: none | heygen | hedra | replicate")
-  .option("--background <kind>", "override the background: glow|image|mesh|aurora|particles|grid|custom")
-  .option("--font <name>", "override brand.font for this render (see `kino fonts`)")
-  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
-  .option("--tag <label>", "suffix the output filename so variants are kept (auto-set from --background/--font)")
-  .option("--beat <n>", "render only beat n (1-indexed) as its own standalone clip — not supported with --tts")
-  .option("--quality <preset>", "standard (default) | very-high — very-high supersamples the composite 2× (4× fill)")
+  .description("Render a spec to MP4")
+  .addOption(draftOpt())
+  .addOption(new Option("--tts", "buy real voiceover from ElevenLabs — THE ONLY FLAG THAT SPENDS"))
+  .addOption(realOpt())
+  .addOption(new Option("--no-avatar", "with --tts: keep the voiceover, skip the presenter"))
+  .addOption(formatListOpt())
+  .addOption(qualityOpt())
+  .addOption(new Option("--provider <name>", "override the presenter engine: none, heygen, hedra, replicate"))
+  .addOption(new Option("--background <kind>", "override the background: glow, image, mesh, aurora, particles, grid, custom"))
+  .addOption(fontOpt())
+  .addOption(new Option("--beat <n>", "render only beat n (1-indexed) as its own clip"))
+  .addOption(new Option("--tag <label>", "suffix the output filename so variants are kept"))
+  .addOption(projectOpt())
+  .addOption(mockAliasOpt())
   .action(async (s, o) => {
     await (await import("./commands/build.js")).build(s, o);
   });
 
 program
-  .command("inspect <spec>")
-  .description("Print the resolved render plan (beats, timings) as JSON")
-  .option("--real", "use real VO timings instead of the mock estimate")
-  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
-  .action(async (s, o) => (await import("./commands/inspect.js")).inspect(s, o));
+  .command("batch <input>")
+  .description('Render many specs, or one spec in many variants — a JSON array of paths, or { "base", "variants" }')
+  .addOption(draftOpt())
+  .addOption(projectOpt())
+  .addOption(mockAliasOpt())
+  .action(async (s, o) =>
+    (await import("./commands/batch.js")).batch(s, { mock: !!(o.draft || o.mock), project: o.project }),
+  );
 
-program
-  .command("projects")
-  .description("List projects, or scaffold one: --new <name> [--brand <brand>]")
-  .option("--new <name>", "scaffold a new project under projects/")
-  .option("--brand <brand>", "brand to assign to the new project (omit for kino defaults)")
-  .action(async (o) => (await import("./commands/projects.js")).projects(o));
-
-program
-  .command("update")
-  .description("Update kino in place (repo install: git pull + rebuild; global: npm -g @latest)")
-  .action(async () => (await import("./commands/update.js")).update());
-
-program
-  .command("transitions")
-  .description("List beat transitions (incl. the wipe family) and the contract for authoring your own")
-  .action(async () => (await import("./commands/transitions.js")).transitions());
+/* ─── look at it ─────────────────────────────────────────────────────────────────────────────── */
 
 program
   .command("still <spec>")
-  .description("Render still(s) fast (no encode): --at | --segment | --around <sec> | (per beat)")
-  .option("--at <list>", "comma-separated timestamps in seconds")
-  .option("--around <sec>", "N frames in a window around this timestamp (implies montage sheet)")
-  .option("--span <sec>", "window width for --around (default 1)")
-  .option("--count <n>", "frames in the --around window (default 5)")
-  .option("--montage", "tile multiple stills into one contact sheet")
-  .option("--quality <preset>", "standard (default) | very-high — very-high supersamples the composite 2× (4× fill)")
-  .option("--segment <list>", "render the midpoint of segment n (comma list for several: 0,1,2)")
-  .option("--word <word>", "center the sheet on a spoken word's start (with --segment; implies montage)")
-  .option("--format <fmt>", "9:16 | 3:4 | 16:9 | 9:16-4k | 3:4-4k | 16:9-4k")
-  .option("--font <name>", "override brand.font (see `kino fonts`)")
-  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
-  .option("--real", "real VO/avatar + true timing (default: mock, free)")
-  .option("--platform <name>", "overlay in-feed safe zones (guide only): tiktok | reels | shorts")
-  .option("--grid", "overlay a rule-of-thirds grid for composition QA")
-  .option("--measure", "print exact geometry (center X/Y + Δ-from-center) of every [data-measure] element — deterministic alignment QA")
-  .option("--dump-html", "write the exact markup each motion graphic emitted at these frames (Tier-2 procs included)")
+  .description("Render single frames from a spec — no video encode, so it is fast")
+  .addOption(atOpt())
+  .addOption(new Option("--segment <list>", "render the midpoint of beat n (comma-separated for several)"))
+  .addOption(aroundOpt())
+  .addOption(spanOpt())
+  .addOption(new Option("--count <n>", "how many frames in the --around window (default 5)"))
+  .addOption(new Option("--word <word>", "centre the window on a spoken word (needs --segment)"))
+  .addOption(montageOpt())
+  .addOption(realOpt())
+  .addOption(formatOneOpt())
+  .addOption(fontOpt())
+  .addOption(qualityOpt())
+  .addOption(platformOpt())
+  .addOption(new Option("--grid", "overlay a rule-of-thirds grid for composition checks"))
+  .addOption(new Option("--measure", "print the exact geometry of every [data-measure] element"))
+  .addOption(new Option("--dump-html", "write the markup each motion graphic emitted at these frames"))
+  .addOption(projectOpt())
   .action(async (s, o) => (await import("./commands/still.js")).still(s, o));
 
 program
   .command("storyboard <spec>")
-  .description("Render per-beat stills (composition + full reveal), tiled into a labeled contact sheet")
-  .option("--format <fmt>", "9:16 | 3:4 | 16:9 | 9:16-4k | 3:4-4k | 16:9-4k")
-  .option("--frames <n>", "frames per beat (default 2: composition + fully-revealed end-state; the ·full tile shows overflow/overlaps)")
-  .option("--font <name>", "override brand.font (see `kino fonts`)")
-  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
-  .option("--real", "real VO/avatar + true timing (default: mock, free)")
-  .option("--platform <name>", "overlay in-feed safe zones (guide only): tiktok | reels | shorts")
+  .description("Render one labelled frame per beat, tiled into a contact sheet")
+  .addOption(new Option("--frames <n>", "how many frames per beat (default 2: composition, then fully revealed)"))
+  .addOption(realOpt())
+  .addOption(formatOneOpt())
+  .addOption(fontOpt())
+  .addOption(platformOpt())
+  .addOption(projectOpt())
   .action(async (s, o) => (await import("./commands/storyboard.js")).storyboard(s, o));
 
 program
+  .command("inspect <spec>")
+  .description("Print the resolved plan as JSON — beats, timings, and per-word timestamps")
+  .addOption(realOpt())
+  .addOption(projectOpt())
+  .action(async (s, o) => (await import("./commands/inspect.js")).inspect(s, o));
+
+program
   .command("frames <video>")
-  .description("Extract frames from any video — --at | --around <sec> | --count/--every")
-  .option("--at <list>", "comma-separated timestamps in seconds")
-  .option("--around <sec>", "N frames in a window around this timestamp (implies montage sheet)")
-  .option("--span <sec>", "window width for --around (default 1)")
-  .option("--out <dir>", "output directory")
-  .option("--montage", "also tile the frames into one image")
-  .option("--every <sec>", "a frame every N seconds (when --at/--around is not given)")
-  .option("--count <n>", "with --around: frames in the window (default 5); else N frames spaced evenly")
+  .description("Extract frames from a video file")
+  .addOption(atOpt())
+  .addOption(aroundOpt())
+  .addOption(spanOpt())
+  .addOption(new Option("--count <n>", "how many frames — in the --around window, or spaced evenly (default 5)"))
+  .addOption(new Option("--every <sec>", "a frame every n seconds, instead of --at/--around"))
+  .addOption(montageOpt())
+  .addOption(outDirOpt())
   .action(async (v, o) => (await import("./commands/frames.js")).frames(v, o));
 
-program
-  .command("transcribe <video>")
-  .description("Analyse an EXTERNAL reference video: transcribe speech to a timestamped transcript (research only — NOT for our own renders or the build pipeline)")
-  .option("--format <fmt>", "json | srt | vtt | text", "json")
-  .option("--out <file>", "write to a file instead of stdout")
-  .option("--mock", "offline canned transcript (no ffmpeg/network)")
-  .action(async (v, o) => {
-    await (await import("./commands/transcribe.js")).transcribe(v, o);
-  });
-
-program
-  .command("segment <input>")
-  .description("Generate object masks (Mac/CoreML or CUDA/PyTorch) for an image or video, consumed as shader texture channels")
-  .option("--prompt <text>", "text prompt naming the object(s) to segment (required)")
-  .option("--objects <n>", "number of objects to track (max 4, default 1)")
-  .option("--out <name>", "output subdir name under assets/masks/ (default: input's basename)")
-  .option("--cutout", "image only: also write a transparent RGBA subject to assets/cutouts/<out>.png")
-  .option("--no-mask", "skip mask.png (image only; use with --cutout for cutout-only)")
-  .option("--no-track", "image-style per-frame segmentation instead of video object tracking")
-  .option("--backend <name>", "coreml | cuda | mock (default: coreml on macOS, cuda on Linux/Windows+NVIDIA)")
-  .option("--format <fmt>", "json (default: human summary, or JSON when stdout isn't a TTY)")
-  .action(async (input, o) => {
-    await (await import("./commands/segment.js")).segment(input, o);
-  });
-
-program
-  .command("scan <video>")
-  .description("Analyse an EXTERNAL reference video: transcript + frames + contact sheet in one shot (research only)")
-  .option("--count <n>", "extract N frames evenly (default: one per transcript segment)")
-  .option("--every <sec>", "extract a frame every N seconds")
-  .option("--out <dir>", "output directory")
-  .option("--mock", "offline canned transcript")
-  .action(async (v, o) => {
-    await (await import("./commands/scan.js")).scan(v, o);
-  });
-
-program
-  .command("audio-markers <file>")
-  .description("Analyze any audio/video file: JSON markers (onsets, peaks, silences, RMS) + waveform/spectrogram PNGs")
-  .option("--out <dir>", "output directory (default: next to the input file)")
-  .action(async (f, o) => (await import("./commands/audiomarkers.js")).audioMarkers(f, o));
+/* ─── fix the timing ─────────────────────────────────────────────────────────────────────────── */
 
 program
   .command("retune <spec>")
-  .description("Rewrite motion/background triggers from real VO word timings (speech-synced UIs)")
-  .option("--dry-run", "print changes without writing the spec")
-  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
+  .description("Rewrite motion triggers from the real voiceover's word timings")
+  .addOption(dryRunOpt())
+  .addOption(projectOpt())
   .action(async (s, o) => (await import("./commands/retune.js")).retune(s, { dryRun: o.dryRun, project: o.project }));
 
 program
   .command("sync <spec>")
-  .description("Retime visual beats so every cut lands on the music bed's beat grid (music-video sync)")
-  .option("--grain <g>", "snap cuts to every beat or every bar (4 beats)", "bar")
-  .option("--offset <mode>", '"auto" picks the loudest on-grid music.startSec; default keeps the current one', "keep")
-  .option("--min-dur <sec>", "floor for a rewritten beat dur", parseFloat)
-  .option("--dry-run", "print changes without writing the spec")
-  .option("--project <name>", "use projects/<name> (else inferred from the spec's path)")
+  .description("Retime beats so every cut lands on the music bed's beat grid")
+  .addOption(new Option("--grain <g>", "snap cuts to every beat, or every bar (4 beats)").choices(["beat", "bar"]).default("bar"))
+  .addOption(
+    new Option("--offset <mode>", "auto picks the loudest on-grid music.startSec; keep leaves it alone")
+      .choices(["auto", "keep"])
+      .default("keep"),
+  )
+  .addOption(new Option("--min-dur <sec>", "shortest a rewritten beat may become").argParser(parseFloat))
+  .addOption(dryRunOpt())
+  .addOption(projectOpt())
   .action(async (s, o) => {
-    if (o.grain !== "beat" && o.grain !== "bar") throw new Error(`--grain must be "beat" or "bar", got "${o.grain}"`);
-    if (o.offset !== "auto" && o.offset !== "keep") throw new Error(`--offset must be "auto" or "keep", got "${o.offset}"`);
-    await (await import("./commands/sync.js")).sync(s, { grain: o.grain, offset: o.offset, minDur: o.minDur, dryRun: o.dryRun, project: o.project });
+    await (await import("./commands/sync.js")).sync(s, {
+      grain: o.grain,
+      offset: o.offset,
+      minDur: o.minDur,
+      dryRun: o.dryRun,
+      project: o.project,
+    });
   });
 
 program
-  .command("batch <input>")
-  .description('Render many specs — JSON array of paths, or { "base", "variants": [{ "tag", "set" }] }')
-  .option("--mock")
-  .option("--project <name>", "use projects/<name> (else inferred from each spec's path)")
-  .action(async (s, o) => (await import("./commands/batch.js")).batch(s, o));
+  .command("audio-markers <file>")
+  .description("Analyse an audio or video file — onsets, peaks, silences, plus waveform images")
+  .addOption(outDirOpt())
+  .action(async (f, o) => (await import("./commands/audiomarkers.js")).audioMarkers(f, o));
 
-program
-  .command("voices")
-  .description("List ElevenLabs voices")
-  .option("--gender <g>")
-  .action(async (o) => (await import("./commands/voices.js")).voices(o));
-
-program
-  .command("avatars")
-  .description("List Avatar-IV photo-avatar looks (usable for lip-sync)")
-  .option("--gender <g>")
-  .action(async (o) => (await import("./commands/avatars.js")).avatars(o));
+/* ─── fetch assets ───────────────────────────────────────────────────────────────────────────── */
 
 program
   .command("pexels <query>")
-  .description("Search Pexels stock VIDEOS (portrait by default); --get <n> downloads into assets/pexels/. For still images use `kino photos`.")
-  .option("--get <n>", "download result #n from the search")
-  .option("--count <n>", "results to list (default 8)")
-  .option("--landscape", "search landscape instead of portrait")
-  .option("--out <rel>", "asset-relative output path (default pexels/<id>.mp4)")
-  .option("--project <name>", "target project whose assets/ receives the download (required for --get)")
-  .action(async (q, o) => (await import("./commands/pexels.js")).pexels(q, o));
+  .description("Search Pexels for stock video clips (portrait by default) — for photos use `kino photos`")
+  .addOption(getOpt())
+  .addOption(resultCountOpt())
+  .addOption(landscapeOpt())
+  .addOption(assetNameOpt("pexels/<id>.mp4"))
+  .addOption(projectTargetOpt())
+  .addOption(outAliasOpt())
+  .action(async (q, o) => (await import("./commands/pexels.js")).pexels(q, { ...o, out: firstOf(o.name, o.out) }));
 
 program
   .command("photos <query>")
-  .description("Search Pexels stock PHOTOS (portrait by default); --get <n> downloads the full-res original into assets/pexels/. For video clips use `kino pexels`.")
-  .option("--get <n>", "download result #n from the search")
-  .option("--count <n>", "results to list (default 8)")
-  .option("--landscape", "search landscape instead of portrait")
-  .option("--out <rel>", "asset-relative output path (default pexels/<id>.jpg)")
-  .option("--project <name>", "target project whose assets/ receives the download (required for --get)")
-  .action(async (q, o) => (await import("./commands/photos.js")).photos(q, o));
+  .description("Search Pexels for stock photos (portrait by default) — for video use `kino pexels`")
+  .addOption(getOpt())
+  .addOption(resultCountOpt())
+  .addOption(landscapeOpt())
+  .addOption(assetNameOpt("pexels/<id>.jpg"))
+  .addOption(projectTargetOpt())
+  .addOption(outAliasOpt())
+  .action(async (q, o) => (await import("./commands/photos.js")).photos(q, { ...o, out: firstOf(o.name, o.out) }));
 
 program
   .command("music [query]")
-  .description(
-    "List bundled beds, or search Freesound CC0 (15–90s short-form). Bare ids work in specs.",
-  )
-  .option("--get [n]", "copy a bundled bed, or download Freesound result #n")
-  .option("--count <n>", "Freesound results to list (default 8)")
-  .option("--project <name>", "target project for --get")
+  .description("List the bundled music beds, or search Freesound for CC0 tracks")
+  .addOption(new Option("--get [n]", "copy a bundled bed, or download Freesound result n"))
+  .addOption(resultCountOpt())
+  .addOption(projectTargetOpt())
   .action(async (q, o) => (await import("./commands/music.js")).music(q, o));
 
 program
+  .command("segment <input>")
+  .description("Generate object masks from an image or video, for use as shader texture channels")
+  .addOption(new Option("--prompt <text>", "text naming the object(s) to segment (required)"))
+  .addOption(new Option("--objects <n>", "how many objects to track (max 4, default 1)"))
+  .addOption(new Option("--name <name>", "output name under assets/masks/ (default: the input's basename)"))
+  .addOption(new Option("--cutout", "images only: also write a transparent subject to assets/cutouts/"))
+  .addOption(new Option("--no-mask", "images only: skip mask.png — pair with --cutout for a cutout only"))
+  .addOption(new Option("--no-track", "segment each frame independently instead of tracking objects"))
+  .addOption(new Option("--backend <name>", "coreml, cuda, or mock (default: coreml on macOS, else cuda)"))
+  .addOption(asOpt(["json"]))
+  .addOption(outAliasOpt())
+  .addOption(formatAliasOpt())
+  .action(async (input, o) => {
+    await (await import("./commands/segment.js")).segment(input, {
+      ...o,
+      out: firstOf(o.name, o.out),
+      format: firstOf(o.as, o.format),
+    });
+  });
+
+/* ─── study a reference video (research only — never the input to our own renders) ───────────── */
+
+program
+  .command("transcribe <video>")
+  .description("Transcribe someone else's reference video — research only, never a build input")
+  .addOption(asOpt(["json", "srt", "vtt", "text"]))
+  .addOption(new Option("--out <file>", "write to this file instead of stdout"))
+  .addOption(draftAnalysisOpt())
+  .addOption(mockAliasOpt())
+  .addOption(formatAliasOpt())
+  .action(async (v, o) => {
+    await (await import("./commands/transcribe.js")).transcribe(v, {
+      ...o,
+      format: firstOf(o.as, o.format) ?? "json",
+      mock: !!(o.draft || o.mock),
+    });
+  });
+
+program
+  .command("scan <video>")
+  .description("Transcribe someone else's reference video and extract frames — research only")
+  .addOption(new Option("--count <n>", "how many frames, spaced evenly (default: one per transcript segment)"))
+  .addOption(new Option("--every <sec>", "a frame every n seconds"))
+  .addOption(outDirOpt())
+  .addOption(draftAnalysisOpt())
+  .addOption(mockAliasOpt())
+  .action(async (v, o) => {
+    await (await import("./commands/scan.js")).scan(v, { ...o, mock: !!(o.draft || o.mock) });
+  });
+
+/* ─── look things up ─────────────────────────────────────────────────────────────────────────── */
+
+program
+  .command("brand [name]")
+  .description("List brands, or print one brand's styling values and guidelines")
+  .addOption(asOpt(["json"]))
+  .action(async (name, o) => (await import("./commands/brand.js")).brand(name, o));
+
+program
+  .command("backgrounds")
+  .description("List the animated backgrounds and the parameters each accepts")
+  .addOption(asOpt(["json"]))
+  .action(async (o) => (await import("./commands/backgrounds.js")).backgrounds(o));
+
+program
+  .command("elements")
+  .description("List the overlay elements (caption, kicker, zoom …) and their layout controls")
+  .addOption(asOpt(["json"]))
+  .action(async (o) => (await import("./commands/elements.js")).elements(o));
+
+program
+  .command("transitions")
+  .description("List the beat transitions, and how to author your own")
+  .addOption(asOpt(["json"]))
+  .action(async (o) => (await import("./commands/transitions.js")).transitions(o));
+
+program
+  .command("motion")
+  .description("Print the contract for authoring motion-graphic HTML")
+  .action(async () => (await import("./commands/motion.js")).motion());
+
+program
   .command("fonts")
-  .description("List the curated fonts, search all of Google Fonts, or render a specimen still")
-  .option("--search <term>", "search the full Google Fonts catalog (needs GOOGLE_FONTS_API_KEY)")
-  .option("--preview <family>", "render a caption specimen still in 9:16 + 16:9 and print the paths")
-  .option("--brand <name>", "brand whose colours/caption size the preview uses (default: kino house)")
-  .option("--format <list>", "preview formats (default 9:16,16:9)")
-  .option("--refresh", "re-fetch the Google Fonts catalog instead of using the cached copy")
+  .description("List the curated fonts, search Google Fonts, or render a specimen")
+  .addOption(new Option("--search <term>", "search the full Google Fonts catalog (needs GOOGLE_FONTS_API_KEY)"))
+  .addOption(new Option("--preview <family>", "render a caption specimen and print the paths"))
+  .addOption(new Option("--brand <name>", "brand whose colours the preview uses (default: kino house)"))
+  .addOption(new Option("--format <list>", "preview formats: 9:16, 3:4, 16:9 (comma-separated, default 9:16,16:9)"))
+  .addOption(new Option("--refresh", "re-fetch the Google Fonts catalog instead of using the cached copy"))
+  .addOption(asOpt(["json"]))
   .action(async (o) => (await import("./commands/fonts.js")).fonts(o));
 
 program
   .command("glyphs <text>")
-  .description("Letterform outlines as SVG path data (for data-kino-morph-stops, stroke-dash, clips)")
-  .option("--font <name>", "any Google Fonts family (default Inter) — see `kino fonts`")
-  .option("--size <px>", "em size the outlines are scaled to (default 100)")
-  .option("--letter-spacing <px>", "extra advance per glyph, in the same units")
-  .option("--combined", "one <path> for the whole run instead of one per glyph")
-  .option("--json", "machine-readable: advances, positions, metrics, path data")
-  .action(async (text: string, opts) => (await import("./commands/glyphs.js")).glyphs(text, opts));
+  .description("Print letterform outlines as SVG path data")
+  .addOption(new Option("--font <name>", "any Google Fonts family (default Inter) — see `kino fonts`"))
+  .addOption(new Option("--size <px>", "em size the outlines are scaled to (default 100)"))
+  .addOption(new Option("--letter-spacing <px>", "extra advance per glyph, in the same units"))
+  .addOption(new Option("--combined", "one path for the whole run instead of one per glyph"))
+  .addOption(asOpt(["json"]))
+  .addOption(new Option("--json", "deprecated alias of --as json").hideHelp())
+  .action(async (text: string, o) =>
+    (await import("./commands/glyphs.js")).glyphs(text, { ...o, json: o.json || o.as === "json" }),
+  );
 
 program
-  .command("backgrounds")
-  .description("List animated backgrounds + their agent-controllable params/actions")
-  .action(async () => (await import("./commands/backgrounds.js")).backgrounds());
+  .command("voices")
+  .description("List the ElevenLabs voices")
+  .addOption(new Option("--gender <g>", "filter by voice gender"))
+  .addOption(asOpt(["json"]))
+  .action(async (o) => (await import("./commands/voices.js")).voices(o));
 
 program
-  .command("elements")
-  .description("List overlay elements (caption, kicker, zoom …) + their layout/tween controls")
-  .action(async () => (await import("./commands/elements.js")).elements());
+  .command("avatars")
+  .description("List the Avatar-IV photo-avatar looks usable for lip-sync")
+  .addOption(new Option("--gender <g>", "filter by look gender"))
+  .addOption(asOpt(["json"]))
+  .action(async (o) => (await import("./commands/avatars.js")).avatars(o));
 
-program
-  .command("motion")
-  .description("Show how to author motion-graphic HTML files + the CSS-variable contract")
-  .action(async () => (await import("./commands/motion.js")).motion());
-
-program
-  .command("brand [name]")
-  .description("List brands, or print a brand's styling values + markdown guidelines")
-  .action(async (name) => (await import("./commands/brand.js")).brand(name));
+/* ─── set up ─────────────────────────────────────────────────────────────────────────────────── */
 
 program
   .command("init [brand]")
-  .description("Scaffold .env, a brand, and a first project under projects/<brand>")
+  .description("Set up .env, a brand, and a first project")
   .action(async (b) => (await import("./commands/init.js")).init(b));
 
 program
+  .command("projects")
+  .description("List the projects, or scaffold a new one")
+  .addOption(new Option("--new <name>", "scaffold a new project under projects/"))
+  .addOption(new Option("--brand <brand>", "brand to assign to the new project (omit for kino defaults)"))
+  .action(async (o) => (await import("./commands/projects.js")).projects(o));
+
+program
   .command("doctor")
-  .description("Check environment (deps + keys)")
+  .description("Check the environment — dependencies and API keys")
   .action(async () => (await import("./commands/doctor.js")).doctor());
 
 program
   .command("skills")
-  .description("List bundled agent skills, or install them for Cursor / Claude / Codex / .agents")
-  .option("--install", "symlink (or copy) package skills/ into each agent’s project skill dir")
-  .option(
-    "--agents <list>",
-    "comma-separated targets: agents,cursor,claude,codex (default: all). Alias: claude-code→claude",
-  )
+  .description("List the bundled agent skills, or install them for Cursor / Claude / Codex")
+  .addOption(new Option("--install", "symlink (or copy) the package's skills/ into each agent's skill dir"))
+  .addOption(new Option("--agents <list>", "comma-separated targets: agents, cursor, claude, codex (default: all)"))
   .action(async (o) => (await import("./commands/skills.js")).skills(o));
+
+program
+  .command("update")
+  .description("Update kino in place")
+  .action(async () => (await import("./commands/update.js")).update());
 
 program
   .parseAsync(process.argv)

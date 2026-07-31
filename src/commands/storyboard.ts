@@ -12,7 +12,7 @@ export async function storyboard(
   specPath: string,
   opts: { real?: boolean; format?: string; font?: string; project?: string; frames?: string; platform?: string },
 ): Promise<void> {
-  const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font, project: opts.project });
+  const r = await prepare(specPath, { real: opts.real, format: opts.format, font: opts.font, project: opts.project });
   const platformGuide = parsePlatform(opts.platform);
   if (platformGuide) r.props.platformGuide = platformGuide;
   // Frames per beat: default 2 — the composition frame plus the fully-revealed end-state, where a

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS } from "../render/textStyles.js";
 import { EASE_NAMES } from "../render/bgparams.js";
 import { EXTRA_PARAM_SLOTS } from "../render/shaderSource.js";
+import { LAYER_SOURCE_KINDS } from "../render/layerSpec.js";
 
 const EaseEnum = z.enum(EASE_NAMES);
 
@@ -78,7 +79,76 @@ const BgKeyframe = z.object({
   params: z.record(z.union([z.number(), z.string()])),
   ease: EaseEnum.optional(),
 });
+
+/**
+ * The channels `tweenAt` (render/layers.ts) actually reads off a caption/kicker/zoom track. Kept in
+ * sync with the defaults object there — anything absent from this list is read by nobody.
+ */
+export const OVERLAY_TWEEN_PARAMS = ["x", "y", "scale", "opacity", "rotate", "scaleX", "scaleY", "anchorX", "anchorY"];
+
+/**
+ * An overlay tween track. Same shape as BgKeyframe, but its `params` bag is CLOSED: on these tracks
+ * the channel set is fixed, so an unknown key is always a typo — and an open bag made that typo a
+ * silent no-op (the spec validated, the render did nothing, and the author had no error to correct
+ * against). Background and region-shader tracks keep the open BgKeyframe, where arbitrary author
+ * param names are the entire point.
+ */
+const OverlayKeyframe = BgKeyframe.superRefine((kf, ctx) => {
+  for (const key of Object.keys(kf.params)) {
+    if (OVERLAY_TWEEN_PARAMS.includes(key)) continue;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["params"],
+      message: `unrecognized tween param '${key}'${suggestKey(key, OVERLAY_TWEEN_PARAMS)} — valid: ${OVERLAY_TWEEN_PARAMS.join(", ")}`,
+    });
+  }
+});
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
+
+/**
+ * A declared layer (`spec.layers[]`) — SHAPE ONLY: required fields, primitive types, and a closed
+ * key set. The semantics stay in `validateLayers` (render/layerSpec.ts): reserved ids, reserved z
+ * values, source-vs-adjust exclusivity, blend/opacity ranges, beat-range checks, mask rules. One
+ * owner per question — "is this the right shape?" here, "does it make sense?" there — so the two
+ * never race to report the same problem in different words.
+ *
+ * `mask`, `effects` and `adjust` stay unknown on purpose: maskSpec.ts owns them, and restating
+ * their per-kind params here would duplicate that validator and risk rejecting what it accepts.
+ */
+const DeclaredLayerSource = z
+  .object({
+    kind: z.enum(LAYER_SOURCE_KINDS),
+    src: z.string().min(1),
+    // The SOURCE's own params (shader uniforms, motion-graphic knobs) — arbitrary author names, so
+    // this bag stays open. Not to be confused with the layer's `keyframes` below, which drive the
+    // fixed transform channels and are closed.
+    params: z.record(z.union([z.number(), z.string()])).optional(),
+    keyframes: z.array(BgKeyframe).optional(),
+    triggers: z.array(BgTrigger).optional(),
+  })
+  .strict();
+
+const DeclaredLayer = z
+  .object({
+    id: z.string().min(1),
+    z: z.number(),
+    source: DeclaredLayerSource.optional(),
+    adjust: z.array(z.unknown()).optional(),
+    blend: z.string().optional(),
+    fromSec: z.number().optional(),
+    toSec: z.number().optional(),
+    // Percent of frame, like every other rect in the spec.
+    rect: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).strict().optional(),
+    opacity: z.number().optional(),
+    mask: z.unknown().optional(),
+    effects: z.array(z.unknown()).optional(),
+    // The layer's own transform tween — same fixed channel set as captionKeyframes, and closed for
+    // the same reason: `tweenAt` reads nine names and silently ignores anything else.
+    keyframes: z.array(OverlayKeyframe).optional(),
+    segment: z.number().optional(),
+    hold: z.boolean().optional(),
+  })
+  .strict();
 // Numeric author-param names that consume a uParam slot — the union across a base dict and every
 // keyframe, since a slot is allocated for any name that appears anywhere (extraParamNames derives
 // the same set). colorA/colorB/colorC/intensity drive their own uniforms and cost nothing.
@@ -206,7 +276,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     shot: Shot.optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
-    captionKeyframes: z.array(BgKeyframe).optional(),
+    captionKeyframes: z.array(OverlayKeyframe).optional(),
     motionOverlay: MotionGraphicRef.optional(),
     captionStyle: CaptionStyle.optional(),
     captionAnimation: CaptionAnimation.optional(),
@@ -236,6 +306,13 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     transitionSource: z.string().min(1).optional(), // with transition:"custom" — bare id or assets/ path to a .frag
     transitionInvert: z.boolean().optional(), // run the transition backwards (a reveal becomes a conceal)
     transitionCamera: TransitionCamera.optional(), // camera carried through the cut
+    // Keep THIS beat's motion running through the transition that follows it. By default an
+    // outgoing motion beat is held on its last authored frame for the whole handoff, so a graphic
+    // that is still moving when the cut starts appears to stop dead under the transition. Opt in
+    // when the motion should carry into the cut (a spin that whips away, drift that keeps drifting).
+    // `--progress` and every eased curve still settle at 1 either way — only the real-time clock
+    // (`--t`, `env.t`) and the raster keep advancing. Costs one raster per handoff frame.
+    carryMotion: z.boolean().optional(),
     // Source-footage slice + retiming (importing-footage skill). Seconds into the asset.
     clipFrom: z.number().min(0).optional(),
     clipTo: z.number().min(0).optional(),
@@ -321,12 +398,12 @@ const SegmentUnion = z.discriminatedUnion("kind", [
       .optional(),
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
-    captionKeyframes: z.array(BgKeyframe).optional(),
-    kickerKeyframes: z.array(BgKeyframe).optional(),
+    captionKeyframes: z.array(OverlayKeyframe).optional(),
+    kickerKeyframes: z.array(OverlayKeyframe).optional(),
     // Camera push/pan on the whole footage+chrome group (the "canvas zoom" for inset device footage).
     // Beat-relative track — `at` is seconds from THIS segment's start (like captionKeyframes), so it
     // rides the beat when VO timing shifts; params x/y/scale/opacity.
-    zoomKeyframes: z.array(BgKeyframe).optional(),
+    zoomKeyframes: z.array(OverlayKeyframe).optional(),
     motionOverlay: MotionGraphicRef.optional(),
     captionStyle: CaptionStyle.optional(),
     captionAnimation: CaptionAnimation.optional(),
@@ -354,10 +431,17 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     transitionSource: z.string().min(1).optional(), // with transition:"custom" — bare id or assets/ path to a .frag
     transitionInvert: z.boolean().optional(), // run the transition backwards (a reveal becomes a conceal)
     transitionCamera: TransitionCamera.optional(), // camera carried through the cut
+    // Keep THIS beat's motion running through the transition that follows it. By default an
+    // outgoing motion beat is held on its last authored frame for the whole handoff, so a graphic
+    // that is still moving when the cut starts appears to stop dead under the transition. Opt in
+    // when the motion should carry into the cut (a spin that whips away, drift that keeps drifting).
+    // `--progress` and every eased curve still settle at 1 either way — only the real-time clock
+    // (`--t`, `env.t`) and the raster keep advancing. Costs one raster per handoff frame.
+    carryMotion: z.boolean().optional(),
 
     captionMode: CaptionMode.optional(),
     emphasis: z.array(z.string()).optional(),
-    captionKeyframes: z.array(BgKeyframe).optional(),
+    captionKeyframes: z.array(OverlayKeyframe).optional(),
     captionStyle: CaptionStyle.optional(),
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
@@ -372,7 +456,9 @@ const SegmentUnion = z.discriminatedUnion("kind", [
 // before the discriminated union — which needs the discriminator present and current.
 const Segment = z.preprocess(normalizeSegment, SegmentUnion);
 
-export const SpecSchema = z
+// Named so the key list is derivable for "did you mean …?" — .superRefine() below wraps this in a
+// ZodEffects, which no longer exposes .shape.
+const SpecObject = z
   .object({
     brand: z.string().optional(), // falls back to the project's project.json brand
     title: z.string().regex(/^[a-z0-9-]+$/, "title must be kebab-case"),
@@ -440,10 +526,15 @@ export const SpecSchema = z
     postFx: z.unknown().optional(),
     // Kept permissive here so the shared CLI validator reports layer errors in the author's
     // vocabulary rather than Zod's. See src/render/layerSpec.ts.
-    layers: z.unknown().optional(),
+    layers: z.array(DeclaredLayer).optional(),
     segments: z.array(Segment).min(1),
   })
-  .strict() // reject unknown top-level keys — a misplaced/misspelled key errors instead of silently no-op'ing
+  .strict(); // reject unknown top-level keys — a misplaced/misspelled key errors instead of silently no-op'ing
+
+/** Every top-level spec key — the candidate set for a mistyped spec field. */
+const SPEC_KEYS = Object.keys(SpecObject.shape);
+
+export const SpecSchema = SpecObject
   .superRefine((spec, ctx) => {
     // A scene's `source` only ever names a presenter — footage belongs to a video beat, which
     // carries the clip/speed/frame knobs a scene has no use for.
@@ -522,12 +613,99 @@ const SEGMENT_KIND_HINTS: Record<string, string> = {
   motionOverlay: "motionOverlay layers a second motion graphic on this beat (video/scene/motion)",
 };
 
+/**
+ * Optimal string alignment distance — Levenshtein plus one extra move: a swapped adjacent pair
+ * costs 1, not 2. Transposition is one of the most common ways to mistype a key (`opactiy` for
+ * `opacity`, `heigth` for `height`), and under plain Levenshtein it scores the same as two
+ * unrelated substitutions, which is exactly where a useful suggestion gets suppressed.
+ * Only ever called on short spec key names, so the quadratic table is free.
+ */
+function editDistance(a: string, b: string): number {
+  const n = b.length;
+  let prev2: number[] = [];
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = new Array<number>(n + 1);
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        cur[j] = Math.min(cur[j], prev2[j - 2] + 1);
+      }
+    }
+    prev2 = prev;
+    prev = cur;
+  }
+  return prev[n];
+}
+
+/**
+ * ` — did you mean 'dur'?` for a near-miss, else "". A wrong key is nearly always a typo or a
+ * remembered-from-elsewhere name, and the valid set is right here — so say it, rather than making
+ * the author go re-read the reference to find a one-character difference.
+ */
+export function suggestKey(key: string, candidates: Iterable<string>): string {
+  let best: string | null = null;
+  let bestDist = Infinity;
+  const lower = key.toLowerCase();
+  for (const c of candidates) {
+    if (c === key) continue;
+    const cl = c.toLowerCase();
+    let d: number;
+    if (cl === lower) {
+      d = 0.5; // case-only slip (captionkeyframes) — an exact hit, not a fuzzy one
+    } else if (lower.length >= 3 && cl.length >= 3 && (lower.startsWith(cl) || cl.startsWith(lower))) {
+      // Longer/shorter spelling of the same word: `duration` for `dur`. Edit distance scores these
+      // terribly (5 apart) even though they are among the likeliest misses. Charged per character
+      // of length gap so a prefix never outranks a genuine near-match — `captionKeyfrmes` must
+      // resolve to `captionKeyframes` (1 edit), not to its own prefix `caption`.
+      d = 0.5 + Math.abs(cl.length - lower.length) / 4;
+    } else {
+      d = editDistance(lower, cl);
+    }
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  // Scale the tolerance with the word: 2 edits is a typo in "backgroundKeyframes", a different
+  // word in "at".
+  const limit = Math.min(3, Math.max(1, Math.floor(key.length / 4)));
+  return best && bestDist <= limit ? ` — did you mean '${best}'?` : "";
+}
+
+/** Every key valid on any segment kind — the candidate set for a mistyped segment field. */
+const SEGMENT_KEYS = [...new Set(SegmentUnion.options.flatMap((o) => Object.keys(o.shape)))];
+const LAYER_KEYS = Object.keys(DeclaredLayer.shape);
+const LAYER_SOURCE_KEYS = Object.keys(DeclaredLayerSource.shape);
+
+/**
+ * Which valid keys to compare a typo against, and how to name the place it appeared. Derived from
+ * the schemas themselves, so a new field is suggestible the moment it exists.
+ */
+function locate(path: (string | number)[]): { where: string; candidates: string[] } {
+  const [head, index, ...rest] = path;
+  if (head === "segments" && rest.length === 0 && index !== undefined) {
+    return { where: `segments[${index}]`, candidates: SEGMENT_KEYS };
+  }
+  if (head === "layers" && index !== undefined) {
+    // `layers[0]` itself, or the `source` object nested in it — the only two closed objects there.
+    const where = `layers[${index}]${rest.length ? `.${rest.join(".")}` : ""}`;
+    if (rest.length === 0) return { where, candidates: LAYER_KEYS };
+    if (rest.length === 1 && rest[0] === "source") return { where, candidates: LAYER_SOURCE_KEYS };
+    return { where, candidates: [] };
+  }
+  if (path.length === 0) return { where: "spec", candidates: SPEC_KEYS };
+  return { where: path.join("."), candidates: [] };
+}
+
 function formatUnrecognizedKey(key: string, path: (string | number)[]): string {
   const onSegment = path[0] === "segments";
-  const where = onSegment ? `segments[${path[1]}]` : path.length ? path.join(".") : "spec";
+  const { where, candidates } = locate(path);
   if (onSegment && TOP_LEVEL_KEYS[key]) return `${where}: ${TOP_LEVEL_KEYS[key]}`;
   if (onSegment && SEGMENT_KIND_HINTS[key]) return `${where}: ${SEGMENT_KIND_HINTS[key]}`;
-  return `${where}: unrecognized key '${key}'`;
+  return `${where}: unrecognized key '${key}'${suggestKey(key, candidates)}`;
 }
 
 /** Humanize Zod unrecognized_keys (and keep other issues). Prefer this at CLI boundaries. */

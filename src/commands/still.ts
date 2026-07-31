@@ -48,10 +48,11 @@ export type StillOpts = {
 // Render one (or a few) still frames — fast preview, no video encode.
 //   --at <sec,...>   specific timestamps      --segment <n>   one beat's midpoint
 //   --around <sec>   N frames in a window around a point (implies montage)
-//   (neither)        one still per beat        --real          true VO/avatar + timing
+//   (neither)        one still per beat        --real          true VO timing, from the cache a
+//                                                              `build --tts` filled (never spends)
 //   --montage        tile multiple stills into one contact sheet
 export async function still(specPath: string, opts: StillOpts): Promise<void> {
-  const r = await prepare(specPath, { mock: !opts.real, format: opts.format, font: opts.font, project: opts.project });
+  const r = await prepare(specPath, { real: opts.real, format: opts.format, font: opts.font, project: opts.project });
   const platformGuide = parsePlatform(opts.platform);
   if (platformGuide) r.props.platformGuide = platformGuide;
   if (opts.grid) r.props.grid = true;

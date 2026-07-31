@@ -2,7 +2,21 @@
 
 Every `kino` command, its arguments, options, and examples. Run `kino <command> --help` for the same option list inline. New to kino? Start with [Getting started](getting-started.md).
 
-Most commands resolve their **project** automatically from the spec's path (`projects/<name>/specs/...`); pass `--project <name>` to override. Anything that renders accepts `--mock` (or defaults to it) so you can iterate for **$0** before spending on APIs.
+Most commands resolve their **project** automatically from the spec's path (`projects/<name>/specs/...`); pass `--project <name>` to override.
+
+**One vocabulary.** A flag means the same thing on every command that has it:
+
+| Flag | Always means | Spends? |
+|---|---|---|
+| `--draft` | fast, low-fidelity preview | never |
+| `--real` | reuse the real voiceover cached by a previous `build --tts` — errors if there is none | never |
+| `--tts` | buy real voiceover from ElevenLabs (`build` only) | **yes — the only flag that does** |
+| `--format` | video shape: `9:16`, `3:4`, `16:9`, `-4k` for UHD | — |
+| `--as` | file format of the output (`json`, `srt`, …) | — |
+| `--out` | a path you choose, anywhere on disk | — |
+| `--name` | a path inside the project's `assets/` | — |
+
+`--mock` still works as a deprecated alias of `--draft`, as do `--format` for `--as` and `--out` for `--name`; only the new spellings appear in `--help`.
 
 **Commands**
 
@@ -66,7 +80,7 @@ kino still <spec> [options]
 | `--format <fmt>` | `9:16\|3:4\|16:9` | Output format. |
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
-| `--real` | — | Use real VO/avatar + true timing (default: mock, free). |
+| `--real` | — | Use the real VO timings cached by a previous `kino build <spec> --tts`. Errors if there is none — it never buys voiceover itself. Pointless on a silent build: there the estimate *is* what renders. |
 | `--platform <name>` | `tiktok\|reels\|shorts` | Overlay in-feed safe zones (right rail / bottom caption / top status) for QA — **guide only**; non-critical chrome (nav bars, docks) may sit in the shaded bands. Still-only — not on `build`. |
 | `--grid` | — | Overlay a rule-of-thirds grid for composition QA (fill budget / dead bands). Still-only — not on `build`. |
 
@@ -94,7 +108,7 @@ kino storyboard <spec> [options]
 | `--frames <n>` | number | Frames per beat (default `2`: composition + fully-revealed end-state; a 3rd/4th `·full` tile surfaces overflow/overlaps). |
 | `--font <name>` | font name | Override `brand.font`. |
 | `--project <name>` | project | Use `projects/<name>`. |
-| `--real` | — | Real VO/avatar + true timing (default: mock, free). |
+| `--real` | — | Use the real VO timings cached by a previous `kino build <spec> --tts`. Errors if there is none. |
 | `--platform <name>` | `tiktok\|reels\|shorts` | Same safe-zone overlay as [`still`](#still) — guide only; protect hooks/CTAs, not decorative chrome. |
 
 ```bash
@@ -161,12 +175,13 @@ kino inspect <spec> [options]
 
 | Option | Value | Meaning |
 |---|---|---|
-| `--real` | — | Use real VO timings instead of the mock estimate. |
+| `--real` | — | Use the real VO word timings cached by a previous `kino build <spec> --tts`, instead of the estimate. Errors if there is none. |
 | `--project <name>` | project | Use `projects/<name>`. |
 
 ```bash
 kino inspect specs/lie-test.json          # fast, estimated timings
-kino inspect specs/lie-test.json --real   # true ElevenLabs word timings
+kino build   specs/lie-test.json --tts    # buy the voiceover once (fills the cache)
+kino inspect specs/lie-test.json --real   # true ElevenLabs word timings, free from here on
 ```
 
 ---
@@ -241,7 +256,23 @@ Browse the open directory via [skills.sh](https://skills.sh) after `npx skills a
 
 ## Discovery
 
-These commands print machine-readable contracts the driving agent reads before authoring a spec.
+These commands print the contracts the driving agent reads before authoring a spec.
+
+**All of them take `--as json`** — `brand`, `voices`, `avatars`, `fonts`, `backgrounds`, `elements`,
+`transitions`. The JSON carries the same facts as the human listing plus the guidance notes, so an
+agent gets `{ "ids": ["mesh", ...], "note": "stock presets (fine for drafts; easy AI tell)" }`
+rather than having to parse the recommendation out of prose. Both renderings are built from one
+constant per catalogue, so a listing can never advertise an id the spec would reject — that
+property is tested, not just intended.
+
+The default output stays human-readable; JSON is opt-in, so anything already reading these
+listings as text keeps working.
+
+```bash
+kino backgrounds --as json | jq '.presets.mesh.params[].name'
+kino elements --as json    | jq -r '.tweenChannels | join(", ")'
+kino transitions --as json | jq -r '.builtIn[] | "\(.ids | join("/")) — \(.note)"'
+```
 
 ### `brand`
 List brands, or print a brand's resolved styling values + guidelines body — the brand context the agent reads before authoring a spec. With no `name`, lists the brands found under `brands/` (each a subdir containing a `brand.md`); brands are optional, so kino falls back to defaults when none exist. With a `name`, prints that brand's resolved frontmatter (colors, font, caption mode, background, voice, disclosure) followed by the free-form markdown guidelines body. See [Spec reference](spec-reference.md) for the `brand.md` format.
@@ -329,7 +360,7 @@ kino segment <input> --prompt <text> [options]
 |---|---|---|
 | `--prompt <text>` | text | Object to segment ("the person"). Required. |
 | `--objects <n>` | 1–4 | Cap objects packed into mask R/G/B/A (default `1`). |
-| `--out <name>` | name | Subdir under `assets/masks/` (default: input basename). |
+| `--name <name>` | name | Subdir under `assets/masks/` (default: input basename). `--out` is a deprecated alias. |
 | `--no-track` | — | Video: force per-frame (no temporal tracking). |
 | `--backend <name>` | `coreml\|cuda\|mock` | Default: `coreml` on macOS, `cuda` elsewhere. `mock` = synthetic ellipse, any platform. |
 | `--format <fmt>` | `json` | Machine-readable manifest on stdout (auto when non-TTY). |
@@ -356,7 +387,7 @@ kino pexels "city commute at night" --get 2 --project x  # download match 2 → 
 | `--get <n>` | download result *n* from the search |
 | `--count <n>` | results to list (default 8) |
 | `--landscape` | search landscape instead of portrait |
-| `--out <rel>` | asset-relative output path (default `pexels/<id>.mp4`) |
+| `--name <rel>` | path under `assets/` (default `pexels/<id>.mp4`); `--out` is a deprecated alias |
 | `--project <name>` | project whose `assets/` receives the download (required for `--get`) |
 
 ### `photos`
@@ -373,7 +404,7 @@ kino photos "coffee desk morning light" --get 2 --project x  # → assets/pexels
 | `--get <n>` | download result *n* from the search |
 | `--count <n>` | results to list (default 8) |
 | `--landscape` | search landscape instead of portrait |
-| `--out <rel>` | asset-relative output path (default `pexels/<id>.jpg`) |
+| `--name <rel>` | path under `assets/` (default `pexels/<id>.jpg`); `--out` is a deprecated alias |
 | `--project <name>` | project whose `assets/` receives the download (required for `--get`) |
 
 Screen local thumbs under `$TMPDIR/kino-pexels-photo-thumbs/` before `--get` (same habit as video).
@@ -411,9 +442,9 @@ kino transcribe <video> [options]
 
 | Option | Value | Meaning |
 |---|---|---|
-| `--format <fmt>` | `json\|srt\|vtt\|text` (default `json`) | Output format. |
+| `--as <fmt>` | `json\|srt\|vtt\|text` (default `json`) | Output format. `--format` is a deprecated alias. |
 | `--out <file>` | path | Write to a file instead of stdout. |
-| `--mock` | — | Offline canned transcript (no ffmpeg/network). |
+| `--draft` | — | Offline canned transcript (no ffmpeg/network). `--mock` is a deprecated alias. |
 
 ### `scan`
 Transcript + frames + contact sheet for an external video, in one shot.
@@ -427,7 +458,7 @@ kino scan <video> [options]
 | `--count <n>` | n | Extract N frames evenly (default: one per transcript segment). |
 | `--every <sec>` | seconds | Extract a frame every N seconds. |
 | `--out <dir>` | dir | Output directory. |
-| `--mock` | — | Offline canned transcript. |
+| `--draft` | — | Offline canned transcript. `--mock` is a deprecated alias. |
 
 ### `frames`
 Extract frames from any video — explicit timestamps, around a point, or evenly.

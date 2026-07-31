@@ -109,6 +109,9 @@ export interface KinoSegment {
   transitionSource?: string; // transition:"custom" — the RESOLVED shader body, read at build time
   transitionInvert?: boolean; // run the transition backwards
   transitionCamera?: CameraSpec; // camera carried through the cut
+  /** Keep this beat's motion running through its outgoing handoff instead of holding the last
+   *  authored frame. See the hold/carry note in layers.ts. */
+  carryMotion?: boolean;
   clipFrom?: number; // seconds into source asset
   clipTo?: number;
   speed?: number; // playbackRate; default 1

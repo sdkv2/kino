@@ -35,7 +35,7 @@ spec → validate → voiceover → avatar plan/trim → stage assets → backgr
 | `kino build <spec> --draft` | silent | 720p, fast encode | $0 |
 | `kino build <spec> --tts` | real ElevenLabs VO + presenter | full | **ElevenLabs (+ avatar credits)** |
 | `kino build <spec> --tts --no-avatar` | real VO, no presenter | full | ElevenLabs only |
-| `still` / `storyboard` / `inspect` | estimated | — | $0 (add `--real` to use true VO times) |
+| `still` / `storyboard` / `inspect` | estimated | — | $0 (after a `--tts` build, `--real` reuses its true VO times, still $0) |
 
 Silent builds and previews estimate timing from word counts; `--tts` produces true per-word
 timings. So the loop is: get structure, layout, and beat order right for free — a silent build is
@@ -49,7 +49,7 @@ actual words.
 ## The iterate loop
 
 ```
-kino inspect <spec>            # read beats + timings as JSON (add --real for true VO times)
+kino inspect <spec>            # read beats + timings as JSON (--real reuses a --tts build's true times)
 kino still <spec> --segment 0  # one frame, fast — the quickest visual check
 kino storyboard <spec>         # one still per beat, tiled — catch overlap/overflow at a glance
 # …edit the spec…
