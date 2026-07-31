@@ -4,7 +4,7 @@ import { FFMPEG_PATH } from "../src/media/binPaths.js";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderFrameRange } from "../src/render/native/engine.js";
+import { renderFrameRange, startEncoder } from "../src/render/native/engine.js";
 import type { WorkerHandle } from "../src/render/native/workerHandle.js";
 import { frameSignatures } from "../src/render/native/frameCache.js";
 import { extractDense, type MediaJob } from "../src/render/native/videoFrames.js";
@@ -251,4 +251,39 @@ describe("extractDense chunking", () => {
     expect(readdirSync(join(framesRoot, "seg0")).every((f) => f.endsWith(".jpg"))).toBe(true);
     expect(footage.byFrame[0]).toBe("x000001.jpg");
   }, 30000);
+});
+
+describe("startEncoder failure semantics", () => {
+  // Regression: an upstream capture failure tore the encoder down via kill(), and the SIGKILLed
+  // ffmpeg's `done` rejection — never observed on that path — crashed the process as an unhandled
+  // rejection. Every render failure then printed as `ffmpeg encode failed (null):` (empty stderr,
+  // no user frames), masking the error that actually caused the teardown.
+  it("kill() rejects done with the signal, without an unhandled rejection", async () => {
+    const rejections: unknown[] = [];
+    const onUnhandled = (r: unknown) => rejections.push(r);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const dir = mkdtempSync(join(tmpdir(), "kino-enc-"));
+      const enc = startEncoder({ fps: 30, out: join(dir, "out.mp4"), audio: null, preset: "veryfast", captureCodec: "h264" });
+      enc.kill();
+      await expect(enc.done).rejects.toThrow(/ffmpeg encode failed \((SIGKILL|\d+)\)/);
+      // Writes racing the teardown must not re-throw the pipe error as an uncaught exception —
+      // the exit reason is the report, the broken pipe is just its echo.
+      enc.stdin.write(Buffer.from("late frame"));
+      await new Promise((r) => setTimeout(r, 100));
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  }, 15000);
+
+  it("a real encode failure carries ffmpeg's stderr in the rejection", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kino-enc-"));
+    const enc = startEncoder({ fps: 30, out: join(dir, "out.mp4"), audio: null, preset: "veryfast", captureCodec: "h264" });
+    // Not annex-B H.264 — the h264 demuxer errors out and the exit must report why.
+    enc.stdin.write(Buffer.from("definitely not an access unit"));
+    enc.stdin.end();
+    // Exit code, not a signal (nobody killed it), and a non-empty diagnostic after the colon.
+    await expect(enc.done).rejects.toThrow(/ffmpeg encode failed \(\d+\): \S/);
+  }, 15000);
 });
