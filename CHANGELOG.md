@@ -3,7 +3,38 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
-## [Unreleased]
+## [3.1.1] — Render fixes, three new transitions, and installer/doc polish
+- **GL host command socket guard:** the test harness's (and shipped render host's) command socket
+  no longer trips over its own shutdown RST during teardown — `close()` now ends the channel
+  instead of writing to it, and both the TCP and stdin command streams carry an `'error'` listener
+  so a killed child's abrupt disconnect can't surface as an uncaught `ECONNRESET`/`EPIPE`. Ends the
+  intermittent Windows/Node-22 CI flake that blamed a random `compositor-*` test each run.
+- **Fixed: word-synced captions in encoded builds** froze or mis-highlighted the active word —
+  the caption raster is now keyed by the active word, so encodes match preview.
+- **Fixed: a real render error could be masked** by the encoder-teardown error that followed it;
+  the first failure is now the one reported.
+- **Fixed: `"background": "solid"` under a spec-level colour scheme** rendered the house look
+  (dark navy base + soft radial tint) instead of a flat fill of the palette's `bg` role — two
+  compounding defects (a hardcoded house base colour, and a scrim alpha keyed off a param nothing
+  ever passed) are both fixed.
+- Dropped the dead `cta` beat flag — `isHeroCaption` already centres a presenter-less scene beat
+  regardless of it, so it marked nothing the layout didn't derive on its own.
+- **`setup.mjs` auto-fixes `PATH`** when `npm link` lands in a non-default global prefix (common on
+  Debian/Raspberry Pi OS setups that avoid `sudo`) — it now patches `PATH` for the running install
+  and appends an idempotent `export PATH=...` line to the detected shell rc, instead of just telling
+  you to fix it yourself.
+- **Three new library transitions:** `glide-parallax` (directional push with depth parallax),
+  `louver-reveal` (architectural slat stagger), and `rack-focus` (defocus dissolve). `kino
+  transitions` now prints a one-line description for every custom-library shader, pulled
+  automatically from each shader's own header comment.
+- **README / getting-started docs** now separate the real one-liner (`npm install -g @sdkv2/kino` —
+  npm manages `PATH` itself, no build step) from the `install.sh` **source checkout** (only needed
+  for `kino update` or native rebuilds) — the two were previously conflated as equivalent options.
+- **Agent skills** (`video-production`, `importing-footage`, `ad-voice`) now point at
+  `docs/spec-reference.md` / `docs/cli-reference.md` for the full field list where they'd embedded
+  only a condensed, common-case subset inline.
+
+## [3.1.0] — Custom beat transitions and motion authoring feedback
 - **One-line installer:** `bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)`
   clones kino (or updates an existing checkout) and hands off to `setup.mjs`. Fixes the stdin trap
   that a plain `curl | bash` has for any installer with interactive prompts — piping into `bash`
@@ -73,8 +104,6 @@ versioning; the authoritative version is the `version` field in `package.json`.
   `kino sync --offset auto` sets it to the loudest on-grid window so the piece opens on a hit.
 - **`audio-markers` beat grid:** markers JSON gains `grid: { bpm, periodSec, phaseSec,
   strength } | null` — a 10 ms-precision fit (onsets stay 0.1s-quantized).
-
-## [3.1.0] — Custom beat transitions and motion authoring feedback
 - **Custom beat transitions:** a shader transition library (`kino transitions`) — CRT collapse, film
   scorch, geo facade, iris, optic prism, organic inkbleed, paper tear, print halftone — plus
   camera-carry across beat boundaries and richer authoring feedback (motion lint, motion QA,
