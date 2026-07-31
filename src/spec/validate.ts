@@ -7,6 +7,7 @@ import { lintMotionSource, type MotionSurface } from "../render/motiongraphic.js
 import { resolveAudioSource } from "../media/sfx.js";
 import { resolveMotionSource } from "../media/motionLib.js";
 import { resolveTransitionSource } from "../media/transitionLib.js";
+import { parseHexColor } from "../render/transitionSource.js";
 import { CAMERA_MOVES } from "../render/cameraSpec.js";
 import { log } from "../log.js";
 import { KINO_VERSION } from "../version.js";
@@ -343,7 +344,21 @@ export function assertTransitions(spec: Spec, project: { assetPath(rel: string):
       } catch (e) {
         throw new Error(`${where}: ${(e as Error).message}`);
       }
-      return; // a custom shader names its own params — nothing to police
+      // A custom shader names its own params, so there is no key list to police. One thing IS
+      // checkable: a value that was plainly meant to be a colour but is malformed. Those reach the
+      // shader as "not a colour", which silently falls back to the brand — a wrong-coloured render
+      // with nothing in the log, which is the failure mode this file exists to prevent.
+      for (const [k, v] of Object.entries(s.transitionParams ?? {})) {
+        if (typeof v !== "string") continue;
+        const looksLikeColor = v.trim().startsWith("#") || /^[0-9a-f]{6}$/i.test(v.trim());
+        if (looksLikeColor && parseHexColor(v) === null) {
+          throw new Error(
+            `${where}: transitionParams.${k} = ${JSON.stringify(v)} looks like a colour but is not a valid hex ` +
+              `(#rgb or #rrggbb). Omit it to use the brand's palette, or fix the value.`,
+          );
+        }
+      }
+      return;
     }
     const params = s.transitionParams;
     if (!params) return;

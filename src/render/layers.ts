@@ -340,10 +340,21 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const opacity = h.fadeIn
       ? interpolate(local, [0, h.xfade], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
       : 1;
-    // Freeze --progress at end of authored beat while held into the handoff.
-    const beatLocal = Math.min(local, h.beatDur - 1);
-    // Effect keyframes ride the same frozen clock as the graphic's own --progress, so a held
-    // beat's effects settle with it instead of continuing to tween through the handoff.
+    // Hold the beat on its last authored frame for the handoff — unless it opts to carry.
+    //
+    // The hold is what makes an outgoing graphic settle under the transition instead of tweening on
+    // through it, and it is the right default: most beats have finished saying what they say by the
+    // time the cut starts. But it freezes the RASTER, not just the clock, so a beat that is still
+    // moving at the boundary stops dead the instant the transition begins — no CSS in the page can
+    // escape it, because the frame is simply never re-rendered.
+    //
+    // `carryMotion` keeps it advancing. Note that --progress (and therefore every eased curve) is
+    // clamped to 1 downstream in motionFrameState either way, so carrying does NOT restart or
+    // overshoot an entrance: only the unclamped real-time clock (`--t` / `env.t`) keeps moving,
+    // which is exactly the clock a "keep going through the cut" flourish is written against.
+    const beatLocal = s.carryMotion ? local : Math.min(local, h.beatDur - 1);
+    // Effect keyframes ride the same clock as the graphic itself, so a held beat's effects settle
+    // with it and a carrying beat's effects carry with it.
     const beatEffects = resolveEffects(s.effects, beatLocal / props.fps);
     const beat = `beat${i}`;
     const segMask = (s as any).mask;

@@ -34,15 +34,38 @@ export function computeTimings(durations: number[], gap: number): SegmentTiming[
 }
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * How a build gets its voiceover. Exactly one mode can spend money.
+ *  - `mock`   — silence + estimated word timings. Free, offline, and the default everywhere.
+ *  - `cached` — real voiceover, reused from the cache a previous `--tts` build filled. Never calls
+ *               a billing API: a cache miss is an error, not a purchase. This is what `--real` maps
+ *               to, so the inspection commands can read true timings without ever buying them.
+ *  - `tts`    — real voiceover, calling ElevenLabs on a miss. `kino build --tts` only.
+ *
+ * `cached` and `tts` share every cache key (the key records `mock`, not the mode), so `--real`
+ * looks up exactly what the paying build wrote.
+ */
+export type VoMode = "mock" | "cached" | "tts";
+
+/** `--real` reuses voiceover a previous `--tts` build paid for; it never buys more. On a miss, name
+ *  the one command that fills the cache rather than silently serving the mock estimate instead. */
+function missingRealVo(what: string, specRef?: string): Error {
+  return new Error(
+    `--real needs real voiceover in the cache, but ${what} has none.\n` +
+      `Run \`kino build ${specRef ?? "<spec>"} --tts\` once, then re-run with --real.`,
+  );
+}
+
 export interface BuildVOOpts {
   spec: Spec;
   voiceId: string;
   cache: Cache;
   apiKey?: string;
-  mock: boolean;
+  vo: VoMode;
   model?: string; // TTS model_id; default DEFAULT_VOICE_MODEL (eleven_v3)
   needClips?: boolean; // avatar providers need per-segment clips — forces the per-segment path
   resolveAsset?: (rel: string) => string; // project asset resolver for segment voFile paths
+  specRef?: string; // spec path, quoted in the `--real` cache-miss error so it names the exact command
 }
 
 // ElevenLabs v3 audio tags ([excited], [short pause], …) are spoken direction, not caption copy —
@@ -78,12 +101,17 @@ export function stripTagWords(words: WordTiming[]): WordTiming[] {
  * and stitch one continuous track (also cached).
  * Exception: real presenter-less builds on models without previous_text/next_text support (v3) TTS the
  * whole script in ONE call instead — see buildVOSingle.
- * Contract: apiKey is required unless mock=true (real TTS calls pass it via the `apiKey!`
- * non-null assertion). Side effects: writes
+ * Contract: apiKey is required only for `vo: "tts"` (real TTS calls pass it via the `apiKey!`
+ * non-null assertion); `"cached"` reads the same entries without one and throws on a miss.
+ * Side effects: writes
  * into the Cache dir and a temp dir. Returns the stitched track path, per-clip paths, timings, and
  * timeline-absolute word timings.
  */
-export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needClips, resolveAsset }: BuildVOOpts): Promise<VOResult> {
+export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needClips, resolveAsset, specRef }: BuildVOOpts): Promise<VOResult> {
+  // Everything below keys off these two. `mock` keeps its exact old meaning so no cache key moves;
+  // `cacheOnly` is the new gate that turns every would-be API call into a hard stop.
+  const mock = vo === "mock";
+  const cacheOnly = vo === "cached";
   const resolvedModel = model ?? DEFAULT_VOICE_MODEL;
   const hasVoFiles = spec.segments.some((s) => s.voFile);
   // A beat with no `text` speaks nothing, so it has no words — and buildVOSingle derives each beat's
@@ -91,7 +119,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
   // per-clip path below, where a silent beat is placed as a plain `dur`-long silence.
   const hasSilentBeats = spec.segments.some((s) => !s.text?.trim());
   if (!mock && !needClips && !hasVoFiles && !hasSilentBeats && !modelSupportsContext(resolvedModel)) {
-    return buildVOSingle(spec, voiceId, cache, apiKey!, resolvedModel);
+    return buildVOSingle(spec, voiceId, cache, apiKey, resolvedModel, { cacheOnly, specRef });
   }
   const dir = scratchDir("kino-vo-");
   try {
@@ -123,6 +151,14 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
         clips.push(abs);
         if (mock) {
           clipWords.push(seg.text ? mockWordsForDuration(seg.text, await probeDuration(abs)) : []);
+        } else if (cacheOnly) {
+          // Which engine transcribed this file is part of its key, and the paying build may have
+          // used either — so accept a hit from either rather than forcing the re-transcription
+          // cache-only mode exists to forbid.
+          const keyFor = (engine: string) => contentHash({ voSha: fileHash(abs), engine, v: "vofile-stt" });
+          const hit = (["scribe", "whisper"] as const).map((e) => cache.get(keyFor(e), "json")).find(Boolean);
+          if (!hit) throw missingRealVo(`segment[${i}] (${seg.voFile})`, specRef);
+          clipWords.push(JSON.parse(readFileSync(hit, "utf8")) as WordTiming[]);
         } else {
           const engine = pickSttEngine({
             hasKey: !!apiKey,
@@ -174,6 +210,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, mock, model, needC
       let clip = cache.get(key, "mp3");
       let wordsFile = cache.get(key, "json");
       if (!clip || !wordsFile) {
+        if (cacheOnly) throw missingRealVo(`segment[${i}]`, specRef);
         const tmp = join(dir, `seg${i}.mp3`);
         const words = stripTagWords(
           mock
@@ -247,16 +284,25 @@ export function splitWordsBySegment(texts: string[], allWords: WordTiming[]): Wo
 // pause the model produced, not GAP.
 // Tradeoff (accepted): one cache entry for the whole script — editing any segment re-bills the
 // entire VO. Avatar providers need per-segment clips, so they stay on the per-segment path.
-async function buildVOSingle(spec: Spec, voiceId: string, cache: Cache, apiKey: string, model: string): Promise<VOResult> {
+async function buildVOSingle(
+  spec: Spec,
+  voiceId: string,
+  cache: Cache,
+  apiKey: string | undefined,
+  model: string,
+  { cacheOnly, specRef }: { cacheOnly: boolean; specRef?: string },
+): Promise<VOResult> {
   const texts = spec.segments.map((s) => s.text ?? "");
   const key = contentHash({ texts, voiceId, settings: DEFAULT_SETTINGS, v: "single", model });
   let track = cache.get(key, "mp3");
   let metaFile = cache.get(key, "json");
   if (!track || !metaFile) {
+    // This path TTSs the whole script in one call, so its cache entry is all-or-nothing.
+    if (cacheOnly) throw missingRealVo("this spec", specRef);
     const dir = scratchDir("kino-vo-");
     try {
       const tmp = join(dir, "track.mp3");
-      const allWords = await ttsWithTimestamps(apiKey, voiceId, texts.join("\n\n"), tmp, DEFAULT_SETTINGS, model);
+      const allWords = await ttsWithTimestamps(apiKey!, voiceId, texts.join("\n\n"), tmp, DEFAULT_SETTINGS, model);
       const raw = splitWordsBySegment(texts, allWords);
       const dur = await probeDuration(tmp);
       const timings: SegmentTiming[] = raw.map((w, i) => {

@@ -100,3 +100,47 @@ describe("layersAt — motion beats", () => {
     expect(layersAt(p, 45, DIMS).find((l) => l.id === "motion0")!.source.key).toBe("15");
   });
 });
+
+describe("carryMotion — the outgoing beat's clock through its handoff", () => {
+  // Two motion beats so beat0 gets a real handoff: it is held past its authored length for the
+  // xfade, and what that hold does to its clock is the whole question here.
+  const two = (carry?: boolean): KinoProps =>
+    mk([
+      { kind: "motion", caption: "", startSec: 0, endSec: 2, motion, ...(carry ? { carryMotion: true } : {}) },
+      { kind: "motion", caption: "", startSec: 2, endSec: 4, motion },
+    ] as KinoSegment[]);
+
+  const motionKey = (props: KinoProps, frame: number): string | undefined =>
+    layersAt(props, frame, DIMS).find((l) => l.id === "motion0")?.source.key;
+
+  const beatDur = 60; // 2s @ 30fps
+  const held = beatDur + Math.floor(MOTION_XFADE_FRAMES / 2); // inside the handoff, past the beat
+
+  it("still emits the outgoing beat during the handoff either way", () => {
+    expect(motionKey(two(), held)).toBeDefined();
+    expect(motionKey(two(true), held)).toBeDefined();
+  });
+
+  // The default freeze is deliberate: an outgoing graphic settles under the transition rather than
+  // tweening on through it. It pins the RASTER key, which is why no CSS in the page can escape it.
+  it("by default pins the raster to the last authored frame, so the handoff shows a still", () => {
+    const a = motionKey(two(), beatDur);
+    const b = motionKey(two(), held);
+    expect(a).toBe(String(beatDur - 1));
+    expect(b).toBe(a);
+  });
+
+  it("with carryMotion, keeps advancing so the graphic moves under the transition", () => {
+    expect(motionKey(two(true), beatDur)).toBe(String(beatDur));
+    expect(motionKey(two(true), held)).toBe(String(held));
+  });
+
+  // Carrying must not restart or overshoot an entrance — only the unclamped real-time clock moves.
+  // --progress is clamped to 1 downstream in motionFrameState, so eased curves settle either way.
+  it("does not change the beat's own window", () => {
+    const carried = two(true);
+    expect(layersAt(carried, 0, DIMS).some((l) => l.id === "motion0")).toBe(true);
+    const past = beatDur + MOTION_XFADE_FRAMES + 5;
+    expect(layersAt(carried, past, DIMS).some((l) => l.id === "motion0")).toBe(false);
+  });
+});

@@ -3,14 +3,18 @@
 ## Commands
 - `kino build <spec> [--tts] [--draft] [--no-avatar] [--format 9:16,3:4] [--provider <p>] [--background <kind>] [--tag <label>]`
   — silent + full quality + free by default; `--tts` is the only flag that spends.
-- `kino inspect <spec> [--real]` — resolved plan as JSON: beats, timings, modes + per-segment **word timestamps**
+- `kino inspect <spec> [--real]` — resolved plan as JSON: beats, timings, modes + per-segment **word timestamps**.
+  `--real` (on `inspect`/`still`/`storyboard`) reuses the VO a `build --tts` cached — free, but it errors if no `--tts` build has run.
 - `kino backgrounds` — list animated backgrounds + their agent-controllable params/actions
 - `kino elements` — list overlay elements (logo …) + their layout/tween controls
+- **Every discovery command takes `--as json`** (`brand`, `backgrounds`, `elements`, `transitions`,
+  `fonts`, `voices`, `avatars`) — parse the catalogue instead of the prose. The JSON keeps the
+  guidance too (`.choices[].note`, `.builtIn[].note`), so you still get *which* to reach for.
 - `kino still <spec> [--at <s,…> | --segment <n> | --around <s>] [--span] [--count] [--montage] [--real] [--format]` — render still(s) fast; **`--around` after every motion edit**; `--at 0` for loop posters (`--segment` = midpoint only)
 - `kino storyboard <spec> [--frames <n>] [--real] [--format]` — per-beat stills (default 2: composition + the fully-revealed end-state) tiled into a labeled contact sheet; the **·full** tile is where a caption overflows the frame or collides with a `texts` overlay
 - `kino frames <video> [--at|--around|--count|--every] [--montage]` — extract stills from any video; `--around` sheets a moment (post-build twin of `still --around`; use after real VO to retune)
 - Seamless loops / real-VO retune / per-beat harnesses — see SKILL.md §§ Seamless loops, Real VO retune
-- `kino transcribe <video> [--format …] [--out …]` — **(reference videos only)** speech → timestamped transcript
+- `kino transcribe <video> [--as …] [--out …]` — **(reference videos only)** speech → timestamped transcript
 - `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
 - `kino batch <input.json>` — input is a JSON array of spec paths
 - `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
@@ -28,7 +32,7 @@
 reference clips (e.g. downloaded reference footage). They are a **research tool, not a production
 step.**
 
-- `kino transcribe <video> [--format json|srt|vtt|text] [--out <file>]` — speech → timestamped
+- `kino transcribe <video> [--as json|srt|vtt|text] [--out <file>]` — speech → timestamped
   transcript (`{ text, words:[{word,start,end}], segments:[…] }`). JSON is the agent-readable
   default; cached by audio content-hash.
 - `kino scan <video> [--count N | --every S]` — transcript + one frame per segment (or evenly) +
@@ -61,8 +65,8 @@ that assigns a brand and optional default overrides:
 `still`/`storyboard`/`inspect` default to **mock** (fast, $0; captions/background/layout render identically —
 only avatar+VO timing differ). Loop: `kino inspect` (map the beats) → `kino still --segment N` (preview one
 beat in ~1–2s) → edit the spec → `kino still` again → **`adversarial-critique` skill** (subagent on
-`out/<title>/stills/sb-*.png`) → `kino build` for the real render. Add `--real`
-for true timing/avatar. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
+`out/<title>/stills/sb-*.png`) → `kino build` for the real render. Once a `--tts` build has cached the
+voiceover, add `--real` for true timing. Stills/storyboards land in `out/<title>/stills/` and `out/<title>/storyboard.png`.
 
 ## Brand config (`brands/<name>/brand.md` YAML frontmatter)
 `name, colors{night,mint,green,white,gold}, font, labelFont?, captionStyle{fontSize,strokeWidth,background?,style?,animation?},
@@ -197,8 +201,8 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   and can diverge from the real VO's pacing (a beat can run longer or shorter for real than its mock
   estimate), so a background pulse or color shift timed to land on a specific beat can drift into the
   wrong beat once real VO timing is in. If a spec times `backgroundKeyframes`/`backgroundTriggers`/
-  a declared layer's `keyframes` to a specific beat boundary, re-check that beat with `kino still --real` (VO is
-  content-hash cached, so this doesn't add spend beyond the real build) before calling it done — don't
+  a declared layer's `keyframes` to a specific beat boundary, re-check that beat with `kino still --real` (which
+  reads the `--tts` build's cached VO, so it adds no spend beyond that build) before calling it done — don't
   reason your way past a mock/real duration mismatch you already noticed.
 - **Motion layout (short-form):** author stacks mid-frame (`.wrap { top: 38%–42%; }`), not
   `translateY(20–28vw)` from the top — that sits under TikTok/Reels chrome. Keep the stack clear of

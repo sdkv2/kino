@@ -1,50 +1,93 @@
 import { PRESET_SCHEMAS } from "../render/backgroundSchema.js";
 import { listBackgroundIds } from "../media/backgroundLib.js";
+import { emitJson, wantsJson, type Choice } from "./emit.js";
 
 // Discovery: print each animated background's controllable params + actions, so an agent knows what it
 // can tween (spec.backgroundKeyframes) or trigger (spec.backgroundTriggers). Use `kino inspect` for word times.
-export async function backgrounds(): Promise<void> {
-  process.stdout.write("Faceless backgrounds — pick for the brand, don't default to mesh.\n\n");
-  process.stdout.write("  Choose:\n");
-  process.stdout.write("    · custom + backgroundComponent  — authored brand stage (preferred when identity matters)\n");
-  process.stdout.write("    · solid                         — loop-safe static wash (seamlessLoop / settle)\n");
-  process.stdout.write("    · image                         — brand.backdrop still + slow Ken Burns\n");
-  process.stdout.write("    · glow                          — calm CSS (cheap default)\n");
-  process.stdout.write("    · mesh / aurora / particles / grid — stock presets (fine for drafts; easy AI tell)\n");
-  process.stdout.write("    · motion beat .bg               — own the ground inside the graphic (occludes all of the above)\n");
-  process.stdout.write("\n");
+//
+// The choice list is data so `--as json` carries the RECOMMENDATION, not just the ids — "mesh is an
+// easy AI tell" is the part worth having, and a bare list of names would drop exactly that.
 
+export const CHOICES: Choice[] = [
+  { label: "custom + backgroundComponent", ids: ["custom"], note: "authored brand stage (preferred when identity matters)" },
+  { label: "solid", ids: ["solid"], note: "loop-safe static wash (seamlessLoop / settle)" },
+  { label: "image", ids: ["image"], note: "brand.backdrop still + slow Ken Burns" },
+  { label: "glow", ids: ["glow"], note: "calm CSS (cheap default)" },
+  {
+    label: "mesh / aurora / particles / grid",
+    ids: ["mesh", "aurora", "particles", "grid"],
+    note: "stock presets (fine for drafts; easy AI tell)",
+  },
+  { label: "motion beat .bg", ids: [], note: "own the ground inside the graphic (occludes all of the above)" },
+];
+
+const NOTES = [
+  "Non-animated kinds: glow (CSS), image (static). custom uses the same params/pulse as presets.",
+  "Drive over time: backgroundKeyframes [{ at, params, ease? }], backgroundTriggers [{ at, action }].",
+  "Draw-fn contract: file body is draw(ctx, env) — env.frame / env.params / env.pulse only.",
+  'Project-local: assets/backgrounds/my.js → "backgroundComponent": "backgrounds/my.js"',
+  "shader (.frag): author mainImage(); uniforms iTime/iResolution/uColorA-C/uIntensity/uPulse",
+  "Get timestamps from `kino inspect`. Docs: docs/backgrounds-and-overlays.md",
+];
+
+export async function backgrounds(opts: { as?: string } = {}): Promise<void> {
   const lib = listBackgroundIds();
-  process.stdout.write("  Custom library (bare backgroundComponent ids):\n");
-  if (lib.length) {
-    for (const id of lib) process.stdout.write(`    · ${id}\n`);
-  } else {
-    process.stdout.write("    · (empty assets-lib/backgrounds/)\n");
-  }
-  process.stdout.write("\n");
-  process.stdout.write('  Spec recipe (overrides brand.backgroundComponent):\n');
-  process.stdout.write('    "background": "custom",\n');
-  process.stdout.write('    "backgroundComponent": "brand-wash",\n');
-  process.stdout.write('    "backgroundKeyframes": [ { "at": 0, "params": { "intensity": 0.4 } } ],\n');
-  process.stdout.write('    "backgroundTriggers": [ { "at": 1.2, "action": "pulse" } ]\n');
-  process.stdout.write('    · shader (.frag): author mainImage(); uniforms iTime/iResolution/uColorA-C/uIntensity/uPulse\n');
-  process.stdout.write("\n");
-  process.stdout.write("  Draw-fn contract: file body is draw(ctx, env) — env.frame / env.params / env.pulse only.\n");
-  process.stdout.write("  Project-local: assets/backgrounds/my.js → \"backgroundComponent\": \"backgrounds/my.js\"\n");
-  process.stdout.write("\n");
 
-  process.stdout.write("Animated presets — agent-controllable params + actions:\n\n");
+  if (wantsJson(opts)) {
+    emitJson({
+      kind: "backgrounds",
+      choices: CHOICES.map(({ ids, label, note }) => ({ ids, label, note })),
+      library: lib,
+      presets: Object.fromEntries(
+        Object.entries(PRESET_SCHEMAS).map(([name, s]) => [
+          name,
+          {
+            params: s.params.map((p) => ({
+              name: p.name,
+              type: p.type,
+              ...(p.min !== undefined ? { min: p.min, max: p.max } : {}),
+              default: p.default,
+              doc: p.doc,
+            })),
+            actions: s.actions,
+          },
+        ]),
+      ),
+      drive: {
+        keyframes: "backgroundKeyframes [{ at, params, ease? }]",
+        triggers: "backgroundTriggers [{ at, action }]",
+      },
+      notes: NOTES,
+    });
+    return;
+  }
+
+  const w = process.stdout.write.bind(process.stdout);
+  w("Faceless backgrounds — pick for the brand, don't default to mesh.\n\n");
+  w("  Choose:\n");
+  for (const c of CHOICES) w(`    · ${c.label.padEnd(30)} — ${c.note}\n`);
+  w("\n");
+
+  w("  Custom library (bare backgroundComponent ids):\n");
+  if (lib.length) for (const id of lib) w(`    · ${id}\n`);
+  else w("    · (empty assets-lib/backgrounds/)\n");
+  w("\n");
+
+  w("  Spec recipe (overrides brand.backgroundComponent):\n");
+  w('    "background": "custom",\n');
+  w('    "backgroundComponent": "brand-wash",\n');
+  w('    "backgroundKeyframes": [ { "at": 0, "params": { "intensity": 0.4 } } ],\n');
+  w('    "backgroundTriggers": [ { "at": 1.2, "action": "pulse" } ]\n');
+  w("\n");
+
+  w("Animated presets — agent-controllable params + actions:\n\n");
   for (const [name, s] of Object.entries(PRESET_SCHEMAS)) {
-    process.stdout.write(`  ${name}\n`);
+    w(`  ${name}\n`);
     for (const p of s.params) {
       const range = p.type === "number" && p.min !== undefined ? ` [${p.min}..${p.max}]` : "";
-      process.stdout.write(`    · ${p.name} (${p.type}${range}) default ${p.default} — ${p.doc}\n`);
+      w(`    · ${p.name} (${p.type}${range}) default ${p.default} — ${p.doc}\n`);
     }
-    process.stdout.write(`    · actions: ${s.actions.join(", ")}\n`);
+    w(`    · actions: ${s.actions.join(", ")}\n`);
   }
-  process.stdout.write(
-    "\nNon-animated kinds: glow (CSS), image (static). custom uses the same params/pulse as presets.\n" +
-      "Drive over time: backgroundKeyframes [{ at, params, ease? }], backgroundTriggers [{ at, action }].\n" +
-      "Get timestamps from `kino inspect`. Docs: docs/backgrounds-and-overlays.md\n",
-  );
+  w("\n" + NOTES.map((n) => n + "\n").join(""));
 }

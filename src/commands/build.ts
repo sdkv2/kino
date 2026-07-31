@@ -17,7 +17,7 @@ import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveV
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
-import { buildVO, GAP } from "../vo/vo.js";
+import { buildVO, GAP, type VoMode } from "../vo/vo.js";
 import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
 import { presenterBeats, resolvePresenterPin } from "../avatar/source.js";
@@ -274,9 +274,9 @@ async function stitchAvatarTrack(clips: string[], indices: number[], cache: Cach
 export interface BuildAxes {
   /** Fast, cheap preview: 720p canvas + low-quality encode. Never speaks, never has a presenter. */
   draft: boolean;
-  /** Real ElevenLabs voiceover. THE ONLY AXIS THAT SPENDS MONEY. */
-  tts: boolean;
-  /** Real presenter. Requires `tts` — a lip-synced avatar has nothing to sync to without speech. */
+  /** Where the voiceover comes from. `"tts"` IS THE ONLY VALUE THAT SPENDS MONEY. */
+  vo: VoMode;
+  /** Real presenter. Requires `vo: "tts"` — a lip-synced avatar has nothing to sync to without speech. */
   avatar: boolean;
 }
 
@@ -289,18 +289,24 @@ export interface BuildAxes {
  * which made spend the default and hid "free but full quality" behind a double negative — easy to
  * miss, and the expensive way to be wrong. `--draft` is now only about render speed and size, so
  * "how cheap" and "how good" are two separate questions instead of one tangled preset.
+ *
+ * **`--real` is the free half of `--tts`.** It reuses voiceover a previous `--tts` build already
+ * paid for and errors if there is none, so every command that reads true timings (still,
+ * storyboard, inspect, retune, sync) can do so without a spending flag of its own.
  */
 export function resolveBuildAxes(opts: {
   draft?: boolean;
   mock?: boolean;
   tts?: boolean;
+  real?: boolean;
   avatar?: boolean;
 }): BuildAxes {
   const draft = !!(opts.draft || opts.mock);
-  // A draft is a structural preview — speaking would defeat its purpose (and cost money).
-  const tts = !draft && !!opts.tts;
-  const avatar = tts && opts.avatar !== false;
-  return { draft, tts, avatar };
+  // A draft is a structural preview — speaking would defeat its purpose (and cost money). Past
+  // that, --tts outranks --real: it is the superset (it fills the very cache --real reads).
+  const vo: VoMode = draft ? "mock" : opts.tts ? "tts" : opts.real ? "cached" : "mock";
+  const avatar = vo === "tts" && opts.avatar !== false;
+  return { draft, vo, avatar };
 }
 
 export interface PrepareResult {
@@ -332,6 +338,7 @@ export async function prepare(
     mock?: boolean; // deprecated alias of `draft`
     draft?: boolean;
     tts?: boolean; // OPT-IN (commander --tts). Absent = silent, full quality, no spend.
+    real?: boolean; // reuse the real VO a --tts build cached. Never spends; errors on a miss.
     avatar?: boolean; // default true once tts is on; false = no presenter. commander --no-avatar.
     format?: string;
     provider?: string;
@@ -360,7 +367,7 @@ export async function prepare(
     captionMode: pc?.captionMode ?? rawBrand.captionMode,
   };
   validateSpec(spec, brand, project);
-  const { draft, tts, avatar: wantAvatar } = resolveBuildAxes(opts);
+  const { draft, vo: voMode, avatar: wantAvatar } = resolveBuildAxes(opts);
   // A beat may pin its provider/look via `source: "heygen:look-id"`; otherwise "avatar:" takes
   // whatever the spec/brand/project configures. --no-avatar (or silent) drops to "none".
   const pin = resolvePresenterPin(spec);
@@ -370,13 +377,22 @@ export async function prepare(
   const voiceId = resolveVoice(spec, brand);
   // A spec whose every beat imports real VO (voFile) needs no TTS voice at all.
   const needsTts = spec.segments.some((s) => !s.voFile);
-  if (tts && needsTts && !voiceId) {
-    throw new Error("--tts needs a voice — set spec.voice or the brand's defaultVoice (or drop --tts for a silent, full-quality render).");
+  // `--real` needs the voice too: it is part of the VO cache key, so without it there is no entry
+  // to look up — not just nothing to synthesise.
+  if (voMode !== "mock" && needsTts && !voiceId) {
+    const flag = voMode === "tts" ? "--tts" : "--real";
+    throw new Error(`${flag} needs a voice — set spec.voice or the brand's defaultVoice (or drop ${flag} for a silent, full-quality render).`);
   }
   const formats: FormatId[] = opts.format ? parseFormatList(opts.format) : (spec.format as FormatId[]);
   const cache = new Cache(project.cache);
 
-  const modeNote = draft ? " · draft (fast preview, no API spend)" : tts ? "" : " · no VO (silent, full quality)";
+  const modeNote = draft
+    ? " · draft (fast preview, no API spend)"
+    : voMode === "tts"
+      ? ""
+      : voMode === "cached"
+        ? " · real VO (from cache, no API spend)"
+        : " · no VO (silent, full quality)";
   log.info(`Building ${spec.title} · ${provider}${modeNote}`);
 
   log.step("voiceover");
@@ -385,9 +401,11 @@ export async function prepare(
     voiceId,
     cache,
     // No TTS → silent placeholder track (buildVO mock path), no key. All-voFile specs can run
-    // keyless (whisper STT); mixed/TTS specs still require the key.
-    apiKey: !tts || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
-    mock: !tts,
+    // keyless (whisper STT); mixed/TTS specs still require the key. `--real` reads the cache and
+    // never calls out, so it stays keyless too.
+    apiKey: voMode !== "tts" || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
+    vo: voMode,
+    specRef: specPath,
     model: resolveVoiceModel(spec, brand),
     needClips: provider !== "none",
     resolveAsset: (rel) => project.assetPath(rel),
@@ -654,6 +672,7 @@ export async function prepare(
         transitionSource: readTransitionSource(seg, project),
         transitionInvert: seg.transitionInvert,
         transitionCamera: seg.transitionCamera,
+        carryMotion: seg.carryMotion,
         clipFrom: seg.clipFrom,
         clipTo: seg.clipTo,
         speed: seg.speed,
@@ -688,6 +707,7 @@ export async function prepare(
       transitionSource: readTransitionSource(seg, project),
       transitionInvert: seg.transitionInvert,
       transitionCamera: seg.transitionCamera,
+      carryMotion: seg.carryMotion,
       motion: {
         ...resolveMotionGraphic(
           anchorMotion({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, `segment[${i}]`),
@@ -742,6 +762,7 @@ export async function build(
     mock?: boolean; // deprecated alias of draft
     draft?: boolean;
     tts?: boolean;
+    real?: boolean;
     avatar?: boolean;
     format?: string;
     provider?: string;
@@ -756,7 +777,7 @@ export async function build(
   let { props, publicDir, formats, project, spec } = await prepare(specPath, opts);
   // Only a draft is low-quality; a full render — silent (the default) or presenter-less
   // (--no-avatar) — keeps final quality and a clean, untagged filename.
-  const { draft, tts } = resolveBuildAxes(opts);
+  const { draft, vo: voMode } = resolveBuildAxes(opts);
   const quality = parseQuality(opts.quality);
 
   // --beat: reduce to a single-segment spec and re-run prepare() on it, so the isolated clip gets
@@ -767,8 +788,11 @@ export async function build(
   // crossfade with, so transitions already degrade to a hard cut with no extra work.
   let beatTag: string | undefined;
   if (opts.beat != null) {
-    if (tts) {
-      throw new Error("--beat cannot be combined with --tts (isolating one beat isn't supported for a real-VO build yet)");
+    // A one-beat spec keys its VO differently from the full spec, so real VO can neither be
+    // synthesised for it (--tts) nor found for it in the cache (--real).
+    if (voMode !== "mock") {
+      const flag = voMode === "tts" ? "--tts" : "--real";
+      throw new Error(`--beat cannot be combined with ${flag} (isolating one beat isn't supported for a real-VO build yet)`);
     }
     const beatNum = Number(opts.beat);
     if (!Number.isInteger(beatNum) || beatNum < 1) throw new Error(`--beat must be a positive integer (got ${opts.beat})`);

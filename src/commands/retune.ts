@@ -110,7 +110,7 @@ export async function retune(
   const working = loadSpec(absPath);
 
   log.step("retune (real VO)");
-  const { props, words: segWords } = await prepare(absPath, { mock: false, project: opts.project });
+  const { props, words: segWords } = await prepare(absPath, { real: true, project: opts.project });
 
   const logLines: string[] = [];
   const absWords: WordTiming[] = [];

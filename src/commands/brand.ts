@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { resolveWorkspace } from "../config/project.js";
 import { loadBrandDoc } from "../config/brand.js";
+import { emitJson, wantsJson } from "./emit.js";
 
 // Brand names = subdirs of brands/ that contain a brand.md.
 export function listBrands(brandsRoot: string): string[] {
@@ -32,17 +33,24 @@ export function brandText(brandDir: string): string {
   return lines.join("\n");
 }
 
-export async function brand(name?: string): Promise<void> {
+export async function brand(name?: string, opts: { as?: string } = {}): Promise<void> {
   const ws = resolveWorkspace();
   const brandsRoot = join(ws.workspaceRoot, "brands");
   if (!name) {
     const names = listBrands(brandsRoot);
+    if (wantsJson(opts)) return emitJson({ kind: "brands", brands: names });
     process.stdout.write(
       names.length
         ? `Brands:\n${names.map((n) => "  · " + n).join("\n")}\n`
         : "No brands found (brands are optional — kino uses defaults).\n",
     );
     return;
+  }
+  if (wantsJson(opts)) {
+    // The whole resolved frontmatter, not the handful of fields the text dump prints — an agent
+    // reading this is usually after captionStyle or a colour role the summary line leaves out.
+    const { brand: b, body } = loadBrandDoc(ws.brandDir(name));
+    return emitJson({ kind: "brand", ...b, guidelines: body.trim() });
   }
   process.stdout.write(brandText(ws.brandDir(name)));
 }

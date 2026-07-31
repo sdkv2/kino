@@ -371,7 +371,8 @@ pixels across time. Use `kino still` / `--around` at **every** stage (mock is fr
      → kino storyboard + adversarial-critique
      (attach --around sheets for typed + Lottie beats — not only sb-*.png)
 5. Real VO
-     → kino build → inspect --real
+     → kino build --tts  (fills the VO cache; --real reads it for free from here)
+     → inspect --real
      → kino retune <spec>              # rewrite triggers[].at from word timings
      → kino frames <mp4> --around <t> on EVERY speech-locked beat
      → retune KEY_MS / camera / word-gated pipelines from the sheet
@@ -393,7 +394,7 @@ ad-voice (VO lines)
   → author motion .js / frame PNG / Lottie ornaments
   → omit captions on montage; typed beat uses motion only
   → still --segment → still --around (loop) → storyboard → adversarial-critique
-  → kino build → inspect --real → kino retune → still/frames --around → retune knobs → ship
+  → kino build --tts → inspect --real → kino retune → still/frames --around → retune knobs → ship
 ```
 
 Hand back to `video-production` for music/SFX/runtime pad rules (this skill often

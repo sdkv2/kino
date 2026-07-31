@@ -11,7 +11,20 @@
 /** Numeric author params that fit into uniform slots, sorted for a stable slot assignment. */
 export const TRANSITION_PARAM_SLOTS = 8;
 
+/** Colour params (`"#ff00aa"` in transitionParams) get their own vec3 slots — a colour cannot ride
+ *  a float slot, and the two kinds must not compete for the same eight. */
+export const TRANSITION_COLOR_SLOTS = 4;
+
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** `#rgb` / `#rrggbb` → 0..1 rgb. Anything else is not a colour param. */
+export function parseHexColor(v: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+  if (!m) return null;
+  const h = m[1]!.length === 3 ? m[1]!.split("").map((c) => c + c).join("") : m[1]!;
+  const n = parseInt(h, 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
 
 const UNIFORM_HEADER = [
   "uniform sampler2D uFrom;   // the outgoing beat, already composited",
@@ -23,7 +36,16 @@ const UNIFORM_HEADER = [
   "uniform vec3  uCamTo;      // …and the incoming side",
   "uniform float uCamBlur;    // directional smear along the camera's travel",
   "uniform float uCamHold;    // fraction of each side held at full extent (ramp/plateau/ramp)",
+  "// Resolved brand palette, linear 0..1 rgb — the same five roles brand.md names. A shader that",
+  "// paints its own pigment (ink, fire, edge glow) should take its hue from these rather than",
+  "// hard-coding one, so a transition looks like the brand it ships in without being reconfigured.",
+  "uniform vec3  uBrandBg;     // page/background base",
+  "uniform vec3  uBrandFg;     // text ink",
+  "uniform vec3  uBrandAccent; // primary accent",
+  "uniform vec3  uBrandAccent2;// secondary/bright accent",
+  "uniform vec3  uBrandDeep;   // deep fill",
   ...Array.from({ length: TRANSITION_PARAM_SLOTS }, (_, i) => `uniform float uParam${i};`),
+  ...Array.from({ length: TRANSITION_COLOR_SLOTS }, (_, i) => `uniform vec3  uColor${i};`),
 ].join("\n");
 
 // Sampling helpers, so an author never hand-rolls the uv flip or forgets which sampler is which.
@@ -66,6 +88,20 @@ vec4 kinoFrom(vec2 uv) { return kinoCamSample(uFrom, uv, uCamFrom, uP); }
 vec4 kinoTo(vec2 uv) { return kinoCamSample(uTo, uv, uCamTo, 1.0 - uP); }
 // fragCoord → normalised uv, the coordinate both samplers expect.
 vec2 kinoUv(vec2 fragCoord) { return fragCoord / uRes; }
+
+// THE COLOUR RULE for anything a transition paints itself — ink, fire, an edge glow, a bevel:
+//
+//   vec3 ink = kinoPick(u_<name>, uBrandAccent);   // <name> is your own param's name
+//
+// One call covers all three cases an author needs. If the spec set that param to a hex you get that
+// colour; if it didn't, you get the brand's, so the transition looks like the brand it ships in
+// without being configured. Passing a literal as the fallback is the escape hatch for an effect
+// whose colour is physical rather than editorial (white-hot metal, black char).
+//
+// The sentinel is a NEGATIVE channel, which no real colour can hold: an omitted \`u_<name>\` is
+// defined to vec3(-1.0) by the assembler, and every supplied colour is 0..1. Zero would have been
+// ambiguous — black is a colour someone may well ask for.
+vec3 kinoPick(vec3 c, vec3 fallback) { return c.r < 0.0 ? fallback : c; }
 `;
 
 /** Numeric param names in slot order (alphabetical, so a slot is stable across frames). */
@@ -77,9 +113,21 @@ export function transitionParamNames(params: Record<string, number | string> = {
     .slice(0, TRANSITION_PARAM_SLOTS);
 }
 
-function paramAliases(names: string[]): string {
-  return names
-    .map((n, i) => (IDENT.test(n) ? `#define u_${n} uParam${i}` : ""))
+/** Colour param names in slot order — the string values that parse as hex. Same alphabetical rule
+ *  as the numeric slots, and a separate list so the two never collide. */
+export function transitionColorNames(params: Record<string, number | string> = {}): string[] {
+  return Object.entries(params)
+    .filter(([, v]) => typeof v === "string" && parseHexColor(v) !== null)
+    .map(([k]) => k)
+    .sort()
+    .slice(0, TRANSITION_COLOR_SLOTS);
+}
+
+function paramAliases(names: string[], colors: string[]): string {
+  return [
+    ...names.map((n, i) => (IDENT.test(n) ? `#define u_${n} uParam${i}` : "")),
+    ...colors.map((n, i) => (IDENT.test(n) ? `#define u_${n} uColor${i}` : "")),
+  ]
     .filter(Boolean)
     .join("\n");
 }
@@ -94,12 +142,20 @@ function paramAliases(names: string[]): string {
  * Zero is the right filler because it is the one value a shader can test for. The house idiom is
  * `u_x > 0.0 ? u_x : <default>` (or `max(u_x, <floor>)`), which turns "omitted" into the author's
  * own default rather than a degenerate zero.
+ *
+ * COLOURS fill with `vec3(-1.0)` instead, because `0.0` is both the wrong TYPE and — as black — a
+ * colour someone may legitimately ask for. Which names are colours is read off the body: a name
+ * passed to `kinoPick(...)` is one by construction, so the shader declares its own intent and the
+ * assembler never has to guess from a name.
  */
-function zeroFillMissing(body: string, declared: string[]): string {
+function zeroFillMissing(body: string, declared: string[], colors: string[]): string {
   const referenced = new Set<string>();
   for (const m of body.matchAll(/\bu_([A-Za-z_][A-Za-z0-9_]*)\b/g)) referenced.add(m[1]!);
-  const missing = [...referenced].filter((n) => !declared.includes(n)).sort();
-  return missing.map((n) => `#define u_${n} 0.0`).join("\n");
+  const asColor = new Set<string>();
+  for (const m of body.matchAll(/\bkinoPick\s*\(\s*u_([A-Za-z_][A-Za-z0-9_]*)\b/g)) asColor.add(m[1]!);
+  const known = new Set([...declared, ...colors]);
+  const missing = [...referenced].filter((n) => !known.has(n)).sort();
+  return missing.map((n) => `#define u_${n} ${asColor.has(n) ? "vec3(-1.0)" : "0.0"}`).join("\n");
 }
 
 /**
@@ -109,9 +165,9 @@ function zeroFillMissing(body: string, declared: string[]): string {
  * exactly `kinoFrom` at uP=0 and exactly `kinoTo` at uP=1, or it pops on every beat boundary.
  * `kino transitions` says so, and the assembled source repeats it where an author will see it.
  */
-export function assembleTransitionSource(body: string, paramNames: string[] = []): string {
-  const aliases = paramAliases(paramNames);
-  const filler = zeroFillMissing(body, paramNames);
+export function assembleTransitionSource(body: string, paramNames: string[] = [], colorNames: string[] = []): string {
+  const aliases = paramAliases(paramNames, colorNames);
+  const filler = zeroFillMissing(body, paramNames, colorNames);
   return (
     "#version 300 es\n" +
     "precision highp float;\n\n" +

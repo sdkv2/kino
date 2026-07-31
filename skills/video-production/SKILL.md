@@ -77,9 +77,13 @@ spec genuinely needs one that doesn't exist yet:
      caption overflow / `texts` collisions
    Edit → still/`--around` again → repeat. **Before shipping a storyboard as "done":** run
    `adversarial-critique` (subagent frame QA) — include `--around` sheets for motion/Lottie beats.
-4. `kino build specs/foo.json` — real render → `out/<title>/`. Post-build: `kino inspect --real` for
+4. `kino build specs/foo.json` — real render → `out/<title>/`. For a spoken piece the timing pass
+   needs real VO, so build it once with `--tts` (the only spending flag); that fills the VO cache
+   and every `--real` read afterwards is free. Post-build: `kino inspect --real` for
    word times, then `kino frames <mp4> --around <sec>` (or `kino still … --around <sec> --real`) on
    every motion/Lottie/typed beat — mock timing lies; retune triggers / KEY_MS / camera from the sheet.
+   (On a silent build there is nothing to reconcile: the estimate *is* what renders, and `--real`
+   will just tell you the cache is empty.)
    Re-run `adversarial-critique` when layout could have shifted with real VO.
 
 **Projects** keep campaigns tidy: `projects/<name>/{specs,assets,out}` + a `project.json` that assigns a
@@ -456,7 +460,7 @@ you have **Read** pixel stills at multiple stages — not just `inspect` JSON or
 | While tuning animation | `kino still <spec> --around <t>` (repeat often) | Progression **and** richness: typewriter, counter, camera, Lottie phase, stagger, idle life |
 | Dense / short beats | `--around <t> --span 0.6 --count 7` | Sub-second motion that a 1s/5-frame sheet smears |
 | Whole-cut layout | `kino storyboard <spec>` | Beat-to-beat jumps; ·full overflow/collisions |
-| After real VO | `kino still … --around <t> --real` **or** `kino frames <mp4> --around <t>` | Speech lock (mock word times ≠ real); retune `triggers` / KEY_MS / params |
+| After a `--tts` build | `kino still … --around <t> --real` **or** `kino frames <mp4> --around <t>` | Speech lock (mock word times ≠ real); retune `triggers` / KEY_MS / params |
 | Critique | `adversarial-critique` on stills **plus** `--around` sheets for motion/Lottie beats | Overlap + frozen + **under-animated** |
 
 **Hard rules:**
@@ -490,7 +494,7 @@ Mock word times are evenly faked. **Real ElevenLabs timestamps differ** — fixe
 (`t0`/`per`, hardcoded `triggers`, progress-only reveals keyed to mock length) desync and leave
 **dead tails** (animation finishes, VO still talking).
 
-After the first real build:
+After the first `--tts` build (which is what puts real VO in the cache for `--real` to read):
 
 1. `kino inspect <spec> --real` — note per-beat `start`/`end` and each word's times
 2. `kino frames <mp4> --around <t>` on every speech-locked beat — Read the sheet
@@ -609,7 +613,7 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   good beds, not chart songs. **Platform trending audio is not pullable** (copyright).
 - Short-form taste: sparse bed under VO; **no default cut whoosh** — silent cuts + ducked music
   are enough. Skip `sfx` unless a reveal/CTA earns a soft pop/click. Avoid loud drums fighting captions.
-- **Place SFX after the real VO exists** (when used): `kino build` → `kino inspect --real` and/or
+- **Place SFX after the real VO exists** (when used): `kino build --tts` → `kino inspect --real` and/or
   `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not shipping.
 - **Music-driven pieces cut on the beat**: `kino sync <spec> --offset auto` detects the bed's
   beat grid, writes `music.startSec` (loudest on-grid stretch, opens on a hit) and retimes the
