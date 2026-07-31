@@ -47,6 +47,20 @@ spec.json ─▶ validate ─▶ voiceover (ElevenLabs) ─▶ presenter plan + 
 ```
 No LLM inside the CLI: every step is deterministic, so the same spec renders the same video.
 
+## Requirements
+
+| Requirement | Why |
+|---|---|
+| **Node 22+** | runtime (the CLI is ESM) |
+| **ffmpeg / ffprobe** | audio muxing, frame extraction — a bundled binary covers you if neither is on `PATH` |
+| **ImageMagick** (`magick`) | optional — storyboard contact sheets + frame montages |
+| **ElevenLabs API key** | voiceover — required for any real (non-`--mock`) build with spoken lines |
+| HeyGen / Hedra / Replicate key | optional — only if a beat asks for an AI presenter |
+
+`kino doctor` checks all of the above. The full local install (below) also npm-links the `kino`
+command onto your `PATH` — including patching your shell rc if npm's global bin dir isn't on
+`PATH` already (e.g. a sudo-free `~/.npm-global` prefix, common on Debian/Raspberry Pi OS).
+
 ## Quickstart
 ```bash
 cd <your-project>
@@ -60,9 +74,9 @@ no editing. Swap in your own spec once the preview looks right. Set a colour sch
 spec (unset falls back to `midnight` with a warning); name a brand (`kino init acme`) when several
 specs should also share tone, fonts and disclosures.
 
-Needs Node 22+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Real voiceover needs
-an [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project);
-presenter builds also need their provider's key. `kino doctor` checks all of it.
+See [Requirements](#requirements) above for what you need — `kino doctor` checks all of it.
+Get an ElevenLabs key via [this referral link](https://try.elevenlabs.io/7t4pgbmyxq67) (supports
+the project).
 
 Prefer a full local install (gives you `kino update` and native rebuilds) over `npx`? One line
 (macOS/Linux — clones to `~/kino`, checks prerequisites, builds the `kino` command, and walks
