@@ -4,7 +4,8 @@
 //   cd <your-project> && node /path/to/kino/setup.mjs      # .env lands in the current dir
 //   node /path/to/kino/setup.mjs ~/path/to/project         # ...or a dir you pass
 //
-// (On macOS/Linux `bash setup.sh` still works — it's a shim that execs this file.)
+// No local checkout yet? install.sh clones one and execs this file:
+//   bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)
 //
 // Non-interactive: supply keys via the environment (ELEVENLABS_API_KEY=... node setup.mjs) —
 // any key already set skips its prompt. Values already in an existing .env are kept unless you

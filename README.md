@@ -64,7 +64,13 @@ Needs Node 22+ and ffmpeg (a bundled binary covers you if it isn't on PATH). Rea
 an [ElevenLabs](https://try.elevenlabs.io/7t4pgbmyxq67) key (referral link — supports the project);
 presenter builds also need their provider's key. `kino doctor` checks all of it.
 
-Repo install, Windows, or the guided API-key walkthrough:
+Prefer a full local install (gives you `kino update` and native rebuilds) over `npx`? One line
+(macOS/Linux — clones to `~/kino`, checks prerequisites, builds the `kino` command, and walks
+through your API keys):
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)
+```
+Windows, a non-default install path, or the guided API-key walkthrough in detail:
 [getting started](docs/getting-started.md).
 
 ## Agent skills

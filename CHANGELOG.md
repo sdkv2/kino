@@ -4,6 +4,14 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [Unreleased]
+- **One-line installer:** `bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)`
+  clones kino (or updates an existing checkout) and hands off to `setup.mjs`. Fixes the stdin trap
+  that a plain `curl | bash` has for any installer with interactive prompts — piping into `bash`
+  consumes stdin as the script text, so `setup.mjs` would see no TTY and silently skip every
+  question; `install.sh` re-attaches `/dev/tty` before the handoff. Also: `setup.mjs`'s TTS and
+  avatar-provider keys are no longer asked one by one — each is a yes/no gate first (avatar
+  defaults no, matching kino's own `provider: none` default), and saying yes to an avatar shows a
+  numbered multi-select for which provider(s) to set up. Non-interactive runs are unaffected.
 - **BREAKING: `brand.md`'s `bannedPhrases` is removed — compliance is no longer build-enforced.**
   The frontmatter field and the `complianceScan` check it drove are gone; a segment using a banned
   phrase no longer fails the build. Author banned phrases in the existing prose **Banned (brand):**

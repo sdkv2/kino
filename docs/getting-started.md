@@ -21,23 +21,39 @@ supports the project). With `--mock` you can preview structure and timing with *
 
 ## Install
 
-Quickest path — from inside your project directory:
+**One-liner** (macOS/Linux) — from inside your project directory:
 
 ```bash
 cd <your-project>
-bash ~/kino/setup.sh          # installs the `kino` command + writes a project .env
-node ~/kino/setup.mjs         # same installer, pure Node — use this on Windows
+bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)
 ```
 
-`setup.mjs` (which `setup.sh` execs) is a guided installer: it checks prerequisites (Node 22+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt/winget), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. Re-running it keeps any keys already in the `.env` (press Enter at the prompt). Keys can also be supplied via the environment to run non-interactively:
+`curl ... | bash` also works, but the `bash <(curl ...)` form above is what keeps `setup.mjs`'s
+key prompts interactive — piping into `bash` hands your terminal's stdin to the script text
+itself, so a plain pipe would read as "no TTY" and silently skip every prompt. `install.sh` also
+falls back to reading from `/dev/tty` directly, so either invocation is safe either way. It clones
+kino to `~/kino` (or updates it, if that's already a kino checkout) — override the location with
+`KINO_DIR=<path>`, or the source with `KINO_REPO=<url>` to install from a fork — then hands off to
+`setup.mjs`.
+
+**Windows**, or if you'd rather clone yourself:
 
 ```bash
-ELEVENLABS_API_KEY=sk_... bash ~/kino/setup.sh
+git clone https://github.com/sdkv2/kino ~/kino
+cd <your-project>
+node ~/kino/setup.mjs
+```
+
+`setup.mjs` is the guided installer underneath both paths: it checks prerequisites (Node 22+, ffmpeg, ImageMagick) and offers to install any that are missing (Homebrew/apt/winget), runs `npm install && npm run build && npm link` in the kino repo (providing the global `kino` command), then walks through the API keys — what each is for and where to get it — and writes them to a **`chmod 600`, git-ignored `.env`** in your project. TTS (ElevenLabs) and an AI avatar/presenter are each an opt-in yes/no question; saying yes to an avatar shows a numbered list to pick which provider(s) (HeyGen/Hedra/Replicate) to set up a key for. Re-running it keeps any keys already in the `.env` (press Enter at a prompt to keep/skip). Keys can also be supplied via the environment to run non-interactively (every prompt, including the TTS/avatar questions, resolves from the environment or the existing `.env` instead of asking):
+
+```bash
+ELEVENLABS_API_KEY=sk_... node ~/kino/setup.mjs
 ```
 
 Or install by hand:
 
 ```bash
+git clone https://github.com/sdkv2/kino ~/kino
 cd ~/kino && npm install && npm run build && npm link   # provides the `kino` command
 ```
 
