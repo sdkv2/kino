@@ -62,12 +62,22 @@ command onto your `PATH` — including patching your shell rc if npm's global bi
 `PATH` already (e.g. a sudo-free `~/.npm-global` prefix, common on Debian/Raspberry Pi OS).
 
 ## Quickstart
+The real one-liner — npm resolves the published package and manages `PATH` itself, no build
+step, no shell-rc surgery:
+```bash
+npm install -g @sdkv2/kino
+```
+Trying it on a single spec without installing anything globally? `npx @sdkv2/kino <command>`
+runs the same published package on demand (re-resolves on each first run of a session, so
+`-g` is worth it once you use kino regularly):
 ```bash
 cd <your-project>
 npx @sdkv2/kino init                                              # scaffold .env, dirs + a sample spec
 npx @sdkv2/kino build projects/default/specs/sample.json --draft  # free structural preview, no API spend
 npx @sdkv2/kino build projects/default/specs/sample.json          # real render → projects/default/out/sample/
 ```
+(drop the `npx @sdkv2/kino` prefix for plain `kino` once installed with `-g`)
+
 `init` writes a ready-to-build sample (no presenter, provider `none`, $0) — the first build works with
 no editing. Swap in your own spec once the preview looks right. Set a colour scheme with
 `"colors": "midnight" | "noir" | "paper"`, or your own roles (`kino colors`) — recommended on every
@@ -78,9 +88,10 @@ See [Requirements](#requirements) above for what you need — `kino doctor` chec
 Get an ElevenLabs key via [this referral link](https://try.elevenlabs.io/7t4pgbmyxq67) (supports
 the project).
 
-Prefer a full local install (gives you `kino update` and native rebuilds) over `npx`? One line
-(macOS/Linux — clones to `~/kino`, checks prerequisites, builds the `kino` command, and walks
-through your API keys):
+Working on kino itself, or want `kino update` (git pull + rebuild) and native module rebuilds?
+Those need a full source checkout, not the published package — heavier than the one-liner above
+(clones the repo, then `npm install && npm run build && npm link`), but it's the right call for
+development or tracking `main`:
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)
 ```
