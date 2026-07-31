@@ -21,7 +21,22 @@ supports the project). With `--mock` you can preview structure and timing with *
 
 ## Install
 
-**One-liner** (macOS/Linux) — from inside your project directory:
+Three ways to get `kino`, in order of commitment:
+
+**No install** — `npx @sdkv2/kino <command>` runs the published package on demand; Puppeteer's
+Chromium ships with it, and ffmpeg/ffprobe use your system install when on `PATH` (a bundled
+binary otherwise). Fine for a one-off, but `npx` re-resolves the package on its first run each
+session, so it's noticeably slower than an actual install.
+
+**The real one-liner** — once you're using kino regularly, a normal global npm install. No git,
+no build step; npm manages `PATH` for you:
+
+```bash
+npm install -g @sdkv2/kino
+```
+
+**A source checkout** — only worth it for `kino update` (git pull + rebuild) or native rebuilds
+(`build:native`); everyday use doesn't need this. macOS/Linux, from inside your project directory:
 
 ```bash
 cd <your-project>
@@ -50,17 +65,12 @@ node ~/kino/setup.mjs
 ELEVENLABS_API_KEY=sk_... node ~/kino/setup.mjs
 ```
 
-Or install by hand:
+Or run the same three commands `setup.mjs` does, by hand, skipping the guided API-key prompts:
 
 ```bash
 git clone https://github.com/sdkv2/kino ~/kino
 cd ~/kino && npm install && npm run build && npm link   # provides the `kino` command
 ```
-
-No install at all also works — `npx @sdkv2/kino <command>` runs the published package, and
-Puppeteer's Chromium ships with it. ffmpeg/ffprobe use your system install when they're on
-PATH and fall back to a bundled binary otherwise. `npx` re-resolves dependencies on each first
-run, so `npm i -g @sdkv2/kino` is worth it once you use kino regularly.
 
 ## Verify your environment
 
