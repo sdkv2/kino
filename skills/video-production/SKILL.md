@@ -650,6 +650,10 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   ("short pause", "softly", …). If the spec pins v2 for metronome-critical / speech-synced timing,
   use punctuation for pauses (`…` / `.`) and drop bracket tags entirely. Faceless only for now:
   with an avatar provider the tagged text also reaches lip-sync, untested.
+- **Multiple speakers**: set a default `"voice"` at the top, then override on beats that need a
+  different speaker — `"voice": "guest"` on that segment (alias or raw ElevenLabs id). Each beat
+  TTSs separately and stitches into one track. Mix with `voFile` for a third-party recording on
+  specific beats. See `docs/spec-reference.md` and `docs/audio.md`.
 - **Timing comes from the generated VO**, not your guesses — don't put timestamps in the spec.
 - **Recorded VO instead of TTS**: set segment `voFile` (project audio asset) — the file is the
   beat verbatim; word timings come from STT (Scribe with the ElevenLabs key, else local

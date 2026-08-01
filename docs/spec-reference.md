@@ -28,9 +28,9 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `brand` | string | — | Brand name; falls back to the project's `project.json` brand. Optional: a brand is for shared tone/voice, fonts, disclosures and voice aliases — colours alone don't need one. |
 | `format` | `("9:16"\|"3:4"\|"16:9"\|"9:16-4k"\|"3:4-4k"\|"16:9-4k")[]` | — | Output formats. Default `["9:16"]` (1080-class). `*-4k` = UHD **output** (e.g. `9:16-4k` → 2160×3840) composed at the 1080-class canvas — same frame, 4× the pixels. Motion layouts adapt via `--kino-aspect`. |
 | `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
-| `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. **Search `kino voices` first** — pick the most appropriate match to brand tone and avatar gender/age; don't reuse a default without searching. |
+| `voice` | string | — | Default ElevenLabs voice for every beat (id or `brand.voiceAliases` alias). Override per segment with `segment.voice`. **Search `kino voices` first.** |
 | `fontWeights` | int[] 100–900 | — | Extra cuts of the brand font to stage, so `font-weight` in a motion page selects a real face instead of silently reusing the single caption cut. The caption weight is always included. **Overrides** brand `fontWeights` rather than merging — pass `[]` to opt a lean spec out of a type-heavy brand's set. Each cut is base64-inlined into every raster, so ask only for what you use. |
-| `voiceModel` | string | — | ElevenLabs TTS model. Default is v3 (inline audio tags `[excited]`, `[whispers]`, `[short pause]`, … work in segment `text`; tags are stripped from word-synced captions). Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads. |
+| `voiceModel` | string | — | Default TTS model (`eleven_v3` or `eleven_multilingual_v2`). Override per beat with `segment.voiceModel`. v3 supports inline audio tags in `text`; tags are stripped from captions. |
 | `film` | number | — | Cinematic-finish intensity (vignette + grain over photographic/app beats), `0..1`. Default `1` (graded film look). Set `0` for clean flat edges — e.g. a light "paper" video where the edge vignette reads as a dark border. Motion-graphic beats are never graded. |
 | `avatarLook` | string | — | HeyGen: look alias/id · Hedra/Replicate: portrait image path/url. |
 | `provider` | `none\|heygen\|hedra\|replicate` | — | Presenter engine for `avatar:` sources; overrides `brand.defaultProvider`. See [Avatars & presenters](avatars.md). |
@@ -129,6 +129,8 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 | `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
+| `voice` | string | — | TTS voice for this beat only — id or `brand.voiceAliases` alias. Falls back to spec `voice`, then `brand.defaultVoice`. |
+| `voiceModel` | string | — | TTS model for this beat only. Falls back to spec `voiceModel`, then `brand.voiceModel`, then `eleven_v3`. |
 | `shot` | [Shot](#enums) | — | Camera move. |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Words to emphasise in `words` mode. |
@@ -150,6 +152,8 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
+| `voice` | string | — | TTS voice for this beat only — id or `brand.voiceAliases` alias. Falls back to spec `voice`, then `brand.defaultVoice`. |
+| `voiceModel` | string | — | TTS model for this beat only. Falls back to spec `voiceModel`, then `brand.voiceModel`, then `eleven_v3`. |
 | `kicker` | `{ text, color }` | — | Small label; `color` ∈ `accent\|deep\|accent2` (default `accent`; legacy `mint\|green\|gold` still accepted for the same slots). |
 | `shot` | [Shot](#enums) | — | Camera move (e.g. `scroll` for long screenshots). |
 | `transition` | [Transition](#enums) | — | In/out transition for the cut-in. |
@@ -187,6 +191,8 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | Optional on-screen caption. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
+| `voice` | string | — | TTS voice for this beat only — id or `brand.voiceAliases` alias. Falls back to spec `voice`, then `brand.defaultVoice`. |
+| `voiceModel` | string | — | TTS model for this beat only. Falls back to spec `voiceModel`, then `brand.voiceModel`, then `eleven_v3`. |
 | `loop` | boolean | — | Tier-3 Lottie: loop at native speed instead of stretching once across the beat (default). |
 | `params` | `Record<string, number\|string>` | — | Base CSS-variable values (read as `--<key>`). Also an **implicit t=0 keyframe**: a lone keyframe tweens from the base value instead of holding. |
 | `keyframes` | MotionKeyframe[] | — | Tween params over the beat. Each entry sets exactly one of `at` (beat-relative seconds) or **`atWord`** (a spoken word — first case/punctuation-insensitive occurrence — or a word index), resolved against the build's VO timings so anchors ride real TTS with no retune. |

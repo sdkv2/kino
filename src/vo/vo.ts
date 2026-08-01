@@ -6,13 +6,19 @@ import { writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { releaseScratch, scratchDir } from "../scratch.js";
 import type { Spec } from "../spec/schema.js";
+import type { Brand } from "../config/brand.js";
+import {
+  hasPerSegmentVoiceVariation,
+  resolveSegmentVoice,
+  resolveSegmentVoiceModel,
+} from "../spec/validate.js";
 import type { SegmentTiming, VOResult } from "../types.js";
 import type { WordTiming } from "../render/props.js";
 import type { Cache } from "../media/cache.js";
 import { contentHash, fileHash } from "../media/hash.js";
 import { offsetWords } from "../render/captions.js";
 import { extractAudio, genSilence, probeDuration, stitchAudio, trailingArtifactCut, trimAudio } from "../media/ffmpeg.js";
-import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL, modelSupportsContext } from "./elevenlabs.js";
+import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, modelSupportsContext } from "./elevenlabs.js";
 import { transcribeAudio, scribeToWords } from "./scribe.js";
 import { pickSttEngine, resolveWhisper, whisperTranscribe } from "./whisper.js";
 
@@ -58,11 +64,10 @@ function missingRealVo(what: string, specRef?: string): Error {
 
 export interface BuildVOOpts {
   spec: Spec;
-  voiceId: string;
+  brand: Brand;
   cache: Cache;
   apiKey?: string;
   vo: VoMode;
-  model?: string; // TTS model_id; default DEFAULT_VOICE_MODEL (eleven_v3)
   needClips?: boolean; // avatar providers need per-segment clips — forces the per-segment path
   resolveAsset?: (rel: string) => string; // project asset resolver for segment voFile paths
   specRef?: string; // spec path, quoted in the `--real` cache-miss error so it names the exact command
@@ -107,25 +112,33 @@ export function stripTagWords(words: WordTiming[]): WordTiming[] {
  * into the Cache dir and a temp dir. Returns the stitched track path, per-clip paths, timings, and
  * timeline-absolute word timings.
  */
-export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needClips, resolveAsset, specRef }: BuildVOOpts): Promise<VOResult> {
+export async function buildVO({ spec, brand, cache, apiKey, vo, needClips, resolveAsset, specRef }: BuildVOOpts): Promise<VOResult> {
   // Everything below keys off these two. `mock` keeps its exact old meaning so no cache key moves;
   // `cacheOnly` is the new gate that turns every would-be API call into a hard stop.
   const mock = vo === "mock";
   const cacheOnly = vo === "cached";
-  const resolvedModel = model ?? DEFAULT_VOICE_MODEL;
   const hasVoFiles = spec.segments.some((s) => s.voFile);
   // A beat with no `text` speaks nothing, so it has no words — and buildVOSingle derives each beat's
   // bounds from its first/last word, which a wordless beat cannot supply. Those specs take the
   // per-clip path below, where a silent beat is placed as a plain `dur`-long silence.
   const hasSilentBeats = spec.segments.some((s) => !s.text?.trim());
-  if (!mock && !needClips && !hasVoFiles && !hasSilentBeats && !modelSupportsContext(resolvedModel)) {
-    return buildVOSingle(spec, voiceId, cache, apiKey, resolvedModel, { cacheOnly, specRef });
+  const voiceVariation = hasPerSegmentVoiceVariation(spec, brand);
+  const defaultModel = resolveSegmentVoiceModel(spec, brand, 0);
+  if (
+    !mock &&
+    !needClips &&
+    !hasVoFiles &&
+    !hasSilentBeats &&
+    !voiceVariation &&
+    !modelSupportsContext(defaultModel)
+  ) {
+    const voiceId = resolveSegmentVoice(spec, brand, 0);
+    return buildVOSingle(spec, voiceId, cache, apiKey, defaultModel, { cacheOnly, specRef });
   }
   const dir = scratchDir("kino-vo-");
   try {
     const clips: string[] = [];
     const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
-    const useCtx = modelSupportsContext(resolvedModel);
     for (const [i, seg] of spec.segments.entries()) {
       // Purely visual beat: no `text`, so nothing is spoken and there are no words. It still occupies
       // its slot on the timeline, as a silence of exactly `dur` (assertBeatLengths guarantees `dur`).
@@ -183,12 +196,34 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
         }
         continue;
       }
+      const voiceId = resolveSegmentVoice(spec, brand, i);
+      const segModel = resolveSegmentVoiceModel(spec, brand, i);
+      const useCtx = modelSupportsContext(segModel);
       // Neighbor text is sent as previous_text/next_text so ElevenLabs keeps prosody continuous
       // across segment seams (v2-family models only — v3 rejects it, so v3 keys stay context-free
-      // and existing v3 caches keep hitting). When sent, it's part of the cache key: editing one
-      // segment re-bills its neighbors too (their clips were conditioned on the old text).
-      const prev = useCtx ? spec.segments[i - 1]?.text : undefined;
-      const next = useCtx ? spec.segments[i + 1]?.text : undefined;
+      // and existing v3 caches keep hitting). Only chain neighbors that share the same voice+model.
+      let prev: string | undefined;
+      let next: string | undefined;
+      if (useCtx) {
+        const prevSeg = spec.segments[i - 1];
+        if (
+          prevSeg?.text?.trim() &&
+          !prevSeg.voFile &&
+          resolveSegmentVoice(spec, brand, i - 1) === voiceId &&
+          resolveSegmentVoiceModel(spec, brand, i - 1) === segModel
+        ) {
+          prev = prevSeg.text;
+        }
+        const nextSeg = spec.segments[i + 1];
+        if (
+          nextSeg?.text?.trim() &&
+          !nextSeg.voFile &&
+          resolveSegmentVoice(spec, brand, i + 1) === voiceId &&
+          resolveSegmentVoiceModel(spec, brand, i + 1) === segModel
+        ) {
+          next = nextSeg.text;
+        }
+      }
       // `dur` only bites when silent (mock): it forces the beat LENGTH. Word timings keep the
       // 0.38s/word cadence regardless (see ttsMockWithTimestamps) so typed-in-sync surfaces preview
       // at a realistic rate. It's in the key so editing dur re-bakes the silent clip; harmless on
@@ -205,7 +240,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
         // unless the key moves — the fix would land only for projects nobody had rendered yet.
         // Scoped to `mock` so real TTS entries keep hitting and nothing is re-billed.
         v: mock ? "ts-mockpace-natural" : "ts",
-        model: resolvedModel,
+        model: segModel,
       });
       let clip = cache.get(key, "mp3");
       let wordsFile = cache.get(key, "json");
@@ -215,7 +250,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
         const words = stripTagWords(
           mock
             ? await ttsMockWithTimestamps(seg.text!, tmp, seg.dur)
-            : await ttsWithTimestamps(apiKey!, voiceId, seg.text!, tmp, DEFAULT_SETTINGS, resolvedModel, { previousText: prev, nextText: next }),
+            : await ttsWithTimestamps(apiKey!, voiceId, seg.text!, tmp, DEFAULT_SETTINGS, segModel, { previousText: prev, nextText: next }),
         );
         clip = cache.put(key, "mp3", tmp);
         const tmpJson = join(dir, `seg${i}.json`);

@@ -13,7 +13,7 @@ import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
 import { resolvePalette, type Palette } from "../config/palettes.js";
 import { readableInk } from "../render/contrast.js";
 import { loadSpec, parseSpec, type Spec } from "../spec/schema.js";
-import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
+import { validateSpec, resolveProvider, resolveVoiceLook, resolveFilm, assertSegmentVoices } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
@@ -386,15 +386,8 @@ export async function prepare(
   const provider = wantAvatar
     ? ((opts.provider as Provider | undefined) ?? pin?.provider ?? resolveProvider(spec, brand))
     : "none";
-  const voiceId = resolveVoice(spec, brand);
-  // A spec whose every beat imports real VO (voFile) needs no TTS voice at all.
-  const needsTts = spec.segments.some((s) => !s.voFile);
-  // `--real` needs the voice too: it is part of the VO cache key, so without it there is no entry
-  // to look up — not just nothing to synthesise.
-  if (voMode !== "mock" && needsTts && !voiceId) {
-    const flag = voMode === "tts" ? "--tts" : "--real";
-    throw new Error(`${flag} needs a voice — set spec.voice or the brand's defaultVoice (or drop ${flag} for a silent, full-quality render).`);
-  }
+  const needsTts = spec.segments.some((s) => s.text?.trim() && !s.voFile);
+  if (voMode !== "mock" && needsTts) assertSegmentVoices(spec, brand);
   const formats: FormatId[] = opts.format ? parseFormatList(opts.format) : (spec.format as FormatId[]);
   const cache = new Cache(project.cache);
 
@@ -410,7 +403,7 @@ export async function prepare(
   log.step("voiceover");
   const vo = await buildVO({
     spec,
-    voiceId,
+    brand,
     cache,
     // No TTS → silent placeholder track (buildVO mock path), no key. All-voFile specs can run
     // keyless (whisper STT); mixed/TTS specs still require the key. `--real` reads the cache and
@@ -418,7 +411,6 @@ export async function prepare(
     apiKey: voMode !== "tts" || (!needsTts && !process.env.ELEVENLABS_API_KEY) ? undefined : requireKey("ELEVENLABS_API_KEY"),
     vo: voMode,
     specRef: specPath,
-    model: resolveVoiceModel(spec, brand),
     needClips: provider !== "none",
     resolveAsset: (rel) => project.assetPath(rel),
   });

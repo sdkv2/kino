@@ -16,18 +16,21 @@ VO always wins: the bed ducks and SFX sit under it. For where these fields live 
 
 ## Voiceover
 
-Every segment's `text` is spoken. Pick the voice once at the top of the spec:
+Every segment's `text` is spoken. Set a default voice at the top of the spec, or override per beat:
 
 ```json
 {
   "voice": "narrator",
   "voiceModel": "eleven_v3",
-  "segments": [{ "kind": "hero", "text": "Paste the job post. We rebuild the bullets." }]
+  "segments": [
+    { "text": "Host intro." },
+    { "text": "Guest reply.", "voice": "guest" }
+  ]
 }
 ```
 
-- **`voice`** — an ElevenLabs voice id, or a `brand.voiceAliases` alias (e.g. `"narrator"` → an id). Falls back to `brand.defaultVoice` when unset. **Always search before picking:** run `kino voices [--gender <g>]` and choose the most appropriate match to the brand's Tone/Voice (and the avatar's gender/age when a presenter is used) — never default to the same voice across brands without searching the catalog.
-- **`voiceModel`** — the TTS model. Default `eleven_v3`, which supports **inline audio tags** in `text` — `[excited]`, `[whispers]`, `[short pause]`, etc. Tags are spoken as direction and **stripped from the word-synced captions**. Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads (no tags). Both `voice` and `voiceModel` can be defaulted per brand (`brand.defaultVoice`, `brand.voiceModel`) — the spec value wins.
+- **`voice`** — an ElevenLabs voice id, or a `brand.voiceAliases` alias (e.g. `"narrator"` → an id). Falls back to `brand.defaultVoice` when unset. **Per-beat override:** set `voice` on any segment to switch speakers for that beat only.
+- **`voiceModel`** — the TTS model. Default `eleven_v3`, which supports **inline audio tags** in `text` — `[excited]`, `[whispers]`, `[short pause]`, etc. Tags are spoken as direction and **stripped from the word-synced captions**. Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads (no tags). Override per beat with `segment.voiceModel`. Both `voice` and `voiceModel` can be defaulted per brand (`brand.defaultVoice`, `brand.voiceModel`) — spec-level values win over brand; segment-level wins over spec.
 
 Get exact per-word VO timings with `kino inspect <spec> --real` — use them to place `sfx[].at`, cuts, and background keyframes on the words. `--real` reads the voiceover a previous `kino build <spec> --tts` cached, so run that once first; it errors rather than falling back to the estimate.
 

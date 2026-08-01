@@ -8,10 +8,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildVO } from "../src/vo/vo.js";
 import { Cache } from "../src/media/cache.js";
+import { DEFAULT_BRAND } from "../src/config/brand.js";
 import type { Spec } from "../src/spec/schema.js";
 
 const specOf = (...texts: string[]) =>
-  ({ title: "cached-test", segments: texts.map((text) => ({ text })) }) as unknown as Spec;
+  ({ title: "cached-test", voice: "v1", segments: texts.map((text) => ({ text })) }) as unknown as Spec;
+
+const brand = { ...DEFAULT_BRAND, defaultVoice: "v1" };
 
 let dir: string;
 let cache: Cache;
@@ -26,7 +29,7 @@ describe("cache-only voiceover (--real)", () => {
   // eleven_v3 rejects previous_text/next_text, so a presenter-less spec takes the one-call path.
   it("throws instead of synthesising when the whole-script entry is missing", async () => {
     await expect(
-      buildVO({ spec: specOf("Hello world.", "Second beat."), voiceId: "v1", cache, vo: "cached" }),
+      buildVO({ spec: specOf("Hello world.", "Second beat."), brand, cache, vo: "cached" }),
     ).rejects.toThrow(/--real needs real voiceover in the cache/);
   });
 
@@ -34,23 +37,22 @@ describe("cache-only voiceover (--real)", () => {
   it("throws on the per-segment path too, naming the beat that is missing", async () => {
     await expect(
       buildVO({
-        spec: specOf("Hello world.", "Second beat."),
-        voiceId: "v1",
+        spec: { ...specOf("Hello world.", "Second beat."), voiceModel: "eleven_multilingual_v2" },
+        brand: { ...brand, voiceModel: "eleven_multilingual_v2" },
         cache,
         vo: "cached",
-        model: "eleven_multilingual_v2",
       }),
     ).rejects.toThrow(/segment\[0\]/);
   });
 
   it("names the exact command that fills the cache, with the spec path in it", async () => {
     await expect(
-      buildVO({ spec: specOf("Hello world."), voiceId: "v1", cache, vo: "cached", specRef: "specs/promo.json" }),
+      buildVO({ spec: specOf("Hello world."), brand, cache, vo: "cached", specRef: "specs/promo.json" }),
     ).rejects.toThrow(/kino build specs\/promo\.json --tts/);
   });
 
   it("falls back to <spec> in the message when no path was threaded through", async () => {
-    await expect(buildVO({ spec: specOf("Hello world."), voiceId: "v1", cache, vo: "cached" })).rejects.toThrow(
+    await expect(buildVO({ spec: specOf("Hello world."), brand, cache, vo: "cached" })).rejects.toThrow(
       /kino build <spec> --tts/,
     );
   });
@@ -59,7 +61,7 @@ describe("cache-only voiceover (--real)", () => {
     const prev = process.env.ELEVENLABS_API_KEY;
     delete process.env.ELEVENLABS_API_KEY;
     try {
-      await expect(buildVO({ spec: specOf("Hello world."), voiceId: "v1", cache, vo: "cached" })).rejects.toThrow(
+      await expect(buildVO({ spec: specOf("Hello world."), brand, cache, vo: "cached" })).rejects.toThrow(
         /--real needs real voiceover/,
       );
     } finally {

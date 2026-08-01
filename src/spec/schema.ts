@@ -323,6 +323,12 @@ const segmentFxFields = {
   blend: z.unknown().optional(),
 };
 
+/** Per-beat TTS voice override — falls back to spec.voice, then brand.defaultVoice. */
+const segmentVoiceFields = {
+  voice: z.string().min(1).optional(),
+  voiceModel: z.string().min(1).optional(),
+};
+
 const SegmentUnion = z.discriminatedUnion("kind", [
   z.object({
     // A beat over the background: voiceover, captions, overlays. The default — omit `kind`.
@@ -347,6 +353,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    ...segmentVoiceFields,
     ...segmentFxFields,
   })
   .strict(),
@@ -475,6 +482,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
     images: z.array(SegmentImageSchema).max(8).optional(),
+    ...segmentVoiceFields,
     ...segmentFxFields,
   })
   .strict(),
@@ -513,6 +521,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     texts: z.array(TextOverlaySpec).optional(),
     motionOverlay: MotionGraphicRef.optional(),
     images: z.array(SegmentImageSchema).max(8).optional(),
+    ...segmentVoiceFields,
     ...segmentFxFields,
   })
   .strict(),
@@ -655,9 +664,7 @@ const TOP_LEVEL_KEYS: Record<string, string> = {
   backgroundTriggers: "backgroundTriggers is top-level — not a segment field",
   music: "music is top-level — not a segment field",
   sfx: "sfx is top-level — not a segment field",
-  voice: "voice is top-level (or brand.md) — not a segment field",
   fontWeights: "fontWeights is top-level (or brand.md) — not a segment field",
-  voiceModel: "voiceModel is top-level — not a segment field",
   provider: "provider is top-level (or brand/project) — not a segment field",
   avatarLook: "avatarLook is top-level (or brand.md) — not a segment field",
 };

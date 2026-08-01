@@ -30,9 +30,37 @@ export function resolveProvider(spec: Spec, brand: Brand): Provider {
 }
 
 /**
- * Resolve the voice id: spec.voice, else brand.defaultVoice, mapped through brand.voiceAliases
- * (unknown alias passes through as a raw id). Returns '' when nothing is configured — a valid
- * "no voice" state for presenter-less builds, not an error.
+ * Resolve the voice id for one beat: segment.voice → spec.voice → brand.defaultVoice,
+ * mapped through brand.voiceAliases (unknown alias passes through as a raw id).
+ */
+export function resolveSegmentVoice(spec: Spec, brand: Brand, segIndex: number): string {
+  const seg = spec.segments[segIndex] as { voice?: string };
+  const alias = seg.voice ?? spec.voice ?? brand.defaultVoice;
+  return alias ? (brand.voiceAliases[alias] ?? alias) : "";
+}
+
+/** segment.voiceModel → spec.voiceModel → brand.voiceModel → eleven_v3. */
+export function resolveSegmentVoiceModel(spec: Spec, brand: Brand, segIndex: number): string {
+  const seg = spec.segments[segIndex] as { voiceModel?: string };
+  return seg.voiceModel ?? spec.voiceModel ?? brand.voiceModel ?? "eleven_v3";
+}
+
+/** True when TTS beats would need more than one voice id or TTS model. */
+export function hasPerSegmentVoiceVariation(spec: Spec, brand: Brand): boolean {
+  const voices = new Set<string>();
+  const models = new Set<string>();
+  for (let i = 0; i < spec.segments.length; i++) {
+    const seg = spec.segments[i];
+    if (!seg.text?.trim() || seg.voFile) continue;
+    voices.add(resolveSegmentVoice(spec, brand, i));
+    models.add(resolveSegmentVoiceModel(spec, brand, i));
+  }
+  return voices.size > 1 || models.size > 1;
+}
+
+/**
+ * Resolve the default voice id: spec.voice, else brand.defaultVoice, mapped through brand.voiceAliases.
+ * For per-beat overrides use resolveSegmentVoice.
  */
 export function resolveVoice(spec: Spec, brand: Brand): string {
   const alias = spec.voice ?? brand.defaultVoice;
@@ -236,17 +264,29 @@ export function assertCaptionModes(spec: Spec, brand: Brand): void {
 const AUDIO_TAG_RE = /\[[a-z][a-z0-9 \-]{0,40}\]/i;
 
 export function assertVoiceTags(spec: Spec, brand: Brand): void {
-  const model = resolveVoiceModel(spec, brand);
-  if (model.startsWith("eleven_v3")) return;
   const hits: string[] = [];
   spec.segments.forEach((seg, i) => {
-    if (seg.text && AUDIO_TAG_RE.test(seg.text)) hits.push(`segment[${i}]`);
+    if (!seg.text || !AUDIO_TAG_RE.test(seg.text)) return;
+    const model = resolveSegmentVoiceModel(spec, brand, i);
+    if (!model.startsWith("eleven_v3")) hits.push(`segment[${i}]`);
   });
   if (!hits.length) return;
   log.warn(
-    `Audio tags in ${hits.join(", ")} but voiceModel is "${model}" — non-v3 reads tags aloud ` +
-      `("short pause", …). Switch to eleven_v3, or drop [brackets] and pause with punctuation.`,
+    `Audio tags in ${hits.join(", ")} but voiceModel is not eleven_v3 — non-v3 reads tags aloud ` +
+      `("short pause", …). Set voiceModel / segment.voiceModel to eleven_v3, or drop [brackets] and pause with punctuation.`,
   );
+}
+
+/** Every TTS beat needs a resolvable voice before any API spend. */
+export function assertSegmentVoices(spec: Spec, brand: Brand): void {
+  spec.segments.forEach((seg, i) => {
+    if (!seg.text?.trim() || seg.voFile) return;
+    if (!resolveSegmentVoice(spec, brand, i)) {
+      throw new Error(
+        `segment[${i}]: no voice configured — set segment.voice, spec.voice, or brand.defaultVoice`,
+      );
+    }
+  });
 }
 
 /**
