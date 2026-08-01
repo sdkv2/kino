@@ -290,7 +290,9 @@ kino brand acme      # resolved styling values + guidelines
 ```
 
 ### `voices`
-List ElevenLabs voices.
+List ElevenLabs voices. **Agents must run this before setting `voice` or `defaultVoice`** — search
+the catalog for the most appropriate match to brand tone and avatar gender/age; never pick from
+memory or reuse the same default across brands without searching.
 
 ```
 kino voices [--gender <g>]

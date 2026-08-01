@@ -44,7 +44,7 @@ spec genuinely needs one that doesn't exist yet:
    - `projects/<name>/assets/{screens,recordings}` — real app stills: read the **actual** palette + type
      off the product, don't guess hex codes
    - the logo / brand kit the user drops in → `brands/<name>/assets/`
-   - `kino fonts` · `kino voices` · `kino backgrounds` — what's settable (font/labelFont, defaultVoice, background)
+   - `kino fonts` · **`kino voices`** (always search the catalog before setting `voice`/`defaultVoice`) · `kino backgrounds` — what's settable (font/labelFont, defaultVoice, background)
    - `assets-lib/` — shared motion/backgrounds the brand can lean on (music/sfx ship empty)
    - **or more** (with permission): the app's App Store listing / site / press kit for public brand assets;
      `kino pexels` / `kino photos` / image-gen for stills the brand lacks
@@ -627,14 +627,16 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   `--gender male|female` to narrow). Brand `lookAliases` map a friendly name → look id. For
   `hedra`/`replicate`, set `brand.avatarImage` (a portrait file) instead — those engines lip-sync a
   source image, not a hosted id.
-- Voices: `kino voices` (add `--gender male|female` to narrow). Match voice age/gender to the avatar,
-  and to the **brand's
-  personality**: don't leave every brand on the same default voice. If `kino voices` 401s (a scoped
-  key without voices_read), these premade ElevenLabs voices work on every account — pick by character:
+- **Voices (mandatory search):** **Always** run `kino voices` before setting `"voice"` or
+  `brand.defaultVoice` — search the catalog for the most appropriate match to the brand's Tone/Voice
+  (register, energy, age, accent) and, when a presenter is used, the avatar's gender/age. Add
+  `--gender male|female` to narrow. **Never** reuse the same default voice across brands or pick from
+  memory without searching. Set the chosen id per spec (`"voice"`) or per brand (`defaultVoice` +
+  `voiceAliases` for friendly names). If `kino voices` 401s (a scoped key without `voices_read`),
+  these premade ElevenLabs voices work on every account — still pick the most appropriate by character:
   `21m00Tcm4TlvDq8ikWAM` Rachel (calm narrative F) · `AZnzlk1XvdvUeBnXmlld` Domi (confident, punchy F) ·
   `EXAVITQu4vr4xnSDxMaL` Sarah (soft, warm F) · `ErXwobaYiN019PkySvjV` Antoni (warm, easy M) ·
   `TxGEqnHWrfWFTfGW9XjX` Josh (deep, serious M) · `pNInz6obpgDQGcFmaJgB` Adam (broadcast M).
-  Set it per spec (`"voice"`) or per brand (`defaultVoice`).
 - **Expressive VO (audio tags)**: default TTS is `"voiceModel": "eleven_v3"`. Direct the read
   inline in segment text with bracketed tags — `[excited]`, `[whispers]`, `[sighs]`, `[laughs]`,
   `[curious]`, `[short pause]`. Tags are stripped from word-synced captions automatically. Use like

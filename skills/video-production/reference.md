@@ -17,7 +17,9 @@
 - `kino transcribe <video> [--as …] [--out …]` — **(reference videos only)** speech → timestamped transcript
 - `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
 - `kino batch <input.json>` — input is a JSON array of spec paths
-- `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
+- `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only). **Voice rule:**
+  always run `kino voices` and search for the most appropriate match before setting `voice` or
+  `defaultVoice` — never pick from memory or reuse the same id across brands without searching.
 - `kino fonts [--search <term>] [--preview <family> [--brand <b>] [--format <list>]] [--refresh]` —
   curated shortlist, full-catalog search, or a specimen still in 9:16 + 16:9
 - `kino projects [--new <name>] [--brand <brand>]` — list or scaffold projects (brand optional)
