@@ -1,6 +1,6 @@
 // voices: list/inspect the available ElevenLabs voices (id, name, gender/age/accent) so an agent can
-// pick a voice id for a spec; --gender filters the list. Read-only — prints to stdout, no API spend
-// beyond the voices lookup.
+// pick a voice id for a spec; --gender filters the list. Agents must run this and search for the
+// most appropriate match before setting voice/defaultVoice — read-only, no TTS spend beyond the lookup.
 import { resolveWorkspace } from "../config/project.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { listVoices } from "../vo/elevenlabs.js";

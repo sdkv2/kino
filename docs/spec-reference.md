@@ -28,7 +28,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `brand` | string | — | Brand name; falls back to the project's `project.json` brand. Optional: a brand is for shared tone/voice, fonts, disclosures and voice aliases — colours alone don't need one. |
 | `format` | `("9:16"\|"3:4"\|"16:9"\|"9:16-4k"\|"3:4-4k"\|"16:9-4k")[]` | — | Output formats. Default `["9:16"]` (1080-class). `*-4k` = UHD **output** (e.g. `9:16-4k` → 2160×3840) composed at the 1080-class canvas — same frame, 4× the pixels. Motion layouts adapt via `--kino-aspect`. |
 | `fps` | int 1–120 | — | Composition frame rate. Default `30` — fine for talking-head and motion work, and cheap. Raise it when the source cadence matters: 60fps footage (and a 60fps `kino segment` mask tracking it) is otherwise sampled every other frame. Render cost scales with it — every frame is a real browser paint. |
-| `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. |
+| `voice` | string | — | ElevenLabs voice id or a `brand.voiceAliases` alias. **Search `kino voices` first** — pick the most appropriate match to brand tone and avatar gender/age; don't reuse a default without searching. |
 | `fontWeights` | int[] 100–900 | — | Extra cuts of the brand font to stage, so `font-weight` in a motion page selects a real face instead of silently reusing the single caption cut. The caption weight is always included. **Overrides** brand `fontWeights` rather than merging — pass `[]` to opt a lean spec out of a type-heavy brand's set. Each cut is base64-inlined into every raster, so ask only for what you use. |
 | `voiceModel` | string | — | ElevenLabs TTS model. Default is v3 (inline audio tags `[excited]`, `[whispers]`, `[short pause]`, … work in segment `text`; tags are stripped from word-synced captions). Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads. |
 | `film` | number | — | Cinematic-finish intensity (vignette + grain over photographic/app beats), `0..1`. Default `1` (graded film look). Set `0` for clean flat edges — e.g. a light "paper" video where the edge vignette reads as a dark border. Motion-graphic beats are never graded. |
@@ -41,7 +41,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `backgroundKeyframes` | [BgKeyframe](#keyframes--triggers)[] | — | Tween background params over time. |
 | `backgroundTriggers` | [BgTrigger](#keyframes--triggers)[] | — | One-shot background actions (e.g. `pulse`). |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset; overrides `brand.captionStyle.style`. Default `stroke`. See [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Unset = the surface's native entrance (`pop`; `rise` for presenter-less hero text). See [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Resolves for `texts[]` overlays; native caption surfaces keep quad-level legacy entrance (see [Captions](#captions)). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal: `word` (default, one word at a time) or `all` (whole line laid out, active-word highlight tracks VO). See [Captions](#captions). |
 | `captionMode` | `phrase\|words` | — | Caption mode; overrides `brand.captionMode`. See [Captions](#captions). |
 | `sfx` | [SfxEvent](#sound-effects--music)[] | — | Free-placed sound effects. See [Sound effects & music](#sound-effects--music). |
@@ -135,7 +135,7 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 | `captionKeyframes` | BgKeyframe[] | — | Tween the caption — see [Tween channels](#tween-channels). |
 | `motionOverlay` | [MotionRef](#motion-segment) | — | Layer a motion graphic over this beat. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Accepted by the schema, but a `scene` beat has no content layer of its own to apply it to (background + optional presenter only) — it validates and threads through, with no visible effect. Use `video`/`motion` for a beat that should actually blend. |
@@ -165,7 +165,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `zoomKeyframes` | BgKeyframe[] | — | Camera push/pan on the whole footage+chrome group (canvas zoom for inset device footage); beat-relative track like `captionKeyframes` — `at` is seconds from this segment's start, so it rides the beat when VO timing shifts (see [Tween channels](#tween-channels)). |
 | `motionOverlay` | [MotionRef](#motion-segment) | — | Layer a motion graphic over this beat. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's footage layer (not its chrome frame or kicker) against what's beneath it. Default `normal`. Same vocabulary as a declared layer's `blend` — see [Layers](#layers). |
@@ -194,7 +194,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `emphasis` | string[] | — | Emphasised words (`words` mode). |
 | `captionKeyframes` | BgKeyframe[] | — | Tween the caption — see [Tween channels](#tween-channels). |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; see [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's motion-graphic layer against what's beneath it. Default `normal`. |
@@ -766,6 +766,17 @@ An optional **backplate** (translucent panel behind lower-third captions for leg
 
 In `words` mode the reveal timing (when each word appears) always stays VO-driven — the animation preset only shapes each word's entrance motion, never its timing.
 
+> **Native raster scope:** the compositor rasterizes caption **look** (`captionStyle`, `captionReveal`, backplate) into a word-keyed bitmap (`cadence: "keyed"` — one repaint per active word, not per frame). `captionAnimation` does **not** paint into that bitmap: an entrance spring needs per-frame state, but a keyed raster only ever captures the settled pose (~1s in). Caption surfaces therefore keep their legacy quad-level entrance (`captionKeyframes`, native pop). Honoring `captionAnimation` in the raster would require per-frame dynamic cadence or animating the quad — a separate architecture change. The preset still resolves for `texts[]` overlays (which raster per frame) and documents the motion vocabulary.
+
+**Caption reveal** (`captionReveal`, `words` mode only) — layered `segment ?? spec ?? brand.captionStyle.reveal`, default `word`:
+
+| reveal | behaviour |
+|---|---|
+| `word` | each word hidden (`opacity: 0`) until its VO time, then shown |
+| `all` | whole line laid out at full opacity from the start; active-word highlight still tracks VO |
+
+`reveal` is opacity/layout semantics, not motion — it **is** honored in the native raster. Use `all` (or `phrase` mode) for a CTA or any long line so the first word doesn't strand at a wrapped corner during a VO pause.
+
 ## Text overlays
 
 Per-segment `texts: [{ text, at, dur?, position?, size?, style?, animation? }]` places standalone captions anywhere on the frame, independent of the segment's own caption.
@@ -914,7 +925,7 @@ The brand config lives at `brands/<name>/brand.md`: a YAML **frontmatter** block
 name: acme
 colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64" }
 # disclosure: AI-generated   # optional — shown on every video when set
-# defaultVoice: <elevenlabs-voice-id>   # or set per spec
+# defaultVoice: <elevenlabs-voice-id>   # search `kino voices` first — most appropriate match to Tone/Voice
 ---
 # acme — brand guidelines
 
@@ -961,7 +972,7 @@ The frontmatter fields:
 | `backgroundColors` | string[] | — | Palette for animated backgrounds (else accent/deep/accent2). |
 | `backgroundIntensity` | number | — | 0..1 motion strength (default 0.5). |
 | `captionMode` | `phrase\|words` | — | Default caption style. |
-| `defaultVoice` / `defaultLook` / `defaultProvider` | string / string / provider | — | Avatar/voice defaults. |
+| `defaultVoice` / `defaultLook` / `defaultProvider` | string / string / provider | — | Avatar/voice defaults. Search `kino voices` before setting `defaultVoice`. |
 | `avatarImage` | string | — | Portrait source for Hedra/Replicate. |
 | `hedraModelId`, `replicateModel`, `replicateImageField`, `replicateAudioField`, `replicateInput` | — | Engine-specific avatar settings. |
 | `voiceAliases` / `lookAliases` | `Record<string,string>` | — | Friendly-name → id maps for `voice` / `avatarLook`. Default `{}`. |

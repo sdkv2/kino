@@ -17,7 +17,9 @@
 - `kino transcribe <video> [--as …] [--out …]` — **(reference videos only)** speech → timestamped transcript
 - `kino scan <video> [--count|--every]` — **(reference videos only)** transcript + frames + contact sheet
 - `kino batch <input.json>` — input is a JSON array of spec paths
-- `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only)
+- `kino voices [--gender]` · `kino avatars [--gender]` (Avatar-IV portrait looks only). **Voice rule:**
+  always run `kino voices` and search for the most appropriate match before setting `voice` or
+  `defaultVoice` — never pick from memory or reuse the same id across brands without searching.
 - `kino fonts [--search <term>] [--preview <family> [--brand <b>] [--format <list>]] [--refresh]` —
   curated shortlist, full-catalog search, or a specimen still in 9:16 + 16:9
 - `kino projects [--new <name>] [--brand <brand>]` — list or scaffold projects (brand optional)
@@ -221,7 +223,9 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   scale-in) · `rise` (translateY cascade) · `typewriter` (staggered instant reveal) · `wave` (pop then a
   per-word sine bob) · `blur-in` (blur→0 + fade) · `none` (static). Unset = the surface's native entrance
   (`pop`; `rise` for hero text) — word-reveal *timing* in `words` mode always stays VO-driven,
-  the preset only shapes each word's entrance motion.
+  the preset only shapes each word's entrance motion. **Native raster:** look + reveal paint into the
+  word-keyed caption bitmap; `captionAnimation` does not — entrance motion rides the quad
+  (`captionKeyframes`, legacy pop). The preset still resolves for `texts[]` overlays.
 - **Caption reveal** (`captionReveal`, `words` mode only; layered `segment ?? spec ?? brand.captionStyle.reveal`,
   default `word`): `word` reveals each word at its VO time (per-word pop); `all` lays the whole caption out
   and fades it in together, the active word still highlighting as the VO reaches it. Reach for `all` (or

@@ -81,7 +81,7 @@ export async function init(brand?: string): Promise<void> {
         '# its own (a preset name or roles). Roles: bg, fg, accent, accent2, deep. `kino colors`.',
         'colors: { bg: "#0b1020", accent: "#80e2b4", deep: "#0c8d64" }',
         "# disclosure: AI-generated   # optional — shown on every video when set",
-        "# defaultVoice: <elevenlabs-voice-id>   # or set per spec",
+        "# defaultVoice: <elevenlabs-voice-id>   # search `kino voices` first — most appropriate match to Tone/Voice",
         "---",
         `# ${brand} — brand guidelines`,
         "",

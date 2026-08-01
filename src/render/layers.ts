@@ -426,7 +426,8 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   });
 
   // 9. Captions. The raster is keyed by the ACTIVE WORD, not the frame: a words-mode caption
-  // re-rasters once per spoken word, and the per-word pop rides the quad instead.
+  // re-rasters once per spoken word. Look presets (style/reveal/backplate) paint in that keyed
+  // bitmap; entrance motion rides the quad (captionKeyframes / legacy pop), not captionAnimation.
   props.segments.forEach((s, i) => {
     const from = f(s.startSec);
     const dur = f(s.endSec) - from;

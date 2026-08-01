@@ -8,8 +8,16 @@
 // single family literally named `"KinoBrandFont", "Anton", …`, which matches nothing and silently
 // drops every caption to sans-serif. That is exactly the bug that made the brand font a no-op on all
 // five of these surfaces; `kino fonts --preview <family>` is the fastest way to catch a regression.
+import type { CSSProperties } from "react";
 import type { Theme } from "../../../props.js";
-import type { ResolvedText } from "../../../textStyles.js";
+import {
+  wordStyle,
+  lineBoxStyle,
+  type CaptionStyle,
+  type CaptionReveal,
+  type ResolvedText,
+} from "../../../textStyles.js";
+import { isHighlightWord, normWord } from "../../../captions.js";
 import { filmFinishParams, luminance } from "../../../filmFinish.js";
 
 /** Spec text reaches the DOM path as React children, which escape by construction. These
@@ -24,6 +32,24 @@ export function escapeHtml(s: string): string {
 
 import { CAPTION_BOTTOM } from "../../../captionLayout.js";
 
+/** CSSProperties (as the textStyles.ts presets emit them) → inline CSS text. Numbers take px
+ *  except the unitless properties the presets use; WebkitX keys kebab-case to -webkit-x. */
+const UNITLESS = new Set(["font-weight", "opacity", "line-height", "z-index"]);
+export function cssText(style: CSSProperties): string {
+  return Object.entries(style)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => {
+      const prop = k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+      const val = typeof v === "number" && !UNITLESS.has(prop) ? `${v}px` : String(v);
+      return `${prop}:${val}`;
+    })
+    .join(";");
+}
+
+// The look presets (style/reveal/backplate) raster here; animation presets do NOT — the caption
+// raster is keyed by active word (registry.ts cadence "keyed"), so an entrance spring has no frames
+// to ride and every preset paints as its settled state. Native entrances stay quad-level, matching
+// the textStyles.ts note that native surfaces keep their legacy entrance math.
 export function captionMarkup(opts: {
   text: string;
   words?: Array<{ word: string; start: number; end: number }>;
@@ -31,60 +57,80 @@ export function captionMarkup(opts: {
   theme: Theme;
   hero: boolean;
   activeWord: number | null;
+  style?: CaptionStyle; // resolved look (segment ?? spec ?? brand); undefined = "stroke"
+  reveal?: CaptionReveal; // words mode: "word" = appear when spoken (default); "all" = whole line up front
+  emphasis?: string[]; // words mode: extra glow when the active word is in this list
+  backplate?: { bg: string } | null; // translucent lower-third plate; caller applies the appOnly gate
 }): string {
-  const { text, words, tAbs, theme, hero, activeWord } = opts;
+  const { text, words, tAbs, theme, hero, activeWord, backplate } = opts;
+  const style = opts.style ?? "stroke";
+  const reveal = opts.reveal ?? "word";
+  const emph = new Set((opts.emphasis ?? []).map(normWord));
   const size = hero ? Math.round(theme.captionFontSize * 1.42) : theme.captionFontSize;
+  const shadow = hero ? "0 8px 28px rgba(0,0,0,.5)" : "0 6px 20px rgba(0,0,0,.45)";
+  // Words mode: the active word (and the brand name) takes the style's highlight treatment.
+  const wordInk = (w: string, i: number) => {
+    const isActive = i === activeWord;
+    const highlight = isHighlightWord(w, { isActive, brandName: theme.brandName });
+    return cssText(wordStyle(style, theme, { highlight, emph: isActive && emph.has(normWord(w)), shadow }));
+  };
 
   let body: string;
   if (words && words.length && tAbs !== undefined) {
     body = words
       .map((w, i) => {
-        const spoken = tAbs >= w.start;
+        const spoken = reveal === "all" || tAbs >= w.start;
         const opacity = spoken ? 1 : 0;
         const activeClass = i === activeWord ? " kino-word-active" : "";
-        return `<span class="kino-word${activeClass}" style="opacity:${opacity}">${escapeHtml(w.word)}</span>`;
+        return `<span class="kino-word${activeClass}" style="opacity:${opacity};${wordInk(w.word, i)}">${escapeHtml(w.word)}</span>`;
       })
       .join(" ");
   } else if (activeWord !== null) {
     body = text
       .split(/\s+/)
-      .map((w, i) => `<span class="kino-word${i === activeWord ? " kino-word-active" : ""}">${escapeHtml(w)}</span>`)
+      .map((w, i) => `<span class="kino-word${i === activeWord ? " kino-word-active" : ""}" style="${wordInk(w, i)}">${escapeHtml(w)}</span>`)
       .join(" ");
   } else {
     body = escapeHtml(text);
   }
+  const wordMode = (words && words.length && tAbs !== undefined) || activeWord !== null;
 
   if (hero) {
     const heroWords = (words ? words.map(w => w.word) : text.split(/\s+/))
       .map((w, i) => {
-        const spoken = words && tAbs !== undefined ? tAbs >= words[i].start : true;
+        const spoken = reveal === "all" || !(words && tAbs !== undefined) || tAbs >= words[i].start;
         const opacity = spoken ? 1 : 0;
         const activeClass = i === activeWord ? " kino-word-active" : "";
-        return `<span class="kino-word${activeClass}" style="display:inline-block;opacity:${opacity}">${escapeHtml(w)}</span>`;
+        // Phrase heroes keep every word in the base ink (no active word, and the brand-name accent
+        // is a words-mode treatment — the legacy HeroCaption never highlighted).
+        const ink = wordMode ? wordInk(w, i) : cssText(wordStyle(style, theme, { shadow }));
+        return `<span class="kino-word${activeClass}" style="display:inline-block;opacity:${opacity};${ink}">${escapeHtml(w)}</span>`;
       })
       .join("");
 
     const colGap = words ? 34 : 22;
     const rowGap = words ? 8 : 6;
+    // Words mode boxes each word individually, so only the legacy backplate may plate the row
+    // (style "stroke" — never the highlight night plate); phrase heroes take the style's own line
+    // box. Flex is declared after the line box so its display wins over inline-block.
+    const rowBox = wordMode ? lineBoxStyle("stroke", theme, backplate?.bg) : lineBoxStyle(style, theme, null);
     return (
       `<style>` +
       `.kino-cap-wrap{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;padding:0 80px}` +
-      `.kino-cap-row{display:flex;flex-wrap:wrap;justify-content:center;column-gap:${colGap}px;row-gap:${rowGap}px}` +
-      `.kino-word{font-family:${theme.font},sans-serif;font-weight:900;font-size:${size}px;line-height:1.04;letter-spacing:-0.015em;` +
-      `color:${theme.fg};text-align:center;` +
-      `-webkit-text-stroke:${theme.captionStroke}px #000;paint-order:stroke fill;text-shadow:0 8px 28px rgba(0,0,0,.5)}` +
-      `.kino-word-active{color:${theme.accent}}` +
+      `.kino-cap-row{${cssText(rowBox)};display:flex;flex-wrap:wrap;justify-content:center;column-gap:${colGap}px;row-gap:${rowGap}px}` +
+      `.kino-word{font-family:${theme.font},sans-serif;font-size:${size}px;line-height:1.04;letter-spacing:-0.015em;text-align:center}` +
       `</style><div class="kino-cap-wrap"><div class="kino-cap-row">${heroWords}</div></div>`
     );
   }
 
+  // Phrase captions carry the ink on the line itself; words mode leaves it to the word spans.
+  const lineInk = wordMode ? {} : wordStyle(style, theme, { shadow });
+  const lineBox = wordMode ? lineBoxStyle("stroke", theme, backplate?.bg) : lineBoxStyle(style, theme, backplate?.bg);
   return (
     `<style>` +
     `.kino-cap-wrap{position:absolute;left:48px;right:48px;bottom:${CAPTION_BOTTOM}px;display:flex;justify-content:center}` +
-    `.kino-cap{font-family:${theme.font},sans-serif;font-weight:900;font-size:${size}px;line-height:1.03;letter-spacing:-0.01em;` +
-    `color:${theme.fg};text-align:center;` +
-    `-webkit-text-stroke:${theme.captionStroke}px #000;paint-order:stroke fill;text-shadow:0 6px 20px rgba(0,0,0,.45)}` +
-    `.kino-word-active{color:${theme.accent}}` +
+    `.kino-cap{font-family:${theme.font},sans-serif;font-size:${size}px;line-height:1.03;letter-spacing:-0.01em;text-align:center;` +
+    `${cssText({ ...lineInk, ...lineBox })}}` +
     `</style><div class="kino-cap-wrap"><span class="kino-cap">${body}</span></div>`
   );
 }
@@ -109,10 +155,13 @@ export function textMarkup(opts: {
   theme: Theme;
 }): string {
   const { overlay, theme } = opts;
+  // Same look presets as captions (overlay.style is resolved at build time); overlays never take
+  // the caption backplate, but the highlight style still brings its own night line box.
+  const ink = cssText({ ...wordStyle(overlay.style, theme, {}), ...lineBoxStyle(overlay.style, theme, null) });
   return (
     `<style>` +
     `.kino-overlay-wrap{position:absolute;left:${overlay.x}%;top:${overlay.y}%;transform:translate(-50%,-50%);max-width:86%;display:flex;justify-content:center}` +
-    `.kino-overlay{font-family:${theme.font},sans-serif;font-size:${overlay.sizePx}px;text-align:center;line-height:1.05;white-space:pre-line;color:${theme.fg};font-weight:900}` +
+    `.kino-overlay{font-family:${theme.font},sans-serif;font-size:${overlay.sizePx}px;text-align:center;line-height:1.05;white-space:pre-line;${ink}}` +
     `</style><div class="kino-overlay-wrap"><span class="kino-overlay">${escapeHtml(overlay.text)}</span></div>`
   );
 }

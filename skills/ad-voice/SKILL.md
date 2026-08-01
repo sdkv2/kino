@@ -40,7 +40,9 @@ concern — see `docs/spec-reference.md` § `brand.md` for that full field list.
 - **Register:** <casual | plain | sharp | warm | dry> — how close to UGC vs broadcast
 - **Person:** <you | we | they> — who the VO addresses (pick one; stay consistent)
 - **Pace:** <punchy | measured> — sentence length + pause density
-- **Energy:** <low | medium | high> — matches ElevenLabs voice + avatar, not hype adjectives
+- **Energy:** <low | medium | high> — matches ElevenLabs voice + avatar, not hype adjectives. **Before
+  setting `defaultVoice`:** run `kino voices` and search for the most appropriate match to this dial
+  (and the avatar's gender/age when one is used) — never reuse a house default without searching.
 - **Proof style:** <specific numbers | social proof | demo-first | none>
 - **CTA style:** <direct | soft recommend | urgency> — still name the action
 - **Say like this:** 2–4 sample lines on-voice (real product truth)

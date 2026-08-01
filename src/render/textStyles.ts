@@ -80,8 +80,9 @@ export function lineBoxStyle(style: CaptionStyle, t: TextTheme, backplateBg?: st
 
 // s = entrance spring 0→1 (caller owns the spring config); frame = frames since this element's
 // entrance began (negative = not yet — words mode passes revealFrame); index = word index for
-// stagger phase. Callers use these presets only for NON-native animations; native entrances keep
-// their legacy inline math (regression gate).
+// stagger phase. Callers use these presets only for NON-native animations (e.g. texts[] overlays);
+// native caption surfaces keep their legacy quad-level entrance — the word-keyed caption raster
+// has no per-frame state for an entrance spring to ride (see textMarkup.ts).
 export interface AnimInput {
   s: number;
   frame: number;
