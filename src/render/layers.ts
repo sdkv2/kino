@@ -6,7 +6,8 @@
 import type { BgKeyframe, KinoProps } from "./props.js";
 import type { LayerEffect } from "./maskSpec.js";
 import { interpolate } from "./interpolate.js";
-import { paramsAt } from "./bgparams.js";
+import { paramsAt, type Keyframe } from "./bgparams.js";
+import { DRIVE_CHANNELS, evalDriveExpr, hashLayerSeed } from "./driveExpr.js";
 import { resolveEffects } from "./effectParams.js";
 import { IDENTITY_TRANSFORM, normalizeLayer, type Dims, type LayerDraw, type LayerSpec, type LayerTransform } from "./native/page/compositor/graph.js";
 import { motionHandoff, motionXfadeFrames, shotTransform, type Shot } from "./motion.js";
@@ -72,20 +73,32 @@ function tweenAt(
   keyframes: BgKeyframe[] | undefined,
   tSec: number,
   dims: Dims,
+  opts?: {
+    drive?: Record<string, string>;
+    flipX?: boolean;
+    flipY?: boolean;
+    beatDur?: number;
+    seed?: number;
+  },
 ): { transform: LayerSpec["transform"]; opacity: number } | null {
-  if (!keyframes?.length) return null;
-  const p = paramsAt(
-    { x: 0, y: 0, scale: 1, opacity: 1, rotate: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5 },
-    keyframes,
-    tSec,
-  );
+  const defaults = { x: 0, y: 0, scale: 1, opacity: 1, rotate: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5 };
+  const p = paramsAt(defaults, (keyframes ?? []) as Keyframe[], tSec);
+  const dur = Math.max(0.001, opts?.beatDur ?? 1);
+  const ctx = { t: tSec, p: tSec / dur, dur, seed: opts?.seed ?? 0 };
+  for (const ch of DRIVE_CHANNELS) {
+    const expr = opts?.drive?.[ch];
+    if (!expr) continue;
+    const base = num(p[ch], (defaults as Record<string, number>)[ch] ?? 0);
+    p[ch] = base + evalDriveExpr(expr, ctx);
+  }
+  if (!keyframes?.length && !opts?.drive && !opts?.flipX && !opts?.flipY) return null;
   // Emit the new channels ONLY when a track actually moves them. modelMatrix reads them as
   // `?? 1` / `?? 0.5`, so omitting a default is identical in pixels — and it keeps the transform
   // object shape-identical to the inline literals cameraAt builds, which layers-tweens.test.ts
   // compares against directly. It also avoids allocating an anchor pair per layer per frame for
   // the overwhelmingly common case where nobody set one.
-  const scaleX = num(p.scaleX, 1);
-  const scaleY = num(p.scaleY, 1);
+  const scaleX = num(p.scaleX, 1) * (opts?.flipX ? -1 : 1);
+  const scaleY = num(p.scaleY, 1) * (opts?.flipY ? -1 : 1);
   const anchorX = num(p.anchorX, 0.5);
   const anchorY = num(p.anchorY, 0.5);
   return {
@@ -492,7 +505,14 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     // Keyframes read from the layer's own start, so a track authored against a beat-bound layer
     // does not shift when the beat does.
     const localFrame = frame - f(fromSec);
-    const tween = tweenAt(d.keyframes, localFrame / props.fps, dims);
+    const beatDur = bound ? bound.endSec - bound.startSec : (toSec ?? props.segments.at(-1)?.endSec ?? fromSec + 1) - fromSec;
+    const tween = tweenAt(d.keyframes, localFrame / props.fps, dims, {
+      drive: d.drive,
+      flipX: d.flipX,
+      flipY: d.flipY,
+      beatDur,
+      seed: hashLayerSeed(d.id),
+    });
     out.push({
       id: d.id,
       z: d.z,

@@ -231,8 +231,11 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
     // off vo.clips) stays stable, and stitchAudio re-encodes to mp3 exactly once.
     const cleanClips = await Promise.all(
       clips.map(async (c, i) => {
-        // trailingArtifactCut is an ElevenLabs-artifact heuristic — never trim user-imported voFiles.
-        const cut = mock || spec.segments[i].voFile ? null : await trailingArtifactCut(c);
+        const seg = spec.segments[i];
+        // trailingArtifactCut is an ElevenLabs-artifact heuristic — never trim user-imported voFiles
+        // or generated silent beats (mp3 padding can look like a trailing burst → zero-length clip).
+        const cut =
+          mock || seg.voFile || !seg.text?.trim() ? null : await trailingArtifactCut(c);
         if (cut == null) return c;
         const t = join(dir, `clean${i}.wav`);
         await trimAudio(c, cut, t);

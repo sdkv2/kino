@@ -10,6 +10,7 @@ import { EASE_NAMES } from "../render/bgparams.js";
 import { EXTRA_PARAM_SLOTS } from "../render/shaderSource.js";
 import { PALETTE_PRESET_NAMES } from "../config/palettes.js";
 import { LAYER_SOURCE_KINDS } from "../render/layerSpec.js";
+import { resolveSpec, validateSegmentImages } from "./segmentImages.js";
 
 const EaseEnum = z.enum(EASE_NAMES);
 
@@ -132,6 +133,23 @@ const OverlayKeyframe = BgKeyframe.superRefine((kf, ctx) => {
     });
   }
 });
+
+/** Extra stills composited on a video/motion beat — expanded to spec.layers[] at resolve time. */
+const SegmentImageSchema = z
+  .object({
+    src: z.string().min(1),
+    id: z.string().min(1).optional(),
+    rect: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).strict().optional(),
+    opacity: z.number().min(0).max(1).optional(),
+    flipX: z.boolean().optional(),
+    flipY: z.boolean().optional(),
+    blend: z.enum(["normal", "screen", "multiply", "add"]).optional(),
+    z: z.number().optional(),
+    keyframes: z.array(OverlayKeyframe).optional(),
+    drive: z.record(z.string()).optional(),
+  })
+  .strict();
+
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
 
 /**
@@ -176,6 +194,9 @@ const DeclaredLayer = z
     keyframes: z.array(OverlayKeyframe).optional(),
     segment: z.number().optional(),
     hold: z.boolean().optional(),
+    flipX: z.boolean().optional(),
+    flipY: z.boolean().optional(),
+    drive: z.record(z.string()).optional(),
   })
   .strict();
 // Numeric author-param names that consume a uParam slot — the union across a base dict and every
@@ -437,6 +458,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    images: z.array(SegmentImageSchema).max(8).optional(),
     ...segmentFxFields,
   })
   .strict(),
@@ -474,6 +496,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
     motionOverlay: MotionGraphicRef.optional(),
+    images: z.array(SegmentImageSchema).max(8).optional(),
     ...segmentFxFields,
   })
   .strict(),
@@ -753,8 +776,10 @@ export function formatSpecError(err: z.ZodError): string {
 /** Parse a spec with helpful footgun messages (film on a segment, transition on motion, …). */
 export function parseSpec(input: unknown): Spec {
   const r = SpecSchema.safeParse(input);
-  if (r.success) return r.data;
-  throw new Error(formatSpecError(r.error));
+  if (!r.success) throw new Error(formatSpecError(r.error));
+  const imgErrs = validateSegmentImages(r.data);
+  if (imgErrs.length) throw new Error(imgErrs.join("\n"));
+  return resolveSpec(r.data);
 }
 
 /** Load and parse a spec JSON file from disk. */

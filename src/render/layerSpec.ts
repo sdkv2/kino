@@ -8,6 +8,7 @@
 // top level, so a cycle would hit a temporal-dead-zone error at load. Keep the dependency one-way.
 import { Z } from "./layers.js";
 import { validateMask, validateEffectKeyframes, validateEffectParams, EFFECT_KINDS, type LayerEffect, type LayerMask } from "./maskSpec.js";
+import { DRIVE_CHANNELS, validateDriveExpr } from "./driveExpr.js";
 // Type-only, so it can't participate in the layers.js value-import cycle warned about above:
 // MotionGraphicProps is only used to shape the `graphic` resolved field below.
 import type { BgKeyframe, MotionGraphicProps } from "./props.js";
@@ -60,6 +61,10 @@ export interface DeclaredLayer {
   keyframes?: BgKeyframe[];
   segment?: number;
   hold?: boolean;
+  flipX?: boolean;
+  flipY?: boolean;
+  /** Beat-local math expressions — additive offset on keyframed transform channels. */
+  drive?: Record<string, string>;
 }
 
 /** Ids `layersAt` may emit (src/render/layers.ts, every `out.push` site), PLUS any id registered
@@ -222,6 +227,15 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
     }
     if (l.hold && l.segment === undefined) {
       errs.push(at("hold requires segment — it means 'timed to this beat but outside its transition'"));
+    }
+
+    for (const [ch, expr] of Object.entries(l.drive ?? {})) {
+      if (!(DRIVE_CHANNELS as readonly string[]).includes(ch)) {
+        errs.push(at(`drive.${ch}: unknown channel — valid: ${DRIVE_CHANNELS.join(", ")}`));
+        continue;
+      }
+      const err = validateDriveExpr(expr);
+      if (err) errs.push(at(`drive.${ch}: ${err}`));
     }
 
     if (l.mask !== undefined) {
