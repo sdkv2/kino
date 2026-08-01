@@ -310,6 +310,11 @@ don't reintroduce per-caption `y` offsets to compensate.
 - **Overlay elements tween** (`kino elements`): captions + kickers tween via per-segment
   `captionKeyframes` / `kickerKeyframes`, and anything you declare in `spec.layers[]` takes the same
   `keyframes` track — all x/y/scale/opacity over time, same keyframe system.
+- **Beat collage / stickers** (`images[]` on `video`/`motion` beats): extra stills on one beat without
+  hand-authoring layers — file paths (`.png`/`.jpg`/`.webp`/`.svg`) or **inline `svg` markup** (badges,
+  simple vector stickers). Each entry supports `rect`, `flipX`/`flipY`, `keyframes`, and beat-local
+  **`drive`** math (`wiggle`, `sin`, …). Expands to `spec.layers[]` at parse. See `docs/spec-reference.md`
+  § [Segment images](docs/spec-reference.md#segment-images-images).
 - **Camera push on app footage** (`zoomKeyframes`, per `app` segment): scales/pans the footage **+ frame
   chrome** as one group about centre — the "canvas zoom" for inset iPhone footage. The phone grows/pushes
   in; captions, kicker, logo and the background stay anchored. **Beat-relative** track (`at` = seconds from

@@ -99,6 +99,18 @@ Faceless branding (optional):
   ```
   `rect` is percent of frame and `fromSec`/`toSec` gate when it is on screen, so a mark that
   appears only on the CTA beat is `"segment": <n>` rather than a special case.
+- **Beat stickers / collage** — on a `video` or `motion` beat, `images[]` stacks extra plates on that
+  beat (expanded to layers at parse). Use a file `src` (`.png`/`.jpg`/`.webp`/`.svg`) or inline `svg`
+  for simple vector badges; add `rect`, `flipX`/`flipY`, `keyframes`, and `drive` (`wiggle`, `sin`, …).
+  Prefer `images[]` when extras belong to one beat; use `spec.layers[]` when they span beats.
+  ```json
+  "images": [{
+    "id": "badge",
+    "svg": "<circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"var(--kino-accent)\"/>",
+    "rect": { "x": 6, "y": 8, "w": 14, "h": 14 },
+    "drive": { "rotate": "sin(t*5)*4" }
+  }]
+  ```
 - `background` — background engine (see below). Default: `glow`. Set `background: "image"`
   when using a backdrop. Override per-video with spec `background` or `--background <kind>`.
 - `backdrop` — image used when `background: "image"` (required for that kind).

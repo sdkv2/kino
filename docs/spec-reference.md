@@ -6,7 +6,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 
 - [Top-level fields](#top-level-fields)
 - [Colour scheme](#colour-scheme)
-- [Segments](#segments) — [scene](#scene-segment) · [video](#video-segment) · [motion](#motion-segment)
+- [Segments](#segments) — [scene](#scene-segment) · [video](#video-segment) · [motion](#motion-segment) · [segment images](#segment-images-images)
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
 - [Masks and effects](#masks-and-effects) — [timed effects](#timed-effects) · [blur focal region](#blur-focal-region) · [tween channels](#tween-channels)
@@ -146,7 +146,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `kind` | `"video"` | ✅ | |
-| `source` | string | ✅ | Project asset path (`.mp4`/`.mov`/`.jpg`/`.png`). A presenter scheme (`"heygen:…"`) is also accepted here and resolves to a [`scene`](#scene-segment) with that presenter. |
+| `source` | string | ✅ | Project asset path (`.mp4`/`.mov`/`.jpg`/`.png`/`.webp`/`.svg`). A presenter scheme (`"heygen:…"`) is also accepted here and resolves to a [`scene`](#scene-segment) with that presenter. |
 | `text` | string | — | Spoken VO. Omit for a silent beat (then `dur` is required). |
 | `caption` | string | — | On-screen caption; omit for none. |
 | `voFile` | string | — | Imported real VO for this beat: project audio asset used instead of TTS (word timings via Scribe or local whisper.cpp — see [Audio](audio.md#imported-real-voiceover-vofile)). |
@@ -172,7 +172,8 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `regionShader` | `{ mask?, masks?, subject?, background?, object?, params?, keyframes?, textures? }` | — | Split this beat's frame by a segmentation mask: subject region (`mask>0.5`) runs one `.frag`, background region another. `mask` = mask asset dir (`manifest.json` + `mask.png`/`mask.mp4` from [`kino segment`](segmentation.md)). `object` picks which packed object channel (0..3). Need at least one of `subject`/`background`; omit a side to pass that region's original pixels through. `masks` (up to 4) takes several mask sources in one beat, each optionally with its own `subject`; later entries paint over earlier ones. Unknown keys are rejected. See [Segmentation](segmentation.md). |
 | `regionShader.params` | `{ name: number\|string }` | — | Author params shared by **every** body in the beat (`subject`, `background`, and each `masks[].subject`) — they compile into one program with one uniform bank. Numeric names alias to `u_<name>` in GLSL, packed alphabetically into `uParam0..3`; `colorA`/`colorB`/`colorC` (hex) and `intensity` drive their own uniforms and cost no slot. Max **4** numeric names across `params` + `keyframes`; more is a build error, not a silent drop. |
 | `regionShader.keyframes` | `{ at, params, ease? }[]` | — | Tweens those params over the beat. **`at` is beat-relative seconds** (0 = this beat's start), like `zoomKeyframes`/`captionKeyframes` — *not* absolute like `backgroundKeyframes`. Region shaders have no `triggers` surface, so `uPulse` always reads 0. |
-| `regionShader.textures` | `string[]` | — | Up to **2** extra sampler channels every body in the beat can read: `textures[i]` → `uTex{i+2}` (`uTex0` is the beat asset, `uTex1` the cutout `backdrop`). An image path uploads once; a Tier-1 motion `.html` (library id or `assets/` path, same sources `motionOverlay` takes) rasterizes at composition size every frame, scrubbed by the beat progress and given the same `--progress`/`--kino-*` vars, palette, fonts and filter library it gets as an overlay — a motion graphic the shader can refract or mask instead of one stacked on top. Tier-2 `.js` / Tier-3 Lottie are overlay-only (build error). Unbound channels sample transparent black. |
+| `regionShader.textures` | `string[]` | — | Up to **2** extra sampler channels every body in the beat can read: `textures[i]` → `uTex{i+2}` (`uTex0` is the beat asset, `uTex1` the cutout `backdrop`). An image path (`.png`/`.jpg`/`.webp`/`.svg`) uploads once; a Tier-1 motion `.html` (library id or `assets/` path, same sources `motionOverlay` takes) rasterizes at composition size every frame, scrubbed by the beat progress and given the same `--progress`/`--kino-*` vars, palette, fonts and filter library it gets as an overlay — a motion graphic the shader can refract or mask instead of one stacked on top. Tier-2 `.js` / Tier-3 Lottie are overlay-only (build error). Unbound channels sample transparent black. |
+| `images` | [SegmentImage](#segment-images-images)[] | — | Extra stills composited on this beat (max 8). Expanded to [`spec.layers[]`](#layers) at parse — see [Segment images](#segment-images-images). |
 
 Long source recordings: see [Importing footage](importing-footage.md) for clipping, chrome frames, and retiming.
 
@@ -198,8 +199,52 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's motion-graphic layer against what's beneath it. Default `normal`. |
+| `images` | [SegmentImage](#segment-images-images)[] | — | Extra stills composited on this beat (max 8). Expanded to [`spec.layers[]`](#layers) at parse — see [Segment images](#segment-images-images). |
 
 > **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS. `atWord` anchoring works in all motion slots (full-screen beats and overlays); other keyframe tracks (`backgroundKeyframes`, `zoomKeyframes`, `captionKeyframes`, …) remain seconds-only and keep their one-keyframe-holds idiom.
+
+### Segment images (`images[]`)
+
+On **`video` and `motion` beats only** — sugar that expands at parse time into [`spec.layers[]`](#layers) entries bound to that beat (`segment: <n>`). A video beat has one `source` plate; stack stickers, badges, and collage elements with `images[]` instead of hand-authoring layers.
+
+Each entry needs **`src`** (a project asset path) **or** **`svg`** (inline markup). Inline SVG is sanitized at build (`<script>`, event handlers, and `javascript:` URLs stripped) and staged to `generated/inline/<id>.svg` under the build's `_public` dir.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `src` | string | one of `src`/`svg` | `.png` / `.jpg` / `.jpeg` / `.webp` / `.svg` under `assets/` |
+| `svg` | string | one of `src`/`svg` | Inline SVG markup — omit `src` to auto-stage at `generated/inline/<id>.svg` |
+| `id` | string | — | Layer id (default `seg{n}-img{i}`) |
+| `rect` | `{x,y,w,h}` | — | Placement, % of frame |
+| `opacity` | number 0–1 | — | |
+| `flipX` / `flipY` | boolean | — | Mirror the plate |
+| `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode |
+| `z` | number | — | Paint order among declared layers (default `301+`) |
+| `keyframes` | BgKeyframe[] | — | Beat-relative transform tweens — same channels as [Tween channels](#tween-channels) |
+| `drive` | `Record<string,string>` | — | Additive math on keyframed channels — see [Drive expressions](#drive-expressions) |
+
+```json
+{
+  "kind": "video",
+  "source": "images/hero.jpg",
+  "dur": 3,
+  "images": [
+    {
+      "id": "badge",
+      "svg": "<circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"#ff3366\"/>",
+      "rect": { "x": 5, "y": 8, "w": 18, "h": 18 },
+      "drive": { "rotate": "sin(t*6)*3", "y": "wiggle(4, 1.5)" }
+    },
+    {
+      "src": "icons/star.svg",
+      "rect": { "x": 80, "y": 4, "w": 12, "h": 12 },
+      "flipX": true,
+      "keyframes": [{ "at": 0, "params": { "opacity": 0 } }, { "at": 0.5, "params": { "opacity": 1 } }]
+    }
+  ]
+}
+```
+
+The same `src` / `svg` vocabulary works on a declared layer's `source` when `kind` is `"image"` — use `images[]` when the extras belong to one beat; use `spec.layers[]` when they span beats or need their own `fromSec`/`toSec` window.
 
 ## Masks and effects
 
@@ -337,8 +382,8 @@ when there is a clear subject at the focal centre and as a toy tilt-shift when t
 
 ### Tween channels
 
-`captionKeyframes`, `kickerKeyframes`, `zoomKeyframes` and a declared layer's own `keyframes` all
-drive one transform, so they share a channel set:
+`captionKeyframes`, `kickerKeyframes`, `zoomKeyframes`, a declared layer's own `keyframes`, and
+[`images[]`](#segment-images-images) entries all drive one transform, so they share a channel set:
 
 | Channel | Unit | Default |
 |---|---|---|
@@ -358,6 +403,31 @@ from the middle. Values outside `0..1` are legal — an anchor beyond the rect i
   { "at": 0,   "params": { "scale": 0.9, "rotate": -3, "anchorX": 0, "anchorY": 1 } },
   { "at": 1.2, "params": { "scale": 1,   "rotate": 0 }, "ease": "easeOutQuart" }
 ]
+```
+
+### Drive expressions
+
+`drive` on a declared layer or [`images[]`](#segment-images-images) entry adds a **beat-local math
+offset** on top of whatever `keyframes` already set. Each key names a [tween channel](#tween-channels);
+the value is a small expression (no `eval()` — parsed allowlist only).
+
+| Variable | Meaning |
+|---|---|
+| `t` | Beat-local seconds |
+| `p` | Beat progress `0..1` |
+| `dur` | Beat duration (seconds) |
+| `pi` / `tau` | Constants |
+| `seed` | Deterministic phase for `wiggle` |
+
+Built-ins: `sin`, `cos`, `tan`, `abs`, `min`, `max`, `sqrt`, `floor`, `ceil`, `round`, `clamp`,
+`lerp`, `noise`, `wiggle(freq, amp)` (and `wiggle(freq, amp, t, seed)`).
+
+```json
+"drive": {
+  "y": "wiggle(4, 1.5)",
+  "rotate": "sin(t * 6) * 3",
+  "opacity": "clamp(0.4 + p * 0.6, 0, 1)"
+}
 ```
 
 `blend` — one of `normal` (default), `screen`, `multiply`, `add` — sets how a beat's own content
@@ -407,6 +477,8 @@ ranges, mask support — are checked right after, by `validateLayers`.
 | `mask` | mask | — | Same mask model as segments — see [Masks and effects](#masks-and-effects). |
 | `effects` | effect[] | — | Same effect chain as segments, run before compositing — see [Masks and effects](#masks-and-effects). |
 | `keyframes` | BgKeyframe[] | — | Tweens the layer's own transform — see [Tween channels](#tween-channels) for the full list. `at` is relative to the layer's own start (its `fromSec`, or its bound segment's `startSec`), not absolute like `backgroundKeyframes`. |
+| `flipX` / `flipY` | boolean | — | Mirror the layer's source plate horizontally / vertically. |
+| `drive` | `Record<string,string>` | — | Additive beat-local math on keyframed channels — see [Drive expressions](#drive-expressions). |
 
 Exactly one of `source`/`adjust` is required. Every field below `adjust` in the table above is
 rejected on an adjustment layer — see [Adjustment layers](#adjustment-layers) for why.
@@ -420,7 +492,7 @@ sanitized `html`).
 
 | Kind | `src` | Accepts | Notes |
 |---|---|---|---|
-| `image` | asset path | `.png` / `.jpg` / `.jpeg` / `.webp` | Staged like any other asset. |
+| `image` | asset path **or** inline `svg` | `.png` / `.jpg` / `.jpeg` / `.webp` / `.svg`, or `source.svg` markup | File assets stage like any other image. Inline `svg` is sanitized and written to `generated/inline/<id>.svg` at build. |
 | `shader` | asset path or bare id | `.frag` / `.glsl`, or an `assets-lib/backgrounds` id that resolves to a shader (not a Canvas2D draw fn like `brand-wash`) | Same uniform contract as a [shader background](#shader-backgrounds-frag--glsl) (`iResolution`/`iTime`/`iFrame`/`uPulse`/`uColorA-C`/`uParam0-3`), driven by this layer's own `params`/`keyframes`/`triggers` — not the spec's `backgroundKeyframes`/`backgroundTriggers`. |
 | `motion` | asset path or library id | `.html` / `.js` (Tier 1/2) | `params`/`keyframes`/`triggers` behave like a `motionOverlay` [MotionRef](#motion-segment). No `loop` field. |
 | `lottie` | asset path or library id | `.json` (Tier 3) | Same `params`/`keyframes`/`triggers` idiom. No `loop` field — unlike a `motion` segment's own Lottie, a declared Lottie layer always stretches once across its window rather than looping. |
@@ -439,7 +511,7 @@ throws rather than staging a file nothing will ever read:
 ```
 layer "bg": source.src "clip.mp4": a declared "video" layer needs per-frame extraction, which is
 not wired up yet (videoFrames.ts's planMediaJobs walks segments/avatarWindows, not spec.layers) —
-use a still image (.png/.jpg/.jpeg/.webp) for a declared "video" layer for now
+use a still image (.png/.jpg/.jpeg/.webp/.svg) for a declared "video" layer for now
 ```
 
 Point it at a still frame instead. `kind: "image"` and `kind: "video"` resolve identically for a
