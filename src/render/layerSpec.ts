@@ -14,6 +14,7 @@ import { DRIVE_CHANNELS, validateDriveExpr } from "./driveExpr.js";
 import type { BgKeyframe, MotionGraphicProps } from "./props.js";
 import type { BlendMode } from "./native/page/compositor/graph.js";
 import { BLEND_MODES } from "./blendModes.js";
+import { isRasterImagePath, validateInlineSvg } from "../media/imageAsset.js";
 
 export const LAYER_SOURCE_KINDS = ["image", "motion", "shader", "video", "lottie"] as const;
 export type LayerSourceKind = (typeof LAYER_SOURCE_KINDS)[number];
@@ -29,9 +30,10 @@ export type { BlendMode };
 
 export interface DeclaredLayerSource {
   kind: LayerSourceKind;
-  /** Author-facing reference: an asset-relative path (image/video/motion/lottie) or, for "shader",
-   *  either a path or a bare assets-lib/backgrounds id. Never read directly by the page. */
-  src: string;
+  /** Author-facing reference: asset-relative path, or staging path for inline `svg`. */
+  src?: string;
+  /** Inline SVG markup — staged at build to `src` (or generated/inline/<id>.svg). */
+  svg?: string;
   params?: Record<string, number | string>;
   keyframes?: BgKeyframe[];
   triggers?: { at: number; action: string }[];
@@ -111,11 +113,11 @@ const ADJUST_INCOMPATIBLE_FIELDS = [
 // only place that knows the library contents.
 function checkSourceShape(kind: LayerSourceKind, src: string): string[] {
   const hasExt = /\.\w+$/.test(src);
-  if (kind === "image" && !/\.(png|jpe?g|webp)$/i.test(src)) {
-    return [`source.src "${src}" doesn't look like an image — expected .png/.jpg/.jpeg/.webp`];
+  if (kind === "image" && !isRasterImagePath(src)) {
+    return [`source.src "${src}" doesn't look like an image — expected .png/.jpg/.jpeg/.webp/.svg`];
   }
-  if (kind === "video" && !/\.(mp4|mov|png|jpe?g|webp)$/i.test(src)) {
-    return [`source.src "${src}" doesn't look like a video or still image — expected .mp4/.mov/.png/.jpg/.jpeg/.webp`];
+  if (kind === "video" && !/\.(mp4|mov|png|jpe?g|webp|svg)$/i.test(src)) {
+    return [`source.src "${src}" doesn't look like a video or still image — expected .mp4/.mov/.png/.jpg/.jpeg/.webp/.svg`];
   }
   if (kind === "shader" && hasExt && !/\.(frag|glsl)$/i.test(src)) {
     return [`source.src "${src}" doesn't look like a shader — expected .frag/.glsl, or a bare assets-lib/backgrounds id`];
@@ -184,10 +186,20 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
       const kind = l.source.kind;
       if (!kind || !(LAYER_SOURCE_KINDS as readonly string[]).includes(kind)) {
         errs.push(at(`unknown layer source kind: ${String(kind)} — expected one of ${LAYER_SOURCE_KINDS.join(", ")}`));
-      } else if (!l.source.src) {
-        errs.push(at("source.src is required"));
       } else {
-        errs.push(...checkSourceShape(kind, l.source.src).map(at));
+        if (l.source.svg) {
+          if (kind !== "image") {
+            errs.push(at(`source.svg is only supported on image layers`));
+          } else {
+            const svgErr = validateInlineSvg(l.source.svg);
+            if (svgErr) errs.push(at(`source.svg: ${svgErr}`));
+          }
+        }
+        if (!l.source.src && !l.source.svg) {
+          errs.push(at("source.src or source.svg is required"));
+        } else if (l.source.src) {
+          errs.push(...checkSourceShape(kind, l.source.src).map(at));
+        }
       }
     }
 

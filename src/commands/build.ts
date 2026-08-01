@@ -17,6 +17,7 @@ import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveV
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
+import { defaultInlineSvgRel, isRasterImagePath, prepareInlineSvg } from "../media/imageAsset.js";
 import { buildVO, GAP, type VoMode } from "../vo/vo.js";
 import { buildAvatar } from "../avatar/avatar.js";
 import { planAvatarWindows } from "../avatar/plan.js";
@@ -107,7 +108,7 @@ function resolveRegionShader(
   // Tier-2 (.js) and Tier-3 (.json) stay overlay-only: their markup is produced per frame by the
   // React layer, which the shader cannot reach (see docs/segmentation.md).
   const textures: RegionTexture[] = (rs.textures ?? []).map((ref, i) => {
-    if (/\.(png|jpe?g|webp)$/i.test(ref)) {
+    if (/\.(png|jpe?g|webp|svg)$/i.test(ref)) {
       const abs = project.assetPath(ref);
       if (!existsSync(abs)) throw new Error(`regionShader.textures[${i}] not found: assets/${ref}`);
       stageAsset(ref);
@@ -146,23 +147,34 @@ function resolveDeclaredLayers(
   layers: DeclaredLayer[] | undefined,
   project: Project,
   stageAsset: (rel: string) => void,
+  stageInlineContent: (rel: string, content: string) => void,
 ): DeclaredLayer[] | undefined {
   if (!layers) return layers;
   return layers.map((d) => {
     if (!d.source) return d; // adjustment layer (grade/blur/etc. chain) — no pixels to resolve
-    const { kind, src } = d.source;
+    const { kind, src: rawSrc, svg: inlineSvg } = d.source;
+    const src = rawSrc ?? (inlineSvg ? defaultInlineSvgRel(d.id) : "");
     const fail = (msg: string): never => {
       throw new Error(`layer "${d.id}": ${msg}`);
     };
 
     if (kind === "image") {
+      if (inlineSvg) {
+        const rel = rawSrc ?? defaultInlineSvgRel(d.id);
+        stageInlineContent(rel, prepareInlineSvg(inlineSvg));
+        const { svg: _drop, ...source } = d.source;
+        return { ...d, source: { ...source, src: rel, url: rel } };
+      }
+      if (!src) fail("image layer needs source.src or source.svg");
       if (!existsSync(project.assetPath(src))) fail(`image not found: assets/${src}`);
+      if (!isRasterImagePath(src)) fail(`source.src "${src}" is not a raster image`);
       stageAsset(src);
       return { ...d, source: { ...d.source, url: src } };
     }
 
     if (kind === "video") {
-      const isStill = /\.(jpe?g|png|webp)$/i.test(src);
+      const isStill = isRasterImagePath(src);
+      if (!src) fail("video layer needs source.src");
       if (!existsSync(project.assetPath(src))) fail(`video source not found: assets/${src}`);
       if (!isStill) {
         // GAP (task-7-report.md / task-7b-brief.md): videoFrames.ts's planMediaJobs walks
@@ -175,7 +187,7 @@ function resolveDeclaredLayers(
         fail(
           `source.src "${src}": a declared "video" layer needs per-frame extraction, which is not wired ` +
             `up yet (videoFrames.ts's planMediaJobs walks segments/avatarWindows, not spec.layers) — ` +
-            `use a still image (.png/.jpg/.jpeg/.webp) for a declared "video" layer for now`,
+            `use a still image (.png/.jpg/.jpeg/.webp/.svg) for a declared "video" layer for now`,
         );
       }
       stageAsset(src);
@@ -440,6 +452,13 @@ export async function prepare(
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(project.assetPath(rel), dest);
   };
+  const stageInlineContent = (rel: string, content: string) => {
+    if (staged.has(rel)) return;
+    staged.add(rel);
+    const dest = join(publicDir, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, content, "utf8");
+  };
   for (const seg of spec.segments) {
     if (seg.kind === "video") {
       stageAsset(seg.source);
@@ -449,7 +468,7 @@ export async function prepare(
   // Author-declared layers (spec.layers): resolve each source into what its provider actually
   // consumes — see resolveDeclaredLayers's own header comment. Runs here (same place as the
   // segment asset staging just above) so it shares this one stageAsset/staged Set.
-  const layers = resolveDeclaredLayers(spec.layers as DeclaredLayer[] | undefined, project, stageAsset);
+  const layers = resolveDeclaredLayers(spec.layers as DeclaredLayer[] | undefined, project, stageAsset, stageInlineContent);
   // Motion HTML can't use relative url() in CSS (determinism lint) — raster siblings are served via
   // <img src="/public/motion/..."> and staged here.
   const motionAssets = join(project.projectRoot, "assets", "motion");

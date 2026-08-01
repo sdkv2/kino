@@ -41,7 +41,17 @@ describe("validateLayers", () => {
 
   it("rejects an unknown source kind and a missing src", () => {
     expect(validateLayers([{ ...ok, source: { kind: "hologram" } }], 1).join()).toMatch(/unknown layer source kind/);
-    expect(validateLayers([{ ...ok, source: { kind: "image" } }], 1).join()).toMatch(/source\.src is required/);
+    expect(validateLayers([{ ...ok, source: { kind: "image" } }], 1).join()).toMatch(/source\.src or source\.svg is required/);
+  });
+
+  it("accepts inline svg on image layers", () => {
+    expect(
+      validateLayers([{ id: "badge", z: 360, source: { kind: "image", svg: '<circle r="10"/>' } }], 1),
+    ).toEqual([]);
+  });
+
+  it("accepts .svg file paths on image layers", () => {
+    expect(validateLayers([{ ...ok, source: { kind: "image", src: "icons/star.svg" } }], 1)).toEqual([]);
   });
 
   it("rejects an unknown blend mode", () => {

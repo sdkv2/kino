@@ -1,9 +1,13 @@
 import type { Spec } from "./schema.js";
 import { DRIVE_CHANNELS, validateDriveExpr } from "../render/driveExpr.js";
+import { defaultInlineSvgRel, validateInlineSvg } from "../media/imageAsset.js";
 
 /** Sugar: extra images composited on one video/motion beat. Expanded to spec.layers[] at resolve time. */
 export type SegmentImage = {
-  src: string;
+  /** Project asset path (.png/.jpg/.webp/.svg). Omit when `svg` is inline markup. */
+  src?: string;
+  /** Inline SVG markup — staged to assets/generated at build. Mutually exclusive with using both. */
+  svg?: string;
   id?: string;
   rect?: { x: number; y: number; w: number; h: number };
   opacity?: number;
@@ -24,6 +28,13 @@ function expandImage(segIdx: number, img: SegmentImage, i: number, seen: Set<str
   const id = img.id ?? `seg${segIdx}-img${i}`;
   if (seen.has(id)) throw new Error(`segments[${segIdx}].images[${i}]: duplicate id "${id}"`);
   seen.add(id);
+  if (!img.src && !img.svg) {
+    throw new Error(`segments[${segIdx}].images[${i}]: needs src (file path) or svg (inline markup)`);
+  }
+  if (img.svg) {
+    const err = validateInlineSvg(img.svg);
+    if (err) throw new Error(`segments[${segIdx}].images[${i}].svg: ${err}`);
+  }
   for (const [ch, expr] of Object.entries(img.drive ?? {})) {
     if (!(DRIVE_CHANNELS as readonly string[]).includes(ch)) {
       throw new Error(`segments[${segIdx}].images[${i}].drive.${ch}: unknown channel`);
@@ -31,11 +42,16 @@ function expandImage(segIdx: number, img: SegmentImage, i: number, seen: Set<str
     const err = validateDriveExpr(expr);
     if (err) throw new Error(`segments[${segIdx}].images[${i}].drive.${ch}: ${err}`);
   }
+  const src = img.src ?? (img.svg ? defaultInlineSvgRel(id) : "");
   return {
     id,
     z: img.z ?? SEG_IMG_Z_BASE + i,
     segment: segIdx,
-    source: { kind: "image" as const, src: img.src },
+    source: {
+      kind: "image" as const,
+      src,
+      ...(img.svg ? { svg: img.svg } : {}),
+    },
     ...(img.rect ? { rect: img.rect } : {}),
     ...(img.opacity !== undefined ? { opacity: img.opacity } : {}),
     ...(img.flipX ? { flipX: true } : {}),
@@ -84,7 +100,11 @@ export function validateSegmentImages(spec: Spec): string[] {
       const id = img.id ?? `seg${segIdx}-img${i}`;
       if (ids.has(id)) errs.push(`segments[${segIdx}].images[${i}]: duplicate id "${id}"`);
       ids.add(id);
-      if (!img.src) errs.push(`segments[${segIdx}].images[${i}]: src is required`);
+      if (!img.src && !img.svg) errs.push(`segments[${segIdx}].images[${i}]: needs src or svg`);
+      if (img.svg) {
+        const err = validateInlineSvg(img.svg);
+        if (err) errs.push(`segments[${segIdx}].images[${i}].svg: ${err}`);
+      }
       for (const [ch, expr] of Object.entries(img.drive ?? {})) {
         if (!(DRIVE_CHANNELS as readonly string[]).includes(ch)) {
           errs.push(`segments[${segIdx}].images[${i}].drive.${ch}: unknown channel`);

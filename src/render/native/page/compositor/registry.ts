@@ -173,7 +173,7 @@ export function buildRegistry(
         const entry = media[`seg${i}`];
         if (entry) {
           sources.set(`seg${i}`, createFramesSource(entry, f(s.startSec)));
-        } else if (s.source && /\.(jpe?g|png|webp)$/i.test(s.source)) {
+        } else if (s.source && /\.(jpe?g|png|webp|svg)$/i.test(s.source)) {
           sources.set(`seg${i}`, createImageSource("/public/" + s.source));
         }
       }

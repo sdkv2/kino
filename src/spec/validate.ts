@@ -94,7 +94,7 @@ export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: strin
     (seg as { regionShader?: { textures?: string[] } }).regionShader?.textures?.forEach((source, j) => {
       // `texture` surface: a rasterized channel advances its own @keyframes via the re-raster param,
       // so it must not be held to the per-element `.kino-anim` scrub rule a beat is held to.
-      if (!/\.(png|jpe?g|webp)$/i.test(source)) {
+      if (!/\.(png|jpe?g|webp|svg)$/i.test(source)) {
         refs.push({ source, where: `segment[${i}].regionShader.textures[${j}]`, surface: "texture" });
       }
     });

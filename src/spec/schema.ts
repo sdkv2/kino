@@ -137,7 +137,8 @@ const OverlayKeyframe = BgKeyframe.superRefine((kf, ctx) => {
 /** Extra stills composited on a video/motion beat — expanded to spec.layers[] at resolve time. */
 const SegmentImageSchema = z
   .object({
-    src: z.string().min(1),
+    src: z.string().min(1).optional(),
+    svg: z.string().min(1).optional(),
     id: z.string().min(1).optional(),
     rect: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).strict().optional(),
     opacity: z.number().min(0).max(1).optional(),
@@ -148,7 +149,12 @@ const SegmentImageSchema = z
     keyframes: z.array(OverlayKeyframe).optional(),
     drive: z.record(z.string()).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((img, ctx) => {
+    if (!img.src && !img.svg) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "needs src (file path) or svg (inline markup)" });
+    }
+  });
 
 const BgTrigger = z.object({ at: z.number(), action: z.string() });
 
@@ -162,10 +168,11 @@ const BgTrigger = z.object({ at: z.number(), action: z.string() });
  * `mask`, `effects` and `adjust` stay unknown on purpose: maskSpec.ts owns them, and restating
  * their per-kind params here would duplicate that validator and risk rejecting what it accepts.
  */
-const DeclaredLayerSource = z
+const DeclaredLayerSourceBase = z
   .object({
     kind: z.enum(LAYER_SOURCE_KINDS),
-    src: z.string().min(1),
+    src: z.string().min(1).optional(),
+    svg: z.string().min(1).optional(),
     // The SOURCE's own params (shader uniforms, motion-graphic knobs) — arbitrary author names, so
     // this bag stays open. Not to be confused with the layer's `keyframes` below, which drive the
     // fixed transform channels and are closed.
@@ -174,6 +181,15 @@ const DeclaredLayerSource = z
     triggers: z.array(BgTrigger).optional(),
   })
   .strict();
+
+const DeclaredLayerSource = DeclaredLayerSourceBase.superRefine((s, ctx) => {
+  if (!s.src && !s.svg) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "source needs src or svg" });
+  }
+  if (s.svg && s.kind !== "image") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "source.svg is only supported on image layers" });
+  }
+});
 
 const DeclaredLayer = z
   .object({
@@ -731,7 +747,7 @@ export function suggestKey(key: string, candidates: Iterable<string>): string {
 /** Every key valid on any segment kind — the candidate set for a mistyped segment field. */
 const SEGMENT_KEYS = [...new Set(SegmentUnion.options.flatMap((o) => Object.keys(o.shape)))];
 const LAYER_KEYS = Object.keys(DeclaredLayer.shape);
-const LAYER_SOURCE_KEYS = Object.keys(DeclaredLayerSource.shape);
+const LAYER_SOURCE_KEYS = Object.keys(DeclaredLayerSourceBase.shape);
 
 /**
  * Which valid keys to compare a typo against, and how to name the place it appeared. Derived from
