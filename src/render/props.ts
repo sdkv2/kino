@@ -120,7 +120,7 @@ export interface KinoSegment {
   words?: WordTiming[]; // absolute word timings (present for captionMode "words")
   emphasis?: string[]; // words to emphasise (glow/pop) in "words" mode
   captionStyle?: CaptionStyle; // resolved look preset (segment ?? spec ?? brand; undefined = "stroke")
-  captionAnimation?: CaptionAnimation; // resolved entrance preset (undefined = the surface's native entrance)
+  captionAnimation?: CaptionAnimation; // resolved preset (overlays + spec contract); native caption raster keeps quad-level legacy entrance — see textStyles.ts
   captionReveal?: CaptionReveal; // words-mode reveal: "word" (per-word pop, default) | "all" (whole line, highlight tracks VO)
   texts?: ResolvedText[]; // standalone stylised text overlays, absolute-timed
   captionKeyframes?: BgKeyframe[]; // tween the caption (x/y offset %, scale, opacity)

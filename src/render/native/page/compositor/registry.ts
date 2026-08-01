@@ -206,6 +206,10 @@ export function buildRegistry(
       );
     });
     if (hasCaptionContent(s)) {
+      // Backplate behind the lower-third caption (legibility over light app screenshots). appOnly
+      // (default) scopes it to video cut-ins.
+      const cbg = props.theme.captionBg;
+      const backplate = cbg && (!cbg.appOnly || s.kind === "video") ? { bg: cbg.bg } : null;
       sources.set(
         `caption${i}`,
         createHtmlSource({
@@ -221,6 +225,10 @@ export function buildRegistry(
               theme: props.theme,
               hero: isHeroCaption(s, Boolean(props.avatar)),
               activeWord: Number.isNaN(activeWord) ? null : activeWord,
+              style: s.captionStyle,
+              reveal: s.captionReveal,
+              emphasis: s.emphasis,
+              backplate,
             });
           },
           theme: props.theme,

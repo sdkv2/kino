@@ -4,6 +4,11 @@ All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
 ## [3.1.1] — Render fixes, three new transitions, and installer/doc polish
+- **Fixed: stylised captions in encoded builds** ignored `captionStyle`, `captionReveal`, emphasis,
+  and the lower-third backplate — the native raster now paints the resolved look presets (style,
+  reveal, backplate) into the word-keyed caption bitmap. `captionAnimation` is intentionally out of
+  scope: the raster is keyed by active word (not frame), so entrance springs have no per-frame state
+  to paint; caption surfaces keep quad-level legacy entrance (`captionKeyframes`, native pop).
 - **GL host command socket guard:** the test harness's (and shipped render host's) command socket
   no longer trips over its own shutdown RST during teardown — `close()` now ends the channel
   instead of writing to it, and both the TCP and stdin command streams carry an `'error'` listener

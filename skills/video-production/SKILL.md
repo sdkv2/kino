@@ -329,7 +329,9 @@ don't reintroduce per-caption `y` offsets to compensate.
   (words mode, default `word`) sets how the line arrives: `word` pops each word in at its VO time; `all`
   lays the whole caption out and fades it in together, the active word still highlighting as the VO reaches
   it — use `all` (or `phrase` mode) for a **CTA or any long line**, since a word-by-word reveal of a long
-  line strands its first word at a wrapped corner during a VO pause. Per-segment
+  line strands its first word at a wrapped corner during a VO pause. Honored in the native raster
+  (opacity/layout, not motion). `captionAnimation` entrance presets do **not** paint into the keyed
+  caption bitmap — see `reference.md`. Per-segment
   `texts: [{ text, at, dur?, position?, size?, style?, animation? }]` drops standalone headline overlays
   anywhere on the frame (slot + small/medium/big, independent of the segment's own caption) — keep them
   clear of the caption's band so the two can't collide (the ·full storyboard tile shows collisions). Details +
