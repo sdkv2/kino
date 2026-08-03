@@ -39,6 +39,47 @@ describe("frameSignatures capture identity", () => {
   });
 });
 
+// The header's stated contract: "Audio never touches the signature." It was only half true —
+// `music` was excluded from the hashed props but `sfx` was not, so moving one effect by 100 ms
+// re-rendered every frame of the video. The mix is built AFTER capture and muxed with the encoded
+// frames; nothing in it can move a pixel.
+describe("frameSignatures ignores audio", () => {
+  const sig = (props: Record<string, unknown>) =>
+    frameSignatures({ ...base, captureKind: "readback", props: { fps: 30, segments: [], ...props } as never })[0];
+  const silent = sig({});
+
+  it("is unchanged by adding, moving, or retiming sfx", () => {
+    expect(sig({ sfx: [{ src: "sfx-0.mp3", at: 1, volume: 0.5 }] })).toBe(silent);
+    expect(sig({ sfx: [{ src: "sfx-0.mp3", at: 1.1, volume: 0.5 }] })).toBe(silent);
+    expect(sig({ sfx: [{ src: "sfx-0.mp3", at: 1, volume: 0.5, pan: -1, rate: 1.5 }] })).toBe(silent);
+    expect(sig({ sfx: [] })).toBe(silent);
+  });
+
+  it("is unchanged by voVolume", () => {
+    expect(sig({ voVolume: 0.5 })).toBe(silent);
+    expect(sig({ voVolume: 1 })).toBe(silent);
+  });
+
+  it("is unchanged by the music beds (single or stacked)", () => {
+    expect(sig({ music: [{ src: "music-0.mp3", volume: 0.2, duck: 0.04, duckSpans: [] }] })).toBe(silent);
+    expect(sig({ music: [{ src: "a.mp3" }, { src: "b.mp3", keyframes: [{ at: 2, params: { volume: 0 } }] }] })).toBe(silent);
+  });
+
+  it("still changes for anything VISUAL — the exclusion is audio-only, not a blanket opt-out", () => {
+    expect(sig({ disclosure: "Paid partnership" })).not.toBe(silent);
+    expect(sig({ motionBlur: false })).not.toBe(silent);
+    expect(sig({ postFx: { grade: { lift: 0.1 } } })).not.toBe(silent);
+    expect(sig({ layers: [{ id: "mark", z: 10 }] })).not.toBe(silent);
+    expect(sig({ background: { kind: "glow" } })).not.toBe(silent);
+  });
+
+  it("keeps a silent spec's existing cache — the key is unmoved for the common case", () => {
+    // A spec with no sfx/voVolume hashes exactly as it did before they were excluded, so the
+    // short-form default (silent cuts) keeps every cached frame across this upgrade.
+    expect(silent).toBe("e7ee2021dbf234ffef061036c48c99753e79fbf9");
+  });
+});
+
 describe("openFrameCache", () => {
   it("serves a frame written by an identical build", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-fc-test-"));
