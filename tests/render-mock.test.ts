@@ -262,7 +262,10 @@ describe("renderVideo with sfx + music", () => {
       background: { kind: "glow", image: null, customCode: null, shaderCode: null, params: { colorA: "#80e2b4", colorB: "#0c8d64", colorC: "#d99a20", intensity: 0.5 }, keyframes: [], triggers: [] },
       disclosure: "test",
       sfx: [{ src: "sfx-0.mp3", at: 1.0, volume: 0.8 }],
-      music: { src: "music.mp3", volume: 0.2, duck: 0.05, fadeOutSec: 1, duckSpans: [{ from: 0, to: 2 }] },
+      // KinoProps.music is a LIST of beds (they stack and sum). This fixture carried the old
+      // single-object shape after that change — invisible because this file only runs under
+      // KINO_TEST_SCOPE=gpu, which CI does not run.
+      music: [{ src: "music.mp3", volume: 0.2, duck: 0.05, fadeInSec: 0, fadeOutSec: 1, duckSpans: [{ from: 0, to: 2 }] }],
       segments: [
         { kind: "scene", caption: "hello", startSec: 0, endSec: 3 },
       ],
