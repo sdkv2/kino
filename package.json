@@ -54,7 +54,7 @@
     "commander": "^12.1.0",
     "culori": "^4.0.2",
     "d3-shape": "^3.2.0",
-    "electron": "^40.10.6",
+    "electron": "^43.2.0",
     "execa": "^9.3.0",
     "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0",
@@ -82,6 +82,6 @@
     "vitest": "^4.1.10"
   },
   "allowScripts": {
-    "electron@40.10.6": true
+    "electron@43.2.0": true
   }
 }
