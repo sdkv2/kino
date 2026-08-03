@@ -4,7 +4,8 @@
 // global config (dimensions, fps, page bundle, avatar, non-segment props) plus every segment
 // whose padded range covers the frame — the pad absorbs transition overlaps, so editing a beat
 // also invalidates the frames of its crossfade neighbors. Audio never touches the signature:
-// music/mix changes re-encode but reuse every captured frame.
+// music/sfx/VO-gain changes re-encode but reuse every captured frame. (That invariant is enforced
+// at the `props:` line below — if you add an audio-only field to KinoProps, exclude it there.)
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { promises as fsp } from "node:fs";
@@ -83,9 +84,28 @@ export function frameSignatures(opts: {
       renderer: "electron",
       captureKind: opts.captureKind,
       avatar: props.avatar ? statSig(join(publicDir, props.avatar)) : "none",
-      props: { ...props, segments: undefined, music: undefined },
+      // Audio is excluded on purpose — see the header. The mix is built after capture and muxed
+      // with the already-encoded frames, so nothing in it can move a pixel. `music` was excluded
+      // from the start; `sfx` and `voVolume` were not, which meant nudging one effect by 100ms (or
+      // trimming the VO gain) re-rendered every frame of the video for nothing. All three are read
+      // ONLY by render/native/audioMix.ts — the page bundle never sees them.
+      //
+      // `voTrack` deliberately stays IN. It is the constant "vo.mp3" on every build, so it can
+      // never invalidate anything, and dropping it would move the hashed object for every existing
+      // .frame-cache to buy exactly nothing. Same reasoning as the `mode`/`renderer` note above.
+      //
+      // Dropping a field can only make two previously-distinct keys collide, and these three
+      // collide precisely when the frames are identical — which is the point. A spec with no `sfx`
+      // (the short-form default) keeps a byte-identical key and its whole cache; a spec that HAS
+      // sfx cold-starts once, then never again for an audio edit.
+      props: { ...props, segments: undefined, music: undefined, sfx: undefined, voVolume: undefined },
     }),
   );
+  // Per-segment signature: the WHOLE segment object. Every field on KinoSegment is visual today
+  // — including `words`, which drives the word-synced caption reveal — so hashing all of it is
+  // correct. It is also the same leak the `props:` exclusion above closes, one level down: if an
+  // audio-only field ever lands ON a segment (a per-beat `sfx`, say), it rides into this hash and
+  // silently re-renders the beat on every audio edit. Strip it here when that happens.
   const ranges = props.segments.map((s) => ({
     from: f(s.startSec) - PAD,
     to: f(s.endSec) + PAD,
