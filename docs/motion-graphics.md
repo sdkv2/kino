@@ -590,6 +590,67 @@ background to refract (e.g. `backgroundComponent: "liquid-orb"`); refraction of 
 invisible. For mask-shaped refraction on footage beats, use `region-glass.frag` (`docs/segmentation.md`)
 — a separate path from motion `kino-lens`.
 
+## CSS 3D: what works, and the one thing that doesn't
+
+A motion graphic is rasterized through an SVG `foreignObject`. That path supports more of CSS 3D
+than authors assume, and exactly one property less — which is the trap, because the missing one
+fails silently.
+
+**Works** (verified against the render): `perspective`, `rotateX` / `rotateY` / `rotate3d`,
+`translateZ`, and `transform-style: preserve-3d`, including a nested, counter-rotated child inside a
+rotated parent. A child at `translateZ(240px)` really does render larger than its sibling at
+`translateZ(-240px)`; foreshortening is correct.
+
+**Does not work:** `backface-visibility: hidden`. The cull is dropped, so **both** faces of a flip
+paint and whichever is later in DOM order wins. At rest this looks perfect — the front face happens
+to cover the back — and it only goes wrong once the card turns, at which point the back never
+appears and the front reads mirrored. It survives a poster still and shows up in the finished
+render. It is lint-rejected now, but recognise the shape:
+
+```html
+<!-- ✗ the standard flip: renders both faces stacked, no error -->
+<div class="face front" style="backface-visibility:hidden"></div>
+<div class="face back"  style="backface-visibility:hidden; transform:rotateY(180deg)"></div>
+```
+
+Keep the real rotation and gate each face's opacity off the same driver. The multiplier just needs
+to be steep enough to read as a hard switch at the halfway point:
+
+```html
+<style>
+  .card  { transform-style:preserve-3d; transform:rotateY(calc(var(--flip) * 180deg)); }
+  .face  { position:absolute; inset:0; }
+  .front { opacity: clamp(0, calc((0.5 - var(--flip)) * 60), 1); }
+  .back  { transform: rotateY(180deg);
+           opacity: clamp(0, calc((var(--flip) - 0.5) * 60), 1); }
+</style>
+<div class="card"><div class="face front">FRONT</div><div class="face back">BACK</div></div>
+```
+
+```jsonc
+"params": { "flip": 0 },
+"keyframes": [{ "at": 2, "params": { "flip": 1 }, "ease": "easeInOut" }]
+```
+
+The `rotateY(180deg)` on `.back` is what keeps its content readable rather than mirrored — it is
+counter-rotating against the card, which `preserve-3d` composes correctly.
+
+### Other primitives that work
+
+Agents routinely avoid these on suspicion that the raster can't take them. All verified:
+
+| | |
+|---|---|
+| `mix-blend-mode` | works (`screen`, `multiply`, … between siblings) |
+| `filter: blur()` / `drop-shadow()` | works |
+| `clip-path` driven by `var(--progress)` | works |
+| `mask-image` gradients | works |
+| SVG `<textPath>` | works |
+| `-webkit-text-stroke` | works |
+| `box-shadow`, including `inset` | works |
+| `conic-gradient` with an animated `from` angle | works |
+| **`backdrop-filter`** | **dead** — use [`kino-lens`](#liquid-glass--lens-kino-lens--kino-lens) |
+
 ## Procedural graphics (Tier 2)
 
 When a graphic needs loops or computed geometry (a chart of N bars, a ring of N dots, a scatter), point
@@ -635,6 +696,49 @@ const tint = env.lib.color.formatHex(
 return `<svg viewBox="0 0 480 270" style="position:absolute;inset:0;width:100%;height:100%">
   <path d="${d}" fill="none" stroke="${tint}" stroke-width="4"/></svg>`;
 ```
+
+### Motion that needs state: springs, and baking a simulation
+
+`render(env)` is called fresh every frame and can keep nothing between calls. That rules out
+*integrating* anything — a physics step, a particle system with history, a solver that settles.
+It does **not** rule out the results, and agents regularly stop one step too early here.
+
+**A spring is a closed form, not an integration.** A damped oscillator has an exact solution at time
+`t`, so a settle with real mass and overshoot is a pure function of `env.t` and needs no state:
+
+```js
+// critically-ish damped settle: 0 → 1, overshoots once, rings down. omega = stiffness, zeta = damping.
+function settle(t, omega, zeta) {
+  if (t <= 0) return 0;
+  const wd = omega * Math.sqrt(Math.max(1e-6, 1 - zeta * zeta));
+  return 1 - Math.exp(-zeta * omega * t) * (Math.cos(wd * t) + (zeta * omega / wd) * Math.sin(wd * t));
+}
+// per-element mass: vary omega by index and they settle at their own rates, deterministically.
+const y = settle(env.t - i * 0.04, 18, 0.45);
+```
+
+`ease: "spring"` on a spec keyframe gives you the same thing when one shared driver is enough;
+reach for the closed form when each element needs its own mass.
+
+**Everything else: bake it.** Run the real solver once, offline, and emit a frame-indexed array into
+the `.js` file. The proc then just indexes it — deterministic by construction, and identical on
+every machine:
+
+```js
+// positions baked from a rigid-body run: FRAMES[f] = [[x, y, rot], …] per object
+const FRAMES = [[[12,80,0],[30,80,0]], [[12,74,6],[30,75,-4]], /* … */];
+const f = Math.min(FRAMES.length - 1, env.frame);
+return FRAMES[f].map(([x, y, r], i) =>
+  `<div class="coin" style="left:${x}%;top:${y}%;transform:rotate(${r}deg)"></div>`).join("");
+```
+
+Keep the bake in the project (a checked-in `.js` with the array inlined, or generated by a script
+under `scripts/`) — the render must not read files or compute the sim itself. Watch the source size:
+the file ships inline in the render-page config, so decimate long sims and round coordinates.
+
+**For organic motion that doesn't need to be a specific sim**, `env.lib.noise2D/3D/4D` is pre-seeded
+and deterministic — drift, flicker, jitter and crowd variation all come out of it with no state and
+no bake. `env.lib.seedNoise(seed)` mints an independent field per series.
 
 It runs in the browser render (no Node `process`/`fs`/env reachable) and must be a **pure `(env) → string`**:
 the build lints the source and rejects `Date.now`/`Math.random`/timers/`fetch`/`import`/`require`/`process`
@@ -703,6 +807,7 @@ The build **rejects** a graphic that contains any of the following (each error t
 | `fetch(` / `XMLHttpRequest` | No network during render. |
 | `url(...)` to anything but `data:` or `#fragment` | External/relative refs don't resolve — inline assets as data: URIs. |
 | `@import` | Bundle all styles inline. |
+| `backface-visibility: hidden` | The raster drops the backface cull, so both faces paint and DOM order wins. Keep the 3D; gate each face's `opacity` — see [CSS 3D](#css-3d-what-works-and-the-one-thing-that-doesnt). |
 
 **Allowed:** `@keyframes` and the `animation-*` longhands (except `animation-play-state`), all CSS custom properties + `calc()`/`sin()`/`clamp()`/`round()`/`counter()`, `sibling-index()`, `data:` URIs, and `#fragment` `url()`. After linting, the HTML is sanitized with DOMPurify (keeps your `<style>` + structural markup; strips `script`/`iframe`/`object`/`embed`/`link`/`meta`/`base`).
 

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { lintPinnedClamps, lintDeadVisuals, lintAnimScrubClass, lintUnresolvedFilterRefs } from "../src/render/motionLint.js";
+import {
+  lintPinnedClamps,
+  lintDeadVisuals,
+  lintAnimScrubClass,
+  lintUnresolvedFilterRefs,
+  lintBackfaceVisibility,
+} from "../src/render/motionLint.js";
 import { lintMotionSource } from "../src/render/motiongraphic.js";
 
 describe("lintPinnedClamps", () => {
@@ -71,6 +77,64 @@ describe("lintDeadVisuals via lintMotionSource", () => {
 
   it("is exported as the aggregate check", () => {
     expect(lintDeadVisuals("a{opacity:clamp(0,var(--x),0)}")).toHaveLength(1);
+  });
+});
+
+describe("lintBackfaceVisibility", () => {
+  // The foreignObject raster honours perspective / translateZ / preserve-3d but drops the backface
+  // cull, so the flip idiom renders both faces stacked and only misbehaves once the card turns.
+  it("flags the card-flip idiom", () => {
+    const css = ".front{backface-visibility:hidden}.back{backface-visibility:hidden;transform:rotateY(180deg)}";
+    const found = lintBackfaceVisibility(css);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/silently ignored/);
+  });
+
+  it("names the opacity-gate substitute rather than just refusing", () => {
+    const found = lintBackfaceVisibility("a{backface-visibility:hidden}");
+    expect(found[0]).toMatch(/opacity: clamp/);
+    expect(found[0]).toMatch(/preserve-3d/);
+  });
+
+  it("catches the -webkit- prefix and loose whitespace", () => {
+    expect(lintBackfaceVisibility("a{ -webkit-backface-visibility : hidden }")).toHaveLength(1);
+  });
+
+  it("reports once per source, not once per declaration", () => {
+    expect(lintBackfaceVisibility("a{backface-visibility:hidden}b{backface-visibility:hidden}")).toHaveLength(1);
+  });
+
+  it("ignores the broken line left in a comment", () => {
+    // An author who reads the rule and comments the line out shouldn't fail on their own note.
+    expect(lintBackfaceVisibility("a{ /* backface-visibility: hidden; ignored — gating opacity */ }")).toEqual([]);
+    expect(lintBackfaceVisibility("<!-- backface-visibility:hidden does nothing here --><div></div>")).toEqual([]);
+    expect(lintBackfaceVisibility("// backface-visibility: hidden is dropped by the raster\nreturn ''")).toEqual([]);
+  });
+
+  it("still flags a live declaration sitting next to a comment", () => {
+    expect(lintBackfaceVisibility("/* note */ a{backface-visibility:hidden}")).toHaveLength(1);
+  });
+
+  it("does not treat a URL's // as a comment", () => {
+    const css = "a{background:url(data:image/svg+xml,%3Csvg/%3E)}b{backface-visibility:hidden}";
+    expect(lintBackfaceVisibility(css)).toHaveLength(1);
+  });
+
+  it("leaves the harmless default alone", () => {
+    // `visible` is the initial value — writing it explicitly changes nothing and is not a trap.
+    expect(lintBackfaceVisibility("a{backface-visibility:visible}")).toEqual([]);
+  });
+
+  it("leaves 3D that does work alone", () => {
+    const css = ".s{perspective:800px}.c{transform-style:preserve-3d;transform:rotateY(40deg) translateZ(120px)}";
+    expect(lintBackfaceVisibility(css)).toEqual([]);
+  });
+
+  it("rejects through both tiers", () => {
+    const html = "<style>.f{backface-visibility:hidden}</style><div class='f'></div>";
+    expect(lintMotionSource("motion/x.html", html).join(" ")).toMatch(/silently ignored/);
+    const js = "return '<style>.f{backface-visibility:hidden}</style>'";
+    expect(lintMotionSource("motion/x.js", js).join(" ")).toMatch(/silently ignored/);
   });
 });
 

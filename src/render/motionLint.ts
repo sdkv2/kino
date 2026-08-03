@@ -238,7 +238,50 @@ export function lintUnresolvedFilterRefs(src: string): string[] {
   );
 }
 
+// ---------------------------------------------------------------------------------------------
+// backface-visibility.
+//
+// A motion graphic is rasterized through an SVG `foreignObject`, and Chromium does not honour
+// `backface-visibility` in that path. The rest of CSS 3D DOES work there — `perspective`,
+// `rotateX/Y`, `translateZ`, and `transform-style: preserve-3d` (including nested, counter-rotated
+// children) all compose correctly; only the backface cull is dropped.
+//
+// That combination is the trap. The card-flip idiom — two faces, one rotated 180deg, both
+// `backface-visibility: hidden` — renders BOTH faces stacked, and whichever is later in DOM order
+// wins. At rest it looks perfect, because the front face happens to paint over the back. It is only
+// wrong once the card turns, at which point the "back" never appears and the front reads mirrored.
+// So the failure survives a poster still and shows up only in the finished render.
+//
+// The fix keeps the real 3D and gates each face's opacity off the same driver that rotates the card
+// (verified against the render: correct perspective, correct swap, non-mirrored back face).
+
+/** Blank comment bodies before scanning. An author who reads this rule and leaves the broken line
+ *  commented out ("backface-visibility: hidden; — ignored, gating opacity instead") should not then
+ *  fail the build on their own note. Block and HTML comments cover CSS and JS alike; `//` is only
+ *  stripped when it is not a URL's `://`. */
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
+/** Violations for `backface-visibility: hidden`, which the foreignObject raster silently ignores. */
+export function lintBackfaceVisibility(src: string): string[] {
+  if (!/(?:-webkit-)?backface-visibility\s*:\s*hidden/i.test(stripComments(src))) return [];
+  return [
+    `backface-visibility: hidden is silently ignored — a motion graphic rasterizes through an SVG ` +
+      `foreignObject, and Chromium drops the backface cull there. Both faces paint and the later one ` +
+      `in DOM order wins, so a flip shows the front face mirrored instead of revealing the back, ` +
+      `with no error. The rest of CSS 3D does work (perspective, rotateX/Y, translateZ, ` +
+      `transform-style: preserve-3d) — keep the rotation and gate each face's opacity off the same ` +
+      `driver: .front { opacity: clamp(0, calc((0.5 - var(--flip)) * 60), 1) } and ` +
+      `.back { transform: rotateY(180deg); opacity: clamp(0, calc((var(--flip) - 0.5) * 60), 1) }, ` +
+      `with the card at rotateY(calc(var(--flip) * 180deg)).`,
+  ];
+}
+
 /** Every dead-visual check, for a motion source of any tier. Empty = clean. */
 export function lintDeadVisuals(src: string): string[] {
-  return lintPinnedClamps(src);
+  return [...lintPinnedClamps(src), ...lintBackfaceVisibility(src)];
 }

@@ -47,6 +47,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `sfx` | [SfxEvent](#sound-effects--music)[] | — | Free-placed sound effects. See [Sound effects & music](#sound-effects--music). |
 | `music` | [Music](#sound-effects--music) | — | Music bed under the VO, auto-ducked while segments speak. See [Sound effects & music](#sound-effects--music). |
 | `seamlessLoop` | boolean | — | Loop-ad contract: last beat must be `kind:"motion"`; validate warns if `film` unset/`>0` or first/last motion sources aren't a ready-state pair; post-build compares first/last frame RGB (warn only). Prefer `"film": 0`. Not the same as segment `loop` (Lottie playback). |
+| `motionBlur` | boolean | — | Automatic camera motion blur, default `true`: kino appends a derived `motionBlur` effect to a beat whose layer actually travels. Set `false` to disable the derivation (a hand-authored [`motionBlur`](#masks-and-effects) effect is still honoured). |
 | `postFx` | [PostFx](#post-fx) | — | Full-frame post stage over the finished composite (compositor only). See [Post FX](#post-fx). |
 | `layers` | [DeclaredLayer](#layers)[] | — | Author-declared layers, slotted into the built-in stack by z. See [Layers](#layers). |
 
@@ -271,6 +272,22 @@ This includes targets outside their active beat window.
 | `blur` | `radius` (px) | `radius: 0` |
 | `glow` | `radius` (px), `intensity`, `threshold` | `radius: 8`, `intensity: 1`, `threshold: 0.6` |
 | `grade` | `brightness`, `contrast`, `saturation` | all `1` |
+| `motionBlur` | `auto`, `shutter`, `angle` (deg), `distance` (px, ≤ 256), `radial` (`-1..1`), `samples` (`1..32`) | `auto: 0`, `shutter: 0.5`, `angle: 0`, `distance: 0`, `radial: 0`, `samples: 8` |
+
+`motionBlur` smears a layer along its own travel — a directional component (`angle` + `distance`)
+plus a radial one (`radial`, the scale change), summed, which is what an affine camera does between
+two frames.
+
+`auto` and `shutter` are resolved node-side in [`src/render/layers.ts`](../src/render/layers.ts);
+`angle` / `distance` / `radial` / `samples` are the shader's own uniforms. With `auto` above `0`,
+`angle` / `distance` / `radial` are **derived from how far the layer actually moved**, so a keyframe
+on those three is overridden — keyframe `shutter` or `samples` instead. `shutter` is the fraction of
+the frame interval the shutter is open (`0.5` = the 180° convention).
+
+kino appends an `auto` motion blur to a moving beat's chain by default; the top-level
+[`motionBlur: false`](#top-level-fields) switch turns that derivation off, and a hand-authored
+`motionBlur` effect is honoured either way. It measures **layer** travel, so it does not reach an
+element moving *inside* a motion graphic.
 
 ```json
 "effects": [
