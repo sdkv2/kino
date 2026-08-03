@@ -8,19 +8,10 @@ uniform float uIntensity;
 uniform float uRadius;
 uniform float uHalation;
 uniform vec2 uAxis;
-uniform float uComposite;
-uniform sampler2D uOriginal;
 
 void main() {
   vec2 uv = gl_FragCoord.xy / uRes;
   if (uIntensity <= 0.0) { kino_frag = texture(uSrc, uv); return; }
-
-  if (uComposite > 0.5) {
-    vec3 base = texture(uOriginal, uv).rgb;
-    vec3 bloom = texture(uSrc, uv).rgb * uIntensity;
-    kino_frag = vec4(base + bloom, 1.0);
-    return;
-  }
 
   vec2 texel = uAxis / uRes;
   float sigma = max(uRadius * 0.5, 0.0001);
@@ -64,7 +55,7 @@ void main() {
 
 export const bloomPass: EffectPass = {
   name: "bloom",
-  uniformNames: ["uThreshold", "uIntensity", "uRadius", "uHalation", "uAxis", "uComposite", "uOriginal"],
+  uniformNames: ["uThreshold", "uIntensity", "uRadius", "uHalation", "uAxis"],
   frag: BLOOM_FRAG,
   uniforms(gl, loc, params) {
     // 0.45 linear == 0.70 sRGB — see the note in glow.ts.
@@ -74,8 +65,40 @@ export const bloomPass: EffectPass = {
     gl.uniform1f(loc.uHalation, numParam(params, "halation", 0, 0, 1));
     const axis = String(params.axis ?? "x");
     gl.uniform2f(loc.uAxis, axis === "x" ? 1 : 0, axis === "y" ? 1 : 0);
-    gl.uniform1f(loc.uComposite, axis === "composite" ? 1 : 0);
-    if (axis === "composite" && params._originalTex) {
+  },
+};
+
+/**
+ * The add-back, as its OWN program.
+ *
+ * It used to be a third branch inside the blur shader, selected by a `uComposite` flag. That
+ * shader then had two samplers used in mutually exclusive branches with a 25-tap loop below them,
+ * and on the ANGLE/Metal backend the `uSrc` fetch in the composite branch returned zero whenever
+ * `uOriginal` was also sampled — so `base + bloom` evaluated to `base` and `postFx.bloom` was a
+ * no-op in every real render, while its unit tests (which only ever ran the `axis: "x"` blur)
+ * stayed green.
+ *
+ * Sampling uSrc alone in that branch read correct values; adding the uOriginal fetch beside it
+ * zeroed it. Splitting the add-back out removes the divergent-branch-plus-loop shape entirely:
+ * this program has no loop and no branch, which is also what it always should have been — the
+ * composite step shares nothing with the blur but its inputs.
+ */
+export const bloomCompositePass: EffectPass = {
+  name: "bloomComposite",
+  uniformNames: ["uIntensity", "uOriginal"],
+  frag: `
+uniform float uIntensity;
+uniform sampler2D uOriginal;
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec3 base = texture(uOriginal, uv).rgb;
+  vec3 bloom = texture(uSrc, uv).rgb * uIntensity;
+  kino_frag = vec4(base + bloom, 1.0);
+}`,
+  uniforms(gl, loc, params) {
+    gl.uniform1f(loc.uIntensity, numParam(params, "intensity", 0.4, 0, 8));
+    if (params._originalTex) {
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, params._originalTex as WebGLTexture);
       gl.uniform1i(loc.uOriginal, 2);
