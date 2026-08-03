@@ -217,19 +217,44 @@ const motionFields = {
 };
 const MotionGraphicRef = z.object(motionFields);
 
+// Knobs shared by both sfx surfaces. The mixer treats a segment effect and a top-level one
+// identically once its time is known — only the clock they are placed against differs.
+const sfxFields = {
+  src: z.string().min(1), // bare library id ("pop") or project asset path ("sfx/hit.mp3")
+  volume: z.number().min(0).max(1).default(1),
+  // Stereo placement, -1 hard left … 0 centre … 1 hard right. Constant-power law, unity at
+  // centre — so 0 is exactly "no pan" and a sweep through centre has no step.
+  pan: z.number().min(-1).max(1).default(0),
+  // Varispeed: pitch and length move together (asetrate), like pitching a sampler. Right for
+  // short transients, wrong for anything with a tune in it.
+  rate: z.number().gt(0).max(4).default(1),
+};
 const SfxEvent = z
   .object({
-    src: z.string().min(1), // bare library id ("pop") or project asset path ("sfx/hit.mp3")
+    ...sfxFields,
     at: z.number().min(0), // seconds on the main timeline
-    volume: z.number().min(0).max(1).default(1),
-    // Stereo placement, -1 hard left … 0 centre … 1 hard right. Constant-power law, unity at
-    // centre — so 0 is exactly "no pan" and a sweep through centre has no step.
-    pan: z.number().min(-1).max(1).default(0),
-    // Varispeed: pitch and length move together (asetrate), like pitching a sampler. Right for
-    // short transients, wrong for anything with a tune in it.
-    rate: z.number().gt(0).max(4).default(1),
   })
   .strict();
+// A sound effect placed ON A BEAT. `at` is BEAT-RELATIVE seconds (like texts[]/captionKeyframes/
+// zoomKeyframes), so it rides the beat when real TTS moves the boundary — the drift that makes a
+// timeline-absolute `sfx[].at` wrong on the first real build, with no `kino retune` path back.
+// `atWord` anchors to a spoken word instead, resolved against THIS build's VO word timings by the
+// same resolver motion keyframes/triggers use (render/motionVars resolveWordAnchors).
+const SegmentSfxEvent = z
+  .object({
+    ...sfxFields,
+    at: z.number().min(0).optional(), // seconds from THIS beat's start
+    atWord: AtWord.optional(),
+    // Seconds nudged onto the resolved word start, either direction. sfx are transients: a couple
+    // of frames decides whether a click reads as caused by the word or dubbed over it, so the
+    // anchor needs a trim that motion (whose moves have their own ease-in) does not.
+    offset: z.number().optional(),
+  })
+  .strict()
+  .refine(oneAnchor, anchorMsg)
+  // A plain `at` IS the exact time — an offset on it would be two numbers for one instant, and the
+  // one that reads as authoritative would be whichever the author looked at last.
+  .refine((s) => s.offset == null || s.atWord != null, { message: "offset needs atWord — with a plain `at`, just move the `at`" });
 // A hand-keyed point on a bed's volume curve. `at` is absolute seconds on the MAIN timeline (like
 // sfx[].at), not an offset into the source file — the bed is a top-level concept, so its keyframes
 // read against the same clock as everything else the author is watching.
@@ -330,6 +355,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    sfx: z.array(SegmentSfxEvent).optional(), // beat-relative sound effects (`at` from beat start, or `atWord`)
     ...segmentFxFields,
   })
   .strict(),
@@ -457,6 +483,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    sfx: z.array(SegmentSfxEvent).optional(), // beat-relative sound effects (`at` from beat start, or `atWord`)
     ...segmentFxFields,
   })
   .strict(),
@@ -493,6 +520,7 @@ const SegmentUnion = z.discriminatedUnion("kind", [
     captionAnimation: CaptionAnimation.optional(),
     captionReveal: CaptionReveal.optional(),
     texts: z.array(TextOverlaySpec).optional(),
+    sfx: z.array(SegmentSfxEvent).optional(), // beat-relative sound effects (`at` from beat start, or `atWord`)
     motionOverlay: MotionGraphicRef.optional(),
     ...segmentFxFields,
   })
@@ -650,7 +678,6 @@ const TOP_LEVEL_KEYS: Record<string, string> = {
   backgroundKeyframes: "backgroundKeyframes is top-level — not a segment field",
   backgroundTriggers: "backgroundTriggers is top-level — not a segment field",
   music: "music is top-level — not a segment field",
-  sfx: "sfx is top-level — not a segment field",
   voice: "voice is top-level (or brand.md) — not a segment field",
   fontWeights: "fontWeights is top-level (or brand.md) — not a segment field",
   voiceModel: "voiceModel is top-level — not a segment field",
