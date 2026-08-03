@@ -15,15 +15,17 @@ import type { EffectPass } from "../src/render/native/page/compositor/effects/pa
 // have sent to the GPU with no browser involved.
 function capture() {
   const got: Record<string, number> = {};
+  const vec3: Record<string, [number, number, number]> = {};
   const gl = {
     uniform1f: (name: string, v: number) => { got[name] = v; },
     uniform2f: () => {},
+    uniform3f: (name: string, x: number, y: number, z: number) => { vec3[name] = [x, y, z]; },
     uniform1i: (name: string, v: number) => { got[name] = v; },
     activeTexture: () => {},
     bindTexture: () => {},
   } as unknown as WebGL2RenderingContext;
   const loc = new Proxy({}, { get: (_t, k) => String(k) }) as Record<string, WebGLUniformLocation | null>;
-  return { gl, loc, got };
+  return { gl, loc, got, vec3 };
 }
 
 describe("bright-pass defaults are linear-light luminance", () => {
@@ -43,6 +45,56 @@ describe("bright-pass defaults are linear-light luminance", () => {
     const { gl, loc, got } = capture();
     glowPass.uniforms(gl, loc, { threshold: 0.9 }, 0);
     expect(got.uThreshold).toBeCloseTo(0.9, 5);
+  });
+});
+
+// The grade's new stages sit AHEAD of brightness/contrast/saturation, so "identity at the
+// default" cannot be left to `pow(c, 1.0)` and `c * 1.0` being near-neutral — each is gated by a
+// uniform the shader branches on. These assert the gates are actually OFF, which is the property
+// that keeps an untouched spec rendering byte-identical.
+describe("grade stages are switched off at their defaults", () => {
+  it("sends both gates as 0 when no new axis is authored", () => {
+    const { gl, loc, got } = capture();
+    gradePass.uniforms(gl, loc, {}, 0);
+    expect(got.uWhiteBalanceOn).toBe(0);
+    expect(got.uLggOn).toBe(0);
+  });
+
+  it("sends both gates as 0 when the defaults are authored explicitly", () => {
+    const { gl, loc, got } = capture();
+    gradePass.uniforms(gl, loc, { temperature: 0, tint: 0, lift: 0, gamma: 1, gain: 1 }, 0);
+    expect(got.uWhiteBalanceOn).toBe(0);
+    expect(got.uLggOn).toBe(0);
+  });
+
+  it("opens only the gate an authored axis belongs to", () => {
+    const wb = capture();
+    gradePass.uniforms(wb.gl, wb.loc, { tint: 0.2 }, 0);
+    expect(wb.got.uWhiteBalanceOn).toBe(1);
+    expect(wb.got.uLggOn).toBe(0);
+
+    const lgg = capture();
+    gradePass.uniforms(lgg.gl, lgg.loc, { gamma: 1.4 }, 0);
+    expect(lgg.got.uWhiteBalanceOn).toBe(0);
+    expect(lgg.got.uLggOn).toBe(1);
+  });
+
+  it("hands the shader exactly unit gains at the default white balance", () => {
+    const { gl, loc, vec3 } = capture();
+    gradePass.uniforms(gl, loc, {}, 0);
+    expect(vec3.uWhiteBalance).toEqual([1, 1, 1]);
+  });
+
+  it("inverts gamma on the way to the GPU so gamma > 1 opens the mids", () => {
+    const { gl, loc, got } = capture();
+    gradePass.uniforms(gl, loc, { gamma: 2 }, 0);
+    expect(got.uInvGamma).toBeCloseTo(0.5, 5);
+  });
+
+  it("floors gamma at 0.1 rather than letting 1/gamma blow up", () => {
+    const { gl, loc, got } = capture();
+    gradePass.uniforms(gl, loc, { gamma: 0 }, 0);
+    expect(got.uInvGamma).toBeCloseTo(10, 5);
   });
 });
 
@@ -80,6 +132,11 @@ describe("non-numeric params fall back to the default instead of reaching the GP
     ["glow intensity", glowPass, { intensity: "loud" }, "uIntensity", 1],
     ["grade brightness", gradePass, { brightness: "up" }, "uBrightness", 1],
     ["grade contrast", gradePass, { contrast: "punchy" }, "uContrast", 1],
+    ["grade temperature", gradePass, { temperature: "warm" }, "uWhiteBalanceOn", 0],
+    ["grade lift", gradePass, { lift: "high" }, "uLift", 0],
+    ["grade gamma", gradePass, { gamma: "steep" }, "uInvGamma", 1],
+    ["grade gain", gradePass, { gain: "loud" }, "uGain", 1],
+    ["bloom halation", bloomPass, { axis: "x", halation: "red" }, "uHalation", 0],
     ["lens distortion", lensPass, { distortion: "warp" }, "uDistortion", 0],
     ["motionBlur angle", motionBlurPass, { angle: "sideways", distance: 10 }, "uAngle", 0],
     ["motionBlur distance", motionBlurPass, { distance: "far" }, "uDistance", 0],
