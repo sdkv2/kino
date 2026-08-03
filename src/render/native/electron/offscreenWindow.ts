@@ -527,22 +527,33 @@ export class OffscreenRenderWindow {
             if (!gl) return { fatal: "webgl2 context missing" };
             const w = c.width, h = c.height;
             const px = new Uint8Array(w * h * 4);
+            const tRead0 = performance.now();
             gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+            const tRead = performance.now() - tRead0;
             if (!window.kinoElectron?.pushFrame) return { fatal: "kinoElectron preload missing" };
+            const tPush0 = performance.now();
             await window.kinoElectron.pushFrame(px, w, h);
-            return { fatal: null, w, h };
+            const tPush = performance.now() - tPush0;
+            return { fatal: null, w, h, tRead, tPush };
           } catch (e) {
             return { fatal: "in-page readback threw: " + errText(e) };
           }
         })()
-      `) as Promise<{ fatal: string | null; w?: number; h?: number }>,
+      `) as Promise<{ fatal: string | null; w?: number; h?: number; tRead?: number; tPush?: number }>,
       SEEK_TIMEOUT_MS,
       `seekReadback(${frame})`,
-    )) as { fatal: string | null; w?: number; h?: number };
+    )) as { fatal: string | null; w?: number; h?: number; tRead?: number; tPush?: number };
 
     if (result.fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${result.fatal}`);
     const pixels = this.lastPixels;
     if (!pixels) throw new Error(`readback produced no pixels on frame ${frame}`);
+    // Split the round trip. `seek-readback` alone lumps the seek, the synchronous readPixels and
+    // the 8.3MB IPC push into one number, which is not enough to tell a GPU stall from a transfer
+    // cost — and guessing wrong sends you optimising the wrong half. Measured on an idle M4:
+    // readPixels ~26ms, ipcPush ~10ms of a ~45ms capture wall. Reading a QUARTER of the pixels cut
+    // readPixels by only 24%, so this is dominated by the synchronous stall, not by byte volume.
+    if (result.tRead != null) this.capProf.add("rb:readPixels", result.tRead);
+    if (result.tPush != null) this.capProf.add("rb:ipcPush", result.tPush);
     this.capProf.add("seek-readback", performance.now() - tAll);
     this.lastPixels = null;
     return pixels;
