@@ -11,7 +11,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Text overlays](#text-overlays)
 - [Masks and effects](#masks-and-effects) — [timed effects](#timed-effects) · [blur focal region](#blur-focal-region) · [tween channels](#tween-channels)
 - [Layers](#layers) — [source kinds](#source-kinds) · [z scale](#z-scale) · [adjustment layers](#adjustment-layers)
-- [Post FX](#post-fx)
+- [Post FX](#post-fx) — [grade axes](#grade-axes) · [halation](#halation) · [film grain](#film-grain)
 - [Keyframes & triggers](#keyframes--triggers)
 - [Backgrounds](#backgrounds)
 - [Sound effects & music](#sound-effects--music)
@@ -274,9 +274,14 @@ This includes targets outside their active beat window.
 | Kind | Params | Defaults |
 |---|---|---|
 | `blur` | `radius` (px) | `radius: 0` |
-| `glow` | `radius` (px), `intensity`, `threshold` | `radius: 8`, `intensity: 1`, `threshold: 0.6` |
-| `grade` | `brightness`, `contrast`, `saturation` | all `1` |
+| `glow` | `radius` (px), `intensity`, `threshold` | `radius: 8`, `intensity: 1`, `threshold: 0.32` |
+| `grade` | `temperature`, `tint`, `lift`, `gamma`, `gain`, `brightness`, `contrast`, `saturation` | `temperature: 0`, `tint: 0`, `lift: 0`, the rest `1` |
 | `motionBlur` | `auto`, `shutter`, `angle` (deg), `distance` (px, ≤ 256), `radial` (`-1..1`), `samples` (`1..32`) | `auto: 0`, `shutter: 0.5`, `angle: 0`, `distance: 0`, `radial: 0`, `samples: 8` |
+
+`grade` is the same pass here and in [`postFx.grade`](#post-fx) — same params, same order, same
+meanings. The difference is only what it grades: a beat's own layers here, the whole finished frame
+there. Reach for this one when a single beat needs the move, and for `postFx` when the video does.
+The full axis reference is in the [Post FX](#post-fx) section.
 
 `motionBlur` smears a layer along its own travel — a directional component (`angle` + `distance`)
 plus a radial one (`radial`, the scale change), summed, which is what an affine camera does between
@@ -505,11 +510,12 @@ adjustment layer never reads any of them, so accepting them would validate clean
 do nothing.
 
 ```json
-{ "id": "warmth", "z": 650, "adjust": [{ "kind": "grade", "params": { "brightness": 1.05, "saturation": 0.95 } }] }
+{ "id": "warmth", "z": 650, "adjust": [{ "kind": "grade", "params": { "temperature": 0.2, "saturation": 0.95 } }] }
 ```
 
 `adjust` takes the same kinds as segment `effects` (see [Masks and effects](#masks-and-effects)),
-plus one more: `film`, the cinematic finish. kino **emits a `film` adjustment layer at `Z.film` by
+plus one more: `film`, the cinematic finish — whose `grain` / `grainHold` / `grainSize` params are
+documented under [film grain](#film-grain). kino **emits a `film` adjustment layer at `Z.film` by
 default** — top-level `film` / `theme.film` (default `1`) supplies its intensity when `postFx.film`
 is absent — so an existing spec keeps its graded look without ever declaring a layer for it. Drop
 it with `"film": 0`; nothing else may declare `z: Z.film`.
@@ -526,10 +532,10 @@ Stages always run in this order — it is not authorable:
 
 | Stage | Params | Range | Meaning |
 |---|---|---|---|
-| `grade` | `brightness`, `contrast`, `saturation` | `0..4` each (default `1`) | Full-frame colour grade. |
-| `bloom` | `threshold`, `intensity`, `radius` | `threshold` `0..1`, `intensity` `0..4`, `radius` `0..128` px | Separable bright-pass bloom. |
+| `grade` | `temperature`, `tint`, `lift`, `gamma`, `gain`, `brightness`, `contrast`, `saturation` | see [Grade axes](#grade-axes) | Full-frame colour grade. |
+| `bloom` | `threshold`, `intensity`, `radius`, `halation` | `threshold` `0..1` (default `0.45`), `intensity` `0..4` (default `0.4`), `radius` `0..128` px (default `24`), `halation` `0..1` (default `0`) | Separable bright-pass bloom. |
 | `lens` | `distortion`, `chroma` | `distortion` `-1..1`, `chroma` `0..0.05` | Barrel/pincushion distortion plus chromatic aberration. |
-| `film` | `intensity` | `0..1` | Vignette + grain over the whole frame. |
+| `film` | `intensity`, `grain`, `grainHold`, `grainSize` | `intensity` `0..1`, `grain` `0..4` (default `1`), `grainHold` `1..8` (default `2`), `grainSize` `1..8` (default `1`) | Vignette + grain over the whole frame. |
 
 Omit a stage and it does not run — **except `film`**: when `postFx.film` is absent, intensity
 falls back to top-level `film` / `theme.film` (default `1`), so existing specs keep their
@@ -540,13 +546,94 @@ cinematic finish without authoring `postFx`.
   "title": "graded-hook",
   "film": 1,
   "postFx": {
-    "grade": { "brightness": 1.05, "contrast": 1.1, "saturation": 0.92 },
-    "bloom": { "threshold": 0.75, "intensity": 0.35, "radius": 24 },
-    "lens": { "distortion": 0.04, "chroma": 0.003 }
+    "grade": { "temperature": 0.25, "lift": 0.01, "contrast": 1.1, "saturation": 0.92 },
+    "bloom": { "threshold": 0.75, "intensity": 0.35, "radius": 24, "halation": 0.6 },
+    "lens": { "distortion": 0.04, "chroma": 0.003 },
+    "film": { "grain": 1.4, "grainHold": 1 }
   },
   "segments": [{ "text": "Ship it.", "caption": "Ship it." }]
 }
 ```
+
+### Grade axes
+
+Three groups, applied in this order, and the order is not authorable:
+
+| Param | Range | Default | What it does |
+|---|---|---|---|
+| `temperature` | `-1..1` | `0` | White balance. Positive is warm (red up, blue down), negative is cool. |
+| `tint` | `-1..1` | `0` | The other balance axis: positive is magenta, negative is green. |
+| `lift` | `-1..1` | `0` | Where black lands. Positive raises the floor — the filmic toe — and negative crushes it. |
+| `gamma` | `0.1..4` | `1` | Midtone rolloff between the floor and the top. Above `1` opens the mids, below `1` closes them. |
+| `gain` | `0..4` | `1` | Where white lands. |
+| `brightness` | `0..4` | `1` | Straight multiply. |
+| `contrast` | `0..4` | `1` | Expand/compress about mid-grey. |
+| `saturation` | `0..4` | `1` | `0` is monochrome. |
+
+**White balance first, then lift/gamma/gain, then brightness/contrast/saturation.** That is the
+order a colourist works in and the reason is not aesthetic: a white balance is a statement about
+what colour the *light* was, so correcting it after the tone curve has already crushed a channel
+corrects the wrong image. The trim stays last because it has always been last — existing specs
+must not move.
+
+Four things worth knowing before reaching for these:
+
+1. **Both surfaces, one pass.** Every param above works identically on a per-beat
+   `effects: [{ "kind": "grade" }]` (see [Masks and effects](#masks-and-effects)) — and only the
+   per-beat form has a [keyframe track](#timed-effects), so an *animated* grade (a night→morning
+   temperature ramp, say) has to live on a beat. `postFx` has no keyframes.
+2. **The grade runs on light-linear values, not on the 0–255 you see.** This is why `lift: 0.15`
+   is enormous (it puts the floor near sRGB 109) and why `contrast` pivots high enough to crush
+   a near-black plate to zero. For a toe, start around `lift: 0.005`–`0.02`.
+3. **Every axis is a genuine no-op at its default** — the pass branches around white balance and
+   around lift/gamma/gain entirely, so adding one param does not perturb the others by a
+   least-significant bit. A spec that does not set them renders byte-identical.
+4. **`temperature` is colour only, not exposure.** The channel gains are normalised on Rec.601
+   luma, so a temperature ramp holds its brightness and needs no compensating `brightness`
+   keyframe.
+
+### Halation
+
+`bloom.halation` gives the bloom a per-channel radius: red bleeds furthest, green less, blue
+least. That wavelength split is what separates a highlight that reads as *photographed* from one
+that reads as drawn — real halation is light scattering back off the film base, and the long
+wavelengths get furthest through the emulsion before they do.
+
+It costs no extra texture reads: the widths live inside the bloom's existing blur loop as three
+sets of weights over the same taps. Two things it is **not**:
+
+- **Not chromatic aberration.** Halation is local — it spreads outward from each bright element
+  wherever that element sits. A global radial channel offset is [`lens.chroma`](#post-fx), and
+  the two do different jobs.
+- **Not a brightener.** Each channel is normalised on its own weights, so halation redistributes
+  a channel's energy rather than adding any. Blue's core tightens as red's skirt widens.
+
+The bloom's tap span scales with red's width — `2 ×` at `halation: 1` — so red keeps its whole
+falloff instead of being clipped at the achromatic radius. Measured on an isolated highlight at
+`radius: 24`: an achromatic bloom is gone by 24px out, and `halation: 1` still has red at 32px.
+
+### Film grain
+
+`film.intensity` scales the whole finish (vignette + grain). The three grain params shape the
+grain itself:
+
+- **`grain`** (`0..4`, default `1`) is the amount. The default is calibrated against a real 35mm
+  plate — a flat midtone measures the same spread the plate does. Raise it for a heavier stock.
+- **`grainHold`** (`1..8`, default `2`) is how many frames one grain field persists, and it is the
+  difference between grain that **shimmers** and grain that **sits**. Real film is a fresh piece of
+  stock every frame (`grainHold: 1`); holding two frames halves the boil, which reads calmer at
+  30fps and is the shipped default. Raise it further for a deliberately still, almost-texture look.
+- **`grainSize`** (`1..8`, default `1`) is the stock. `1` means one grain per output pixel, which
+  is what 35mm actually measures at this delivery size. Above `1` the field is interpolated on a
+  coarser lattice — less accurate, but coarse grain is the part that survives a low-bitrate codec,
+  so it is the knob to reach for when the finish disappears after upload.
+
+Grain is exposure-weighted either way: densest through the midtones, thinning toward the toe and
+the shoulder. Constant-amplitude noise across the whole range is what makes digital grain read as
+compression.
+
+These also work on a declared `film` [adjustment layer](#adjustment-layers), which is how the
+finish is applied by default — `postFx.film` overrides that layer's params.
 
 Three things authors trip on:
 
@@ -554,7 +641,7 @@ Three things authors trip on:
 2. **`film` defaults from `theme.film`** — omit `postFx.film` and the post stage still applies
    vignette/grain at the same intensity as the legacy CSS film finish.
 3. **Whole-video, not per beat** — one `postFx` object grades the entire output. Per-beat grading
-   still belongs on segment `effects`.
+   still belongs on segment `effects`, which is also the only place a grade can be keyframed.
 
 ### Enums
 

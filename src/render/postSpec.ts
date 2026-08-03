@@ -7,8 +7,22 @@ export const postChainOrder = ["grade", "bloom", "lens", "film"] as const;
 export type PostStage = (typeof postChainOrder)[number];
 
 export interface PostFx {
-  grade?: { brightness?: number; contrast?: number; saturation?: number };
-  bloom?: { threshold?: number; intensity?: number; radius?: number };
+  /** White balance (`temperature` / `tint`) → three-way (`lift` / `gamma` / `gain`) → trim
+   *  (`brightness` / `contrast` / `saturation`). Every stage is a no-op at its default, and the
+   *  same params reach a per-beat `effects: [{ kind: "grade" }]` — one pass serves both. */
+  grade?: {
+    temperature?: number;
+    tint?: number;
+    lift?: number;
+    gamma?: number;
+    gain?: number;
+    brightness?: number;
+    contrast?: number;
+    saturation?: number;
+  };
+  /** `halation` widens the bloom per channel — red furthest, blue least — which is what makes a
+   *  highlight read as photographed rather than drawn. */
+  bloom?: { threshold?: number; intensity?: number; radius?: number; halation?: number };
   lens?: { distortion?: number; chroma?: number };
   /** Vignette + grain. Defaults to theme.film when the stage is absent entirely. */
   /** `grain` scales the grain amount (1 = default); `grainHold` is how many frames a grain
@@ -22,8 +36,18 @@ interface Range {
   max: number;
 }
 const RANGES: Record<PostStage, Record<string, Range>> = {
-  grade: { brightness: { min: 0, max: 4 }, contrast: { min: 0, max: 4 }, saturation: { min: 0, max: 4 } },
-  bloom: { threshold: { min: 0, max: 1 }, intensity: { min: 0, max: 4 }, radius: { min: 0, max: 128 } },
+  // `gamma` bottoms out at 0.1, not 0: the pass raises to 1/gamma, and 1/0 has no meaning here.
+  grade: {
+    temperature: { min: -1, max: 1 },
+    tint: { min: -1, max: 1 },
+    lift: { min: -1, max: 1 },
+    gamma: { min: 0.1, max: 4 },
+    gain: { min: 0, max: 4 },
+    brightness: { min: 0, max: 4 },
+    contrast: { min: 0, max: 4 },
+    saturation: { min: 0, max: 4 },
+  },
+  bloom: { threshold: { min: 0, max: 1 }, intensity: { min: 0, max: 4 }, radius: { min: 0, max: 128 }, halation: { min: 0, max: 1 } },
   lens: { distortion: { min: -1, max: 1 }, chroma: { min: 0, max: 0.05 } },
   film: { intensity: { min: 0, max: 1 }, grain: { min: 0, max: 4 }, grainHold: { min: 1, max: 8 }, grainSize: { min: 1, max: 8 } },
 };
