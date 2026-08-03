@@ -18,10 +18,21 @@ function run(cmd, args, opts = {}) {
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
-/** node-gyp ≤10 rejects VS 18; map it to 2022 + v145 toolset. */
+/** node-gyp ≤10 rejects VS 18; map it to 2022 + v145 toolset.
+ *
+ *  BOTH copies need this. The build runs plain `node-gyp rebuild` first and `@electron/node-gyp`
+ *  second, and they are separate installs with separate copies of find-visualstudio.js. Patching
+ *  only the electron one left the FIRST step unpatched, so on a windows-latest runner (Server 2025,
+ *  VS 18) the build died at `node-gyp rebuild` with "Could not find any Visual Studio installation"
+ *  — the exact condition this patch exists to handle. */
 function patchNodeGypVs18() {
   if (process.platform !== "win32") return;
-  const p = join(root, "node_modules/@electron/node-gyp/lib/find-visualstudio.js");
+  for (const rel of ["node_modules/node-gyp", "node_modules/@electron/node-gyp"]) {
+    patchOneNodeGyp(join(root, rel, "lib/find-visualstudio.js"), rel);
+  }
+}
+
+function patchOneNodeGyp(p, label) {
   if (!existsSync(p)) return;
   let c = readFileSync(p, "utf8");
   if (c.includes("ret.versionMajor === 18")) return;
@@ -50,7 +61,7 @@ function patchNodeGypVs18() {
     }`,
   );
   writeFileSync(p, c);
-  console.log("build:native — patched @electron/node-gyp for VS 18 / v145");
+  console.log(`build:native — patched ${label} for VS 18 / v145`);
 }
 
 patchNodeGypVs18();
