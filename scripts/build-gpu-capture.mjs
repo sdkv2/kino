@@ -70,4 +70,20 @@ const distDir = join(root, "dist/render/native/electron/native/build/Release");
 mkdirSync(distDir, { recursive: true });
 copyFileSync(built, join(distDir, "gpu_capture.node"));
 
-console.log("build:native — gpu_capture.node ready for Electron", electronVersion);
+// Also publish it as a per-platform prebuild. The addon is pure N-API (node-addon-api, no raw v8),
+// so a single binary per platform+arch loads on ANY Node/Electron ABI — verified by loading an
+// Electron-43 build inside plain Node 22 (ABI 148 vs 147). That is why this is keyed by
+// platform-arch only and does NOT need an entry per Electron version: bumping Electron does not
+// invalidate these files.
+//
+// One build committed at build/Release is worse than none: it is whatever machine last ran this
+// script, so every other platform silently fails to dlopen it and the renderer drops to a slower
+// capture path. Prebuilds keyed by triple make that impossible — a missing triple is simply absent
+// rather than present-but-wrong.
+const triple = `${process.platform}-${process.arch}`;
+const prebuildDir = join(root, "prebuilds", triple);
+mkdirSync(prebuildDir, { recursive: true });
+copyFileSync(built, join(prebuildDir, "gpu_capture.node"));
+
+console.log(`build:native — gpu_capture.node ready for Electron ${electronVersion}`);
+console.log(`build:native — prebuilds/${triple}/gpu_capture.node written`);

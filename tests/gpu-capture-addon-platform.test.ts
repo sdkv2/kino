@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addonPlatform } from "../src/render/native/electron/gpuCapture.js";
@@ -52,5 +52,26 @@ describe("addonPlatform — identifies which OS a .node was built for", () => {
 
   it("returns null for a truncated file instead of throwing", () => {
     expect(addonPlatform(write("short.node", [0x7f]))).toBeNull();
+  });
+});
+
+// The shipped prebuild for THIS platform must actually load. Not every triple is populated yet, so
+// a missing one is skipped rather than failed — but a present-and-broken one is the exact bug this
+// layout replaced (a single build/Release binary that existed everywhere and loaded on one OS).
+describe("shipped prebuild for the current platform", () => {
+  const triple = `${process.platform}-${process.arch}`;
+  const p = join(process.cwd(), "prebuilds", triple, "gpu_capture.node");
+
+  it("is built for this platform, if it is shipped at all", () => {
+    if (!existsSync(p)) return; // triple not populated yet — the CI workflow warns about this
+    expect(addonPlatform(p)).toBe(process.platform);
+  });
+
+  it("loads and exposes available(), if it is shipped at all", async () => {
+    if (!existsSync(p)) return;
+    const { createRequire } = await import("node:module");
+    const req = createRequire(import.meta.url);
+    const mod = req(p) as { available?: () => boolean };
+    expect(typeof mod.available).toBe("function");
   });
 });

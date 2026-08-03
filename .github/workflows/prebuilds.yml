@@ -1,0 +1,83 @@
+name: prebuilds
+
+# Builds gpu_capture.node for every platform we ship and uploads one artifact per triple, so the
+# committed prebuilds/<platform>-<arch>/ set can be refreshed without needing four machines.
+#
+# Why this exists: the addon used to be committed as a SINGLE build/Release/gpu_capture.node — built
+# on whichever machine last ran build:native. On every other platform that file is present but not
+# loadable, loadGpuCapture() swallowed the dlopen error, and capture silently degraded to `direct`.
+# A per-triple layout makes a foreign build unreachable instead of mis-loaded.
+#
+# One build per platform+arch covers ALL Electron versions: the addon is pure N-API (node-addon-api,
+# no raw v8), verified by loading an Electron-43 build inside plain Node 22. Bumping Electron does
+# not require regenerating these.
+on:
+  workflow_dispatch:
+  # Also run when the native sources or the build script change, so a broken build is caught on the
+  # PR that breaks it rather than months later on someone else's machine.
+  pull_request:
+    paths:
+      - "src/render/native/electron/native/**"
+      - "scripts/build-gpu-capture.mjs"
+      - ".github/workflows/prebuilds.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.triple }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            triple: darwin-arm64
+          - os: macos-13
+            triple: darwin-x64
+          - os: ubuntu-latest
+            triple: linux-x64
+          - os: windows-latest
+            triple: win32-x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # build:native needs devDeps (node-gyp, @electron/rebuild) and the electron package, whose
+      # version it reads to pick the rebuild target.
+      - run: npm ci --allow-git=all
+
+      - run: npm run build:native
+
+      - name: verify the prebuild is for THIS platform and loads
+        shell: bash
+        run: |
+          set -euo pipefail
+          triple="${{ matrix.triple }}"
+          f="prebuilds/${triple}/gpu_capture.node"
+          test -f "$f" || { echo "::error::$f was not produced"; exit 1; }
+          # A binary for the wrong OS is the exact failure this whole layout exists to prevent —
+          # assert the object format matches the runner rather than trusting the filename.
+          node -e "
+            const {openSync,readSync,closeSync}=require('fs');
+            const fd=openSync(process.argv[1],'r'); const h=Buffer.alloc(4);
+            readSync(fd,h,0,4,0); closeSync(fd);
+            const be=h.readUInt32BE(0), le=h.readUInt32LE(0);
+            let got=null;
+            if (be===0x7f454c46) got='linux';
+            else if ([0xfeedface,0xfeedfacf].includes(be)||[0xfeedface,0xfeedfacf].includes(le)||be===0xcafebabe||le===0xcafebabe) got='darwin';
+            else if (h[0]===0x4d&&h[1]===0x5a) got='win32';
+            if (got !== process.platform) { console.error('built for '+got+', runner is '+process.platform); process.exit(1); }
+            const m = require(require('path').resolve(process.argv[1]));
+            if (typeof m.available !== 'function') { console.error('addon has no available()'); process.exit(1); }
+            console.log('ok:', got, '| available():', m.available());
+          " "$f"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-${{ matrix.triple }}
+          path: prebuilds/${{ matrix.triple }}/gpu_capture.node
+          if-no-files-found: error
