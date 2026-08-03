@@ -189,6 +189,49 @@ Silent cuts + a ducked bed read cleaner than busy SFX. Reach for effects sparing
 `rate` 1.0 / 1.12 / 0.94, alternating left and right, reads as three different sounds instead of a
 repeat. Reuse beats sourcing a second file.
 
+### On a beat instead of the timeline (`segments[].sfx`)
+
+A top-level `sfx[].at` is a **timeline second**, and timeline seconds move. You place effects
+against mock estimates, the real TTS comes back a little longer or shorter, every boundary shifts —
+and every effect is now in the wrong place. `kino retune` does not help: it rewrites motion
+`triggers` and `backgroundTriggers`, never `sfx`.
+
+So put the effect on the beat it belongs to:
+
+```json
+{ "kind": "motion", "source": "motion/stamp.html",
+  "text": "It's your change. It should be doing something.",
+  "sfx": [
+    { "src": "sfx/stamp.mp3", "atWord": "doing", "offset": -0.04, "volume": 0.7 },
+    { "src": "sfx/tail.mp3",  "at": 1.9 }
+  ] }
+```
+
+- **`at`** — seconds from **this beat's start**, like `texts[]` and `captionKeyframes`. It rides the
+  beat: when real VO moves the boundary, the effect moves with it.
+- **`atWord`** — anchor to a spoken word, resolved against *this build's* VO timings. A word (first
+  occurrence in this beat, case- and punctuation-insensitive) or a word index. Identical semantics
+  to a motion `keyframe`/`trigger` anchor, because it is the same resolver.
+- **`offset`** — seconds added to the resolved word start, either sign. Only valid with `atWord`.
+- `volume` / `pan` / `rate` behave exactly as above.
+
+Exactly one of `at` / `atWord` per entry.
+
+**Why `offset` exists.** A word's start is where the *word* begins, not necessarily where the hit
+should land. A click a couple of frames early reads as having *caused* the word; the same click a
+couple of frames late reads as dubbed over it. 30fps is 33ms per frame, so this is a millisecond
+control — and kino keeps it at millisecond resolution all the way into the mix.
+
+**Which to use.** Beat-relative for anything that belongs to what is being said or shown — a stamp
+on a word, a UI tick, a whoosh on a cut. Top-level for things that belong to the *timeline* rather
+than to a beat: a hit on the music's downbeat, a bookend at 0.0s, a tail after the last beat ends.
+
+A word-anchored effect survives mock → real with **no edit**, which is the whole point. Anchoring
+also fails loudly rather than silently: a word the beat never speaks fails the build listing the
+words it does speak, and `atWord` on a beat with no VO at all is an error, since nothing could ever
+fire it. For a `voFile` beat, anchor to the **transcribed** words — STT normalises some tokens
+("thirty" → "30") — and the error lists those, so copy from what it prints.
+
 ## Authoring against real audio
 
 Don't guess timestamps. Run `kino audio-markers <file>` on the VO track (or a music file) to get the structure to place cuts and `sfx[].at` against:

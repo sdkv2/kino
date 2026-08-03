@@ -463,15 +463,30 @@ export async function prepare(
   copyFileSync(vo.trackPath, join(publicDir, "vo.mp3"));
   // SFX + music bed: resolve (library id or project asset), stage into _public, warn on
   // placements the mix can't honour. duckSpans = per-segment VO spans (see MusicProps).
-  const sfx = (spec.sfx ?? []).map((s, i) => {
+  // Milliseconds, not the 2dp most times in this file carry: `offset` exists to place a transient
+  // to the frame (33ms at 30fps, 16ms at 60), and 10ms rounding would quantise that away. It is
+  // also exactly the resolution the mix can express — audioMix turns `at` into `adelay=<ms>`.
+  const round3 = (n: number) => Math.round(n * 1000) / 1000;
+  // Stage one effect into _public and shape it for the mixer. `at` is ABSOLUTE by the time this
+  // runs — a beat-relative entry is resolved against its beat's start first (see beatSfx below).
+  // `id` only names the staged file; keeping top-level ids bare (`sfx-0`) leaves the staging of
+  // every already-authored spec byte-identical.
+  // pan/rate are dropped at their defaults so the props (and the frame-cache key built from them)
+  // stay byte-identical for every spec authored before those knobs existed.
+  const stageSfx = (s: { src: string; volume: number; pan: number; rate: number }, at: number, id: string, where: string) => {
     const abs = resolveAudioSource(s.src, project);
-    const rel = `sfx-${i}${extname(abs)}`;
+    const rel = `sfx-${id}${extname(abs)}`;
     copyFileSync(abs, join(publicDir, rel));
-    if (s.at > vo.totalSec) log.warn(`sfx[${i}] at=${s.at}s is past the end of the VO (${vo.totalSec}s) — it will never play`);
-    // pan/rate are dropped at their defaults so the props (and the frame-cache key built from
-    // them) stay byte-identical for every spec authored before these knobs existed.
-    return { src: rel, at: s.at, volume: s.volume, ...(s.pan ? { pan: s.pan } : {}), ...(s.rate !== 1 ? { rate: s.rate } : {}) };
-  });
+    if (at > vo.totalSec) log.warn(`${where} at=${round3(at)}s is past the end of the VO (${vo.totalSec}s) — it will never play`);
+    return { src: rel, at, volume: s.volume, ...(s.pan ? { pan: s.pan } : {}), ...(s.rate !== 1 ? { rate: s.rate } : {}) };
+  };
+  const timelineSfx = (spec.sfx ?? []).map((s, i) => stageSfx(s, s.at, `${i}`, `sfx[${i}]`));
+  // Beat-relative effects, filled in during the renderSegments walk below (that is where each
+  // beat's startSec and spoken words are in scope). They are resolved to absolute times and merged
+  // into the one flat list the mixer reads, which is also why a KinoSegment never carries `sfx`:
+  // frameCache.ts hashes the whole segment object, so an audio field living on one would silently
+  // re-render the beat on every effect tweak.
+  const beatSfx: ReturnType<typeof stageSfx>[] = [];
   const beds = musicBeds(spec);
   // Every bed ducks under the same VO spans; each keeps its own level, curve and offset.
   const duckSpans = vo.timings.map((t) => ({ from: t.startSec, to: t.endSec }));
@@ -633,6 +648,18 @@ export async function prepare(
     // Beat's spoken words, beat-relative — every motion graphic (beat or overlay) gets them so it can
     // type text in sync with the VO. Independent of captionMode: the words exist even with captions off.
     const motionWords = beatRelativeWords(vo.words[i], startSec);
+    // Beat-relative sound effects → absolute, against THIS build's VO timings. Two things ride on
+    // doing it here rather than asking the author for a timeline second: a plain `at` follows the
+    // beat when real TTS moves the boundary, and `atWord` lands on the spoken word itself. Either
+    // way the placement survives mock→real with no edit, which is the whole point — `kino retune`
+    // rewrites motion triggers and backgroundTriggers, never sfx.
+    // `offset` nudges a transient off the word start (a click reads as caused a few frames early,
+    // dubbed a few frames late); clamped at 0 so a negative offset on the first word can't produce
+    // a negative timestamp.
+    for (const [j, e] of (resolveWordAnchors(seg.sfx, motionWords, `segment[${i}].sfx`) ?? []).entries()) {
+      const at = Math.max(0, round3(startSec + e.at + (e.offset ?? 0)));
+      beatSfx.push(stageSfx(e, at, `s${i}-${j}`, `segment[${i}].sfx[${j}]`));
+    }
     // atWord anchors resolve here — against THIS build's VO timings — so word-anchored
     // triggers/keyframes ride real TTS with no mock→real retune.
     const anchorMotion = (
@@ -761,7 +788,9 @@ export async function prepare(
     voTrack: "vo.mp3",
     background,
     disclosure: avatarRel ? (brand.presenterDisclosure ?? brand.disclosure) : brand.disclosure,
-    sfx,
+    // Timeline-absolute effects first, then the beat-relative ones resolved during the walk above.
+    // Order is presentational only — the mixer places each event with its own `adelay`.
+    sfx: [...timelineSfx, ...beatSfx],
     music,
     // Omitted at the identity so the frame-cache key is unchanged for every existing spec.
     ...(spec.voVolume !== 1 ? { voVolume: spec.voVolume } : {}),

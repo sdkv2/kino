@@ -624,8 +624,15 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   `volume` to match) and `sfx[].rate` (varispeed — pitch and length move together; transients only).
   `voVolume` (top level) trims the whole VO when it sits too far in front of the bed.
   Full field reference + traps: docs/audio.md.
-- **Place SFX after the real VO exists** (when used): `kino build --tts` → `kino inspect --real` and/or
-  `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not shipping.
+- **Put an effect on its BEAT, not on the timeline**: `segments[].sfx` takes `at` (seconds from that
+  beat's start) or **`atWord`** (a spoken word, same anchor motion keyframes use), plus `offset`
+  (seconds, `atWord` only) to trim the landing — a hit a few frames before a word reads as having
+  caused it, a few after as dubbed. Both forms **ride real TTS with no retune**, which top-level
+  `sfx[].at` does not: `kino retune` rewrites motion `triggers`/`backgroundTriggers` and never `sfx`.
+  Keep top-level `sfx` for hits that belong to the timeline — a music downbeat, a bookend, a tail.
+- **Place timeline SFX after the real VO exists** (when used): `kino build --tts` → `kino inspect --real`
+  and/or `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not
+  shipping — or anchor with `atWord` on the beat and skip this loop entirely.
 - **Music-driven pieces cut on the beat**: `kino sync <spec> --offset auto` detects the bed's
   beat grid, writes `music.startSec` (loudest on-grid stretch, opens on a hit) and retimes the
   visual beats' `dur`s so every cut lands on a bar (`--grain beat` for faster cutting; `--dry-run`

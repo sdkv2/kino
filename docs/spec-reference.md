@@ -140,6 +140,7 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
+| `sfx` | `{ src, at \| atWord, offset?, volume?, pan?, rate? }[]` | — | Sound effects placed on **this beat**: `at` is seconds from segment start, `atWord` anchors to a spoken word. Both ride real TTS with no retune, unlike a top-level [`sfx[].at`](#sound-effects--music). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Accepted by the schema, but a `scene` beat has no content layer of its own to apply it to (background + optional presenter only) — it validates and threads through, with no visible effect. Use `video`/`motion` for a beat that should actually blend. |
 
 ### `video` segment
@@ -170,6 +171,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
+| `sfx` | `{ src, at \| atWord, offset?, volume?, pan?, rate? }[]` | — | Sound effects placed on **this beat**: `at` is seconds from segment start, `atWord` anchors to a spoken word. Both ride real TTS with no retune, unlike a top-level [`sfx[].at`](#sound-effects--music). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's footage layer (not its chrome frame or kicker) against what's beneath it. Default `normal`. Same vocabulary as a declared layer's `blend` — see [Layers](#layers). |
 | `regionShader` | `{ mask?, masks?, subject?, background?, object?, params?, keyframes?, textures? }` | — | Split this beat's frame by a segmentation mask: subject region (`mask>0.5`) runs one `.frag`, background region another. `mask` = mask asset dir (`manifest.json` + `mask.png`/`mask.mp4` from [`kino segment`](segmentation.md)). `object` picks which packed object channel (0..3). Need at least one of `subject`/`background`; omit a side to pass that region's original pixels through. `masks` (up to 4) takes several mask sources in one beat, each optionally with its own `subject`; later entries paint over earlier ones. Unknown keys are rejected. See [Segmentation](segmentation.md). |
 | `regionShader.params` | `{ name: number\|string }` | — | Author params shared by **every** body in the beat (`subject`, `background`, and each `masks[].subject`) — they compile into one program with one uniform bank. Numeric names alias to `u_<name>` in GLSL, packed alphabetically into `uParam0..3`; `colorA`/`colorB`/`colorC` (hex) and `intensity` drive their own uniforms and cost no slot. Max **4** numeric names across `params` + `keyframes`; more is a build error, not a silent drop. |
@@ -199,6 +201,7 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
+| `sfx` | `{ src, at \| atWord, offset?, volume?, pan?, rate? }[]` | — | Sound effects placed on **this beat**: `at` is seconds from segment start, `atWord` anchors to a spoken word. Both ride real TTS with no retune, unlike a top-level [`sfx[].at`](#sound-effects--music). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's motion-graphic layer against what's beneath it. Default `normal`. |
 
 > **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS. `atWord` anchoring works in all motion slots (full-screen beats and overlays); other keyframe tracks (`backgroundKeyframes`, `zoomKeyframes`, `captionKeyframes`, …) remain seconds-only and keep their one-keyframe-holds idiom.
@@ -916,7 +919,12 @@ voiceover, ducking model, sourcing beds — see [Audio](audio.md).
   library (`assets-lib/sfx/<id>.mp3|.wav`, ships empty — add your own); a path resolves from
   the project's `assets/`. Omit `sfx` for silent cuts (preferred short-form default — no
   bundled cut whoosh).
-- `sfx[].at` — seconds on the main timeline. `volume` 0–1 (default `1`).
+- `sfx[].at` — seconds on the main timeline. `volume` 0–1 (default `1`). **A timeline second is the
+  wrong anchor for anything that belongs to a beat**: real TTS moves every boundary, so effects
+  placed against mock estimates all land wrong on the first real build, and `kino retune` only
+  rewrites motion `triggers`/`backgroundTriggers` — never `sfx`. Put those on the beat instead
+  (below); keep top-level `sfx` for hits that belong to the timeline itself — a downbeat in the
+  music, a bookend, a tail after the last beat.
 - `sfx[].pan` — stereo placement, `-1` hard left … `0` centre … `1` hard right (default `0`).
   Constant-power law scaled to be **unity at centre**, so `0` is genuinely "no pan" (kino emits
   no filter for it at all) and sweeping a sound across the field has no step in the middle. The
@@ -926,6 +934,16 @@ voiceover, ducking model, sourcing beds — see [Audio](audio.md).
   pitch and duration move together, like pitching a sampler. Right for transients (a semitone on
   a 100 ms click costs ~6% of its length and nobody hears it), wrong for anything with a tune in
   it. The event still starts at exactly `at` — the retime happens before the delay.
+- **`segments[].sfx`** — the same effect placed on a **beat**, which is what most effects want.
+  `at` is seconds from that beat's start (like `texts[]`/`captionKeyframes`), so it rides the beat
+  when VO timing shifts. `atWord` anchors to a spoken word instead — a word (first occurrence in
+  that beat, case/punctuation-insensitive) or a word index, resolved by the same resolver motion
+  keyframes use, so it survives mock → real with no edit. `offset` (seconds, either sign, `atWord`
+  only) trims the landing: a hit a couple of frames before a word reads as having caused it, a
+  couple after as dubbed over it — kept at millisecond resolution into the mix, since a frame is
+  33 ms at 30fps. Exactly one of `at`/`atWord` per entry. A missing word fails the build listing
+  what the beat does say; `atWord` on a beat with no VO is an error rather than silence. Full
+  discussion in [Audio](audio.md#on-a-beat-instead-of-the-timeline-segmentssfx).
 - `music` plays under the VO for the whole video: `volume` is the bed level (default `0.12`),
   `duck` the level while a segment is speaking (default `0.04`, with 0.3s linear ramps in/out
   of each VO span), `fadeOutSec` the linear tail fade to silence at the end of the video

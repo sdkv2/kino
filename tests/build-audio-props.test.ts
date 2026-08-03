@@ -106,3 +106,76 @@ describe("build.ts → KinoProps audio mapping", () => {
     expect(props.music).toBeNull();
   }, TIMEOUT);
 });
+
+// Beat-relative sound effects. The reason they exist: a timeline-absolute `sfx[].at` is placed
+// against mock estimates and is simply wrong once real TTS moves the beat boundaries — and unlike
+// motion triggers there is no `kino retune` path back for sfx. A beat-relative `at` rides the beat;
+// `atWord` rides the spoken word itself.
+describe("segment-level sfx", () => {
+  it("resolves a beat-relative `at` against the beat's start", async () => {
+    const specPath = await writeSpec({
+      segments: [
+        { kind: "scene", text: "first beat speaking", caption: "first" },
+        { kind: "scene", text: "second beat speaking", caption: "second", sfx: [{ src: "sfx/click.wav", at: 0.25, volume: 0.6 }] },
+      ],
+    });
+    const { props } = await prepare(specPath, { mock: true, format: "9:16" });
+    const beat1Start = props.segments[1].startSec;
+    expect(props.sfx).toEqual([{ src: "sfx-s1-0.wav", at: Math.round((beat1Start + 0.25) * 1000) / 1000, volume: 0.6 }]);
+    // It is genuinely offset by the beat, not coincidentally near zero.
+    expect(beat1Start).toBeGreaterThan(0.5);
+  }, TIMEOUT);
+
+  it("anchors to a spoken word, and applies `offset` to the word start", async () => {
+    const base = { kind: "scene", text: "it should be doing something", caption: "x" };
+    const plain = await writeSpec({ segments: [{ ...base, sfx: [{ src: "sfx/click.wav", atWord: "doing" }] }] });
+    const nudged = await writeSpec({ segments: [{ ...base, sfx: [{ src: "sfx/click.wav", atWord: "doing", offset: -0.04 }] }] });
+    const a = (await prepare(plain, { mock: true, format: "9:16" })).props;
+    const b = (await prepare(nudged, { mock: true, format: "9:16" })).props;
+    // "doing" is the 4th of 5 words, so the anchor is well into the beat rather than at its head.
+    expect(a.sfx![0].at).toBeGreaterThan(a.segments[0].startSec);
+    // The offset moves it earlier by exactly 40ms — millisecond precision survives, which is the
+    // point of offset (a frame is 33ms at 30fps).
+    expect(Math.round((a.sfx![0].at - b.sfx![0].at) * 1000)).toBe(40);
+  }, TIMEOUT);
+
+  it("keeps sfx off the segment props, so the per-segment frame-cache signature can't see them", async () => {
+    // frameCache hashes the WHOLE segment object. Resolving beat sfx into the flat props list at
+    // build time is what keeps an audio edit from re-rendering the beat.
+    const specPath = await writeSpec({
+      segments: [{ kind: "scene", text: "first beat speaking", caption: "first", sfx: [{ src: "sfx/click.wav", at: 0.1 }] }],
+    });
+    const { props } = await prepare(specPath, { mock: true, format: "9:16" });
+    expect(props.sfx).toHaveLength(1);
+    expect("sfx" in props.segments[0]).toBe(false);
+  }, TIMEOUT);
+
+  it("merges timeline and beat effects into one list, staged under non-colliding names", async () => {
+    const specPath = await writeSpec({
+      segments: [
+        { kind: "scene", text: "first beat speaking", caption: "first", sfx: [{ src: "sfx/click.wav", at: 0.1 }] },
+        { kind: "scene", text: "second beat speaking", caption: "second", sfx: [{ src: "sfx/click.wav", at: 0.2 }] },
+      ],
+      sfx: [{ src: "sfx/click.wav", at: 0.5 }],
+    });
+    const { props } = await prepare(specPath, { mock: true, format: "9:16" });
+    // Top-level ids stay bare so existing specs stage byte-identically.
+    expect(props.sfx!.map((s) => s.src)).toEqual(["sfx-0.wav", "sfx-s0-0.wav", "sfx-s1-0.wav"]);
+  }, TIMEOUT);
+
+  it("fails loudly when atWord names a word the beat never speaks, listing what it does say", async () => {
+    const specPath = await writeSpec({
+      segments: [{ kind: "scene", text: "it should be doing something", caption: "x", sfx: [{ src: "sfx/click.wav", atWord: "shear" }] }],
+    });
+    await expect(prepare(specPath, { mock: true, format: "9:16" })).rejects.toThrow(/segment\[0\]\.sfx.*"shear".*doing/s);
+  }, TIMEOUT);
+
+  it("fails when atWord is used on a beat that speaks nothing", async () => {
+    // A silent beat has no word timings, so the anchor could never fire. Failing beats silence.
+    const specPath = await writeSpec({
+      // `dur` with no `text` is the silent-beat form — no asset needed, and no word timings.
+      segments: [{ kind: "scene", dur: 2, sfx: [{ src: "sfx/click.wav", atWord: "anything" }] }],
+    });
+    await expect(prepare(specPath, { mock: true, format: "9:16" })).rejects.toThrow(/no spoken words/);
+  }, TIMEOUT);
+});
