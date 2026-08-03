@@ -59,11 +59,21 @@ export interface GpuCaptureNative {
 let cached: GpuCaptureNative | null | undefined;
 let resolvedPath: string | null | undefined;
 
+/** `linux-x64`, `darwin-arm64`, `win32-x64` … the prebuild key. Not ABI-qualified on purpose: the
+ *  addon is pure N-API, so one binary per platform+arch serves every Node/Electron version. */
+const PREBUILD_TRIPLE = `${process.platform}-${process.arch}`;
+
 function nodePath(): string | null {
   if (resolvedPath !== undefined) return resolvedPath;
   let dir = here;
   for (let i = 0; i < 8; i++) {
     const candidates = [
+      // Per-platform prebuilds first. A triple that does not match this machine is simply not
+      // found, which is the whole point — unlike the single build/Release artifact below, which is
+      // present on every platform but only loadable on the one that produced it.
+      join(dir, `prebuilds/${PREBUILD_TRIPLE}/gpu_capture.node`),
+      join(dir, `native/prebuilds/${PREBUILD_TRIPLE}/gpu_capture.node`),
+      // Local build output — what `npm run build:native` leaves behind for the current machine.
       join(dir, "native/build/Release/gpu_capture.node"),
       join(dir, "src/render/native/electron/native/build/Release/gpu_capture.node"),
     ];

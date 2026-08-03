@@ -45,17 +45,26 @@ demos/
 superpowers/
 docs/superpowers/
 
-# gpu_capture native addon — the BUILT artifact stays tracked, its scratch does not.
-# Keeping gpu_capture.node in git is deliberate: CI never runs `npm run build:native` (ci.yml does
-# `npm ci`, whose prepare script is tsc-only), so on macos-latest the committed binary is the only
-# thing loadGpuCapture() can find. Drop it and the suite silently degrades from `shared` capture to
-# `direct` — green either way, which is precisely the failure this repo tries not to ship. Rebuild
-# it with `npm run build:native` after any Electron major bump (it is ABI-pinned; 43.x = ABI 148).
+# gpu_capture native addon — NOTHING under build/ is tracked. Shipped binaries live in
+# prebuilds/<platform>-<arch>/ instead (written by `npm run build:native`).
+#
+# The reason a binary must be committed at all is real: CI never runs `npm run build:native` (ci.yml
+# does `npm ci`, whose prepare script is tsc-only), so without one loadGpuCapture() finds nothing and
+# the suite silently degrades from `shared`/`readback` capture to `direct` — green either way, which
+# is precisely the failure this repo tries not to ship.
+#
+# But build/Release holds exactly ONE binary, for whichever machine last ran the build. That is
+# present-but-unloadable on every other platform, which is strictly worse than absent: it produced a
+# Linux run that reported NVENC only after a manual rebuild, and would silently invalidate any
+# benchmark taken on a fresh non-macOS clone. Keying by platform-arch makes a foreign build
+# unreachable rather than mis-loaded.
+#
+# One prebuild per platform+arch is sufficient for ALL Electron versions: the addon is pure N-API
+# (node-addon-api, no raw v8), verified by loading an Electron-43 build inside plain Node 22 (ABI 148
+# vs 147). It is NOT ABI-pinned, so an Electron bump does not invalidate prebuilds.
+#
 # Everything else under build/ is node-gyp / @electron/rebuild scratch — Makefiles, config.gypi,
 # .deps and .o files — that bakes in an absolute path to whatever worktree last built it, so it
 # churns every diff and is regenerable in one command. bin/ is @electron/rebuild's per-ABI cache.
-src/render/native/electron/native/build/*
-!src/render/native/electron/native/build/Release/
-src/render/native/electron/native/build/Release/*
-!src/render/native/electron/native/build/Release/gpu_capture.node
+src/render/native/electron/native/build/
 src/render/native/electron/native/bin/

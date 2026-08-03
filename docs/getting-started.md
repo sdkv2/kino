@@ -38,6 +38,12 @@ npm install -g @sdkv2/kino
 **A source checkout** — only worth it for `kino update` (git pull + rebuild) or native rebuilds
 (`build:native`); everyday use doesn't need this. macOS/Linux, from inside your project directory:
 
+> **Working from a source checkout on a platform with no committed prebuild?** Run
+> `npm run build:native` once. The GPU encode addon ships as `prebuilds/<platform>-<arch>/`, and if
+> your triple isn't there the renderer silently falls back to a slower capture path rather than
+> failing — so a render still succeeds, just well below the speed the hardware can do. `kino doctor`
+> reports which capture backend you actually got.
+
 ```bash
 cd <your-project>
 bash <(curl -fsSL https://raw.githubusercontent.com/sdkv2/kino/main/install.sh)
