@@ -8,7 +8,7 @@ import { loadEnv } from "../config/env.js";
 import { DEFAULT_SKILL_AGENTS, listBundledSkills, missingSkillAgents } from "../config/skills.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../media/binPaths.js";
 import { listMusicIds, listSfxIds } from "../media/sfx.js";
-import { describeElectronHost, electronBinaryPath } from "../render/native/renderer.js";
+import { describeElectronHost, probeElectronInstall } from "../render/native/renderer.js";
 import { hasDisplay, nvidiaDrmModeset, type ModesetStatus } from "../render/native/sandbox.js";
 import { resolveWhisper } from "../vo/whisper.js";
 import { log } from "../log.js";
@@ -169,8 +169,9 @@ export async function doctor(): Promise<void> {
   ];
   for (const [n, ok] of checks) ok ? log.ok(n) : log.warn(`${n} missing`);
 
-  // Electron renders everything — video, stills, storyboards, frames — so this row is fatal-shaped
-  // rather than advisory: there is no second renderer to fall back to.
+  // Electron renders everything — video, stills, storyboards, frames — so a missing PACKAGE here is
+  // fatal-shaped rather than advisory: there is no second renderer to fall back to. A missing
+  // binary is only a pending download since Electron 42; describeElectronHost splits the two.
   const el = describeElectronHost();
   el.level === "ok" ? log.ok(el.message) : log.warn(el.message);
 
@@ -182,14 +183,12 @@ export async function doctor(): Promise<void> {
     const display = describeDisplayCheck();
     display.level === "ok" ? log.ok(display.message) : log.warn(display.message);
 
-    let bin: string | null = null;
-    try {
-      bin = electronBinaryPath();
-    } catch {
-      bin = null; // already reported by describeElectronHost above
-    }
-    if (bin) {
-      const libs = await describeSharedLibsCheck(bin);
+    // Probe, don't resolve: electronBinaryPath() would DOWNLOAD the binary (see
+    // probeElectronInstall), turning a diagnostic into a ~100MB install. An absent binary is
+    // already reported by the row above, and there is nothing for ldd to inspect yet.
+    const el = probeElectronInstall();
+    if (el.binOnDisk && el.binPath) {
+      const libs = await describeSharedLibsCheck(el.binPath);
       libs.level === "ok" ? log.ok(libs.message) : log.warn(libs.message);
     }
 
