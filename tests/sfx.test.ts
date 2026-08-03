@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveAudioSource, SFX_LIB_DIR, MUSIC_LIB_DIR, listMusicIds, listSfxIds } from "../src/media/sfx.js";
 import { containedPath } from "../src/config/project.js";
-import { SpecSchema } from "../src/spec/schema.js";
+import { SpecSchema, musicBeds } from "../src/spec/schema.js";
 import { assertAudioSources } from "../src/spec/validate.js";
 
 function fakeProject(root: string) {
@@ -53,14 +53,56 @@ const baseSpec = {
 };
 
 describe("spec sfx/music schema", () => {
-  it("parses sfx events and applies the volume default", () => {
+  it("parses sfx events and applies the volume/pan/rate defaults", () => {
     const s = SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 2.4 }] });
-    expect(s.sfx![0]).toEqual({ src: "pop", at: 2.4, volume: 1 });
+    expect(s.sfx![0]).toEqual({ src: "pop", at: 2.4, volume: 1, pan: 0, rate: 1 });
   });
 
-  it("parses music with defaults", () => {
+  it("parses sfx pan and rate", () => {
+    const s = SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, pan: -1, rate: 1.5 }] });
+    expect(s.sfx![0]).toMatchObject({ pan: -1, rate: 1.5 });
+  });
+
+  it("rejects pan outside -1..1 and a non-positive rate", () => {
+    expect(() => SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, pan: 1.5 }] })).toThrow();
+    expect(() => SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, rate: 0 }] })).toThrow();
+    expect(() => SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, rate: -1 }] })).toThrow();
+  });
+
+  it("parses music with defaults — and leaves `keyframes` absent so old props stay byte-identical", () => {
     const s = SpecSchema.parse({ ...baseSpec, music: { src: "bed/track.mp3" } });
     expect(s.music).toEqual({ src: "bed/track.mp3", volume: 0.12, duck: 0.04, fadeInSec: 0, fadeOutSec: 2, startSec: 0 });
+  });
+
+  it("accepts a single bed or an array of beds, and musicBeds normalizes both", () => {
+    const one = SpecSchema.parse({ ...baseSpec, music: { src: "a.mp3" } });
+    const many = SpecSchema.parse({ ...baseSpec, music: [{ src: "a.mp3" }, { src: "b.mp3", volume: 0.3 }] });
+    expect(musicBeds(one).map((b) => b.src)).toEqual(["a.mp3"]);
+    expect(musicBeds(many).map((b) => b.src)).toEqual(["a.mp3", "b.mp3"]);
+    expect(musicBeds({ music: undefined })).toEqual([]);
+    // By reference, so `kino sync` can write startSec straight back into the loaded spec.
+    musicBeds(one)[0].startSec = 4;
+    expect((one.music as { startSec: number }).startSec).toBe(4);
+  });
+
+  it("rejects an empty music array — an author meant to write something", () => {
+    expect(() => SpecSchema.parse({ ...baseSpec, music: [] })).toThrow();
+  });
+
+  it("parses music keyframes and rejects a typo'd param", () => {
+    const s = SpecSchema.parse({
+      ...baseSpec,
+      music: { src: "a.mp3", keyframes: [{ at: 3, params: { volume: 0 }, ease: "easeOut" }] },
+    });
+    expect((s.music as { keyframes: unknown[] }).keyframes).toEqual([{ at: 3, params: { volume: 0 }, ease: "easeOut" }]);
+    expect(() => SpecSchema.parse({ ...baseSpec, music: { src: "a.mp3", keyframes: [{ at: 1, params: { vol: 0.2 } }] } })).toThrow();
+    expect(() => SpecSchema.parse({ ...baseSpec, music: { src: "a.mp3", keyframes: [{ at: 1, params: { volume: 2 } }] } })).toThrow();
+  });
+
+  it("applies the voVolume default and rejects out-of-range gain", () => {
+    expect(SpecSchema.parse(baseSpec).voVolume).toBe(1);
+    expect(SpecSchema.parse({ ...baseSpec, voVolume: 0.6 }).voVolume).toBe(0.6);
+    expect(() => SpecSchema.parse({ ...baseSpec, voVolume: 1.4 })).toThrow();
   });
 
   it("rejects out-of-range volume and negative at", () => {

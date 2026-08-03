@@ -615,6 +615,15 @@ kino music "soft ambient pad loop" --get 2 --project <name>
   good beds, not chart songs. **Platform trending audio is not pullable** (copyright).
 - Short-form taste: sparse bed under VO; **no default cut whoosh** — silent cuts + ducked music
   are enough. Skip `sfx` unless a reveal/CTA earns a soft pop/click. Avoid loud drums fighting captions.
+- **Ride the bed by hand only where ducking can't hear**: `music.keyframes`
+  (`[{ at, params: { volume }, ease? }]`, absolute timeline seconds) sets the bed's level over
+  time — a drop on a hard cut, a swell into the CTA. `volume` is the implicit t=0 key, and
+  auto-ducking still applies on top, so a keyframe to `0` is a **gate the VO cannot reopen**.
+  `music` also takes an **array** for stacked beds (drone + pulse); they SUM, so split the budget.
+- **One sample, several sounds**: `sfx[].pan` (-1…1, constant-power, +3 dB at a hard pan — drop
+  `volume` to match) and `sfx[].rate` (varispeed — pitch and length move together; transients only).
+  `voVolume` (top level) trims the whole VO when it sits too far in front of the bed.
+  Full field reference + traps: docs/audio.md.
 - **Place SFX after the real VO exists** (when used): `kino build --tts` → `kino inspect --real` and/or
   `kino audio-markers` → set `sfx[].at` → rebuild (VO cached). Guessing `at` mid-word is not shipping.
 - **Music-driven pieces cut on the beat**: `kino sync <spec> --offset auto` detects the bed's

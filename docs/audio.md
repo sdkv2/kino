@@ -3,13 +3,17 @@
 A kino video has three audio layers, mixed automatically at render:
 
 1. **Voiceover** — the spoken track (ElevenLabs TTS), one read per segment `text`. It drives the whole timeline: caption timing, cuts, and ducking all key off the VO word timings.
-2. **Music bed** — one optional track under the whole video, **auto-ducked** while any segment is speaking.
+2. **Music beds** — one or more optional tracks under the whole video, **auto-ducked** while any segment is speaking.
 3. **Sound effects** — free-placed one-shots at explicit timestamps.
 
 VO always wins: the bed ducks and SFX sit under it. For where these fields live in the JSON, see the [Spec reference](spec-reference.md#sound-effects--music); for the commands, see the [CLI reference](cli-reference.md). To *write* VO that doesn't sound like AI, use the [`ad-voice`](../skills/ad-voice/SKILL.md) skill.
 
+**The mix sums, it does not normalize.** Every layer keeps exactly the level you authored (`amix … normalize=0`), so nothing quietly attenuates when you add a second bed or a loud effect — and nothing catches you when the total goes past full scale and clips. Budget the headroom yourself: a short-form piece with VO wants beds around `0.12`, and stacked beds want to *share* that, not each take it. `kino build` warns when the beds alone peak past `1.0`.
+
 - [Voiceover](#voiceover)
 - [Music beds](#music-beds)
+  - [Riding the bed (`music.keyframes`)](#riding-the-bed-musickeyframes)
+  - [Stacking beds](#stacking-beds)
 - [Sound effects](#sound-effects)
 - [Authoring against real audio](#authoring-against-real-audio)
 - [Licensing & attribution](#licensing--attribution)
@@ -28,6 +32,8 @@ Every segment's `text` is spoken. Pick the voice once at the top of the spec:
 
 - **`voice`** — an ElevenLabs voice id, or a `brand.voiceAliases` alias (e.g. `"narrator"` → an id). Falls back to `brand.defaultVoice` when unset. **Always search before picking:** run `kino voices [--gender <g>]` and choose the most appropriate match to the brand's Tone/Voice (and the avatar's gender/age when a presenter is used) — never default to the same voice across brands without searching the catalog.
 - **`voiceModel`** — the TTS model. Default `eleven_v3`, which supports **inline audio tags** in `text` — `[excited]`, `[whispers]`, `[short pause]`, etc. Tags are spoken as direction and **stripped from the word-synced captions**. Set `eleven_multilingual_v2` for more timing-stable / metronome-critical reads (no tags). Both `voice` and `voiceModel` can be defaulted per brand (`brand.defaultVoice`, `brand.voiceModel`) — the spec value wins.
+
+- **`voVolume`** — a 0–1 gain on the whole VO track, top level, default `1`. Reach for it when the read sits too far in front of a busy bed and you would rather move the VO than fight every other level. It does **not** change ducking: the bed ducks on *when* segments speak, not how loud they are, so turning the VO down does not open the bed back up.
 
 Get exact per-word VO timings with `kino inspect <spec> --real` — use them to place `sfx[].at`, cuts, and background keyframes on the words. `--real` reads the voiceover a previous `kino build <spec> --tts` cached, so run that once first; it errors rather than falling back to the estimate.
 
@@ -60,7 +66,7 @@ podcast clip — by pointing `voFile` at a project audio asset:
 
 ## Music beds
 
-One bed plays under the entire video. It **ducks automatically** whenever a segment is speaking, so you never hand-key volume around the VO:
+A bed plays under the entire video. It **ducks automatically** whenever a segment is speaking, so you never hand-key volume around the VO:
 
 ```json
 "music": { "src": "music/bed.mp3", "volume": 0.12, "duck": 0.04, "fadeInSec": 0, "fadeOutSec": 2 }
@@ -74,11 +80,74 @@ One bed plays under the entire video. It **ducks automatically** whenever a segm
 | `fadeInSec` | `0` | Head fade from silence (avoids a click on loop-audio starts). |
 | `fadeOutSec` | `2` | Linear tail fade to silence at the end of the video. |
 | `startSec` | `0` | Offset into the source the bed plays from (sample-accurate). Set by `kino sync --offset auto`, or by hand to skip an intro. |
+| `keyframes` | — | Hand-keyed bed level over time — see [Riding the bed](#riding-the-bed-musickeyframes). |
 
 **Music-only pieces:** with no VO there is nothing to duck under — set `volume` to the level you
 want (e.g. `0.85`) and `duck` to the same value.
 
 Overlapping VO spans take the *most-ducked* level, so back-to-back beats never pop the bed up in a short gap. The curve is `musicVolumeAt` in [`src/render/audio.ts`](../src/render/audio.ts).
+
+### Riding the bed (`music.keyframes`)
+
+Auto-ducking handles the VO. `keyframes` handle everything ducking can't hear: a drop on a cut, a
+swell into the CTA, a bed that has to get out of the way of a piece of footage that has its own
+audio.
+
+```json
+"music": {
+  "src": "music/bed.mp3", "volume": 0.12,
+  "keyframes": [
+    { "at": 4.0, "params": { "volume": 0.12 } },
+    { "at": 4.4, "params": { "volume": 0 } },
+    { "at": 6.0, "params": { "volume": 0 } },
+    { "at": 6.6, "params": { "volume": 0.3 }, "ease": "easeOut" }
+  ]
+}
+```
+
+`at` is **absolute seconds on the main timeline** — the same clock as `sfx[].at` and the same one
+`kino inspect` prints — not an offset into the source file. `startSec` moves what the bed is
+playing; keyframes move how loud it is, and the two are independent.
+
+Three things worth knowing before you key anything:
+
+- **`volume` is the implicit `t=0` keyframe.** A lone keyframe *tweens from the bed's base level*
+  rather than snapping to itself — the same rule as motion `params` and effect keyframes. Want a
+  flat level up to a point and then a move? Key the flat level explicitly first, as above at `4.0`.
+- **Ducking still applies on top.** The bed's level at any instant is the *lower* of your curve and
+  the duck. So keyframing to `0` is a **hard gate** the VO can't lift back up, which is exactly what
+  you want for a silent beat — and a VO span that lands inside a fade ramps toward the level the bed
+  is actually at, rather than stepping back up to the authored `volume` and then ducking from there.
+- **The fades are still multiplicative.** `fadeInSec`/`fadeOutSec` scale whatever the curve says, so
+  a bed keyframed up to `0.3` at the end still fades out over `fadeOutSec`.
+
+`ease` takes any of the [standard curve names](spec-reference.md#keyframes--triggers); `hold` steps
+at the keyframe instead of lerping, which is the one to use for a hard mute.
+
+### Stacking beds
+
+`music` also accepts an **array**, for a bed that is really two or three parts — a drone, a pulse
+that only enters at the turn, a riser under the CTA:
+
+```json
+"music": [
+  { "src": "music/drone.mp3", "volume": 0.10, "duck": 0.04 },
+  { "src": "music/pulse.mp3", "volume": 0, "duck": 0,
+    "keyframes": [{ "at": 5.2, "params": { "volume": 0 } }, { "at": 5.6, "params": { "volume": 0.09 } }] }
+]
+```
+
+Every bed ducks under the same VO spans; each keeps its own `volume`, `duck`, `startSec`,
+`fadeInSec`/`fadeOutSec` and `keyframes`. Two traps:
+
+- **They sum.** Two beds at `0.12` are `0.24` under the VO, not `0.12` — the mix does plain
+  summation. Split the budget you would have given one bed, don't repeat it. `kino build` warns
+  when the beds alone peak past full scale.
+- **`kino sync` fits its grid to the first bed.** Put the one with the pulse first, and keep the
+  others phase-locked to it by hand (`startSec`).
+
+A bed that should only appear later is a bed keyframed up from `0` — there is no `startSec`-on-the-
+timeline field, because a bed's `startSec` is an offset into *its own file*.
 
 **Sourcing beds** — `kino music`:
 
@@ -96,15 +165,29 @@ Free-placed one-shots on the main timeline. Omit `sfx` entirely for **silent cut
 ```json
 "sfx": [
   { "src": "sfx/click.mp3", "at": 0.45, "volume": 0.22 },
-  { "src": "sfx/impact.mp3", "at": 7.9,  "volume": 0.7 }
+  { "src": "sfx/impact.mp3", "at": 7.9,  "volume": 0.7, "pan": -0.6, "rate": 1.2 }
 ]
 ```
 
 - **`at`** — seconds on the main timeline.
 - **`volume`** — 0–1, default `1`.
+- **`pan`** — `-1` hard left … `0` centre … `1` hard right, default `0`. Constant-power, scaled so
+  the centre is unity — `0` is genuinely "no pan" (kino emits no pan filter for it), and sweeping a
+  sound across the field has no step in the middle. The catch: constant power means a hard pan is
+  **+3 dB** in the channel it lands in, so a hard-panned hit at the same `volume` as a centred one
+  is noticeably louder. Pull `volume` down when you push `pan` out.
+- **`rate`** — playback rate, `>0`, default `1`. **Varispeed**: pitch and duration move together,
+  like pitching a sampler up. That is the right behaviour for transients — a semitone on a 100 ms
+  click costs about 6% of its length and nobody hears it — and the wrong tool for anything with a
+  tune in it, which will go up in key. It is *not* pitch-preserving time-stretch. The event still
+  starts at exactly `at`; only its tail moves.
 - **`src`** (both `sfx[]` and `music`) — a **bare id** (no slash, no extension) resolves from the shared library at `assets-lib/sfx/<id>` then `assets-lib/music/<id>` (`.mp3`/`.wav`). Both shared libraries ship empty — add your own clips there, or use a path. A **path** (e.g. `sfx/click.mp3`) resolves from the project's `assets/`. Every ref is checked at validate time, before any API spend — a bad id fails the build early.
 
 Silent cuts + a ducked bed read cleaner than busy SFX. Reach for effects sparingly, on a real beat.
+
+`pan` and `rate` are also the cheap way to get variety out of **one** sample: the same click at
+`rate` 1.0 / 1.12 / 0.94, alternating left and right, reads as three different sounds instead of a
+repeat. Reuse beats sourcing a second file.
 
 ## Authoring against real audio
 

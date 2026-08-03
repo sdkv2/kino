@@ -12,7 +12,7 @@ import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
 import { resolvePalette, type Palette } from "../config/palettes.js";
 import { readableInk } from "../render/contrast.js";
-import { loadSpec, parseSpec, type Spec } from "../spec/schema.js";
+import { loadSpec, parseSpec, musicBeds, type Spec } from "../spec/schema.js";
 import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
@@ -468,25 +468,41 @@ export async function prepare(
     const rel = `sfx-${i}${extname(abs)}`;
     copyFileSync(abs, join(publicDir, rel));
     if (s.at > vo.totalSec) log.warn(`sfx[${i}] at=${s.at}s is past the end of the VO (${vo.totalSec}s) — it will never play`);
-    return { src: rel, at: s.at, volume: s.volume };
+    // pan/rate are dropped at their defaults so the props (and the frame-cache key built from
+    // them) stay byte-identical for every spec authored before these knobs existed.
+    return { src: rel, at: s.at, volume: s.volume, ...(s.pan ? { pan: s.pan } : {}), ...(s.rate !== 1 ? { rate: s.rate } : {}) };
   });
+  const beds = musicBeds(spec);
+  // Every bed ducks under the same VO spans; each keeps its own level, curve and offset.
+  const duckSpans = vo.timings.map((t) => ({ from: t.startSec, to: t.endSec }));
   let music: KinoProps["music"] = null;
-  if (spec.music) {
-    const abs = resolveAudioSource(spec.music.src, project);
-    const rel = `music${extname(abs)}`;
-    copyFileSync(abs, join(publicDir, rel));
-    if (spec.music.duck > spec.music.volume) log.warn(`music.duck (${spec.music.duck}) > music.volume (${spec.music.volume}) — ducking would boost the bed; check the values`);
-    const musicSec = await probeDuration(abs);
-    if (musicSec < vo.totalSec) log.warn(`music is ${musicSec.toFixed(1)}s but the video runs ${vo.totalSec.toFixed(1)}s — the bed plays once and goes silent after it ends`);
-    music = {
-      src: rel,
-      volume: spec.music.volume,
-      duck: spec.music.duck,
-      fadeInSec: spec.music.fadeInSec,
-      fadeOutSec: spec.music.fadeOutSec,
-      startSec: spec.music.startSec,
-      duckSpans: vo.timings.map((t) => ({ from: t.startSec, to: t.endSec })),
-    };
+  if (beds.length) {
+    const label = (i: number) => (beds.length > 1 ? `music[${i}]` : "music");
+    music = [];
+    for (const [i, bed] of beds.entries()) {
+      const abs = resolveAudioSource(bed.src, project);
+      const rel = `music-${i}${extname(abs)}`;
+      copyFileSync(abs, join(publicDir, rel));
+      if (bed.duck > bed.volume) log.warn(`${label(i)}.duck (${bed.duck}) > ${label(i)}.volume (${bed.volume}) — ducking would boost the bed; check the values`);
+      const musicSec = await probeDuration(abs);
+      if (musicSec < vo.totalSec) log.warn(`${label(i)} is ${musicSec.toFixed(1)}s but the video runs ${vo.totalSec.toFixed(1)}s — the bed plays once and goes silent after it ends`);
+      music.push({
+        src: rel,
+        volume: bed.volume,
+        duck: bed.duck,
+        fadeInSec: bed.fadeInSec,
+        fadeOutSec: bed.fadeOutSec,
+        startSec: bed.startSec,
+        duckSpans,
+        ...(bed.keyframes?.length ? { keyframes: bed.keyframes } : {}),
+      });
+    }
+    // amix sums (normalize=0), so stacked beds add rather than share the headroom. Peak = the
+    // loudest level each bed ever reaches, keyframes included.
+    const peak = beds.reduce((sum, b) => sum + Math.max(b.volume, ...(b.keyframes ?? []).map((k) => k.params.volume)), 0);
+    if (peak > 1) {
+      log.warn(`music beds peak at a summed ${peak.toFixed(2)} — the mix sums (no auto-attenuation) and will clip before the VO is even in it; lower the levels`);
+    }
   }
   // Faceless background: stage the image (image kind) or read the custom draw-fn (custom kind).
   const bgKind = (opts.background as ReturnType<typeof resolveBackgroundKind> | undefined) ?? resolveBackgroundKind(brand, spec);
@@ -747,6 +763,8 @@ export async function prepare(
     disclosure: avatarRel ? (brand.presenterDisclosure ?? brand.disclosure) : brand.disclosure,
     sfx,
     music,
+    // Omitted at the identity so the frame-cache key is unchanged for every existing spec.
+    ...(spec.voVolume !== 1 ? { voVolume: spec.voVolume } : {}),
     segments: renderSegments,
     layers,
     ...(spec.postFx ? { postFx: spec.postFx as PostFx } : {}),

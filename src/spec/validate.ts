@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { Brand } from "../config/brand.js";
-import type { Spec } from "./schema.js";
+import { musicBeds, type Spec } from "./schema.js";
 import type { Project } from "../config/project.js";
 import type { Provider } from "../avatar/provider.js";
 import { lintMotionSource, type MotionSurface } from "../render/motiongraphic.js";
@@ -123,13 +123,14 @@ export function assertAudioSources(spec: Spec, project: { assetPath(rel: string)
       throw new Error(`sfx[${i}]: ${(e as Error).message}`);
     }
   });
-  if (spec.music) {
+  const beds = musicBeds(spec);
+  beds.forEach((bed, i) => {
     try {
-      resolveAudioSource(spec.music.src, project);
+      resolveAudioSource(bed.src, project);
     } catch (e) {
-      throw new Error(`music: ${(e as Error).message}`);
+      throw new Error(`music${beds.length > 1 ? `[${i}]` : ""}: ${(e as Error).message}`);
     }
-  }
+  });
 }
 
 const READY_PAIR: Record<string, string> = {
