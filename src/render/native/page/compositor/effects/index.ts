@@ -4,7 +4,7 @@ import type { EffectPass } from "./pass.js";
 import { blurPass } from "./blur.js";
 import { gradePass } from "./grade.js";
 import { glowPass } from "./glow.js";
-import { bloomPass } from "./bloom.js";
+import { bloomPass, bloomCompositePass } from "./bloom.js";
 import { lensPass } from "./lens.js";
 import { filmPass } from "./film.js";
 import { motionBlurPass } from "./motionBlur.js";
@@ -13,13 +13,14 @@ registerPass(blurPass);
 registerPass(gradePass);
 registerPass(glowPass);
 registerPass(bloomPass);
+registerPass(bloomCompositePass);
 registerPass(lensPass);
 registerPass(filmPass);
 registerPass(motionBlurPass);
 
 export { registerPass, runChain, getPass };
 export type { EffectPass };
-export { blurPass, gradePass, glowPass, bloomPass, lensPass, filmPass, motionBlurPass };
+export { blurPass, gradePass, glowPass, bloomPass, bloomCompositePass, lensPass, filmPass, motionBlurPass };
 
 /** Test hook. Renders a half-white / half-transparent source with a soft-edged coloured band,
  *  runs one effect, and reads back four numbers:
@@ -166,3 +167,7 @@ export function probeFilm(
   if (out !== src) pool.release(out);
   return { centre, corner, grainSpread };
 }
+
+// The full-post-chain probe lives in post.ts (it needs runPost), but is re-exported here so it
+// reaches the same KinoFx global the effect probes use — and so importing it registers the passes.
+export { probePostChain } from "../post.js";

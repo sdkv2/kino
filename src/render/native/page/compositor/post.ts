@@ -6,7 +6,7 @@ import type { EffectRef } from "./graph.js";
 import { postChainOrder, type PostFx } from "../../../postSpec.js";
 import { getPass, runChain } from "./effects/chain.js";
 import type { EffectPass } from "./effects/pass.js";
-import type { TargetPool, RenderTarget } from "./targets.js";
+import { TargetPool, type RenderTarget } from "./targets.js";
 
 export interface ResolvedPass {
   pass: EffectPass;
@@ -85,7 +85,8 @@ export function resolvePostChain(post: PostFx | undefined, theme: Theme): Resolv
       if (pass) {
         out.push({ pass, params: { ...params, axis: "x" } });
         out.push({ pass, params: { ...params, axis: "y" } });
-        out.push({ pass, params: { ...params, axis: "composite" } });
+        const composite = getPass("bloomComposite");
+        if (composite) out.push({ pass: composite, params: { ...params, axis: "composite" } });
       }
       continue;
     }
@@ -95,6 +96,10 @@ export function resolvePostChain(post: PostFx | undefined, theme: Theme): Resolv
   }
   return out;
 }
+
+/** The blur passes and the add-back are separate programs but one logical stage — they must stay
+ *  in the same slice so the add-back still sees the pre-bloom copy. */
+const isBloom = (name: string) => name === "bloom" || name === "bloomComposite";
 
 /** Run the resolved post chain over the composite. Caller owns `composite` when the chain is empty. */
 export function runPost(
@@ -109,10 +114,10 @@ export function runPost(
   let owned: RenderTarget | null = null;
   let i = 0;
   while (i < chain.length) {
-    if (chain[i].pass.name === "bloom") {
+    if (isBloom(chain[i].pass.name)) {
       const bloomOriginal = copyTarget(gl, pool, read);
       const bloomSlice: ResolvedPass[] = [];
-      while (i < chain.length && chain[i].pass.name === "bloom") {
+      while (i < chain.length && isBloom(chain[i].pass.name)) {
         const e = chain[i++];
         const params = { ...e.params };
         if (params.axis === "composite") params._originalTex = bloomOriginal.tex;
@@ -125,7 +130,7 @@ export function runPost(
       read = out;
     } else {
       const slice: ResolvedPass[] = [];
-      while (i < chain.length && chain[i].pass.name !== "bloom") slice.push(chain[i++]);
+      while (i < chain.length && !isBloom(chain[i].pass.name)) slice.push(chain[i++]);
       const out = runChain(gl, pool, read, slice as Array<{ pass: EffectPass; params: Record<string, number | string> }>, frame);
       if (owned) pool.release(owned);
       owned = out === read ? null : out;
@@ -133,4 +138,78 @@ export function runPost(
     }
   }
   return read;
+}
+
+/**
+ * Test hook: the FULL post chain over a real pooled target, not a single pass.
+ *
+ * This exists because `probeEffect` runs one pass with the default `axis`, so every bloom test
+ * ever written exercised the blur and never the add-back — which is how a dead `postFx.bloom`
+ * survived. Here the chain is resolved exactly as a render resolves it (bright-pass → blur x →
+ * blur y → composite), over a pool target with a real fbo, so the composite step and its
+ * `uOriginal` binding are actually covered.
+ *
+ * Fixture: black frame, one white disc at the centre. Returns the red channel sampled outward
+ * from the disc edge, so a working bloom shows light where the source is black.
+ *
+ * NOTE ON WHAT THIS CANNOT CATCH: the glProbe host runs a plain webgl2 context, while a render
+ * forces ANGLE/Metal. The miscompile that made the add-back a no-op reproduced only on the latter
+ * — this probe passed against the broken shader. It covers the chain's LOGIC (ordering, target
+ * lifetimes, the uOriginal binding); the pixel guarantee belongs to the real-render assertion in
+ * tests/postfx-integration.test.ts.
+ */
+export function probePostChain(canvas: HTMLCanvasElement, postFx: PostFx, offsets: number[], churn = 0): number[] {
+  const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true })!;
+  const pool = new TargetPool();
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const c2d = document.createElement("canvas");
+  c2d.width = w;
+  c2d.height = h;
+  const ctx = c2d.getContext("2d")!;
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(w / 2, h / 2, Math.max(2, w / 16), 0, Math.PI * 2);
+  ctx.fill();
+
+  const tex = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c2d);
+
+  // A REAL pooled target, blitted from the fixture — the composite path needs a source with an
+  // fbo, and pooling it is what puts the pool in the state a render leaves it in.
+  // Simulate what a layer walk leaves behind: targets acquired and handed back, so the free
+  // list is populated and `composite` itself comes out of it rather than being freshly made.
+  if (churn > 0) {
+    const scratch: RenderTarget[] = [];
+    for (let i = 0; i < churn; i++) scratch.push(pool.acquire(gl, w, h));
+    for (const t of scratch) pool.release(t);
+  }
+  const composite = pool.acquire(gl, w, h);
+  const blitSrc = gl.createFramebuffer()!;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, blitSrc);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, blitSrc);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, composite.fbo);
+  gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+
+  const theme = { bg: "#000000" } as unknown as Theme;
+  const out = runPost(gl, pool, composite, resolveTailPostChain(postFx, theme, 1), 0);
+
+  const px = new Uint8Array(4);
+  return offsets.map((d) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fbo);
+    gl.readPixels(Math.round(w / 2 + d), Math.round(h / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return px[0];
+  });
 }
