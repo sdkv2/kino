@@ -10,7 +10,7 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { prepare } from "./build.js";
-import { loadSpec } from "../spec/schema.js";
+import { loadSpec, musicBeds } from "../spec/schema.js";
 import { resolveAudioSource } from "../media/sfx.js";
 import { decodePcm } from "../media/markers.js";
 import { detectBeatGrid, pickLoudestGridStart, solveCutDurations, type BeatGrid } from "../media/beats.js";
@@ -34,7 +34,11 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
 export async function sync(specPath: string, opts: SyncOpts = {}): Promise<void> {
   const absPath = resolve(specPath);
   const working = loadSpec(absPath);
-  if (!working.music) throw new Error("spec has no music — `kino sync` retimes cuts against the music bed (add `music.src` first)");
+  // musicBeds hands back the authored objects by reference, so writing startSec below rewrites
+  // the spec in whichever shape the author used (single object or array).
+  const workingBeds = musicBeds(working);
+  if (!workingBeds.length) throw new Error("spec has no music — `kino sync` retimes cuts against the music bed (add `music.src` first)");
+  if (workingBeds.length > 1) log.info(`${workingBeds.length} music beds — syncing the grid against the first (${workingBeds[0].src})`);
 
   const grainBeats = (opts.grain ?? "bar") === "bar" ? 4 : 1;
   const spoken = working.segments.some((s) => s.text || s.voFile);
@@ -55,13 +59,14 @@ export async function sync(specPath: string, opts: SyncOpts = {}): Promise<void>
   });
   if (!timeline.some((t) => t.editable)) throw new Error("no visual beats with an authored `dur` — nothing sync can retime");
 
-  const musicAbs = resolveAudioSource(spec.music!.src, project);
+  const bed = musicBeds(spec)[0];
+  const musicAbs = resolveAudioSource(bed.src, project);
   const samples = await decodePcm(musicAbs, ANALYSIS_RATE);
   const musicSec = samples.length / ANALYSIS_RATE;
 
   // Choose the playback offset, then fit the grid LOCALLY over the window that will play —
   // real tracks drift, so a whole-file fit is only good enough to enumerate candidates.
-  let startSec = spec.music!.startSec;
+  let startSec = bed.startSec;
   if (opts.offset === "auto") {
     const coarse = detectBeatGrid(samples, ANALYSIS_RATE);
     if (!coarse) throw new Error("no beat grid detected in the music — pick a more percussive track");
@@ -100,7 +105,7 @@ export async function sync(specPath: string, opts: SyncOpts = {}): Promise<void>
   });
 
   log.info(`grid: ${grid.bpm} bpm · ${grainBeats === 4 ? "bar" : "beat"} = ${r3(grid.periodSec * grainBeats)}s · strength ${grid.strength}`);
-  if (opts.offset === "auto") log.info(`music.startSec: ${spec.music!.startSec} → ${r3(startSec)} (loudest on-grid window)`);
+  if (opts.offset === "auto") log.info(`music.startSec: ${bed.startSec} → ${r3(startSec)} (loudest on-grid window)`);
 
   let changed = 0;
   working.segments.forEach((seg, i) => {
@@ -123,8 +128,8 @@ export async function sync(specPath: string, opts: SyncOpts = {}): Promise<void>
     else if (c.deltaMs !== 0) log.info(`${label}: ${c.beforeSec}s → ${c.afterSec}s (${c.deltaMs > 0 ? "+" : ""}${c.deltaMs}ms)`);
   }
 
-  if (working.music!.startSec !== r3(startSec)) {
-    working.music!.startSec = r3(startSec);
+  if (workingBeds[0].startSec !== r3(startSec)) {
+    workingBeds[0].startSec = r3(startSec);
     changed++;
   }
 

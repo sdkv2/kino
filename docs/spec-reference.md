@@ -45,7 +45,8 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `captionReveal` | `word\|all` | — | Words-mode reveal: `word` (default, one word at a time) or `all` (whole line laid out, active-word highlight tracks VO). See [Captions](#captions). |
 | `captionMode` | `phrase\|words` | — | Caption mode; overrides `brand.captionMode`. See [Captions](#captions). |
 | `sfx` | [SfxEvent](#sound-effects--music)[] | — | Free-placed sound effects. See [Sound effects & music](#sound-effects--music). |
-| `music` | [Music](#sound-effects--music) | — | Music bed under the VO, auto-ducked while segments speak. See [Sound effects & music](#sound-effects--music). |
+| `music` | [Music](#sound-effects--music) \| [Music](#sound-effects--music)[] | — | Music bed under the VO, auto-ducked while segments speak. An array stacks several beds — all ducked under the same VO spans, each with its own level/curve/offset. See [Sound effects & music](#sound-effects--music). |
+| `voVolume` | number 0–1 | — | Gain on the whole VO track. Default `1` (untouched). Lower it when the read sits too far in front of a loud bed; it does **not** change ducking, which keys off VO *timing*, not level. |
 | `seamlessLoop` | boolean | — | Loop-ad contract: last beat must be `kind:"motion"`; validate warns if `film` unset/`>0` or first/last motion sources aren't a ready-state pair; post-build compares first/last frame RGB (warn only). Prefer `"film": 0`. Not the same as segment `loop` (Lottie playback). |
 | `motionBlur` | boolean | — | Automatic camera motion blur, default `true`: kino appends a derived `motionBlur` effect to a beat whose layer actually travels. Set `false` to disable the derivation (a hand-authored [`motionBlur`](#masks-and-effects) effect is still honoured). |
 | `postFx` | [PostFx](#post-fx) | — | Full-frame post stage over the finished composite (compositor only). See [Post FX](#post-fx). |
@@ -905,9 +906,10 @@ voiceover, ducking model, sourcing beds — see [Audio](audio.md).
 ```json
 "sfx": [
   { "src": "sfx/click.mp3", "at": 0.45, "volume": 0.22 },
-  { "src": "sfx/impact.mp3", "at": 7.9, "volume": 0.7 }
+  { "src": "sfx/impact.mp3", "at": 7.9, "volume": 0.7, "pan": -0.6, "rate": 1.2 }
 ],
-"music": { "src": "music/bed.mp3", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 }
+"music": { "src": "music/bed.mp3", "volume": 0.12, "duck": 0.04, "fadeOutSec": 2 },
+"voVolume": 1
 ```
 
 - `src` (both `sfx[]` and `music`) — a bare id (no slash/extension) resolves from the shared
@@ -915,12 +917,36 @@ voiceover, ducking model, sourcing beds — see [Audio](audio.md).
   the project's `assets/`. Omit `sfx` for silent cuts (preferred short-form default — no
   bundled cut whoosh).
 - `sfx[].at` — seconds on the main timeline. `volume` 0–1 (default `1`).
+- `sfx[].pan` — stereo placement, `-1` hard left … `0` centre … `1` hard right (default `0`).
+  Constant-power law scaled to be **unity at centre**, so `0` is genuinely "no pan" (kino emits
+  no filter for it at all) and sweeping a sound across the field has no step in the middle. The
+  price of constant power is that a hard pan is +3 dB in the channel it lands in — pull `volume`
+  down on hard-panned hits or they will be the loudest thing in the mix.
+- `sfx[].rate` — playback rate, `>0` (default `1`). This is **varispeed**, not time-stretch:
+  pitch and duration move together, like pitching a sampler. Right for transients (a semitone on
+  a 100 ms click costs ~6% of its length and nobody hears it), wrong for anything with a tune in
+  it. The event still starts at exactly `at` — the retime happens before the delay.
 - `music` plays under the VO for the whole video: `volume` is the bed level (default `0.12`),
   `duck` the level while a segment is speaking (default `0.04`, with 0.3s linear ramps in/out
   of each VO span), `fadeOutSec` the linear tail fade to silence at the end of the video
   (default `2`), and `startSec` (default `0`) the offset into the source file the bed plays
   from — sample-accurate, so a beat-aligned offset stays beat-aligned. `kino sync --offset auto`
   sets it to the loudest on-grid stretch of the track; hand-set it to skip an intro.
+- `music.keyframes` — `[{ at, params: { volume }, ease? }]`, tweening the **bed level** over time.
+  `at` is absolute seconds on the main timeline (like `sfx[].at`, not an offset into the source),
+  and the bed's own `volume` is the implicit `t=0` keyframe, so a lone keyframe tweens from it.
+  **Ducking still applies on top**: the resolved level is the *lower* of the curve and the duck,
+  so a keyframe to `0` is a hard gate ducking cannot lift back up, and a VO span inside a swell
+  ramps toward the level the bed is actually at rather than stepping back to `volume`.
+- `music` may be an **array** of beds — a drone plus a pulse plus a riser. Every bed ducks under
+  the same VO spans and gets its own `volume`/`duck`/`startSec`/`keyframes`. `kino sync` fits its
+  grid to the first bed.
+- `voVolume` (top level, default `1`) scales the whole VO track. Ducking is unaffected: it keys
+  off *when* segments speak, not how loud they are.
+- **The mix sums.** `amix` runs with `normalize=0` so every layer keeps its authored level, which
+  also means N beds + VO + a hard-panned effect can add past full scale and clip, with nothing
+  downstream to catch it. `kino build` warns when the beds alone peak past `1.0`; the VO and SFX
+  on top of that are yours to budget.
 - **`kino sync <spec>`** retimes the visual beats (those with an authored `dur`) so every cut —
   and the video's end — lands on the music bed's beat grid: it detects bpm/phase over the
   stretch that will actually play, then rewrites `dur`s (`--grain bar` default, `--grain beat`

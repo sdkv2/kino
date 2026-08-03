@@ -222,6 +222,22 @@ const SfxEvent = z
     src: z.string().min(1), // bare library id ("pop") or project asset path ("sfx/hit.mp3")
     at: z.number().min(0), // seconds on the main timeline
     volume: z.number().min(0).max(1).default(1),
+    // Stereo placement, -1 hard left … 0 centre … 1 hard right. Constant-power law, unity at
+    // centre — so 0 is exactly "no pan" and a sweep through centre has no step.
+    pan: z.number().min(-1).max(1).default(0),
+    // Varispeed: pitch and length move together (asetrate), like pitching a sampler. Right for
+    // short transients, wrong for anything with a tune in it.
+    rate: z.number().gt(0).max(4).default(1),
+  })
+  .strict();
+// A hand-keyed point on a bed's volume curve. `at` is absolute seconds on the MAIN timeline (like
+// sfx[].at), not an offset into the source file — the bed is a top-level concept, so its keyframes
+// read against the same clock as everything else the author is watching.
+const MusicKeyframe = z
+  .object({
+    at: z.number().min(0),
+    params: z.object({ volume: z.number().min(0).max(1) }).strict(),
+    ease: EaseEnum.optional(),
   })
   .strict();
 const Music = z
@@ -232,8 +248,12 @@ const Music = z
     fadeInSec: z.number().min(0).default(0), // head fade (avoids a click on loop-audio starts)
     fadeOutSec: z.number().min(0).default(2),
     startSec: z.number().min(0).default(0), // play the bed from this offset into the file (`kino sync --offset auto` sets it to a beat)
+    // Hand-keyed bed level over time. `volume` above is the implicit t=0 keyframe (same idiom as
+    // motion params and effect keyframes), and ducking still applies ON TOP — see render/audio.ts.
+    keyframes: z.array(MusicKeyframe).optional(),
   })
   .strict();
+export type MusicBed = z.infer<typeof Music>;
 
 // Imported real voiceover for a beat: a project audio asset used instead of TTS. Word timings
 // come from STT on real builds (Scribe with an ElevenLabs key, else local whisper.cpp; KINO_STT
@@ -549,7 +569,10 @@ const SpecObject = z
     captionReveal: CaptionReveal.optional(), // words-mode reveal: "word" (default) | "all" (whole line laid out, highlight tracks VO)
     captionMode: CaptionMode.optional(), // "phrase" | "words" — spec-wide caption mode (brand < spec < segment)
     sfx: z.array(SfxEvent).optional(), // free-placed sound effects (place with `kino audio-markers`)
-    music: Music.optional(), // music bed under the VO, auto-ducked while segments speak
+    // One bed, or several stacked (drone + pulse + riser). Every bed ducks under the same VO
+    // spans but keeps its own level/curve/offset. Read it with `musicBeds()`, never by shape.
+    music: z.union([Music, z.array(Music).min(1)]).optional(),
+    voVolume: z.number().min(0).max(1).default(1), // gain on the whole VO track (1 = untouched)
     // Web/hero loop: last beat should settle to the first-frame ready-state. Enables validate
     // guidance + a post-build first/last-frame seam check (warn only). Not the same as segment
     // `loop` (Lottie playback).
@@ -605,6 +628,18 @@ export const SpecSchema = SpecObject
 
 export type Spec = z.infer<typeof SpecSchema>;
 export type Segment = z.infer<typeof Segment>;
+
+/**
+ * Top-level `music` as a list — `{...}` and `[{...}]` are the same thing downstream.
+ *
+ * Returns the authored objects BY REFERENCE (no copy), so a command that rewrites a bed in place
+ * — `kino sync` writing `startSec` — can mutate what it gets back and still write the spec out in
+ * whichever shape the author used.
+ */
+export function musicBeds(spec: Pick<Spec, "music">): MusicBed[] {
+  if (!spec.music) return [];
+  return Array.isArray(spec.music) ? spec.music : [spec.music];
+}
 
 /** Top-level / brand fields agents often park on a segment by mistake. */
 const TOP_LEVEL_KEYS: Record<string, string> = {

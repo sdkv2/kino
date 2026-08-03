@@ -1,18 +1,21 @@
-// Audio for the native engine, mixed node-side with ffmpeg: the VO track plain, each SFX delayed
-// to its timestamp at its own volume, and the music bed pre-shaped by the EXACT musicVolumeAt curve
-// (the same pure function the legacy engine evaluated per frame) applied per-sample to raw PCM —
-// sample-accurate ducking/fades with no filter-expression approximation.
+// Audio for the native engine, mixed node-side with ffmpeg: the VO track (plus `voVolume` when the
+// spec asks for one), each SFX delayed to its timestamp at its own volume/pan/rate, and every music
+// bed pre-shaped by the EXACT musicVolumeAt curve (the same pure function the legacy engine
+// evaluated per frame) applied per-sample to raw PCM — sample-accurate ducking/fades/keyframes with
+// no filter-expression approximation.
+//
+// The filter STRINGS come from audioFilters.ts (pure, unit-tested). This file owns the process
+// work: decoding, the per-sample shaping loop, and the one amix call.
 import { execa } from "execa";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
 import { musicVolumeAt } from "../audio.js";
-import type { KinoProps } from "../props.js";
+import type { KinoProps, MusicProps } from "../props.js";
+import { RATE, UNIFORM, sfxFilterChain, voFilterChain } from "./audioFilters.js";
 
-const RATE = 44100;
-
-async function shapeMusicBed(srcAbs: string, music: NonNullable<KinoProps["music"]>, endSec: number, workDir: string): Promise<string> {
-  const raw = join(workDir, "music-raw.pcm");
+async function shapeMusicBed(srcAbs: string, music: MusicProps, endSec: number, outBase: string, workDir: string): Promise<string> {
+  const raw = join(workDir, `${outBase}-raw.pcm`);
   // startSec: output-side -ss (after -i) decodes and discards, so the offset is
   // sample-accurate — beat-grid phase alignment depends on this.
   const seek = music.startSec > 0 ? ["-ss", String(music.startSec)] : [];
@@ -25,6 +28,7 @@ async function shapeMusicBed(srcAbs: string, music: NonNullable<KinoProps["music
     fadeInSec: music.fadeInSec,
     fadeOutSec: music.fadeOutSec,
     endSec,
+    keyframes: music.keyframes,
   };
   const samples = buf.length >> 1; // interleaved stereo s16le
   for (let i = 0; i < samples; i++) {
@@ -34,7 +38,7 @@ async function shapeMusicBed(srcAbs: string, music: NonNullable<KinoProps["music
     buf.writeInt16LE(v, i * 2);
   }
   writeFileSync(raw, buf);
-  const out = join(workDir, "music-shaped.wav");
+  const out = join(workDir, `${outBase}-shaped.wav`);
   await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-f", "s16le", "-ar", String(RATE), "-ac", "2", "-i", raw, out]);
   return out;
 }
@@ -46,29 +50,30 @@ export async function buildAudioTrack(props: KinoProps, publicDir: string, endSe
   const mixLabels: string[] = [];
   const addInput = (path: string) => inputs.push(path) - 1;
 
-  const uniform = "aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo";
-
   if (props.voTrack) {
     const idx = addInput(join(publicDir, props.voTrack));
-    filters.push(`[${idx}:a]${uniform}[vo]`);
+    filters.push(voFilterChain(idx, "vo", props.voVolume));
     mixLabels.push("[vo]");
   }
   (props.sfx ?? []).forEach((s, i) => {
     if (s.at >= endSec) return; // the composition never mounts these either
     const idx = addInput(join(publicDir, s.src));
-    const ms = Math.round(s.at * 1000);
-    filters.push(`[${idx}:a]${uniform},adelay=${ms}|${ms},volume=${s.volume}[sfx${i}]`);
+    filters.push(sfxFilterChain(s, idx, `sfx${i}`));
     mixLabels.push(`[sfx${i}]`);
   });
-  if (props.music) {
-    const shaped = await shapeMusicBed(join(publicDir, props.music.src), props.music, endSec, workDir);
+  // Beds are shaped serially: each is a full decode + per-sample pass, and they contend for the
+  // same disk and the same ffmpeg. A stack of beds is 2–3 deep in practice, not 30.
+  for (const [i, bed] of (props.music ?? []).entries()) {
+    const shaped = await shapeMusicBed(join(publicDir, bed.src), bed, endSec, `music-${i}`, workDir);
     const idx = addInput(shaped);
-    filters.push(`[${idx}:a]${uniform}[mus]`);
-    mixLabels.push("[mus]");
+    filters.push(`[${idx}:a]${UNIFORM}[mus${i}]`);
+    mixLabels.push(`[mus${i}]`);
   }
   if (!inputs.length) return null;
 
   // normalize=0: plain summation — each layer keeps its authored volume (no auto-attenuation).
+  // Which also means the mix CAN clip: N beds + VO + a hard-panned effect all add up, and nothing
+  // downstream rescues that. `kino build` warns when the beds alone sum past full scale.
   filters.push(`${mixLabels.join("")}amix=inputs=${mixLabels.length}:duration=longest:normalize=0,apad[mix]`);
   const out = join(workDir, "mix.wav");
   const args = ["-y", "-loglevel", "error"];

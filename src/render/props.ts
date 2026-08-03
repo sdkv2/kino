@@ -247,10 +247,15 @@ export interface MotionEnv {
 }
 
 // A staged sound-effect event (staticFile-relative src, absolute timeline seconds).
+// `pan`/`rate` are OMITTED at their defaults rather than written as 0/1: sfx is part of the
+// frame-cache key (render/native/frameCache), and JSON.stringify drops undefined, so an existing
+// project's cache keeps serving instead of cold-starting on a field that changes no pixels.
 export interface SfxProps {
   src: string;
   at: number;
   volume: number;
+  pan?: number; // -1 hard left … 1 hard right; undefined = centre (no pan filter emitted)
+  rate?: number; // varispeed multiplier; undefined = 1 (no rate filter emitted)
 }
 
 // Music bed under the VO. duckSpans = the per-segment VO-active spans the bed ducks under
@@ -263,6 +268,13 @@ export interface MusicProps {
   fadeOutSec: number;
   startSec: number; // decode offset into the source file (0 = play from the top)
   duckSpans: Array<{ from: number; to: number }>;
+  keyframes?: MusicKeyframeProps[]; // hand-keyed bed level; `volume` is the implicit t=0 key
+}
+
+export interface MusicKeyframeProps {
+  at: number; // absolute seconds on the main timeline
+  params: { volume: number };
+  ease?: Ease;
 }
 
 export interface KinoProps {
@@ -274,7 +286,9 @@ export interface KinoProps {
   background: BackgroundProps; // background engine selection
   disclosure: string;
   sfx?: SfxProps[]; // free-placed sound effects
-  music?: MusicProps | null; // music bed, ducked while VO speaks
+  music?: MusicProps[] | null; // music beds, all ducked under the same VO spans
+  /** Gain on the whole VO track. Omitted at the default (1) so the frame-cache key is unchanged. */
+  voVolume?: number;
   segments: KinoSegment[];
   /** Author-declared layers, sorted into the built-in stack by z. See render/layerSpec.ts. */
   layers?: DeclaredLayer[];
