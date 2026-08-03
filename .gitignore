@@ -44,3 +44,18 @@ demos/
 .superpowers/
 superpowers/
 docs/superpowers/
+
+# gpu_capture native addon — the BUILT artifact stays tracked, its scratch does not.
+# Keeping gpu_capture.node in git is deliberate: CI never runs `npm run build:native` (ci.yml does
+# `npm ci`, whose prepare script is tsc-only), so on macos-latest the committed binary is the only
+# thing loadGpuCapture() can find. Drop it and the suite silently degrades from `shared` capture to
+# `direct` — green either way, which is precisely the failure this repo tries not to ship. Rebuild
+# it with `npm run build:native` after any Electron major bump (it is ABI-pinned; 43.x = ABI 148).
+# Everything else under build/ is node-gyp / @electron/rebuild scratch — Makefiles, config.gypi,
+# .deps and .o files — that bakes in an absolute path to whatever worktree last built it, so it
+# churns every diff and is regenerable in one command. bin/ is @electron/rebuild's per-ABI cache.
+src/render/native/electron/native/build/*
+!src/render/native/electron/native/build/Release/
+src/render/native/electron/native/build/Release/*
+!src/render/native/electron/native/build/Release/gpu_capture.node
+src/render/native/electron/native/bin/
