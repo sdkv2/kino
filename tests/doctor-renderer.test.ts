@@ -1,64 +1,112 @@
 import { describe, it, expect } from "vitest";
-import { describeElectronHost, electronBinaryPath } from "../src/render/native/renderer.js";
+import { join } from "node:path";
+import {
+  describeElectronHost,
+  probeElectronInstall,
+  type ElectronInstall,
+} from "../src/render/native/renderer.js";
 import {
   describeDisplayCheck,
   describeModesetCheck,
   describeSharedLibsCheck,
 } from "../src/commands/doctor.js";
 
-// Electron renders everything now, so a missing host is fatal rather than a degradation — there is
-// no headless-Chrome path left to point the user at.
+const install = (o: Partial<ElectronInstall>): ElectronInstall => ({
+  installed: true,
+  binPath: "/pkg/node_modules/electron/dist/electron",
+  binOnDisk: true,
+  ...o,
+});
+
+// Electron renders everything now, so a missing PACKAGE is fatal rather than a degradation — there
+// is no headless-Chrome path left to point the user at. A missing BINARY is not fatal: since
+// Electron 42 it downloads on first use, so that row must not claim renders will fail.
 describe("describeElectronHost", () => {
   it("warns actionably when electron is not installed at all", () => {
-    const missing = () => {
-      throw Object.assign(new Error("Cannot find module 'electron'"), { code: "MODULE_NOT_FOUND" });
-    };
-    const r = describeElectronHost(missing);
+    const r = describeElectronHost(() =>
+      install({ installed: false, binPath: null, binOnDisk: false, error: "Cannot find module 'electron'" }),
+    );
     expect(r.level).toBe("warn");
     expect(r.message).toMatch(/every render will fail/);
     expect(r.message).toMatch(/npm install/);
   });
 
-  it("warns when the package resolved but its binary never downloaded", () => {
-    const r = describeElectronHost(
-      () => "/pkg/node_modules/electron/dist/electron",
-      () => false,
-    );
+  it("describes a not-yet-downloaded binary as pending, not as a broken install", () => {
+    const r = describeElectronHost(() => install({ binPath: null, binOnDisk: false }));
     expect(r.level).toBe("warn");
-    expect(r.message).toMatch(/binary is missing/);
+    // The whole point of this row: it self-heals, so it must not claim renders will fail...
+    expect(r.message).not.toMatch(/every render will fail/);
+    expect(r.message).toMatch(/downloaded|download/i);
+    // ...and must not suggest reinstalling, which cannot help — there is no install script left.
+    expect(r.message).not.toMatch(/reinstall/i);
+    expect(r.message).toMatch(/install-electron/);
   });
 
-  it("reports ok with the binary path when the host is installed", () => {
-    const r = describeElectronHost(
-      () => "/pkg/node_modules/electron/dist/electron",
-      () => true,
-    );
+  it("treats a resolvable path that is not on disk the same as never downloaded", () => {
+    const r = describeElectronHost(() => install({ binOnDisk: false }));
+    expect(r.level).toBe("warn");
+    expect(r.message).toMatch(/install-electron/);
+  });
+
+  it("reports ok with the binary path when the host is fully installed", () => {
+    const r = describeElectronHost(() => install({}));
     expect(r.level).toBe("ok");
     expect(r.message).toContain("/pkg/node_modules/electron/dist/electron");
   });
+});
 
-  it("treats an empty resolution as missing rather than ok", () => {
-    const r = describeElectronHost(
-      () => "",
-      () => true,
+// A diagnostic must not install anything. Before Electron 42 this was free — the postinstall had
+// already run — but `require("electron")` now downloads ~100MB, so doctor has to read the install
+// rather than resolve through it.
+describe("probeElectronInstall", () => {
+  it("reads path.txt without executing electron's index.js", () => {
+    const seen: string[] = [];
+    const r = probeElectronInstall(
+      {},
+      (p) => {
+        seen.push(p);
+        return true;
+      },
+      () => "Electron.app/Contents/MacOS/Electron\n",
     );
-    expect(r.level).toBe("warn");
+    expect(r.installed).toBe(true);
+    expect(r.binOnDisk).toBe(true);
+    expect(r.binPath).toContain(join("dist", "Electron.app", "Contents", "MacOS", "Electron"));
+    // path.txt is consulted; nothing resolves through require("electron") itself.
+    expect(seen.some((p) => p.endsWith("path.txt"))).toBe(true);
   });
 
-  // Exercises the real resolution the render host spawns through, without assuming electron is
-  // installed: `npm i --omit=optional` skips it, and that is precisely the scenario
-  // describeElectronHost exists to describe — this test must not hard-fail under it.
-  it("resolves the real electron binary when installed, and degrades cleanly when it is not", () => {
-    let bin: string | null = null;
-    try {
-      bin = electronBinaryPath();
-    } catch {
-      bin = null;
-    }
+  it("reports installed-but-not-downloaded when path.txt is absent", () => {
+    const r = probeElectronInstall(
+      {},
+      () => false,
+      () => {
+        throw new Error("should not read a file that does not exist");
+      },
+    );
+    expect(r.installed).toBe(true);
+    expect(r.binOnDisk).toBe(false);
+    expect(r.binPath).toBeNull();
+  });
+
+  it("honours ELECTRON_OVERRIDE_DIST_PATH so a prebuilt dist isn't misreported as missing", () => {
+    const r = probeElectronInstall(
+      { ELECTRON_OVERRIDE_DIST_PATH: "/opt/electron" },
+      () => true,
+      () => "electron\n",
+    );
+    expect(r.binPath).toBe(join("/opt/electron", "electron"));
+    expect(r.binOnDisk).toBe(true);
+  });
+
+  // Runs against the real tree. Must not hard-fail when electron is absent (`npm i --omit=optional`)
+  // — that is exactly the state this function exists to describe.
+  it("describes the real install without downloading anything", () => {
+    const r = probeElectronInstall();
     const host = describeElectronHost();
-    if (bin) {
+    if (r.installed && r.binOnDisk) {
       expect(host.level).toBe("ok");
-      expect(bin).toContain("electron");
+      expect(r.binPath).toContain("electron");
     } else {
       expect(host.level).toBe("warn");
     }
