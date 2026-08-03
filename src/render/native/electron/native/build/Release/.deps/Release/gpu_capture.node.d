@@ -1,1 +1,0 @@
-cmd_Release/gpu_capture.node := c++ -bundle -undefined dynamic_lookup -Wl,-search_paths_first -mmacosx-version-min=12.0 -arch arm64 -L./Release -stdlib=libc++  -o Release/gpu_capture.node Release/obj.target/gpu_capture/gpu_capture.o Release/nothing.a -framework IOSurface -framework CoreVideo -framework VideoToolbox -framework CoreMedia -framework CoreFoundation

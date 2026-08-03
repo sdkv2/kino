@@ -150,7 +150,8 @@ const exclude = scope === "full" ? configDefaults.exclude : [...configDefaults.e
 export default defineConfig({
   test: {
     globals: true,
-    globalSetup: ["tests/setup/scratchSweep.ts"],
+    // electronBinary first: it must win the download race before any worker forks (see that file).
+    globalSetup: ["tests/setup/electronBinary.ts", "tests/setup/scratchSweep.ts"],
     env: { KINO_GPU: "0" },
     projects: projectsFor(scope),
   },
