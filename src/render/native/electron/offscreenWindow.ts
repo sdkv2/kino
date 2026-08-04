@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { ensureElectronApp } from "./app.js";
 import { CaptureProfiler } from "./captureProfile.js";
 import { ERR_TEXT_JS } from "./errText.js";
+import { READBACK_HELPERS_JS, syncReadbackEnabled } from "./readbackJs.js";
 import {
   loadGpuCapture,
   reconcileCapture,
@@ -70,6 +71,16 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
     );
   });
 }
+
+/** seekReadback result: the frame plus a per-leg split of where its wall time went. */
+type ReadbackLegs = {
+  fatal: string | null;
+  w?: number;
+  h?: number;
+  msSeek?: number;
+  msRead?: number;
+  msPush?: number;
+};
 
 /** seekFrame result with in-page Date.now() stamps for cross-process attribution. */
 type SeekResult = { fatal: string | null; tEnter: number; tExit: number };
@@ -518,6 +529,8 @@ export class OffscreenRenderWindow {
       wc.executeJavaScript(`
         (async () => {
           const errText = ${ERR_TEXT_JS};
+          ${READBACK_HELPERS_JS}
+          const t0 = performance.now();
           try {
             const fatal = await window.kinoSeek(${frame}).then(() => window.__kinoFatal ?? null);
             if (fatal) return { fatal: String(fatal) };
@@ -526,24 +539,34 @@ export class OffscreenRenderWindow {
             const gl = c.getContext("webgl2");
             if (!gl) return { fatal: "webgl2 context missing" };
             const w = c.width, h = c.height;
-            const px = new Uint8Array(w * h * 4);
-            gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+            const tSeeked = performance.now();
+            const px = ${syncReadbackEnabled()} ? syncRead(gl, w, h) : pboRead(gl, w, h);
+            const tRead = performance.now();
             if (!window.kinoElectron?.pushFrame) return { fatal: "kinoElectron preload missing" };
             await window.kinoElectron.pushFrame(px, w, h);
-            return { fatal: null, w, h };
+            const tPush = performance.now();
+            return { fatal: null, w, h,
+              msSeek: tSeeked - t0, msRead: tRead - tSeeked, msPush: tPush - tRead };
           } catch (e) {
             return { fatal: "in-page readback threw: " + errText(e) };
           }
         })()
-      `) as Promise<{ fatal: string | null; w?: number; h?: number }>,
+      `) as Promise<ReadbackLegs>,
       SEEK_TIMEOUT_MS,
       `seekReadback(${frame})`,
-    )) as { fatal: string | null; w?: number; h?: number };
+    )) as ReadbackLegs;
 
     if (result.fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${result.fatal}`);
     const pixels = this.lastPixels;
     if (!pixels) throw new Error(`readback produced no pixels on frame ${frame}`);
     this.capProf.add("seek-readback", performance.now() - tAll);
+    // Leg split: which of seek / pixel transport / IPC actually costs. `rb:read` is the transport
+    // (PBO, or the old sync readPixels under KINO_RB_SYNC=1); `rb:push` the 8.3MB hop to the worker.
+    if (result.msSeek != null) {
+      this.capProf.add("rb:seek", result.msSeek);
+      this.capProf.add("rb:read", result.msRead ?? 0);
+      this.capProf.add("rb:push", result.msPush ?? 0);
+    }
     this.lastPixels = null;
     return pixels;
   }

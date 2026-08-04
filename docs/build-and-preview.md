@@ -89,6 +89,7 @@ WebGL2 on any backend, so run under `xvfb-run` on a headless box. `kino doctor` 
 | `KINO_SHADER_DRAFT=1` | Force SS=1 even on non-mock encodes. |
 | `KINO_DRAFT_EDGE=<px>\|off` | Draft output short edge (default **720**). The composition is unchanged — a draft is the same frame on fewer pixels. `off` renders drafts at full size. |
 | `KINO_ELECTRON_CAPTURE=…` | Pin the capture backend: `shared`, `readback`, `direct`, `page` (default `auto`). |
+| `KINO_RB_SYNC=1` | `readback` only: restore the pre-PBO synchronous `readPixels` transport. For A/B-ing the two on one build — the PBO default measured 23.5ms/frame vs 34.6ms on an M4. |
 | `KINO_ELECTRON_ARGS="…"` | Extra Chromium flags for the render host. A `--use-angle` here overrides the platform default. |
 | `KINO_CONCURRENCY=N` | Render worker count. Auto default caps at 4; override for more VRAM/compute. Linux also bounds by probed VRAM and NVENC sessions (`KINO_VRAM_PER_WORKER`, `KINO_NVENC_SESSIONS`). |
 

@@ -208,6 +208,17 @@ export function resolveElectronCapture(
   // clean runs). Explicit `KINO_ELECTRON_CAPTURE=readback` still works (see the `mode === "readback"`
   // branch above) for anyone benchmarking NVENC. If you're reading this because `direct` is beating
   // a hardware encoder and that looks wrong: it isn't, re-run the benchmark before "fixing" it back.
+  //
+  // STALE AS OF THE PBO TRANSPORT (see electron/readbackJs.ts): every readback number above was
+  // measured against a synchronous `readPixels`, which is no longer what readback does. That
+  // transport measured 34.6ms/frame on an M4; the PBO one measures 23.5ms and lifted the same
+  // spec from 86.1 to 99.6 fps (+16%). The Linux `seek-readback` cost those numbers rest on was
+  // 95.33ms/frame, ~72ms of it the very call that got replaced — so the 2.0× gap above is no
+  // longer a measurement of anything that ships, and the direct-vs-readback question on NVIDIA is
+  // genuinely open again. It has NOT been re-measured on Linux, so the default stays `direct`:
+  // flipping it on the strength of a macOS result would be exactly the mistake this comment
+  // already warns about. Re-run the sweep on real NVIDIA hardware first — `KINO_RB_SYNC=1`
+  // restores the old transport in-place, so both sides are one env var apart on the same build.
   if (linux) return "direct";
   return "shared";
 }
