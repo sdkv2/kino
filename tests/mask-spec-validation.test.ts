@@ -44,21 +44,21 @@ describe("validateSegmentFx", () => {
     expect(validateSegmentFx({ blend: "screen" }, 0)).toEqual([]);
   });
 
-  it('rejects a "file"-kind segment mask, naming the beat — the compositor has no binding for it', () => {
+  it('accepts a "file"-kind segment mask — the binding is wired now', () => {
+    // #25: planMaskJobs extracts lmask<beat> frames (coverage + SDF), registry registers them,
+    // renderer binds them. A well-formed file mask is a valid segment mask.
     const errs = validateSegmentFx(
       { mask: { source: { kind: "file", src: "masks/subject/mask.mp4", channel: "r" } } },
       5,
     );
-    expect(errs[0]).toMatch(/beat 5/);
-    expect(errs[0]).toMatch(/mask\.source\.kind "file"/);
-    expect(errs[0]).toMatch(/not supported/i);
+    expect(errs).toEqual([]);
   });
 
-  it('still reports other mask errors on a "file"-kind mask alongside the unsupported-kind error', () => {
-    // No `src` — validateMask's own check and the new unsupported-kind check both fire.
+  it('still reports OTHER mask errors on a "file"-kind mask', () => {
+    // No `src` — validateMask's own check fires; the kind itself is no longer an error.
     const errs = validateSegmentFx({ mask: { source: { kind: "file", channel: "r" } } }, 0);
     expect(errs.some((e) => /mask\.source\.src is required/.test(e))).toBe(true);
-    expect(errs.some((e) => /mask\.source\.kind "file"/.test(e))).toBe(true);
+    expect(errs.some((e) => /mask\.source\.kind "file"/.test(e))).toBe(false);
   });
 
   it('does not reject "shape" or "layer" mask kinds', () => {

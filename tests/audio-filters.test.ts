@@ -48,6 +48,41 @@ describe("sfxFilterChain", () => {
   });
 });
 
+describe("sfx fades", () => {
+  it("emits nothing for absent fades — byte-identical to the unfaded chain", () => {
+    expect(sfxFilterChain({ at: 1, volume: 1, fadeInSec: 0, fadeOutSec: 0 }, 0, "s")).toBe(
+      sfxFilterChain({ at: 1, volume: 1 }, 0, "s"),
+    );
+  });
+
+  it("fades in from the event's own start, before adelay", () => {
+    const chain = sfxFilterChain({ at: 2, volume: 1, fadeInSec: 0.05 }, 0, "s");
+    expect(chain).toBe(`[0:a]${UNIFORM},afade=t=in:st=0:d=0.05,adelay=2000|2000,volume=1[s]`);
+    // The fade must land before the event is placed, or it would fade the timeline around `at`.
+    expect(chain.indexOf("afade")).toBeLessThan(chain.indexOf("adelay"));
+  });
+
+  it("fades out the LAST fadeOutSec via reverse-fade-reverse", () => {
+    const chain = sfxFilterChain({ at: 1, volume: 1, fadeOutSec: 0.15 }, 0, "s");
+    expect(chain).toBe(`[0:a]${UNIFORM},areverse,afade=t=in:st=0:d=0.15,areverse,adelay=1000|1000,volume=1[s]`);
+  });
+
+  it("combines fade-in and fade-out, both before adelay", () => {
+    const chain = sfxFilterChain({ at: 3, volume: 0.5, fadeInSec: 0.02, fadeOutSec: 0.1 }, 1, "s");
+    const adelay = chain.indexOf("adelay");
+    expect(chain.indexOf("afade=t=in:st=0:d=0.02")).toBeLessThan(adelay);
+    expect(chain.indexOf("areverse")).toBeLessThan(adelay);
+    expect(chain.indexOf("areverse,afade=t=in:st=0:d=0.1,areverse")).toBeLessThan(adelay);
+  });
+
+  it("rides after the varispeed pair, so fades scale with rate", () => {
+    const chain = sfxFilterChain({ at: 1, volume: 1, rate: 2, fadeInSec: 0.05 }, 0, "s");
+    // asetrate first (retimes the clock), THEN the fade — so fade seconds are played seconds.
+    expect(chain.indexOf("asetrate")).toBeLessThan(chain.indexOf("afade"));
+    expect(chain).toContain("asetrate=88200,aresample=44100,afade=t=in:st=0:d=0.05,adelay=1000|1000");
+  });
+});
+
 describe("panGains", () => {
   it("is unity at centre, so pan 0 really is 'no pan'", () => {
     const c = panGains(0);

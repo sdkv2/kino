@@ -53,14 +53,19 @@ const baseSpec = {
 };
 
 describe("spec sfx/music schema", () => {
-  it("parses sfx events and applies the volume/pan/rate defaults", () => {
+  it("parses sfx events and applies the volume/pan/rate/fade defaults", () => {
     const s = SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 2.4 }] });
-    expect(s.sfx![0]).toEqual({ src: "pop", at: 2.4, volume: 1, pan: 0, rate: 1 });
+    expect(s.sfx![0]).toEqual({ src: "pop", at: 2.4, volume: 1, pan: 0, rate: 1, fadeInSec: 0, fadeOutSec: 0 });
   });
 
-  it("parses sfx pan and rate", () => {
-    const s = SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, pan: -1, rate: 1.5 }] });
-    expect(s.sfx![0]).toMatchObject({ pan: -1, rate: 1.5 });
+  it("parses sfx pan, rate and fades", () => {
+    const s = SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, pan: -1, rate: 1.5, fadeInSec: 0.02, fadeOutSec: 0.1 }] });
+    expect(s.sfx![0]).toMatchObject({ pan: -1, rate: 1.5, fadeInSec: 0.02, fadeOutSec: 0.1 });
+  });
+
+  it("rejects a negative fade", () => {
+    expect(() => SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, fadeInSec: -0.1 }] })).toThrow();
+    expect(() => SpecSchema.parse({ ...baseSpec, sfx: [{ src: "pop", at: 1, fadeOutSec: -1 }] })).toThrow();
   });
 
   it("rejects pan outside -1..1 and a non-positive rate", () => {

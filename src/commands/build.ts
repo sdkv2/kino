@@ -162,22 +162,10 @@ function resolveDeclaredLayers(
     }
 
     if (kind === "video") {
-      const isStill = /\.(jpe?g|png|webp)$/i.test(src);
       if (!existsSync(project.assetPath(src))) fail(`video source not found: assets/${src}`);
-      if (!isStill) {
-        // GAP (task-7-report.md / task-7b-brief.md): videoFrames.ts's planMediaJobs walks
-        // props.segments and props.avatarWindows only — it never walks props.layers, so a declared
-        // video layer never gets a MediaEntry and createFramesSource has nothing to draw (registry.ts
-        // falls back to a still image only when the extension matches one). Staging the file and
-        // calling it "resolved" would reproduce exactly the silent-nothing bug this task exists to
-        // close, just one layer deeper — fail loudly here instead until a job planner walks
-        // declared layers too.
-        fail(
-          `source.src "${src}": a declared "video" layer needs per-frame extraction, which is not wired ` +
-            `up yet (videoFrames.ts's planMediaJobs walks segments/avatarWindows, not spec.layers) — ` +
-            `use a still image (.png/.jpg/.jpeg/.webp) for a declared "video" layer for now`,
-        );
-      }
+      // Real footage (mp4/mov) and stills both stage here. planMediaJobs walks props.layers for the
+      // video kind (keyed by layer id), so a footage layer gets a MediaEntry and createFramesSource
+      // draws it; a still falls back to createImageSource in registry.ts. Same contract as segments.
       stageAsset(src);
       return { ...d, source: { ...d.source, url: src } };
     }
@@ -473,12 +461,20 @@ export async function prepare(
   // every already-authored spec byte-identical.
   // pan/rate are dropped at their defaults so the props (and the frame-cache key built from them)
   // stay byte-identical for every spec authored before those knobs existed.
-  const stageSfx = (s: { src: string; volume: number; pan: number; rate: number }, at: number, id: string, where: string) => {
+  const stageSfx = (s: { src: string; volume: number; pan: number; rate: number; fadeInSec: number; fadeOutSec: number }, at: number, id: string, where: string) => {
     const abs = resolveAudioSource(s.src, project);
     const rel = `sfx-${id}${extname(abs)}`;
     copyFileSync(abs, join(publicDir, rel));
     if (at > vo.totalSec) log.warn(`${where} at=${round3(at)}s is past the end of the VO (${vo.totalSec}s) — it will never play`);
-    return { src: rel, at, volume: s.volume, ...(s.pan ? { pan: s.pan } : {}), ...(s.rate !== 1 ? { rate: s.rate } : {}) };
+    return {
+      src: rel, at, volume: s.volume,
+      ...(s.pan ? { pan: s.pan } : {}),
+      ...(s.rate !== 1 ? { rate: s.rate } : {}),
+      // Dropped at 0 like pan/rate, so an unfaded spec's props (and frame-cache key) stay
+      // byte-identical — the mixer emits no filter for an absent fade either.
+      ...(s.fadeInSec ? { fadeInSec: s.fadeInSec } : {}),
+      ...(s.fadeOutSec ? { fadeOutSec: s.fadeOutSec } : {}),
+    };
   };
   const timelineSfx = (spec.sfx ?? []).map((s, i) => stageSfx(s, s.at, `${i}`, `sfx[${i}]`));
   // Beat-relative effects, filled in during the renderSegments walk below (that is where each

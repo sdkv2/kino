@@ -112,13 +112,38 @@ export function planMediaJobs(props: KinoProps, fps: number): MediaJob[] {
       }
     }
   });
+  // Declared layers that are real footage: same extraction contract as a `seg{i}` beat, keyed by
+  // the layer's own id so registry.ts can bind it (`media[d.id]` → createFramesSource). The window
+  // mirrors layers.ts §11b — a `segment` binding borrows that beat's window; otherwise fromSec/toSec
+  // (default: whole composition). Clock is plain playback: no trim/speed/freeze on declared layers.
+  for (const d of props.layers ?? []) {
+    if (d.source?.kind !== "video") continue;
+    if (!d.source.url || !/\.(mp4|mov)$/i.test(d.source.url)) continue; // stills render directly
+    const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
+    const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
+    const compEndSec = props.segments.length ? props.segments[props.segments.length - 1].endSec : 0;
+    const toSec = bound ? bound.endSec : (d.toSec ?? compEndSec);
+    const fromFrame = f(fromSec, fps);
+    const seqDur = f(toSec, fps) - fromFrame;
+    if (seqDur <= 0) continue;
+    jobs.push({
+      key: d.id,
+      assetRel: d.source.url,
+      fromFrame,
+      seqDurFrames: seqDur,
+      startSec: 0,
+      stepSec: 1 / fps,
+      effFrame: (n) => n,
+      maxEffFrame: seqDur - 1,
+    });
+  }
   return jobs;
 }
 
 /** Media jobs for layer masks that are files. Shape and layer masks need no extraction.
  *  Keyed `lmask<segmentIndex>` so it cannot collide with the region-shader `rsmask<i>_<j>`
- *  namespace. SDF frames are written beside the mask frames by the same path region-shader
- *  masks already use. */
+ *  namespace, and `lmask-<layerId>` for declared layers' masks. SDF frames are written beside
+ *  the mask frames by the same path region-shader masks already use. */
 export function planMaskJobs(props: KinoProps, fps: number): MediaJob[] {
   const jobs: MediaJob[] = [];
   props.segments.forEach((s, i) => {
@@ -138,6 +163,31 @@ export function planMaskJobs(props: KinoProps, fps: number): MediaJob[] {
       maskChannels: [ch],
     });
   });
+  // Declared layers' file masks: same contract as a segment's, keyed by the layer id (mirrors how
+  // planMediaJobs keys a declared video layer by id). Window mirrors layers.ts §11b — segment
+  // binding borrows that beat's window, else fromSec/toSec, else the whole composition.
+  for (const d of props.layers ?? []) {
+    const mask = d.mask as { source?: { kind?: string; src?: string; channel?: string } } | undefined;
+    if (mask?.source?.kind !== "file" || !mask.source.src) continue;
+    const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
+    const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
+    const compEndSec = props.segments.length ? props.segments[props.segments.length - 1].endSec : 0;
+    const toSec = bound ? bound.endSec : (d.toSec ?? compEndSec);
+    const fromFrame = f(fromSec, fps);
+    const seqDur = Math.max(1, f(toSec, fps) - fromFrame);
+    const ch = mask.source.channel ?? "a";
+    jobs.push({
+      key: `lmask-${d.id}`,
+      assetRel: mask.source.src,
+      fromFrame,
+      seqDurFrames: seqDur,
+      startSec: 0,
+      stepSec: 1 / fps,
+      effFrame: (lf: number) => lf,
+      maxEffFrame: seqDur - 1,
+      maskChannels: [ch],
+    });
+  }
   return jobs;
 }
 

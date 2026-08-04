@@ -10,7 +10,7 @@ import { measureLayers, type ElementMeasure } from "../measure.js";
 import { log } from "../../log.js";
 import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
-import { buildAudioTrack } from "./audioMix.js";
+import { buildAudioTrack, type AudioTrack } from "./audioMix.js";
 import { angleBackend } from "./angle.js";
 import { frameCacheCovers, frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
@@ -909,13 +909,13 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
       ).catch(() => undefined);
     }
 
-    let mediaAndAudio: [PreparedMedia, string | null];
+    let mediaAndAudio: [PreparedMedia, AudioTrack];
     try {
       [mediaAndAudio] = await Promise.all([
         Promise.all([
           skipExtraction ? emptyMedia(scratch) : extractMedia(),
           buildAudioTrack(props, publicDir, endSec, scratch),
-        ]) as Promise<[PreparedMedia, string | null]>,
+        ]) as Promise<[PreparedMedia, AudioTrack]>,
         bootAhead,
       ]);
     } catch (err) {
@@ -924,7 +924,13 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
       await releaseElectronWorkers();
       throw err;
     }
-    let [{ framesDir, media }, audio] = mediaAndAudio;
+    let [{ framesDir, media }, audioTrack] = mediaAndAudio;
+    const audio = audioTrack.track;
+    // Per-frame mix envelope (0..1 RMS), threaded to the page so motion graphics can react to
+    // the audio (env.audio / --kino-audio). Attached to a COPY: props feeds the frame-cache key
+    // (audio must not move it — see frameCache.ts) and is reused across formats, so mutating it
+    // would either poison the key or leak the first format's envelope into the second.
+    const renderProps = audioTrack.envelope ? { ...props, audio: audioTrack.envelope } : props;
     if (skipExtraction) log.step("media: extraction skipped (every frame already cached)");
     lap("media+audio");
 
@@ -949,7 +955,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
         const requestedSource = resolveCaptureSource(process.env);
         const electronShared = useSharedTextureCapture();
         const server = await pointServerAt({
-          props, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
+          props: renderProps, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
           total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
           captureCodec: electronShared ? "h264" : "jpeg",
           captureSource: requestedSource,
@@ -1011,7 +1017,7 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           log.step(`media: capture resolved to ${electronKind}, not ${predictedKind} — extracting after all`);
           ({ framesDir, media } = await extractMedia());
           await pointServerAt({
-            props, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
+            props: renderProps, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
             total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
             captureCodec: electronShared ? "h264" : "jpeg",
             captureSource: requestedSource,

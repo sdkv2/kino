@@ -227,6 +227,8 @@ export interface MotionEnv {
   /** sin(progress·π) — 0 at beat edges, 1 mid (seam-safe life). */
   edge: number;
   pulse: number; // 0 → 1 trigger envelope (fast attack, exponential decay)
+  /** RMS loudness of the FINAL mixed audio at this frame (0..1); 0 when the build has no audio. */
+  audio: number;
   params: Record<string, BgParamValue>; // resolved spec params at this frame
   /** |cam[t] − cam[t−1]| × fps when the spec defines `cam`; else 0. */
   camVel: number;
@@ -256,6 +258,11 @@ export interface SfxProps {
   volume: number;
   pan?: number; // -1 hard left … 1 hard right; undefined = centre (no pan filter emitted)
   rate?: number; // varispeed multiplier; undefined = 1 (no rate filter emitted)
+  // Event fades, in played-event seconds. Undefined = no fade (no filter emitted — a 0 fade
+  // would emit an afade that changes nothing but the chain's bytes, and this object is part of
+  // the frame-cache key).
+  fadeInSec?: number;
+  fadeOutSec?: number;
 }
 
 // Music bed under the VO. duckSpans = the per-segment VO-active spans the bed ducks under
@@ -289,6 +296,10 @@ export interface KinoProps {
   music?: MusicProps[] | null; // music beds, all ducked under the same VO spans
   /** Gain on the whole VO track. Omitted at the default (1) so the frame-cache key is unchanged. */
   voVolume?: number;
+  /** Per-frame RMS envelope of the final mixed audio (0..1), one entry per composition frame.
+   *  Set only on the props the RENDER PAGE receives (engine attaches it to a copy AFTER the
+   *  frame-cache key is computed) — it never reaches frameCache.ts, exactly like music/sfx. */
+  audio?: number[];
   segments: KinoSegment[];
   /** Author-declared layers, sorted into the built-in stack by z. See render/layerSpec.ts. */
   layers?: DeclaredLayer[];

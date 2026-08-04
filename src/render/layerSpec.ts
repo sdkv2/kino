@@ -226,23 +226,9 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
 
     if (l.mask !== undefined) {
       errs.push(...validateMask(l.mask).map((m) => at(m)));
-      // See maskSpec.ts's matching check in validateSegmentFx for the full rationale: the
-      // compositor has no binding for a `file`-kind mask (renderer.ts's compositeLayerInner always
-      // passes `binding: { mask: null, ... }` for anything other than a `layer`-kind source), so
-      // this layer would render invisible rather than clipped. Declared layers route their `mask`
-      // through the exact same renderer code path as a segment's (`layers.ts` §11b threads
-      // `d.mask` onto the LayerDraw unchanged, same as §9's `caption{i}`), so the gap — and the
-      // fail-loud fix — apply here too, not just to segments.
-      const maskSrc = (l.mask as { source?: { kind?: unknown } }).source;
-      if (maskSrc && (maskSrc as { kind?: unknown }).kind === "file") {
-        errs.push(
-          at(
-            `mask.source.kind "file" is not supported on a declared layer yet — the compositor has no ` +
-              `binding for it (same gap as a segment's file mask; see maskSpec.ts's validateSegmentFx) ` +
-              `and this layer would render invisible; use mask.source.kind "shape" or "layer" instead`,
-          ),
-        );
-      }
+      // `file`-kind masks on a declared layer are bound now: planMaskJobs keys them lmask-<id>,
+      // the registry registers the frames source, and the renderer's mask branch binds it —
+      // the exact same path a segment's file mask uses (renderer.ts `lmask-${layer.id}`).
     }
   });
 

@@ -649,7 +649,7 @@ export class StageRenderer {
       backdropSnap = true;
     }
     try {
-      this.compositeLayerInnerWithBackdrop(dest, layer, source, frame, maskTargets);
+      this.compositeLayerInnerWithBackdrop(dest, layer, source, sources, frame, maskTargets);
     } finally {
       if (backdropSnap) clearBackdrop();
     }
@@ -659,6 +659,7 @@ export class StageRenderer {
     dest: RenderTarget,
     layer: LayerDraw,
     source: TextureSource,
+    sources: Map<string, TextureSource>,
     frame: number,
     maskTargets: Map<string, RenderTarget>,
   ): void {
@@ -694,6 +695,23 @@ export class StageRenderer {
             this.pool.release(rendered);
             current = masked;
           }
+        } else if (resolved.source.kind === "file") {
+          // The mask's frames (coverage + SDF) were extracted under lmask<beat> (segment masks)
+          // or lmask-<id> (declared-layer masks) and registered as sources in registry.ts; Stage
+          // prepares them each frame. Without an entry (media missing this frame, or a hand-built
+          // props with no extraction), bind nothing and let the shader sample null — same
+          // degradation as a layer mask whose target never rendered.
+          const beatKey = layer.group ? `lmask${/^beat(\d+)$/.exec(layer.group)?.[1] ?? ""}` : "";
+          const maskSource = sources.get(`lmask-${layer.id}`) ?? (beatKey ? sources.get(beatKey) : undefined);
+          const maskTex = maskSource?.texture(gl, frame, layer.source?.key);
+          if (maskTex) {
+            const sdfTex = (maskSource as { sdfTexture?: (g: WebGL2RenderingContext) => WebGLTexture | null }).sdfTexture?.(gl) ?? null;
+            const sdfMax = (maskSource as { sdfMax?: number }).sdfMax ?? 0;
+            binding = { mask: maskTex, sdf: sdfTex, sdfMax };
+          }
+          const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.compScale);
+          this.pool.release(rendered);
+          current = masked;
         } else {
           const masked = applyMask(gl, this.pool, rendered, resolved, binding, this.compScale);
           this.pool.release(rendered);

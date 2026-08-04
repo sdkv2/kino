@@ -38,6 +38,10 @@ export interface SfxFilterEvent {
   volume: number;
   pan?: number;
   rate?: number;
+  /** Fade the head of the EVENT over this many seconds (source-timeline; scales with rate). */
+  fadeInSec?: number;
+  /** Fade the tail of the EVENT over this many seconds (source-timeline; scales with rate). */
+  fadeOutSec?: number;
 }
 
 /**
@@ -56,6 +60,16 @@ export function sfxFilterChain(s: SfxFilterEvent, inputIdx: number, label: strin
   // semitone costs ~6% of its length, which nobody hears; on anything with a tune in it, this is
   // the wrong tool.
   if (s.rate != null && s.rate !== 1) parts.push(`asetrate=${Math.round(RATE * s.rate)}`, `aresample=${RATE}`);
+  // Fades ride the EVENT, before adelay places it. Fade-in is afade from the source's own start
+  // (st=0 — the event's head). Fade-out is the areverse trick: reverse, fade in the first
+  // fadeOutSec of the reversed stream (= the LAST fadeOutSec of the original), reverse back.
+  // That avoids needing the source duration, which the pure chain builder cannot know. Both sit
+  // AFTER the varispeed pair, so their seconds are the PLAYED event's seconds — a fade scales
+  // with `rate` exactly like the event does, and the reversed stream keeps the same clock
+  // (areverse preserves sample rate; afade on it is time-based, so the reversed fade's seconds
+  // are the original's).
+  if (s.fadeInSec != null && s.fadeInSec > 0) parts.push(`afade=t=in:st=0:d=${num(s.fadeInSec)}`);
+  if (s.fadeOutSec != null && s.fadeOutSec > 0) parts.push(`areverse,afade=t=in:st=0:d=${num(s.fadeOutSec)},areverse`);
   parts.push(`adelay=${ms}|${ms}`, `volume=${s.volume}`);
   if (s.pan != null && s.pan !== 0) {
     const { left, right } = panGains(s.pan);

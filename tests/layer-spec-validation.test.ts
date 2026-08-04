@@ -104,14 +104,14 @@ describe("validateLayers", () => {
     expect(errs.join()).toMatch(/^layer "leak": unknown mask source kind: nope/);
   });
 
-  it('rejects a "file"-kind mask on a declared layer, naming the layer — same unbound-texture gap as a segment mask', () => {
+  it('accepts a "file"-kind mask on a declared layer — the binding is wired now', () => {
+    // #25: planMaskJobs keys declared-layer file masks lmask-<id>, the registry registers the
+    // frames source, and the renderer binds it (same path as a segment's file mask).
     const errs = validateLayers(
       [{ ...ok, mask: { source: { kind: "file", src: "masks/subject/mask.png", channel: "r" } } }],
       1,
     );
-    expect(errs.join()).toMatch(/^layer "leak":/);
-    expect(errs.join()).toMatch(/mask\.source\.kind "file"/);
-    expect(errs.join()).toMatch(/not supported/i);
+    expect(errs).toEqual([]);
   });
 
   // Carried from Task 6's review: `layersAt`'s adjustment branch (§11b) pushes only

@@ -7,7 +7,7 @@ import type { Dims, TextureSource } from "./graph.js";
 
 export type { Dims };
 import { createCanvas2dSource } from "./providers/canvas2d.js";
-import { createFramesSource } from "./providers/frames.js";
+import { createFramesSource, createMaskFramesSource } from "./providers/frames.js";
 import { createHtmlSource } from "./providers/html.js";
 import { createImageSource } from "./providers/image.js";
 import { createLottieSource } from "./providers/lottie.js";
@@ -263,6 +263,7 @@ export function buildRegistry(
         scale,
         beatFrom,
         beatDur,
+        audio: props.audio,
         captionBottom: captionBandBottom(s, Boolean(props.avatar)),
       });
     };
@@ -357,7 +358,7 @@ export function buildRegistry(
         if (kind === "motion") {
           sources.set(
             d.id,
-            createMotionSource({ data, theme: props.theme, width: compDims.width, height: compDims.height, fps: props.fps, scale, beatFrom, beatDur }),
+            createMotionSource({ data, theme: props.theme, width: compDims.width, height: compDims.height, fps: props.fps, scale, beatFrom, beatDur, audio: props.audio }),
           );
         } else {
           sources.set(d.id, createLottieSource({ data, width: dims.width, height: dims.height, fps: props.fps, beatFrom, beatDur }));
@@ -365,11 +366,9 @@ export function buildRegistry(
       }
     } else if (kind === "video") {
       // createFramesSource needs a pre-extracted MediaEntry, keyed here under the layer's own id
-      // exactly like `media["seg{i}"]` — no job planner (videoFrames.ts's planMediaJobs) walks
-      // props.layers yet (see resolveDeclaredLayers in build.ts, which rejects a real video file
-      // for exactly this reason), so media[d.id] never exists in practice today. Mirrors the
-      // seg{i} fallback exactly: a real entry if one is ever produced, else the resolved still
-      // image, else nothing.
+      // exactly like `media["seg{i}"]` — planMediaJobs walks props.layers (keyed by id), so a
+      // footage layer has one. Mirrors the seg{i} fallback exactly: a real entry if one is ever
+      // produced, else the resolved still image, else nothing.
       const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
       const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
       const entry = media[d.id];
@@ -379,6 +378,27 @@ export function buildRegistry(
         sources.set(d.id, createImageSource("/public/" + d.source.url));
       }
     }
+  }
+
+  // File-kind layer masks: the lmask{i} / lmask-<id> entries planMaskJobs extracted are bound
+  // here as mask frames sources (coverage + signed-distance twin). The renderer finds the right
+  // one per layer — `lmask-<layer.id>` for a declared layer, `lmask<beat>` for a segment's — and
+  // Stage.tsx prepares it beside the layers, so the mask pass reads real pixels instead of the
+  // null texture that used to make every file-masked layer invisible.
+  props.segments.forEach((s, i) => {
+    const mask = (s as { mask?: { source?: { kind?: string } } }).mask;
+    if (mask?.source?.kind !== "file") return;
+    const entry = media[`lmask${i}`];
+    if (entry) sources.set(`lmask${i}`, createMaskFramesSource(entry, f(s.startSec)));
+  });
+  for (const d of props.layers ?? []) {
+    const mask = d.mask as { source?: { kind?: string } } | undefined;
+    if (mask?.source?.kind !== "file") continue;
+    const entry = media[`lmask-${d.id}`];
+    if (!entry) continue;
+    const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
+    const fromSec = bound ? bound.startSec : (d.fromSec ?? 0);
+    sources.set(`lmask-${d.id}`, createMaskFramesSource(entry, f(fromSec)));
   }
 
   return sources;

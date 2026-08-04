@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMotionVars, wordsShownAt, beatRelativeWords, resolveWordAnchors, cameraBlurVars } from "../src/render/motionVars.js";
+import { buildMotionVars, wordsShownAt, beatRelativeWords, resolveWordAnchors, cameraBlurVars, motionFrameState } from "../src/render/motionVars.js";
 
 // Role-keyed theme; the assertions below intentionally check the LEGACY --kino-* names too,
 // pinning the alias emission every pre-rename motion page depends on.
@@ -198,5 +198,37 @@ describe("beatRelativeWords", () => {
   it("returns undefined when there are no words (so the prop stays absent)", () => {
     expect(beatRelativeWords(undefined, 3)).toBeUndefined();
     expect(beatRelativeWords([], 3)).toBeUndefined();
+  });
+});
+
+describe("motionFrameState audio envelope", () => {
+  const data = { params: {}, keyframes: [] as never[], words: undefined };
+  const ctx = (over: Record<string, unknown>) => ({
+    local: 10,
+    fps: 30,
+    durationFrames: 30,
+    theme,
+    width: 1080,
+    height: 1920,
+    ...over,
+  });
+
+  it("exposes env.audio and --kino-audio at the composition frame (beatFrom + local)", () => {
+    const audio = new Array(120).fill(0.1);
+    audio[100] = 0.2; // composition frame 100 = audioFrom 90 + local 10
+    const { env, vars } = motionFrameState(data, ctx({ audio, audioFrom: 90 }));
+    expect(env.audio).toBe(0.2);
+    expect(vars["--kino-audio"]).toBe("0.2000");
+  });
+
+  it("is 0 when the build has no audio (the still/dump path)", () => {
+    const { env, vars } = motionFrameState(data, ctx({}));
+    expect(env.audio).toBe(0);
+    expect(vars["--kino-audio"]).toBe("0.0000");
+  });
+
+  it("clamps past the end of the envelope instead of reading undefined", () => {
+    const { env } = motionFrameState(data, ctx({ local: 200, audio: [0.5], audioFrom: 0 }));
+    expect(env.audio).toBe(0.5);
   });
 });

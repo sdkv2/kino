@@ -58,6 +58,8 @@ export function createMotionSource(opts: {
   scale: number;
   beatFrom: number;
   beatDur: number;
+  /** Per-composition-frame audio envelope (0..1) — env.audio/--kino-audio. Absent → 0. */
+  audio?: number[];
   captionBottom?: number;
 }): TextureSource {
   const hasLenses = motionNeedsLensLayers(opts.data.html);
@@ -98,6 +100,8 @@ export function createMotionSource(opts: {
       width: opts.width,
       height: opts.height,
       captionBottom: opts.captionBottom,
+      audio: opts.audio,
+      audioFrom: opts.beatFrom,
     });
 
     let html = opts.data.html;

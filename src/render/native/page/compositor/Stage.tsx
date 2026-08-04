@@ -71,6 +71,16 @@ export function createStage(
             const providerId = mLayer?.source ? mLayer.source.providerId : ref.layerId;
             return sources.get(providerId)?.prepare(frame, mLayer?.source?.key);
           }),
+        // File-kind masks read extracted lmask frames (coverage + SDF) — prepare those sources too,
+        // or the mask pass binds a texture that was never uploaded this frame.
+        ...layers
+          .filter((l) => (l.mask as { source?: { kind?: string } } | undefined)?.source?.kind === "file")
+          .map((l) => {
+            const beatKey = l.group ? `lmask${/^beat(\d+)$/.exec(l.group)?.[1] ?? ""}` : "";
+            const key = `lmask-${l.id}`;
+            const src = sources.get(key) ?? (beatKey ? sources.get(beatKey) : undefined);
+            return src?.prepare(frame, l.source?.key);
+          }),
       ]);
       sync("draw", () => renderer.draw(layers, sources, frame, { theme: props.theme, postFx: props.postFx, props }));
       const next = sync("layersAt", () => layersAt(props, frame + 1, dims));

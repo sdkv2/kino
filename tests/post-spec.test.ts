@@ -12,6 +12,7 @@ describe("validatePostFx", () => {
       bloom: { threshold: 0.7, intensity: 0.4, radius: 24 },
       lens: { distortion: 0.06, chroma: 0.004 },
       film: { intensity: 0.8 },
+      dither: { strength: 0.7 },
     })).toEqual([]);
   });
 
@@ -30,7 +31,7 @@ describe("validatePostFx", () => {
 });
 
 describe("postChainOrder", () => {
-  it("is grade, bloom, lens, film — grain last so nothing smears it", () => {
-    expect(postChainOrder).toEqual(["grade", "bloom", "lens", "film"]);
+  it("is grade, bloom, lens, film, dither — dither last of all so nothing smears it", () => {
+    expect(postChainOrder).toEqual(["grade", "bloom", "lens", "film", "dither"]);
   });
 });

@@ -113,14 +113,16 @@ describe("build.ts resolves declared-layer sources node-side", () => {
     );
   }, 60000);
 
-  it('fails loudly (not silently) for a declared "video" layer pointed at a real video file', async () => {
-    // GAP (see report): videoFrames.ts's planMediaJobs walks props.segments/avatarWindows only, so
-    // a declared video layer never gets a MediaEntry — frame extraction isn't wired for it yet.
-    // Staging the file and calling it "resolved" would reproduce exactly the silent-nothing bug
-    // this task exists to close (registry.ts's `if (!source) return` no-ops a missing TextureSource
-    // with no error). This must throw instead, naming the layer.
-    const specPath = writeSpec(makeProject(), [{ id: "ghost", z: 301, source: { kind: "video", src: "video.mp4" } }]);
-    await expect(prepare(specPath, { mock: true, format: "9:16" })).rejects.toThrow(/ghost/);
+  it("resolves and stages a declared video layer pointed at real footage", async () => {
+    // #24: planMediaJobs now walks props.layers, so a footage layer gets a MediaEntry keyed by its
+    // id and the compositor binds it (registry.ts `media[d.id]` → createFramesSource). The build
+    // must resolve the url and stage the file exactly like an image layer.
+    const specsDir = makeProject();
+    const specPath = writeSpec(specsDir, [{ id: "ghost", z: 301, source: { kind: "video", src: "video.mp4" } }]);
+    const r = await prepare(specPath, { mock: true, format: "9:16" });
+    const layer = (r.props.layers ?? []).find((l) => l.id === "ghost");
+    expect(layer?.source?.url).toBe("video.mp4");
+    expect(existsSync(join(r.publicDir, "video.mp4"))).toBe(true);
   }, 60000);
 
   it("adjustment layer (no source) passes through unaffected", async () => {
