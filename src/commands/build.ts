@@ -10,7 +10,7 @@ import { resolveProject, type Project } from "../config/project.js";
 import { loadProjectConfig } from "../config/projectConfig.js";
 import { loadEnv, requireKey } from "../config/env.js";
 import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
-import { resolvePalette, type Palette } from "../config/palettes.js";
+import { derivePalette, normalizeUiColors, resolvePalette, type Palette, type UiRole } from "../config/palettes.js";
 import { readableInk } from "../render/contrast.js";
 import { loadSpec, parseSpec, musicBeds, type Spec } from "../spec/schema.js";
 import { collectMotionRefs, validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
@@ -33,7 +33,7 @@ import { resolveAudioSource } from "../media/sfx.js";
 import { resolveBackgroundComponent, isShaderPath } from "../media/backgroundLib.js";
 import { parseQuality } from "../render/native/engine.js";
 import { renderVideo, renderStills, variantName } from "../render/render.js";
-import { parseFormatList, type FormatId } from "../render/formats.js";
+import { compDims, parseFormatList, type FormatId } from "../render/formats.js";
 import type { BgKeyframe, BgParamValue, BgTexture, KinoProps, RegionShaderProps, RegionTexture, WordTiming } from "../render/props.js";
 import type { PostFx } from "../render/postSpec.js";
 import type { DeclaredLayer } from "../render/layerSpec.js";
@@ -352,6 +352,14 @@ export async function prepare(
     // The spec's colour scheme lands here, so every downstream reader of brand.colors — captions,
     // motion vars, background gradients, kicker chips, the film pass — picks it up unchanged.
     colors: resolvePalette(spec.colors, rawBrand.colors),
+    // The UI roles layer INDEPENDENTLY of the core five. `resolvePalette` above implements "naming
+    // a preset replaces all five", which is right for the piece's colour — but a brand's border and
+    // state conventions are a statement about how its fabricated UI is drawn, and a spec choosing
+    // `noir` should not silently lose them. So these merge brand-then-spec, preset or not.
+    uiColors: {
+      ...rawBrand.uiColors,
+      ...(spec.colors && typeof spec.colors !== "string" ? normalizeUiColors(spec.colors) : {}),
+    },
     defaultProvider: pc?.provider ?? rawBrand.defaultProvider,
     background: pc?.background ?? rawBrand.background,
     font: pc?.font ?? rawBrand.font,
@@ -678,7 +686,13 @@ export async function prepare(
     }
   }
 
-  const c = brand.colors;
+  const c = derivePalette(brand.colors, brand.uiColors);
+  // A solver works in composition pixels and integrates on the composition's clock, so both come
+  // from the same place the renderer gets them. The FIRST format wins when a spec renders several:
+  // one bake per graphic, and a solve that changed with the aspect ratio would make the 9:16 and
+  // 16:9 cuts different videos rather than two framings of one.
+  const fps = spec.fps ?? 30;
+  const simDims = compDims(formats[0]);
   // Resolve a camera shot + transition per app cut-in (auto-vary, spec can override).
   let appIdx = 0;
   const renderSegments = spec.segments.map((seg, i) => {
@@ -711,15 +725,25 @@ export async function prepare(
         keyframes?: { at?: number; atWord?: string | number; params: Record<string, number | string>; ease?: import("../render/bgparams.js").Ease }[];
         triggers?: { at?: number; atWord?: string | number; action: string }[];
         loop?: boolean;
+        sim?: { source: string; frames?: number; seed?: number };
       },
       where: string,
     ): MotionGraphicRefInput => ({
       source: ref.source,
       params: ref.params,
       loop: ref.loop,
+      sim: ref.sim,
       keyframes: resolveWordAnchors(ref.keyframes, motionWords, `${where}.keyframes`),
       triggers: resolveWordAnchors(ref.triggers, motionWords, `${where}.triggers`),
     });
+    // A solver is sized against the beat's REAL length — the one VO just produced, not the one the
+    // spec guessed — so a bake authored under mock VO still covers the beat under `--tts`.
+    const simCtx = {
+      frames: Math.max(1, Math.round((endSec - startSec) * fps)),
+      fps,
+      width: simDims.width,
+      height: simDims.height,
+    };
     const base = {
       kind: seg.kind,
       source: seg.kind === "video" ? seg.source : undefined,
@@ -779,7 +803,7 @@ export async function prepare(
         ...base,
         shot: seg.shot as Shot | undefined,
         motionOverlay: seg.motionOverlay
-          ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
+          ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project, simCtx), words: motionWords }
           : undefined,
       };
     }
@@ -794,13 +818,17 @@ export async function prepare(
       carryMotion: seg.carryMotion,
       motion: {
         ...resolveMotionGraphic(
-          anchorMotion({ source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop }, `segment[${i}]`),
+          anchorMotion(
+            { source: seg.source, params: seg.params, keyframes: seg.keyframes, triggers: seg.triggers, loop: seg.loop, sim: seg.sim },
+            `segment[${i}]`,
+          ),
           project,
+          simCtx,
         ),
         words: motionWords,
       },
       motionOverlay: seg.motionOverlay
-        ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project), words: motionWords }
+        ? { ...resolveMotionGraphic(anchorMotion(seg.motionOverlay, `segment[${i}].motionOverlay`), project, simCtx), words: motionWords }
         : undefined,
     };
   });
@@ -817,13 +845,19 @@ export async function prepare(
       deep: c.deep,
       accent2: c.accent2,
       fg: c.fg,
+      surface: c.surface,
+      line: c.line,
+      muted: c.muted,
+      ok: c.ok,
+      warn: c.warn,
+      danger: c.danger,
       brandName: brand.name,
       captionFontSize: brand.captionStyle.fontSize,
       captionStroke: brand.captionStyle.strokeWidth,
       captionBg: resolveCaptionBackplate(brand.captionStyle.background, c.bg),
       film: resolveFilm(spec, brand),
     },
-    fps: spec.fps ?? 30,
+    fps,
     motionBlur: spec.motionBlur,
     avatar: avatarRel,
     avatarWindows,
@@ -838,6 +872,9 @@ export async function prepare(
     ...(spec.voVolume !== 1 ? { voVolume: spec.voVolume } : {}),
     segments: renderSegments,
     layers,
+    // Same omit-at-the-default rule as voVolume: a spec with no shared constants keeps the exact
+    // props object (and therefore the exact frame-cache key) it had before the block existed.
+    ...(spec.data && Object.keys(spec.data).length ? { data: spec.data } : {}),
     ...(spec.postFx ? { postFx: spec.postFx as PostFx } : {}),
   };
 

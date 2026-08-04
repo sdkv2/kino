@@ -37,6 +37,7 @@ export function resolveBackgroundDraw(bg: BackgroundProps): DrawFn | undefined {
 
 import { captionMarkup, kickerMarkup, textMarkup, disclosureMarkup } from "./textMarkup.js";
 import { captionBandBottom, hasCaptionContent, isHeroCaption } from "../../../captionLayout.js";
+import { captionAnimStarts, captionAnimVars } from "../../../textStyles.js";
 
 export function buildRegistry(
   props: KinoProps,
@@ -210,6 +211,19 @@ export function buildRegistry(
       // (default) scopes it to video cut-ins.
       const cbg = props.theme.captionBg;
       const backplate = cbg && (!cbg.appOnly || s.kind === "video") ? { bg: cbg.bg } : null;
+      const anim = s.captionAnimation;
+      // How many words the entrance has to drive, and when each of them starts. Computed once per
+      // beat rather than per frame — the answer is a property of the beat's VO, not of the clock.
+      const animWords = s.words?.length ? s.words.length : (s.caption ?? "").split(/\s+/).filter(Boolean).length;
+      const animStarts = anim
+        ? captionAnimStarts({
+            anim,
+            count: animWords,
+            beatStartSec: s.startSec,
+            wordStartsSec: s.words?.map((w) => w.start),
+            perWord: (s.captionReveal ?? "word") === "word",
+          })
+        : [];
       sources.set(
         `caption${i}`,
         createHtmlSource({
@@ -229,6 +243,7 @@ export function buildRegistry(
               reveal: s.captionReveal,
               emphasis: s.emphasis,
               backplate,
+              animation: anim,
             });
           },
           theme: props.theme,
@@ -240,6 +255,11 @@ export function buildRegistry(
           // from the markup (no CSS vars), so without the override the raster classifies static
           // and freezes on whichever word the page was created at.
           cadence: "keyed",
+          // The entrance. Returns "" on every frame where nothing is moving, which is what keeps
+          // the cadence effectively keyed outside the entrances — see textStyles.ts.
+          vars: anim
+            ? (frame: number) => captionAnimVars({ anim, starts: animStarts, tAbs: frame / props.fps, fps: props.fps })
+            : undefined,
         }),
       );
     }
@@ -265,6 +285,7 @@ export function buildRegistry(
         beatDur,
         audio: props.audio,
         captionBottom: captionBandBottom(s, Boolean(props.avatar)),
+        specData: props.data,
       });
     };
     if (s.kind === "motion" && s.motion) {

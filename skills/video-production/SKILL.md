@@ -330,8 +330,8 @@ don't reintroduce per-caption `y` offsets to compensate.
   lays the whole caption out and fades it in together, the active word still highlighting as the VO reaches
   it — use `all` (or `phrase` mode) for a **CTA or any long line**, since a word-by-word reveal of a long
   line strands its first word at a wrapped corner during a VO pause. Honored in the native raster
-  (opacity/layout, not motion). `captionAnimation` entrance presets do **not** paint into the keyed
-  caption bitmap — see `reference.md`. Per-segment
+  (opacity/layout, not motion). `captionAnimation` entrance presets paint into the caption raster too
+  — per-frame while the entrance is in flight, keyed once it settles — see `reference.md`. Per-segment
   `texts: [{ text, at, dur?, position?, size?, style?, animation? }]` drops standalone headline overlays
   anywhere on the frame (slot + small/medium/big, independent of the segment's own caption) — keep them
   clear of the caption's band so the two can't collide (the ·full storyboard tile shows collisions). Details +
@@ -455,6 +455,19 @@ noise. See `kino motion` + `docs/motion-graphics.md` for the full contract.
 
 **Agents under-preview motion.** Treat every HTML/CSS/JS graphic and every Lottie as unfinished until
 you have **Read** pixel stills at multiple stages — not just `inspect` JSON or one midpoint frame.
+
+**A still sheet is cheap. Measure it once and stop rationing.** On an M4, eight stills of a
+motion-only spec is **~1.7s end to end**, of which ~0.9s is fixed (Electron boot + page load) and the
+marginal cost is **~15ms per extra frame**. So: ask for MORE frames, not fewer, and re-render after
+every change instead of batching edits. Two corollaries that matter more than the rule itself:
+
+- **Never infer render cost from how long a tool call felt.** A call that also ran a montage, edited
+  three files and carried your own reasoning is not a measurement of the renderer. If you find
+  yourself rationing previews, time one run first — the belief that stills are expensive causes far
+  more under-previewing than any amount of "repeat often" guidance cures.
+- **A rendered frame pulls this loop in, whatever the task was.** Engine work, a new effect, a
+  library spike, a demo for a feature — if the deliverable is something a person will look at, it is
+  authoring output and gets the authoring loop. Classify by what came OUT, not by what it was for.
 
 | Stage | Command | What you're checking |
 |---|---|---|

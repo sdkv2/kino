@@ -13,6 +13,7 @@ import type { Theme } from "../../../props.js";
 import {
   wordStyle,
   lineBoxStyle,
+  type CaptionAnimation,
   type CaptionStyle,
   type CaptionReveal,
   type ResolvedText,
@@ -46,10 +47,25 @@ export function cssText(style: CSSProperties): string {
     .join(";");
 }
 
-// The look presets (style/reveal/backplate) raster here; animation presets do NOT — the caption
-// raster is keyed by active word (registry.ts cadence "keyed"), so an entrance spring has no frames
-// to ride and every preset paints as its settled state. Native entrances stay quad-level, matching
-// the textStyles.ts note that native surfaces keep their legacy entrance math.
+// The look presets (style/reveal/backplate) raster here, and so do the animation presets — but
+// through a seam, not inline. A word carrying an animation is wrapped in a positioning span whose
+// transform/opacity/filter come from `var(--ka{i}-*)` custom properties, which the caller injects
+// per frame (see textStyles.ts's captionAnimVars for the architecture and why the vars, rather
+// than the markup, are what moves). Each reads a FALLBACK equal to the settled pose, so a raster
+// taken with no vars at all — which is every frame after the entrances land — is the settled
+// caption this file has always produced.
+//
+// The wrapper only appears when an animation is actually asked for. It is an extra inline-block in
+// the line box, and adding one unconditionally would move existing caption rasters for a feature
+// they never opted into.
+function animWrap(i: number, inner: string, animated: boolean): string {
+  if (!animated) return inner;
+  return (
+    `<span class="kino-word-anim" style="display:inline-block;` +
+    `transform:var(--ka${i}-t,none);opacity:var(--ka${i}-o,1);filter:var(--ka${i}-f,)">${inner}</span>`
+  );
+}
+
 export function captionMarkup(opts: {
   text: string;
   words?: Array<{ word: string; start: number; end: number }>;
@@ -61,10 +77,14 @@ export function captionMarkup(opts: {
   reveal?: CaptionReveal; // words mode: "word" = appear when spoken (default); "all" = whole line up front
   emphasis?: string[]; // words mode: extra glow when the active word is in this list
   backplate?: { bg: string } | null; // translucent lower-third plate; caller applies the appOnly gate
+  /** Resolved entrance preset. Set = wrap each word so the per-frame `--ka{i}-*` vars can move it;
+   *  absent = the settled markup, byte-identical to what this produced before animations landed. */
+  animation?: CaptionAnimation;
 }): string {
   const { text, words, tAbs, theme, hero, activeWord, backplate } = opts;
   const style = opts.style ?? "stroke";
   const reveal = opts.reveal ?? "word";
+  const animated = Boolean(opts.animation);
   const emph = new Set((opts.emphasis ?? []).map(normWord));
   const size = hero ? Math.round(theme.captionFontSize * 1.42) : theme.captionFontSize;
   const shadow = hero ? "0 8px 28px rgba(0,0,0,.5)" : "0 6px 20px rgba(0,0,0,.45)";
@@ -82,13 +102,27 @@ export function captionMarkup(opts: {
         const spoken = reveal === "all" || tAbs >= w.start;
         const opacity = spoken ? 1 : 0;
         const activeClass = i === activeWord ? " kino-word-active" : "";
-        return `<span class="kino-word${activeClass}" style="opacity:${opacity};${wordInk(w.word, i)}">${escapeHtml(w.word)}</span>`;
+        return animWrap(
+          i,
+          `<span class="kino-word${activeClass}" style="opacity:${opacity};${wordInk(w.word, i)}">${escapeHtml(w.word)}</span>`,
+          animated,
+        );
       })
       .join(" ");
   } else if (activeWord !== null) {
     body = text
       .split(/\s+/)
-      .map((w, i) => `<span class="kino-word${i === activeWord ? " kino-word-active" : ""}" style="${wordInk(w, i)}">${escapeHtml(w)}</span>`)
+      .map((w, i) =>
+        animWrap(i, `<span class="kino-word${i === activeWord ? " kino-word-active" : ""}" style="${wordInk(w, i)}">${escapeHtml(w)}</span>`, animated),
+      )
+      .join(" ");
+  } else if (animated) {
+    // A phrase caption has one string and no spans, so an animation has nothing to attach to.
+    // Splitting it into words is what gives `typewriter` and `wave` something to stagger across —
+    // and for the whole-line presets every word shares one entrance, so the line still moves as one.
+    body = text
+      .split(/\s+/)
+      .map((w, i) => animWrap(i, `<span class="kino-word">${escapeHtml(w)}</span>`, true))
       .join(" ");
   } else {
     body = escapeHtml(text);
@@ -104,7 +138,11 @@ export function captionMarkup(opts: {
         // Phrase heroes keep every word in the base ink (no active word, and the brand-name accent
         // is a words-mode treatment — the legacy HeroCaption never highlighted).
         const ink = wordMode ? wordInk(w, i) : cssText(wordStyle(style, theme, { shadow }));
-        return `<span class="kino-word${activeClass}" style="display:inline-block;opacity:${opacity};${ink}">${escapeHtml(w)}</span>`;
+        return animWrap(
+          i,
+          `<span class="kino-word${activeClass}" style="display:inline-block;opacity:${opacity};${ink}">${escapeHtml(w)}</span>`,
+          animated,
+        );
       })
       .join("");
 

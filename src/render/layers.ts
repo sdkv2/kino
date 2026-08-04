@@ -426,8 +426,10 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   });
 
   // 9. Captions. The raster is keyed by the ACTIVE WORD, not the frame: a words-mode caption
-  // re-rasters once per spoken word. Look presets (style/reveal/backplate) paint in that keyed
-  // bitmap; entrance motion rides the quad (captionKeyframes / legacy pop), not captionAnimation.
+  // re-rasters once per spoken word, and look presets (style/reveal/backplate) paint in that keyed
+  // bitmap. `captionAnimation` rides INSIDE that raster now — the template stays word-keyed and
+  // the entrance arrives as per-frame CSS vars, so the quad keeps carrying only what a whole-line
+  // transform can carry (captionKeyframes, the legacy pop). See textStyles.ts's captionAnimVars.
   props.segments.forEach((s, i) => {
     const from = f(s.startSec);
     const dur = f(s.endSec) - from;
@@ -470,13 +472,6 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
   // 11b. Author-declared layers. They carry their own z, so where they land is decided by the
   // sort rather than by this position in the function.
   for (const d of props.layers ?? []) {
-    if (d.adjust?.length) {
-      // An adjustment layer spans the whole accumulator — validateLayers rejects fromSec/toSec/
-      // segment on one (ADJUST_INCOMPATIBLE_FIELDS), so its own start IS the composition's and
-      // its keyframe clock is absolute.
-      out.push({ id: d.id, z: d.z, source: null, rect: full, adjust: resolveEffects(d.adjust, frame / props.fps) });
-      continue;
-    }
     // A segment binding borrows that beat's window; `hold` keeps the layer out of the beat's
     // group so the crossfade happens beneath it instead of taking it along.
     const bound = d.segment !== undefined ? props.segments[d.segment] : undefined;
@@ -484,14 +479,28 @@ export function layersAt(props: KinoProps, frame: number, dims: Dims): LayerDraw
     const toSec = bound ? bound.endSec : d.toSec;
     if (frame < f(fromSec)) continue;
     if (toSec !== undefined && frame >= f(toSec)) continue;
+    // Keyframes read from the layer's own start, so a track authored against a beat-bound layer
+    // does not shift when the beat does.
+    const localFrame = frame - f(fromSec);
+
+    if (d.adjust?.length) {
+      // An adjustment layer is WINDOWED like any other — the window is the whole composition only
+      // when nothing narrows it. That is what makes "grain alive under beat 1 and gone by the
+      // ident" expressible at all: two film adjustments bound to different beats, rather than one
+      // chain for the whole piece.
+      //
+      // It stays out of any beat GROUP even when bound to one. An adjustment applies to everything
+      // composited beneath it, which is not a thing that can crossfade with a beat — groups.ts
+      // breaks it into a standalone run for exactly this reason, and `hold` (the field that says
+      // which side of a crossfade a bound layer sits on) is rejected on one.
+      out.push({ id: d.id, z: d.z, source: null, rect: full, adjust: resolveEffects(d.adjust, localFrame / props.fps) });
+      continue;
+    }
 
     const r = d.rect;
     const rect = r
       ? { x: (r.x / 100) * width, y: (r.y / 100) * height, w: (r.w / 100) * width, h: (r.h / 100) * height }
       : full;
-    // Keyframes read from the layer's own start, so a track authored against a beat-bound layer
-    // does not shift when the beat does.
-    const localFrame = frame - f(fromSec);
     const tween = tweenAt(d.keyframes, localFrame / props.fps, dims);
     out.push({
       id: d.id,

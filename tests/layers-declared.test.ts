@@ -93,8 +93,8 @@ describe("declared layers", () => {
   });
 
   // §11b's first branch: a declared layer with an `adjust` chain and no source. It applies to
-  // everything composited beneath it, so it has none of the rect/window/group machinery below —
-  // the `continue` skips straight past all of it.
+  // everything composited beneath it, so it has none of the rect/group machinery below — the
+  // `continue` skips past all of that, but not past the window.
   describe("adjustment layer branch", () => {
     const grade = { id: "grade", z: 500, adjust: [{ kind: "grade" as const, params: { contrast: 1.2 } }] };
 
@@ -114,24 +114,26 @@ describe("declared layers", () => {
       expect(ids).toEqual(["before", "grade", "after"]);
     });
 
-    // Current behaviour, read straight off the code: the `d.adjust?.length` check and its
-    // `continue` come before the fromSec/toSec/segment window is even looked at, so an
-    // adjustment layer paints on every frame of the whole composition no matter what window
-    // fields it carries. `validateLayers` does not reject fromSec/toSec/segment alongside
-    // `adjust`, so a spec author CAN write one of these on an adjustment layer — it will just be
-    // silently ignored at render time. That silent accept-then-ignore looks like a defect to me
-    // (either the fields should work, or authoring them on an adjust layer should be a validation
-    // error), not a deliberate design choice, but this task is coverage, not redesign: asserting
-    // the current behaviour here so a future change to it is a deliberate decision, not a fluke.
-    it("is emitted regardless of fromSec/toSec/segment", () => {
-      const windowed = { ...grade, fromSec: 1, toSec: 2, segment: 1 };
+    // This assertion used to read the other way round, and its comment said so: the
+    // `d.adjust?.length` check and its `continue` came BEFORE the window was looked at, so an
+    // adjustment painted every frame of the composition no matter what window fields it carried.
+    // The comment called that silent accept-then-ignore a defect and named the two acceptable
+    // resolutions — make the fields work, or reject them. Both happened: `hold`/`rect`/`opacity`/
+    // `mask`/`effects`/`keyframes`/`blend` are rejected by validateLayers, and the three window
+    // fields work, which is what makes an adjustment authorable per beat.
+    it("honours fromSec/toSec like any other declared layer", () => {
+      const windowed = { ...grade, fromSec: 1, toSec: 2 };
       const p = mk(beats, { layers: [windowed] });
-      // Before its own fromSec (1s = frame 30) and before segment 1 even starts (2s = frame 60).
-      expect(layersAt(p, 0, DIMS).some((l) => l.id === "grade")).toBe(true);
-      // Inside the declared window.
+      expect(layersAt(p, 0, DIMS).some((l) => l.id === "grade")).toBe(false);
       expect(layersAt(p, 45, DIMS).some((l) => l.id === "grade")).toBe(true);
-      // After its own toSec (2s = frame 60) — a normal declared layer would have dropped out.
-      expect(layersAt(p, 90, DIMS).some((l) => l.id === "grade")).toBe(true);
+      expect(layersAt(p, 90, DIMS).some((l) => l.id === "grade")).toBe(false);
+    });
+
+    it("borrows a beat's window from `segment`", () => {
+      const p = mk(beats, { layers: [{ ...grade, segment: 1 }] });
+      // Beat 1 runs 2s..4s, so frame 30 is before it and frame 75 is inside it.
+      expect(layersAt(p, 30, DIMS).some((l) => l.id === "grade")).toBe(false);
+      expect(layersAt(p, 75, DIMS).some((l) => l.id === "grade")).toBe(true);
     });
   });
 });

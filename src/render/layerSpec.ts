@@ -89,10 +89,22 @@ const BUILTIN_ID_PATTERNS = [
 
 const RESERVED_Z = new Set<number>(Object.values(Z));
 
+/** Full-frame stages an `adjust` chain may name that are NOT per-layer effect passes. Both are
+ *  whole-composite operations with no per-layer meaning: `film` is the cinematic finish, `veil` the
+ *  measured lens glare. Kept as a list here rather than folded into EFFECT_KINDS, which is the set
+ *  a beat's `effects` may use. */
+const ADJUST_ONLY_KINDS: string[] = ["film", "veil"];
+
 /** Fields the adjustment branch in layers.ts §11b never reads — see the check in validateLayers
- *  that rejects them alongside `adjust`. */
+ *  that rejects them alongside `adjust`.
+ *
+ *  `fromSec`/`toSec`/`segment` USED to be here. They came off the list when the adjustment branch
+ *  started resolving the same window every other declared layer does, which is what makes per-beat
+ *  grain expressible. Everything still listed is rejected for the original reason: the branch reads
+ *  none of them, so accepting one would let a spec author a masked, blended, or offset adjustment
+ *  that validates clean and then quietly is not any of those things. */
 const ADJUST_INCOMPATIBLE_FIELDS = [
-  "fromSec", "toSec", "segment", "hold", "rect", "opacity", "mask", "effects", "keyframes", "blend",
+  "hold", "rect", "opacity", "mask", "effects", "keyframes", "blend",
 ] as const satisfies readonly (keyof DeclaredLayer)[];
 
 // Static (no I/O) shape check: does `src`'s extension agree with the declared `kind`? This is the
@@ -161,16 +173,16 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
     if (l.source && hasAdjust) errs.push(at("cannot have both source and adjust — an adjustment layer has no pixels of its own"));
     else if (!l.source && !hasAdjust) errs.push(at("needs either a source or an adjust chain"));
 
-    // An adjustment layer (layers.ts §11b) is always base-group and applies to the whole
-    // accumulator: the `d.adjust?.length` branch pushes only id/z/source:null/adjust and
-    // `continue`s before fromSec/toSec/segment/hold/rect/opacity/mask/effects/keyframes/blend are
-    // even read. Accepting those fields here would let a schema-valid spec author a windowed,
-    // masked, or blended adjustment layer that silently does nothing of the kind at render time —
-    // reject the combination instead of letting it validate clean and then quietly not work.
+    // An adjustment layer (layers.ts §11b) is always base-group and always applies to the whole
+    // frame it sits over: its branch pushes id/z/source:null/adjust plus the resolved window, and
+    // `continue`s before hold/rect/opacity/mask/effects/keyframes/blend are ever read. Accepting
+    // those fields here would let a schema-valid spec author a masked, blended or offset
+    // adjustment layer that silently does nothing of the kind at render time — reject the
+    // combination instead of letting it validate clean and then quietly not work.
     if (l.adjust?.length) {
       for (const field of ADJUST_INCOMPATIBLE_FIELDS) {
         if (l[field] !== undefined) {
-          errs.push(at(`adjust cannot be combined with ${field} — an adjustment layer is always base-group, spans the whole accumulator, and layersAt's adjustment branch never reads ${field}, so it would be silently ignored at render time`));
+          errs.push(at(`adjust cannot be combined with ${field} — an adjustment layer applies to the whole frame beneath it and layersAt's adjustment branch never reads ${field}, so it would be silently ignored at render time (fromSec/toSec/segment DO work: an adjustment can be windowed)`));
         }
       }
     }
@@ -190,8 +202,12 @@ export function validateLayers(layers: unknown, segmentCount: number): string[] 
     // in EFFECT_KINDS — that list is the per-layer effect passes, and film is a distinct
     // full-frame-grade concept validated by its own postFx range checks (postSpec.ts). It is
     // allowed here as an explicit exception rather than folded into EFFECT_KINDS.
+    //
+    // `veil` joins it for the same reason and a sharper one: it MEASURES everything composited
+    // beneath it, so where it sits in the stack is the whole authoring decision — glare that reads
+    // the footage but not the captions over it is only expressible as an adjustment layer.
     for (const [j, e] of (l.adjust ?? []).entries()) {
-      if (!(EFFECT_KINDS as readonly string[]).includes(e.kind) && (e.kind as string) !== "film") {
+      if (!(EFFECT_KINDS as readonly string[]).includes(e.kind) && !ADJUST_ONLY_KINDS.includes(e.kind as string)) {
         errs.push(at(`unknown adjust kind: ${String(e.kind)}`));
       }
       errs.push(...validateEffectKeyframes(e, `adjust[${j}]`).map(at));

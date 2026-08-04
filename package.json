@@ -53,12 +53,14 @@
   "dependencies": {
     "commander": "^12.1.0",
     "culori": "^4.0.2",
+    "d3-force": "^3.0.0",
     "d3-shape": "^3.2.0",
     "electron": "^43.2.0",
     "execa": "^9.3.0",
     "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0",
     "isomorphic-dompurify": "^2.36.0",
+    "matter-js": "^0.20.0",
     "simplex-noise": "^4.0.3",
     "yaml": "^2.9.0",
     "zod": "^3.23.8"
@@ -66,8 +68,10 @@
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
     "@types/culori": "^4.0.1",
+    "@types/d3-force": "^3.0.10",
     "@types/d3-shape": "^3.1.8",
     "@types/ffprobe-static": "^2.0.3",
+    "@types/matter-js": "^0.20.2",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",

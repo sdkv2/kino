@@ -61,6 +61,8 @@ export function createMotionSource(opts: {
   /** Per-composition-frame audio envelope (0..1) — env.audio/--kino-audio. Absent → 0. */
   audio?: number[];
   captionBottom?: number;
+  /** Spec-level shared constants — see KinoProps.data. */
+  specData?: Record<string, string | number>;
 }): TextureSource {
   const hasLenses = motionNeedsLensLayers(opts.data.html);
   const cacheMax = motionCacheMax(opts.scale, hasLenses);
@@ -102,6 +104,7 @@ export function createMotionSource(opts: {
       captionBottom: opts.captionBottom,
       audio: opts.audio,
       audioFrom: opts.beatFrom,
+      specData: opts.specData,
     });
 
     let html = opts.data.html;

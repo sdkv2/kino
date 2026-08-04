@@ -1,7 +1,22 @@
 import type { Theme, BgParamValue, WordTiming, MotionEnv, MotionGraphicProps } from "./props.js";
 import { progressCurves, paramsAt, pulseAt } from "./bgparams.js";
+import { derivePalette, type UiRole } from "../config/palettes.js";
+import { simEnvAt } from "./sim.js";
 import { procLib } from "./procLib.js";
 import { velocityRestVars } from "./motionVelocity.js";
+
+/**
+ * Custom-property names the motion runtime owns. A spec-level `data` key matching one of these
+ * would overwrite the frame clock or a palette role in every graphic at once, so `validateSpecData`
+ * rejects them at build time rather than letting a plausible-looking name (`progress`, `t`) take
+ * the whole engine down silently.
+ *
+ * Everything under `--kino-` is reserved wholesale — the palette, the curves, the caption band, the
+ * word counters and the velocity rest values all live there, and the set grows.
+ */
+export const RESERVED_MOTION_VARS = new Set([
+  "frame", "t", "progress", "progress-num", "progress-den", "pulse", "cam-vel", "cam-blur",
+]);
 
 export interface MotionVarDynamics {
   frame: number;
@@ -9,6 +24,9 @@ export interface MotionVarDynamics {
   progress: number;
   pulse: number;
   params: Record<string, BgParamValue>;
+  /** Spec-level shared constants (`spec.data`), emitted as `--<key>` BENEATH the beat's own
+   *  params — see the note at the emission site. */
+  data?: Record<string, BgParamValue>;
   fps?: number;
   /** Per-frame audio envelope (0..1, final mix RMS) at the COMPOSITION frame. */ 
   audio?: number;
@@ -49,6 +67,67 @@ export function wordsShownAt(words: WordTiming[] | undefined, t: number): number
     n += span <= 0 ? 1 : Math.min(1, (t - w.start) / span);
   }
   return n;
+}
+
+/**
+ * The six UI roles, resolved from whatever the theme carries.
+ *
+ * A Theme's UI roles are optional because most of them are derived, and build.ts fills them in — but
+ * a KinoProps built by hand (test fixtures, `kino still` on a partial theme) may carry only the five
+ * core ones. Re-deriving here rather than emitting `undefined` is the difference between a fabricated
+ * panel painting with a default border and the entire element disappearing, which is what an
+ * unresolved `var()` does to the declaration it sits in.
+ */
+export function uiPalette(t: Theme): Record<UiRole, string> {
+  const p = derivePalette(
+    { bg: t.bg, fg: t.fg, accent: t.accent, accent2: t.accent2, deep: t.deep },
+    { surface: t.surface, line: t.line, muted: t.muted, ok: t.ok, warn: t.warn, danger: t.danger },
+  );
+  return { surface: p.surface, line: p.line, muted: p.muted, ok: p.ok, warn: p.warn, danger: p.danger };
+}
+
+/** The same six as `--kino-*` custom properties. */
+export function uiRoleVars(t: Theme): Record<string, string> {
+  const p = uiPalette(t);
+  return {
+    "--kino-surface": p.surface,
+    "--kino-line": p.line,
+    "--kino-muted": p.muted,
+    "--kino-ok": p.ok,
+    "--kino-warn": p.warn,
+    "--kino-danger": p.danger,
+  };
+}
+
+/** A key that is legal both as a CSS custom property and as a plain `env.data` lookup. */
+const DATA_KEY = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+/**
+ * Validate `spec.data` — the shared-constants block.
+ *
+ * The block exists because a figure quoted on eight fabricated surfaces has to AGREE on all eight,
+ * and per-beat params put eight copies of it in eight files. So the failure this guards against is
+ * specific: a key that looks fine and silently overwrites something the engine owns would take a
+ * whole render's timing or palette with it, and the symptom would appear in a graphic that never
+ * mentioned the key.
+ */
+export function validateSpecData(data: unknown): string[] {
+  if (data === undefined || data === null) return [];
+  if (typeof data !== "object" || Array.isArray(data)) return ["data must be an object"];
+  const errs: string[] = [];
+  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+    if (!DATA_KEY.test(k)) {
+      errs.push(`data.${k} is not a usable name — start with a letter and use letters, digits, - or _ (it becomes the CSS variable --${k})`);
+    } else if (k.startsWith("kino-")) {
+      errs.push(`data.${k} is reserved — every --kino-* variable belongs to the engine (palette, curves, caption band, word counters)`);
+    } else if (RESERVED_MOTION_VARS.has(k)) {
+      errs.push(`data.${k} is reserved — --${k} is set by the motion runtime every frame, so a constant here would be overwritten or would break the clock`);
+    }
+    if (typeof v !== "string" && (typeof v !== "number" || !Number.isFinite(v))) {
+      errs.push(`data.${k} must be a string or a finite number`);
+    }
+  }
+  return errs;
 }
 
 /** Normalize a spoken word for atWord matching: lowercase, letters+digits only. */
@@ -154,6 +233,11 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     "--kino-mint": t.accent,
     "--kino-gold": t.accent2,
     "--kino-green": t.deep,
+    // The UI roles. Derived from the five above at build time; re-derived here from whatever the
+    // theme carries so a hand-built props object (every test fixture, `kino still` on a bare theme)
+    // resolves them to something real rather than leaving `var(--kino-line)` undefined — which
+    // would not fall back, it would take the whole declaration and the element's paint with it.
+    ...uiRoleVars(t),
     "--kino-font": t.font,
     // Second typeface for label/mono-style text inside a motion beat, distinct from the caption
     // font — falls back to --kino-font so it's never invalid when the brand sets no labelFont.
@@ -173,6 +257,12 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     ...velocityRestVars(),
   };
   if (dyn.width && dyn.height) vars["--kino-aspect"] = (dyn.width / dyn.height).toFixed(4);
+  // Spec-level constants first, the beat's own params second, so a beat can override a shared
+  // figure locally and a graphic that names neither still resolves. Both land in the same `--<key>`
+  // namespace on purpose: a motion page reading `var(--p95)` should not have to know whether the
+  // number is shared across the piece or set on this beat — that is the author's decision to move,
+  // not the page's to track. The reserved names are kept out of reach by validateSpecData.
+  for (const [k, v] of Object.entries(dyn.data ?? {})) vars[`--${k}`] = String(v);
   for (const [k, v] of Object.entries(dyn.params)) vars[`--${k}`] = String(v);
   const { camVel, camBlur } = cameraBlurVars(
     dyn.params,
@@ -199,8 +289,22 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
  * previous frame too) is free of order effects.
  */
 export function motionFrameState(
-  data: Pick<MotionGraphicProps, "params" | "keyframes" | "words"> & Partial<Pick<MotionGraphicProps, "triggers">>,
-  ctx: { local: number; fps: number; durationFrames: number; theme: Theme; width: number; height: number; captionBottom?: number; audio?: number[]; audioFrom?: number },
+  data: Pick<MotionGraphicProps, "params" | "keyframes" | "words"> &
+    Partial<Pick<MotionGraphicProps, "triggers" | "sim">>,
+  ctx: {
+    local: number;
+    fps: number;
+    durationFrames: number;
+    theme: Theme;
+    width: number;
+    height: number;
+    captionBottom?: number;
+    /** Per-frame audio envelope (0..1, final mix RMS), and the composition frame it starts at. */
+    audio?: number[];
+    audioFrom?: number;
+    /** Spec-level shared constants. Reaches CSS as `--<key>` and Tier 2 as `env.data`. */
+    specData?: Record<string, BgParamValue>;
+  },
 ): { env: MotionEnv; vars: Record<string, string> } {
   const { local, fps, durationFrames, theme } = ctx;
   const tt = fps > 0 ? local / fps : 0;
@@ -232,6 +336,7 @@ export function motionFrameState(
     prevParams: prevResolved,
     nextParams: nextResolved,
     hasCam,
+    data: ctx.specData,
     captionBottom: ctx.captionBottom,
     wordsShown: 0,
     wordCount: data.words?.length ?? 0,
@@ -252,6 +357,7 @@ export function motionFrameState(
     pulse,
     audio: audioAt,
     params: resolved,
+    data: ctx.specData ?? {},
     camVel,
     camBlur,
     palette: {
@@ -260,6 +366,9 @@ export function motionFrameState(
       accent: theme.accent,
       accent2: theme.accent2,
       deep: theme.deep,
+      // Same derivation the CSS vars take, so a Tier-2 proc reading env.palette.line and a Tier-1
+      // page reading var(--kino-line) get the same colour.
+      ...uiPalette(theme),
       // Legacy literal-name aliases (pre-rename Tier-2 pages read these).
       mint: theme.accent,
       green: theme.deep,
@@ -274,6 +383,9 @@ export function motionFrameState(
     durationFrames,
     duration: fps > 0 ? durationFrames / fps : 0,
     lib: procLib,
+    // Indexed on the BEAT-LOCAL frame, the same clock env.frame runs on — so a held beat holds its
+    // sim and a carried one carries it, with no arithmetic in the graphic.
+    sim: simEnvAt(data.sim, local),
   };
   return { env, vars };
 }

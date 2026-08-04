@@ -285,6 +285,19 @@ program
   .action(async () => (await import("./commands/motion.js")).motion());
 
 program
+  .command("bake <solver>")
+  .description("Run a simulation solver once and report its frame-indexed rows")
+  .addOption(new Option("--frames <n>", "frames to solve (default: 3 seconds' worth)"))
+  .addOption(new Option("--fps <n>", "frame rate the solver integrates on (default 30)"))
+  .addOption(new Option("--seed <n>", "PRNG seed for sim.random() (default 24301)"))
+  .addOption(new Option("--format <id>", "composition the solver sizes against (default 9:16)"))
+  .addOption(new Option("--params <json>", "author params the solver reads, as JSON"))
+  .addOption(new Option("--out <file>", "write the baked rows to a JSON file"))
+  .addOption(projectOpt())
+  .addOption(asOpt(["json"]))
+  .action(async (solver, o) => (await import("./commands/bake.js")).bake(solver, o));
+
+program
   .command("fonts")
   .description("List the curated fonts, search Google Fonts, or render a specimen")
   .addOption(new Option("--search <term>", "search the full Google Fonts catalog (needs GOOGLE_FONTS_API_KEY)"))

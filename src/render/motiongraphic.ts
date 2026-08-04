@@ -6,6 +6,8 @@ import { sanitizeMotionHtml } from "./sanitizeMotion.js";
 import { parseLottie, lintLottie, warnLottie } from "./lottie.js";
 import { lintDeadVisuals, lintAnimScrubClass, lintUnresolvedFilterRefs } from "./motionLint.js";
 import { lintPathMorphs } from "./pathMorph.js";
+import { runSimSolver, DEFAULT_SIM_SEED } from "./simRun.js";
+import type { SimData } from "./sim.js";
 
 // Re-exported for back-compat (callers/tests import it from here).
 export { sanitizeMotionHtml };
@@ -282,6 +284,60 @@ export interface MotionGraphicRefInput {
   keyframes?: BgKeyframe[];
   triggers?: BgTrigger[];
   loop?: boolean;
+  /** Offline solver for this graphic — see render/sim.ts. `frames` defaults to the beat's own
+   *  length, which only the caller knows, so it is passed in rather than read off the ref. */
+  sim?: { source: string; frames?: number; seed?: number };
+}
+
+/** Everything `resolveMotionGraphic` needs to run a solver that the ref alone cannot supply: the
+ *  beat's real length after TTS, the composition size, and the frame rate. */
+export interface MotionSimContext {
+  frames: number;
+  fps: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Run (or reuse) a graphic's bake.
+ *
+ * Resolved here rather than in a separate pass because a bake is a property of the GRAPHIC, and
+ * this is the one place that already knows how to turn a `source` string into a file — a second
+ * resolver would be a second set of "unknown motion id" messages to keep in sync.
+ *
+ * `frames` defaulting to the beat's own length is what makes a bake survive real TTS: a spec
+ * authored against mock VO and then built with `--tts` gets a longer beat, and a bake pinned to the
+ * old number would run out partway through and freeze. An author who wants a fixed count (a loop
+ * that must close on exactly 90 frames) states one.
+ */
+function resolveSim(
+  ref: NonNullable<MotionGraphicRefInput["sim"]>,
+  project: EffectResolveProject,
+  ctx: MotionSimContext | undefined,
+  params: Record<string, BgParamValue>,
+  display: string,
+): SimData {
+  const solver = resolveMotionSource(ref.source, project);
+  if (!solver.fileName.toLowerCase().endsWith(".js")) {
+    throw new Error(`Motion graphic ${display}: sim.source must be a .js solver (got ${solver.fileName})`);
+  }
+  if (!ctx) {
+    throw new Error(
+      `Motion graphic ${display}: a sim needs the beat's frame count, which this caller did not supply — ` +
+        `resolveMotionGraphic was called without its simCtx`,
+    );
+  }
+  const frames = ref.frames ?? ctx.frames;
+  const src = readFileSync(solver.abs, "utf8");
+  try {
+    return runSimSolver(
+      src,
+      { frames, fps: ctx.fps, width: ctx.width, height: ctx.height, params },
+      ref.seed ?? DEFAULT_SIM_SEED,
+    );
+  } catch (e) {
+    throw new Error(`Motion graphic ${display}: ${(e as Error).message}`);
+  }
 }
 
 // Read the agent's HTML file, reject on lint violations, sanitize, and attach the JSON-owned
@@ -289,6 +345,7 @@ export interface MotionGraphicRefInput {
 export function resolveMotionGraphic(
   ref: MotionGraphicRefInput,
   project: EffectResolveProject,
+  simCtx?: MotionSimContext,
 ): MotionGraphicProps {
   const { abs, display, fileName } = resolveMotionSource(ref.source, project);
   const raw = readFileSync(abs, "utf8");
@@ -297,6 +354,7 @@ export function resolveMotionGraphic(
     keyframes: ref.keyframes ?? [],
     triggers: ref.triggers ?? [],
     loop: ref.loop,
+    ...(ref.sim ? { sim: resolveSim(ref.sim, project, simCtx, ref.params ?? {}, display) } : {}),
   };
   const ext = fileName.toLowerCase();
   if (ext.endsWith(".js")) {
