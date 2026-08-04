@@ -160,9 +160,21 @@ async function fontFaceCss(theme: KinoProps["theme"]): Promise<string> {
   return css;
 }
 
-/** Unit tests only — clears the process-lifetime font CSS cache. */
+// The URI-encoded form of that same @font-face block, cached under the same key. buildTemplate* is
+// called once per RASTER (the markup changes every frame, so the template cannot be reused), and
+// the font payload is the overwhelming bulk of the prefix — five staged Inter cuts plus a label
+// font is ~475KB of base64 out of a ~492KB SVG. Without this, encodeURIComponent re-ran over all
+// of it on every frame: 2197 times per render for a byte-identical result.
+//
+// Safe to encode separately and concatenate because encodeURIComponent distributes over
+// concatenation as long as no surrogate pair straddles a join — which is what assertSplitBoundary
+// guards, and the joins here are ASCII (`>` | `@font-face…}` | ` html,body{…`) either way.
+const encodedFontCache = new Map<string, string>();
+
+/** Unit tests only — clears the process-lifetime font CSS caches (raw + URI-encoded). */
 export function resetFontFaceCacheForTests(): void {
   fontFaceCache.clear();
+  encodedFontCache.clear();
 }
 
 export function paletteVars(theme: KinoProps["theme"]): string {
@@ -278,7 +290,11 @@ export function htmlTemplateFromXhtml(
     `<svg xmlns="http://www.w3.org/2000/svg" style="background:transparent" width="${Math.round(w * scale)}" height="${Math.round(h * scale)}" viewBox="0 0 ${w} ${h}">`;
   // Palette vars live in a <style> block, NOT a style attribute: font families contain double
   // quotes, which would terminate the XML attribute and invalidate the whole SVG.
-  const stylePrefix = `<style>${fonts} html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} `;
+  // Split either side of `fonts` so the encoded font bytes can be cached across templates — see
+  // encodedFontCache. The concatenation is byte-identical to the single template literal it replaces.
+  const styleHead = `<style>`;
+  const styleAfterFonts = ` html,body{background:transparent !important;} .${TEX_ROOT}{${paletteVars(theme)}} `;
+  const stylePrefix = styleHead + fonts + styleAfterFonts;
   const styleTail = `</style>${defs}`;
   const foOpen = `<foreignObject width="${w}" height="${h}">`;
   const divOpen =
@@ -296,7 +312,22 @@ export function htmlTemplateFromXhtml(
 
   const ensureEncodedHalves = () => {
     if (encodedPrefix === undefined) {
-      encodedPrefix = encodeURIComponent(rawPrefix);
+      // Only the font block is cached; the head and tail are a few hundred bytes and vary with
+      // w/h/scale/palette, so re-encoding them per template costs nothing measurable.
+      // Theme key + a content fingerprint. The theme key alone is what production needs (the only
+      // caller passes the string fontFaceCss cached under that same key), but htmlTemplateFromXhtml
+      // is exported and takes `fonts` directly, so the fingerprint stops a caller that varies the
+      // font CSS independently of the theme from being served another block's encode.
+      const fontKey = `${fontFaceCacheKey(theme)}\0${fonts.length}\0${fonts.slice(0, 64)}\0${fonts.slice(-64)}`;
+      let encodedFonts = encodedFontCache.get(fontKey);
+      if (encodedFonts === undefined) {
+        encodedFonts = encodeURIComponent(fonts);
+        encodedFontCache.set(fontKey, encodedFonts);
+      }
+      assertSplitBoundary(svgOpen + styleHead, fonts, "before fonts");
+      assertSplitBoundary(fonts, styleAfterFonts, "after fonts");
+      encodedPrefix =
+        encodeURIComponent(svgOpen + styleHead) + encodedFonts + encodeURIComponent(styleAfterFonts);
       encodedSuffix = encodeURIComponent(rawSuffix);
     }
   };

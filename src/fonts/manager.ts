@@ -93,8 +93,11 @@ export function fontCacheDir(): string {
 }
 const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-/** Cache path for one cut of one family. */
-export function fontPath(family: string, weight: number): string {
+/** Cache path for one cut of one family. `charKey` (from charsetKey) names a glyph-subset build of
+ *  that cut; subsets live in their own directory so they never shadow the full cut, which stays the
+ *  offline fallback and the thing `kino fonts` reports on. */
+export function fontPath(family: string, weight: number, charKey?: string): string {
+  if (charKey) return join(fontCacheDir(), "subset", `${slug(family)}-${weight}-${charKey}.ttf`);
   return join(fontCacheDir(), `${slug(family)}-${weight}.ttf`);
 }
 
@@ -116,11 +119,15 @@ export function cachedFontPath(family: string, weight: number): string | null {
   return null;
 }
 
-/** The URL the legacy CSS API hands out for a family (at `weight`, or its regular face when null). */
-async function fontFileUrl(family: string, weight: number | null): Promise<string | null> {
+/** The URL the legacy CSS API hands out for a family (at `weight`, or its regular face when null).
+ *  With `text`, Google subsets the face to those characters server-side and hands back a much
+ *  smaller TTF (measured: Inter 900 at 66.3KB full → 32.3KB for a 98-char set → 8.7KB for 28) —
+ *  which is why kino needs no font-subsetting dependency of its own. */
+async function fontFileUrl(family: string, weight: number | null, text?: string): Promise<string | null> {
   try {
     const spec = weight == null ? family : `${family}:${weight}`;
-    const url = `https://fonts.googleapis.com/css?family=${encodeURIComponent(spec)}`;
+    let url = `https://fonts.googleapis.com/css?family=${encodeURIComponent(spec)}`;
+    if (text) url += `&text=${encodeURIComponent(text)}`;
     // Old-Safari UA makes the legacy API serve real TrueType (modern UAs get woff2; old IE gets EOT).
     const ua = "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_8; en-us) AppleWebKit/533.21.1 (KHTML, like Gecko) Version/5.0.5 Safari/533.21.1";
     const res = await fetch(url, { headers: { "user-agent": ua } });
@@ -144,7 +151,28 @@ async function fontFileUrl(family: string, weight: number | null): Promise<strin
  * asked. Explicit `fontWeights` cuts pass `exact: true`, since silently staging a 400 as
  * `font-800.ttf` would make a motion page's `font-weight: 800` a lie rather than a miss.
  */
-export async function ensureFont(family: string, weight: number, opts: { exact?: boolean } = {}): Promise<string | null> {
+export async function ensureFont(
+  family: string,
+  weight: number,
+  opts: { exact?: boolean; charset?: string; charKey?: string } = {},
+): Promise<string | null> {
+  // Glyph subset: a separate cache entry per charset, tried first and always optional. Any failure
+  // (offline, a family the subset endpoint won't serve, a charset it rejects) falls through to the
+  // full cut below rather than failing the build — a slower render beats a missing typeface.
+  if (opts.charset && opts.charKey) {
+    const subPath = fontPath(family, weight, opts.charKey);
+    if (existsSync(subPath)) return subPath;
+    const subUrl = await fontFileUrl(family, weight, opts.charset);
+    if (subUrl) {
+      try {
+        mkdirSync(join(fontCacheDir(), "subset"), { recursive: true });
+        await download(subUrl, subPath);
+        return subPath;
+      } catch {
+        // fall through to the full cut
+      }
+    }
+  }
   const cached = cachedFontPath(family, weight);
   if (cached) return cached;
   const out = fontPath(family, weight);
