@@ -116,7 +116,7 @@ re-bill. One presenter clip is generated per build, so every presenter beat must
   "background": "custom",        // prefer custom+backgroundComponent over mesh for brand identity
   "backgroundComponent": "brand-wash", // bare id → assets-lib/backgrounds/ (or path / brand field)
   "segments": [
-    { "text": "spoken over the background", "caption": "on-screen text (optional — omit on any kind for a caption-free beat)", "cta": true },
+    { "text": "spoken over the background", "caption": "on-screen text (optional — omit on any kind for a caption-free beat)" },
     { "source": "avatar:", "text": "spoken + lip-synced by the configured presenter provider" },
     { "kind": "video", "source": "screens/x.png", "text": "spoken (presenter hidden)", "caption": "...",
       "captionMode": "words", "emphasis": ["claim"],  // optional: spoken text, word-synced + highlighted
@@ -160,7 +160,7 @@ One proven layout for a footage-driven trailer (cold-open first):
 3  video    footage — the payoff moment
 4  motion   a data/feature beat (counter, timer…)   ← media ≈ half the runtime
 5  scene    payoff — the emotional turn (caption card OK here)
-6  scene    CTA (cta: true) — brand name + action as a **centered end card** (hero), not a lower-third subtitle
+6  scene    CTA — brand name + action; a presenter-less scene beat's caption is **automatically the centered end card** (hero), not a lower-third subtitle
 ```
 
 **Footage-cut rules:** match each clip's length to its beat's VO; vary the `shot` per cut-in to the action (push-in / pan / pull-out); keep related shots back-to-back for the auto-crossfade; set the brand's `captionStyle.background` backplate so captions stay legible over uncontrolled footage. **Plan the opener clip before writing beat 0 copy** — pick the thumb-stopping frame, then write the one-line caption that rides it.
@@ -180,7 +180,7 @@ layout and crowd the top chrome — don't.
 | Hook / cold open (`video`) | Strongest footage first; short lower-third caption + backplate; optional kicker | Soft mesh card as the default opener; brand-name first line |
 | Hook (`scene`, no presenter) | Centered hero caption — big, calm, no `captionKeyframes` (use when caption-card opener is intentional) | Pin to top edge; `y: -16` "for variety"; muddy low-contrast mesh behind a weak line |
 | Video / footage captions | Lower-third (engine default) + brand backplate | Per-beat `y`/`scale` jitters |
-| CTA (`cta: true`) | **Centered end card** (hero) — short brand + action; `captionReveal: "all"` or `captionMode: "phrase"` | Park the CTA in the lower-third caption gutter; word-by-word drip on a long App Store line; empty mesh with no brand mark |
+| CTA (presenter-less `scene`, end beat) | **Centered end card** (hero, automatic) — short brand + action; `captionReveal: "all"` or `captionMode: "phrase"` | Park the CTA in the lower-third caption gutter; word-by-word drip on a long App Store line; empty mesh with no brand mark |
 | Kickers | Top pill — fine when the still has empty top chrome | Treat kicker as the end card; **kicker on a feed/chip still that already labels the moment** |
 | `texts[]` labels | Small, `position: "top"` (or clear of caption band) | Second headline fighting the CTA end card |
 | Motion / counters | Stack **mid-frame**: CSS `.wrap { top: 38%–42%; }` (no tiny `translateY(20vw)`), clear of caption band + top UI | Park the graphic in the top ~20% (Following/For You chrome) |
@@ -197,14 +197,13 @@ the tint.
 **Caption stability is the default.** Omit `captionKeyframes` on a first pass. Add one only when a
 single beat must dodge a bright subject (check that still) — never a different `y` on every beat.
 
-**CTA = end card, not a subtitle.** `cta: true` on a presenter-less scene beat uses the **centered hero**
-surface (same as other presenter-less talking beats). **`cta: true` is scene/motion-only — the CLI rejects
-it on a `video` beat (`cta is scene/motion-only`).** A motion end-card graphic (baked wordmark + button, or
-a `texts` CTA) already *is* the end card; keep it plain `kind:"motion"` and carry the CTA copy in the
-graphic/`texts`, not via `cta: true`. **Two valid CTA shapes:** (a) a plain scene (no `source`) **with**
-`cta:true` (the centered-hero caption surface — add a `motionOverlay` for a wordmark if you want the
-graphic), or (b) a pure `kind:"motion"` end-card **without** `cta:true`. A scene has no face unless its
-`source` asks for one. Write a short caption (`Cadence · free to try`, not a
+**CTA = end card, not a subtitle.** There is no `cta` field in the schema — the centered-hero treatment
+is **automatic**: any presenter-less `scene` beat (no `source`) gets it, the same as every other
+presenter-less talking beat (`isHeroCaption` — no avatar + `kind: "scene"`, nothing beat-specific to a
+CTA). **Two valid CTA shapes:** (a) a plain scene beat (no `source`) as the last beat — its caption
+renders as the centered hero for free; add a `motionOverlay` for a wordmark if you want a graphic, or
+(b) a pure `kind:"motion"` end-card with the CTA copy baked into the graphic/`texts`. A scene has no
+face unless its `source` asks for one. Write a short caption (`Cadence · free to try`, not a
 full spoken sentence). Prefer `captionMode: "phrase"` or `captionReveal: "all"` so the line lands as
 one poster, not a word drip. A brand mark is optional: if the caption already carries the brand name,
 **leave the mark layer out** — a centered mark + centered wordmark fights. Otherwise put it mid/top so the
@@ -536,9 +535,10 @@ When the brief is a looping site/hero video (first frame ≡ last frame):
    audio pad — without that, players flash **black** for ~1–2 frames after the video track ends
    even when the true last picture is the ready poster.
 3. **Motion→motion dissolves automatically** (~0.5s): outgoing beat holds through the VO gap,
-   incoming fades in. First beat stays opaque (no fade-from-black). **`transition` is still
-   app-only** (schema rejects it on motion) — you don't author the dissolve. For `app` openers use
-   `"transition": "cut"` so nothing fades the cold open.
+   incoming fades in. First beat stays opaque (no fade-from-black). `transition` on a `motion` beat
+   defaults to `"dissolve"` (this handoff) — leave it unset for a seamless loop's crossfade. Setting
+   `"cut"` explicitly abuts with no crossfade instead, which is right for an `app` opener so nothing
+   fades the cold open, but would break the seam here.
 4. Design beat 0 t=0 and the final beat's end as the **same ready poster** (empty field, solid caret,
    **native scale S=1**, no CTA). Cameras: soft mid-beat breath only — **native at every beat edge**
    so cuts don't zoom-pop (`speech-synced-ui` → *Camera*). Prove with `kino still --at 0` vs settle

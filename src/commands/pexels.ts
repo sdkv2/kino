@@ -75,7 +75,9 @@ export async function pexels(
 
   const n = Number(opts.get);
   if (!Number.isInteger(n) || n < 1 || n > videos.length) {
-    throw new Error(`--get must be 1..${videos.length} (from the search results)`);
+    throw new Error(
+      `--get takes exactly ONE result number, not a list (got "${opts.get}") — 1..${videos.length} (from the search results)`,
+    );
   }
   const v = videos[n - 1];
   const file = pickFile(v);
