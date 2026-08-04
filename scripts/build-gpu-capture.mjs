@@ -18,11 +18,30 @@ function run(cmd, args, opts = {}) {
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
-/** node-gyp ≤10 rejects VS 18; map it to 2022 + v145 toolset. */
+/** Every node-gyp copy that could resolve Visual Studio for this build.
+ *
+ *  Both are patched because the two rebuild steps below use *different* copies: `node-gyp rebuild`
+ *  resolves the plain `node-gyp` dependency, while `electron-rebuild` prefers `@electron/node-gyp`.
+ *  Patching only the latter looks like it works and silently does nothing when it is not installed
+ *  — which is the common case, and left `build:native` failing on VS 18 with
+ *  "Could not find any Visual Studio installation to use" despite a working install. */
+const NODE_GYP_VS_FINDERS = [
+  "node_modules/@electron/node-gyp/lib/find-visualstudio.js",
+  "node_modules/node-gyp/lib/find-visualstudio.js",
+];
+
+/** node-gyp ≤11 rejects VS 18 (Visual Studio 2026); map it to 2022 + the v145 toolset. */
 function patchNodeGypVs18() {
   if (process.platform !== "win32") return;
-  const p = join(root, "node_modules/@electron/node-gyp/lib/find-visualstudio.js");
-  if (!existsSync(p)) return;
+  const found = NODE_GYP_VS_FINDERS.map((rel) => join(root, rel)).filter((p) => existsSync(p));
+  if (found.length === 0) {
+    console.warn("build:native — no node-gyp find-visualstudio.js found; skipping VS 18 patch");
+    return;
+  }
+  for (const p of found) patchVsFinder(p);
+}
+
+function patchVsFinder(p) {
   let c = readFileSync(p, "utf8");
   if (c.includes("ret.versionMajor === 18")) return;
   const needle = `    if (ret.versionMajor === 17) {
@@ -50,7 +69,7 @@ function patchNodeGypVs18() {
     }`,
   );
   writeFileSync(p, c);
-  console.log("build:native — patched @electron/node-gyp for VS 18 / v145");
+  console.log(`build:native — patched ${p.slice(root.length + 1)} for VS 18 / v145`);
 }
 
 patchNodeGypVs18();
