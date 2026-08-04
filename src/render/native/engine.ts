@@ -17,9 +17,9 @@ import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer, takeCaptureBuffer, clearCaptureBuffers } from "./server.js";
 import type { CaptureCodec } from "./captureCodec.js";
 import type { CaptureSource } from "./captureSource.js";
-import { extractDense, extractMaxDim, extractSparse, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
+import { extractDense, extractMaxDim, extractSparse, planDense, planMediaJobs, planMaskJobs, type MediaEntryNode } from "./videoFrames.js";
 import type { WorkerHandle } from "./workerHandle.js";
-import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.js";
+import { acquireElectronWorker, prewarmElectronHosts, releaseElectronWorkers } from "./electron/slots.js";
 import { loadGpuCapture, resolveElectronCapture, useSharedTextureCapture, type CaptureKind } from "./electron/gpuCapture.js";
 import { compDims, DRAFT_SHORT_EDGE, FORMAT_DIMS, formatFileTag, maxOutputDim, scaledDims, type FormatId } from "../formats.js";
 import { capWorkers, bytesPerWorker } from "./workerCap.js";
@@ -330,11 +330,28 @@ export function startEncoder(opts: {
   return { stdin: proc.stdin, done, kill };
 }
 
+/**
+ * Bytes allowed to sit in ffmpeg's stdin buffer before the drain loop stops to let it catch up.
+ *
+ * A pipe's default highWaterMark is 64KB and an all-intra 1080p frame is ~208KB, so EVERY write
+ * overshoots it, returns false, and — if honoured literally — parks the drain on a `drain` event
+ * once per frame. The write itself always succeeds; `false` is advisory, not a failure. Measured
+ * on an M4 (shotstack-parity, shared capture, 12 workers) that cost 4.33 ms/frame, **62.5% of the
+ * whole frames phase**, and backed up far enough to park workers on the AHEAD window 9.5% of their
+ * time — the frames phase went flat while wall got worse (17.24s at 4 workers, 17.90s at 12).
+ *
+ * So: keep writing while the buffer is under this cap, and only wait when it is genuinely deep.
+ * 32MB is ~150 frames at this size — bounded memory (see logMemProfile), far above the per-frame
+ * stall point.
+ */
+const STDIN_BUFFER_CAP = 32 * 1024 * 1024;
+
 function writeFrame(stdin: NodeJS.WritableStream, buf: Buffer): Promise<void> {
-  if (!stdin.write(buf)) {
-    return new Promise<void>((resolve) => stdin.once("drain", resolve));
-  }
-  return Promise.resolve();
+  stdin.write(buf);
+  // `writableLength` is what is actually queued; a Writable always accepts the write regardless.
+  const queued = (stdin as unknown as { writableLength?: number }).writableLength ?? 0;
+  if (queued < STDIN_BUFFER_CAP) return Promise.resolve();
+  return new Promise<void>((resolve) => stdin.once("drain", resolve));
 }
 
 function logMemProfile(written: number, total: number): void {
@@ -355,9 +372,30 @@ export async function renderFrameRange(
   total: number,
   stdin: NodeJS.WritableStream,
   cache?: { get(n: number): Promise<Buffer | null>; put(n: number, buf: Buffer): Promise<void> },
-  opts?: { pipeline?: boolean },
+  opts?: { pipeline?: boolean; gate?: (frame: number) => Promise<void> },
 ): Promise<void> {
   const pipeline = opts?.pipeline ?? capturePipelineEnabled();
+  // Extraction may still be running (see planDenseMedia): a frame that draws a clip whose JPEGs
+  // are not on disk yet would render with the footage silently absent — a wrong-pixels bug, not a
+  // slow one. Only capture waits; a cache hit needs nothing from disk.
+  const gate = opts?.gate;
+
+  // Where does the frames phase actually go? Measured on a 4090/61-core box, the phase stayed flat
+  // at 4.7-5.2s from 32 to 64 workers while CPU sat at 32% and the GPU at 14%, and workers were
+  // busy only ~39% of it — so something downstream of the page serialises. These counters split
+  // the candidates apart: `capture` is the parent's view of a seek (page work PLUS IPC and
+  // event-loop queueing, so capture-minus-page-seek is parent overhead), `park` is workers stalled
+  // on the AHEAD window, `drain-idle` is the writer waiting on an out-of-order frame, and `write`
+  // is ffmpeg backpressure. Reported under KINO_PROFILE=1 beside the page's own profile.
+  // Its own flag as well as KINO_PROFILE, because these counters are just performance.now() around
+  // awaits (free), while KINO_PROFILE also turns on the page's per-phase timers — and those are
+  // GL-FLUSHED, so they serialise the renderer and inflate the very numbers being measured.
+  const prof = process.env.KINO_PROFILE === "1" || process.env.KINO_FRAMES_PROFILE === "1";
+  const stat = { gate: 0, capture: 0, park: 0, drainIdle: 0, write: 0, captures: 0 };
+  const clock = () => (prof ? performance.now() : 0);
+  const add = (k: keyof typeof stat, t0: number) => {
+    if (prof) stat[k] += performance.now() - t0;
+  };
   const RUN = 16;
   // Scale AHEAD dynamically so workers >= 4 never park on backpressure while holding valid runs
   const AHEAD = Math.max(48, RUN * Math.max(1, handles.length));
@@ -405,7 +443,9 @@ export async function renderFrameRange(
           lagFrame = null;
           notify();
         }
+        const tp = clock();
         await waitTick();
+        add("park", tp);
         continue;
       }
       if (run === 0) {
@@ -424,7 +464,15 @@ export async function renderFrameRange(
           }
           ready.set(frame, cached);
         } else {
+          if (gate) {
+            const tg = clock();
+            await gate(frame);
+            add("gate", tg);
+          }
+          const tc = clock();
           const buf = await h.seekAndCapture(frame);
+          add("capture", tc);
+          stat.captures++;
           if (pipeline) {
             await storeLag(h, lagFrame, buf);
             lagFrame = frame;
@@ -445,18 +493,40 @@ export async function renderFrameRange(
       if (failure) throw failure;
       const buf = ready.get(written);
       if (!buf) {
+        const td = clock();
         await waitTick();
+        add("drainIdle", td);
         continue;
       }
       ready.delete(written);
+      const tw = clock();
       await writeFrame(stdin, buf);
+      add("write", tw);
       written++;
       logMemProfile(written, total);
       notify();
     }
   })();
 
+  const tAll = clock();
   await Promise.all([...workers, drain]);
+  if (prof) {
+    const wall = performance.now() - tAll;
+    const w = handles.length;
+    const per = (ms: number) => (ms / Math.max(1, stat.captures)).toFixed(2).padStart(7);
+    // Worker-side totals are summed ACROSS workers, so compare them against wall x workers;
+    // drain-side totals are single-threaded and compare against wall.
+    const pctW = (ms: number) => `${((100 * ms) / Math.max(1, wall * w)).toFixed(1).padStart(5)}%`;
+    const pctD = (ms: number) => `${((100 * ms) / Math.max(1, wall)).toFixed(1).padStart(5)}%`;
+    console.error(`[frames profile] ${total} frames, ${w} workers, ${wall.toFixed(0)}ms wall`);
+    console.error(`  worker  capture     ${per(stat.capture)} ms/frame  ${pctW(stat.capture)} of worker time`);
+    console.error(`  worker  media-gate  ${per(stat.gate)} ms/frame  ${pctW(stat.gate)} of worker time`);
+    console.error(`  worker  parked      ${per(stat.park)} ms/frame  ${pctW(stat.park)} of worker time (AHEAD backpressure)`);
+    console.error(`  drain   idle        ${per(stat.drainIdle)} ms/frame  ${pctD(stat.drainIdle)} of wall (waiting on out-of-order frame)`);
+    console.error(`  drain   write       ${per(stat.write)} ms/frame  ${pctD(stat.write)} of wall (ffmpeg backpressure)`);
+    const busy = (100 * stat.capture) / Math.max(1, wall * w);
+    console.error(`  → workers busy ${busy.toFixed(0)}% of the phase; the rest is idle or waiting`);
+  }
   if (failure) throw failure;
 }
 
@@ -471,6 +541,126 @@ function emptyMedia(scratch: string): PreparedMedia {
   const framesDir = join(scratch, "vframes");
   mkdirSync(framesDir, { recursive: true });
   return { framesDir, media: {} };
+}
+
+/** Media whose manifest is final but whose pixels may still be landing. See planDenseMedia. */
+interface OverlappedMedia extends PreparedMedia {
+  /** Composition frame → the writes that must finish before that frame may be drawn. */
+  gate: (frame: number) => Promise<void>;
+  /** Rejects with the first write failure; awaited before the render is declared done. */
+  all: Promise<void>;
+}
+
+/** `KINO_OVERLAP_EXTRACT=0` restores the old behaviour (extract fully, then render). */
+export function overlapExtractionEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.KINO_OVERLAP_EXTRACT !== "0";
+}
+
+/** Below this many usable cores, booting pages early starves extraction instead of hiding. */
+const BOOT_AHEAD_MIN_CORES = 16;
+
+/**
+ * Whether to boot the render pages before the media manifest exists (see the call site).
+ *
+ * Gated on cores because it MOVES page-load work earlier rather than removing it, so it only pays
+ * where there is spare CPU to absorb it. Measured on shotstack-parity, 16:9, cold:
+ *
+ * | box            | config     | off                  | on                                  |
+ * |----------------|------------|----------------------|-------------------------------------|
+ * | 4090, 61 cores | h=3 c=32   | 17.29s (boot 2.91s)  | **15.71s** (boot 0.36s)             |
+ * | 4090, 61 cores | h=8 c=64   | 17.23s (boot 6.00s)  | 17.40s (boot 0.29s, media 1.66→7.5s)|
+ * | M4, 10 cores   | defaults   | **17.24s**           | 20.19s                              |
+ *
+ * Boot leaves the critical path every time (2.91→0.36s, 6.00→0.29s) — but at 64 slots the page
+ * loads simply reappear inside the media phase, and on a 10-core M4 they starve the extraction
+ * ffmpegs outright and cost 17%. So it is on only where the machine is wide enough.
+ *
+ * `KINO_BOOT_AHEAD=1`/`=0` forces it either way.
+ */
+export function bootAheadEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+  cores: number = usableCores(),
+): boolean {
+  if (env.KINO_BOOT_AHEAD === "0") return false;
+  if (env.KINO_BOOT_AHEAD === "1") return true;
+  return cores >= BOOT_AHEAD_MIN_CORES;
+}
+
+/**
+ * Plan every extraction, then start the decodes WITHOUT waiting for them.
+ *
+ * The manifest is knowable after a probe (planDense), and the render server bakes it in at
+ * point-time — so pages can boot and early frames can render while later clips are still being
+ * decoded. Each frame waits only on the clips that actually cover it, via `gate`.
+ *
+ * Masks are deliberately excluded from the overlap and written eagerly here: their entry
+ * optimistically advertises an `sdfByFrame` twin that `write()` withdraws if writeSdfSequence
+ * fails, and a withdrawal after the server has baked the manifest would leave the page requesting
+ * an s*.png that does not exist. Footage has no such conditional field.
+ */
+async function planDenseMedia(
+  props: KinoProps,
+  publicDir: string,
+  scratch: string,
+  maxDim?: number,
+): Promise<OverlappedMedia> {
+  const framesDir = join(scratch, "vframes");
+  mkdirSync(framesDir, { recursive: true });
+  const jobs = [...planMediaJobs(props, props.fps), ...planMaskJobs(props, props.fps)];
+  const plans = await Promise.all(
+    jobs.map((j) => planDense(j, join(publicDir, j.assetRel), framesDir, maxDim)),
+  );
+  const media: Record<string, MediaEntryNode> = {};
+  jobs.forEach((j, i) => (media[j.key] = plans[i].entry));
+
+  const isMask = (key: string) => key.startsWith("rsmask") || key.startsWith("lmask");
+  // Masks first and eagerly — see the note above.
+  for (let i = 0; i < jobs.length; i++) if (isMask(jobs[i].key)) await plans[i].write();
+
+  // Overlapped writes, in timeline order so the frames the render reaches first are ready first.
+  // Same pool of 3 as the eager path, and for the same measured reason (see prepareDenseMedia).
+  const overlapped = jobs
+    .map((j, i) => ({ job: j, write: plans[i].write }))
+    .filter((x) => !isMask(x.job.key))
+    .sort((a, b) => a.job.fromFrame - b.job.fromFrame);
+  const done = new Map<string, Promise<void>>();
+  const resolvers = new Map<string, () => void>();
+  for (const { job } of overlapped) {
+    done.set(job.key, new Promise<void>((res) => resolvers.set(job.key, res)));
+  }
+  let cursor = 0;
+  const all = Promise.all(
+    Array.from({ length: Math.min(3, overlapped.length) }, async () => {
+      while (cursor < overlapped.length) {
+        const { job, write } = overlapped[cursor++];
+        await write();
+        resolvers.get(job.key)!();
+      }
+    }),
+  ).then(() => undefined);
+  // A write failure must reject the frame that waits on it rather than hanging the drain forever.
+  all.catch((err) => {
+    for (const [key, res] of resolvers) {
+      done.set(key, Promise.reject(err instanceof Error ? err : new Error(String(err))));
+      res();
+    }
+  });
+
+  const covering = (frame: number): Array<Promise<void>> => {
+    const waits: Array<Promise<void>> = [];
+    for (const { job } of overlapped) {
+      if (frame >= job.fromFrame && frame < job.fromFrame + job.seqDurFrames) {
+        const p = done.get(job.key);
+        if (p) waits.push(p);
+      }
+    }
+    return waits;
+  };
+  const gate = async (frame: number): Promise<void> => {
+    const waits = covering(frame);
+    if (waits.length) await Promise.all(waits);
+  };
+  return { framesDir, media, gate, all };
 }
 
 async function prepareDenseMedia(
@@ -663,12 +853,78 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     // in there. The mismatch is handled after boot rather than guessed at — see `lateMedia` below.
     const predictedKind = resolveElectronCapture();
     const skipExtraction = formats.every((f) => frameCacheCovers(cacheDirFor(f), sigsFor(f, predictedKind)));
-    const extractMedia = (): Promise<PreparedMedia> =>
-      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOut, ss));
-    let [{ framesDir, media }, audio] = await Promise.all([
-      skipExtraction ? emptyMedia(scratch) : extractMedia(),
-      buildAudioTrack(props, publicDir, endSec, scratch),
-    ]);
+    // Overlapped by default: plan every extraction (a probe each), publish the manifest, and let
+    // the decodes run while pages boot and early frames render. Each frame waits only on the clips
+    // covering it (`mediaGate`). KINO_OVERLAP_EXTRACT=0 restores the extract-then-render order.
+    const overlap = overlapExtractionEnabled() && !skipExtraction;
+    let mediaGate: ((frame: number) => Promise<void>) | undefined;
+    let mediaWrites: Promise<void> | undefined;
+    const extractMedia = async (): Promise<PreparedMedia> => {
+      if (!overlap) return prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOut, ss));
+      const m = await planDenseMedia(props, publicDir, scratch, extractMaxDim(maxOut, ss));
+      mediaGate = m.gate;
+      mediaWrites = m.all;
+      return { framesDir: m.framesDir, media: m.media };
+    };
+    // Spawning Electron does not depend on anything extraction produces — only the page load does
+    // (it needs the server URL, which needs framesDir/media). Start the hosts now so Chromium's
+    // startup overlaps the media lap instead of queueing behind it. See prewarmElectronHosts.
+    prewarmElectronHosts(hostCount);
+
+    // ...and then boot their PAGES too, before the manifest exists.
+    //
+    // Page load is a 1.5MB bundle fetch+parse, WebGL init and shader compile, once per slot, and
+    // with overlapped extraction it became the dominant serial cost: measured on a 4090/61-core
+    // box, pages-boot ran 2.96s at 32 workers and 7.59s at 64 while the frames phase floored at
+    // ~4.9s, so wall got WORSE above c=32 even though rendering got faster. Prewarming the
+    // processes did not help much because lever 1 shrank the media lap it was hiding behind from
+    // 5.6s to ~1.0s.
+    //
+    // The page does not need the real manifest to load — only to render. server.ts keeps config as
+    // per-render swappable state and pages re-init via window.kinoLoad(), and acquireElectronWorker
+    // already takes that cheap `reload` path for an already-booted slot. So: point the server at an
+    // empty media map, boot every slot against it, and let the normal acquire below re-point them
+    // at the real manifest. No frame is captured in between, so the empty map is never drawn.
+    const bootFmt = formats[0];
+    const bootComp = compDims(bootFmt);
+    const bootCanvas = outDimsOf(bootFmt);
+    let bootAhead: Promise<unknown> = Promise.resolve();
+    if (bootAheadEnabled()) {
+      const preServer = await pointServerAt({
+        props, publicDir, framesDir: emptyMedia(scratch).framesDir, media: {},
+        width: bootComp.width, height: bootComp.height,
+        outWidth: bootCanvas.width, outHeight: bootCanvas.height,
+        total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
+        captureCodec: useSharedTextureCapture() ? "h264" : "jpeg",
+        captureSource: resolveCaptureSource(process.env),
+      });
+      // Failures are swallowed on purpose: this is an optimisation, and the acquire in the format
+      // loop below will boot the slot for real and report whatever went wrong with its own context.
+      bootAhead = Promise.all(
+        slots.map((i) =>
+          acquireElectronWorker(i, preServer.url, bootCanvas.width, bootCanvas.height, props.fps, {
+            hosts: hostCount,
+          }),
+        ),
+      ).catch(() => undefined);
+    }
+
+    let mediaAndAudio: [PreparedMedia, string | null];
+    try {
+      [mediaAndAudio] = await Promise.all([
+        Promise.all([
+          skipExtraction ? emptyMedia(scratch) : extractMedia(),
+          buildAudioTrack(props, publicDir, endSec, scratch),
+        ]) as Promise<[PreparedMedia, string | null]>,
+        bootAhead,
+      ]);
+    } catch (err) {
+      // The hosts above were spawned before the try/finally that normally owns them, so on this
+      // path nothing downstream would ever release them — they would outlive the failed render.
+      await releaseElectronWorkers();
+      throw err;
+    }
+    let [{ framesDir, media }, audio] = mediaAndAudio;
     if (skipExtraction) log.step("media: extraction skipped (every frame already cached)");
     lap("media+audio");
 
@@ -779,7 +1035,10 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           // stderr) instead of waiting on a frame loop whose backpressure no exited process will
           // ever drain. The loser stays observed — `render` via the no-op catch (its workers get
           // torn down by releaseElectronWorkers below), `enc.done` via kill() in the catch path.
-          const render = renderFrameRange(handles, total, enc.stdin, cache, { pipeline: true });
+          const render = renderFrameRange(handles, total, enc.stdin, cache, {
+            pipeline: true,
+            gate: mediaGate,
+          });
           render.catch(() => {});
           await Promise.race([
             render,
@@ -787,6 +1046,10 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
               throw new Error("ffmpeg exited before the frame stream ended");
             }),
           ]);
+          // Every drawn frame gated on the clips covering it, but a clip covering no drawn frame
+          // (or one still finishing its tail) could otherwise still be decoding into the scratch
+          // dir this render is about to tear down. Also the point where a write failure surfaces.
+          if (mediaWrites) await mediaWrites;
           lap(`frames ${fmt} (${cache.hits}/${total} cached)`);
           if (process.env.KINO_PROFILE === "1" && handles[0]?.dumpProfile) {
             await handles[0].dumpProfile(total, captureMs);

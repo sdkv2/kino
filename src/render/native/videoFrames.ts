@@ -10,7 +10,7 @@
 // pts list — an fps-filter resample follows a different (pts-grid) rule, and frame≈time·rate
 // arithmetic breaks entirely on VFR screen recordings.
 import { execa } from "execa";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../../media/binPaths.js";
 import { appFreezeFrame, appTrimFrames } from "../appMedia.js";
@@ -256,10 +256,26 @@ async function extractIndices(
   localFrames: number[],
   maxDim?: number,
 ): Promise<MediaEntryNode> {
+  const p = await planIndices(job, assetAbs, framesRoot, localFrames, maxDim);
+  await p.write();
+  return p.entry;
+}
+
+async function planIndices(
+  job: MediaJob,
+  assetAbs: string,
+  framesRoot: string,
+  localFrames: number[],
+  maxDim?: number,
+): Promise<PlannedExtraction> {
   const dir = join(framesRoot, job.key);
   mkdirSync(dir, { recursive: true });
+  const empty = (): PlannedExtraction => ({
+    entry: { dir: job.key, byFrame: {}, maxFrame: 0 },
+    write: async () => {},
+  });
   const { pts, transfer } = await probeVideo(assetAbs);
-  if (!pts.length) return { dir: job.key, byFrame: {}, maxFrame: 0 };
+  if (!pts.length) return empty();
   // Key everything by the EFFECTIVE (freeze-pinned) frame — that is the clock value the page's
   // FrameVideo sees (Freeze pins useCurrentFrame to the pause frame), so it must be the map key.
   const wanted = new Map<number, number[]>(); // srcIndex → effective frames that show it
@@ -271,7 +287,7 @@ async function extractIndices(
     wanted.set(idx, list);
   }
   const uniq = [...wanted.keys()].sort((a, b) => a - b);
-  if (!uniq.length) return { dir: job.key, byFrame: {}, maxFrame: 0 };
+  if (!uniq.length) return empty();
 
   // Select by presentation TIME (±2ms window around each wanted pts — comfortably under any real
   // inter-frame gap), not by frame index: with an input pre-seek the index counter restarts, but
@@ -292,6 +308,32 @@ async function extractIndices(
   const isMask = job.key.startsWith("rsmask");
   const ext = isMask ? "png" : "jpg";
   const quality = isMask ? [] : ["-q:v", "2"];
+
+  // The manifest is computed HERE, before a single frame is decoded, so callers may publish it to
+  // the render server while write() is still running. `-start_number` makes the numbering
+  // contiguous across chunks, so uniq[i] is always x{i+1} — no readdir needed to know the names.
+  const nameAt = (i: number) => `x${String(i + 1).padStart(6, "0")}.${ext}`;
+  const byFrame: Record<number, string> = {};
+  let maxFrame = 0;
+  uniq.forEach((idx, i) => {
+    for (const eff of wanted.get(idx)!) {
+      byFrame[eff] = nameAt(i);
+      maxFrame = Math.max(maxFrame, eff);
+    }
+  });
+  // Masks also advertise a signed-distance twin per frame (s%06d.png beside x%06d.png). Predicting
+  // it is safe because write() only publishes the field if writeSdfSequence actually succeeded —
+  // see the sdfOk flag below, which clears these entries on failure.
+  const sdfByFrame: Record<number, string> = {};
+  if (isMask) for (const [k, v] of Object.entries(byFrame)) sdfByFrame[Number(k)] = v.replace(/^x/, "s");
+  const entry: MediaEntryNode = {
+    dir: job.key,
+    byFrame,
+    maxFrame,
+    ...(isMask ? { sdfByFrame } : {}),
+  };
+
+  const write = async (): Promise<void> => {
   for (let c = 0; c < uniq.length; c += CHUNK) {
     const part = uniq.slice(c, c + CHUNK);
     const terms = part.map((i) => `between(t\\,${(pts[i] - 0.002).toFixed(6)}\\,${(pts[i] + 0.002).toFixed(6)})`);
@@ -314,41 +356,51 @@ async function extractIndices(
       join(dir, `x%06d.${ext}`),
     ]);
   }
-  // Outputs arrive in source order → x000001.<ext> maps to uniq[0], etc. EOF can shorten the run;
-  // local frames whose index wasn't reached clamp to the last extracted file (hold last frame).
-  const files = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(`.${ext}`)).sort();
-  const byFrame: Record<number, string> = {};
-  let maxFrame = 0;
-  if (!files.length) return { dir: job.key, byFrame, maxFrame: 0 };
-  uniq.forEach((idx, i) => {
-    const file = files[Math.min(i, files.length - 1)];
-    for (const eff of wanted.get(idx)!) {
-      byFrame[eff] = file;
-      maxFrame = Math.max(maxFrame, eff);
-    }
-  });
-  if (!isMask) return { dir: job.key, byFrame, maxFrame };
+  // EOF can shorten the run: ffmpeg simply stops producing files once the source ends. The manifest
+  // above already names x{i+1} for every wanted index, so materialise the clamp ON DISK (copy the
+  // last real frame into the missing names) rather than aliasing it in the map. Same "hold last
+  // frame" result, but it keeps the manifest predictable — which is the whole point of planning it
+  // before the decode, since the server bakes it in at point-time and cannot be told later.
+  const written = readdirSync(dir).filter((x) => x.startsWith("x") && x.endsWith(`.${ext}`)).sort();
+  if (!written.length) {
+    // Nothing decoded at all: strip the manifest so the page draws no footage rather than
+    // requesting files that will never exist.
+    for (const k of Object.keys(byFrame)) delete byFrame[Number(k)];
+    for (const k of Object.keys(sdfByFrame)) delete sdfByFrame[Number(k)];
+    entry.maxFrame = 0;
+    return;
+  }
+  const last = join(dir, written[written.length - 1]);
+  for (let i = written.length; i < uniq.length; i++) copyFileSync(last, join(dir, nameAt(i)));
 
+  if (!isMask) return;
   // Masks additionally get an exact signed distance field, so kinoMaskDist is one tap at any radius
   // instead of a 24-tap search that facets past ~10px. Best-effort: a failure here leaves
   // sdfByFrame undefined and the shader keeps its old behaviour.
-  const sdfByFrame: Record<number, string> = {};
+  let sdfOk = false;
   try {
     const { width, height } = await probeSize(assetAbs);
-    const ok = await writeSdfSequence({
+    sdfOk = Boolean(await writeSdfSequence({
       srcPattern: join(dir, `x%06d.${ext}`),
       outDir: dir,
       outPattern: join(dir, "s%06d.png"),
       width,
       height,
       channels: job.maskChannels ?? ["gray"],
-    });
-    if (ok) for (const [k, v] of Object.entries(byFrame)) sdfByFrame[Number(k)] = v.replace(/^x/, "s");
+    }));
   } catch {
     // Best effort: no field means kinoMaskDist keeps its in-shader search, which is exactly the
     // behaviour every mask had before fields existed. Never fail a render over an optimisation.
   }
-  return { dir: job.key, byFrame, maxFrame, sdfByFrame: Object.keys(sdfByFrame).length ? sdfByFrame : undefined };
+  // The plan optimistically advertised a field per frame; withdraw it if none was produced, so the
+  // page never requests an s*.png that is not there.
+  if (!sdfOk) {
+    for (const k of Object.keys(sdfByFrame)) delete sdfByFrame[Number(k)];
+    delete entry.sdfByFrame;
+  }
+  };
+
+  return { entry, write };
 }
 
 /** Pixel dimensions of a decoded asset — the SDF transform needs them to frame the raw stream. */
@@ -392,9 +444,37 @@ export async function extractDense(
   framesRoot: string,
   maxDim?: number,
 ): Promise<MediaEntryNode> {
-  if (!existsSync(assetAbs)) return { dir: job.key, byFrame: {}, maxFrame: 0 };
+  const p = await planDense(job, assetAbs, framesRoot, maxDim);
+  await p.write();
+  return p.entry;
+}
+
+/**
+ * A planned extraction whose manifest is final BEFORE any pixel is written.
+ *
+ * This is what lets the render overlap extraction instead of gating on it: the render server bakes
+ * `media` into its config JSON at point-time (see pointServerAt), so the manifest has to be known
+ * up front — but the JPEGs it names can still be appearing on disk while pages boot and early
+ * frames render. `write()` is the expensive half; `entry` is available immediately after the
+ * probe.
+ */
+export interface PlannedExtraction {
+  entry: MediaEntryNode;
+  write: () => Promise<void>;
+}
+
+/** Probe + plan a dense extraction without decoding anything. See PlannedExtraction. */
+export async function planDense(
+  job: MediaJob,
+  assetAbs: string,
+  framesRoot: string,
+  maxDim?: number,
+): Promise<PlannedExtraction> {
+  if (!existsSync(assetAbs)) {
+    return { entry: { dir: job.key, byFrame: {}, maxFrame: 0 }, write: async () => {} };
+  }
   const locals = Array.from({ length: job.seqDurFrames }, (_, n) => n);
-  return extractIndices(job, assetAbs, framesRoot, locals, maxDim);
+  return planIndices(job, assetAbs, framesRoot, locals, maxDim);
 }
 
 // Sparse extraction (stills): only the requested local frames.

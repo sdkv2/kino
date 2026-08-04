@@ -25,6 +25,20 @@
  * texture means the hardware decodes to linear and nothing re-encodes, which crushes the blacks
  * and oversaturates the whole plate. Those callers pass `srgb: false` and get raw bytes.
  */
+/**
+ * `texImage2D` here is deliberate, and `texSubImage2D` is NOT the optimisation it looks like.
+ *
+ * Footage re-uploads dominate the frame: every composition frame needs different pixels (at speed
+ * 1 no source frame repeats, so caching them cannot help), and this is 8.29MB of 1080p RGBA per
+ * segment per frame — measured at 25-29 ms/call in `texture:segN` on a 4090, with `layer:segN`
+ * tracking it to within 0.06ms.
+ *
+ * Re-uploading in place via texSubImage2D when the shape is unchanged was tried, to skip the
+ * reallocation. Output was bit-identical (PSNR 120 on sampled frames) and it was SLOWER: 23.64s vs
+ * 18.84s on an M4 at defaults. Reallocating orphans the old storage, so the driver never waits on
+ * in-flight sampling of the previous contents; a sub-update writes into a texture the GPU may
+ * still be reading and has to stall or copy internally. The allocation is what buys the asynchrony.
+ */
 export function uploadCanvasOrImage(
   gl: WebGL2RenderingContext,
   existing: WebGLTexture | null,
@@ -59,6 +73,18 @@ export function uploadCanvasOrImage(
 
 /** Load an <img> to completion. Rejects nothing — a broken asset yields null, matching the
  *  DOM path where a failed <img> is a blank layer rather than a crash. */
+/**
+ * `<img>` here is deliberate; `createImageBitmap` is NOT the faster upload it looks like.
+ *
+ * Tried 2026-08-04 on the frames provider (the hottest upload in the renderer, ~57% of capture):
+ * decode to an ImageBitmap off-thread so texImage2D takes it directly instead of routing through
+ * Chromium's image pipeline. Measured on an M4 at defaults: 17.81s vs 18.29s — ~3%, inside this
+ * machine's run-to-run noise. AND it changed pixels: sampled frame 300 came out at 39.8 dB PSNR
+ * against the <img> path, ~8 dB below that frame's own 48.3 dB noise floor, while other frames
+ * were identical. <img> and createImageBitmap do not treat an embedded transfer profile the same
+ * way (extraction can write one — see videoFrames.ts's hdrChain), and the captured bitstream IS
+ * the deliverable (`-c:v copy`). No speedup plus a colour shift is not a trade worth taking.
+ */
 export function loadImage(url: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -67,3 +93,4 @@ export function loadImage(url: string): Promise<HTMLImageElement | null> {
     img.src = url;
   });
 }
+
