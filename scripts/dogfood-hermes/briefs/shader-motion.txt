@@ -1,0 +1,12 @@
+You're working inside the `kino` repo — a spec-driven vertical video ad generator with a CLI command called `kino`.
+
+Task: create a new brand called `lunara` (a premium skincare brand) and build a real ~18 second vertical (9:16) ad for it that leans on abstract animated backgrounds/shaders and motion graphics instead of stock footage — it should feel premium and painterly, not like a generic template. This should be a real, finished, playable video, not a mock or a plan.
+
+Use the `kino` CLI. Explore its own docs/help/skills to find the right building blocks (backgrounds, motion authoring, etc.) — don't guess blindly if the tool is trying to tell you how.
+
+When you are done, or if you get stuck for good and give up, write a file at `./dogfood-report.md` in your working directory with these four sections:
+
+1. **Commands run** — every command you ran, in order, and why.
+2. **Friction log** — every point you got confused, blocked, or had to guess/work around something. For each: the exact command you ran, the exact error/output you got, and what you did about it. No vague "this was unclear" — quote the actual text that confused you.
+3. **Top 5, ranked** — the five things that made this harder than it should have been, worst first.
+4. **Result** — did you produce a final playable mp4? Where is it? If you didn't finish, say exactly where you stopped and why.

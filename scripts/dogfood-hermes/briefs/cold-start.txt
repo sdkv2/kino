@@ -1,0 +1,12 @@
+You're working inside the `kino` repo — a spec-driven vertical video ad generator with a CLI command called `kino`. You've never used it before and nobody is going to walk you through it.
+
+Task: create a brand new brand called `nova-fit` (a home-fitness subscription app) and produce a real ~15 second vertical (9:16) video ad for it — script, AI voiceover, visuals, captions, ending on whatever kino's standard sign-off convention turns out to be. This should be a real, finished, playable video, not a mock or a plan.
+
+Figure out the right workflow yourself using the CLI's own help output, docs, and any built-in guidance it offers (it has more than `--help` — look for it). Don't guess blindly when the tool is trying to tell you something; don't assume you already know kino's conventions.
+
+When you are done, or if you get stuck for good and give up, write a file at `./dogfood-report.md` in your working directory with these four sections:
+
+1. **Commands run** — every command you ran, in order, and why.
+2. **Friction log** — every point you got confused, blocked, or had to guess/work around something. For each: the exact command you ran, the exact error/output you got, and what you did about it. No vague "this was unclear" — quote the actual text that confused you.
+3. **Top 5, ranked** — the five things that made this harder than it should have been, worst first.
+4. **Result** — did you produce a final playable mp4? Where is it? If you didn't finish, say exactly where you stopped and why.
