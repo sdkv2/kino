@@ -70,7 +70,7 @@ describe("electronHosts", () => {
   it("never spawns a host that cannot amortise its own boot", () => {
     // 700 frames over 8 hosts would be ~90 frames each, under a second of work per host.
     expect(electronHosts(700, {}, 61)).toBe(2);
-    expect(electronHosts(1817, {}, 61)).toBe(6); // the shotstack-parity spec
+    expect(electronHosts(1817, {}, 61)).toBe(6); // a 60s 1080p footage bench
   });
 
   it("caps the process count on very large machines", () => {

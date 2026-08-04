@@ -73,9 +73,9 @@ So the second build after a small edit is fast and cheap — only the changed be
 Rendered frames are cached too, under `out/<title>/.frame-cache/`, keyed on everything that changes
 a pixel (composition, canvas size, page bundle, supersample, capture backend). When a rebuild finds
 **every** frame already there, the footage extraction that would have fed the compositor is skipped
-entirely — it exists to produce frames nobody is going to composite. On the 12-clip
-`shotstack-bench` spec that takes a warm rebuild from **7.5 s to 2.0 s** (the extraction alone was
-5.4 s of it), and the output is byte-identical. The build logs `media: extraction skipped (every
+entirely — it exists to produce frames nobody is going to composite. On a 12-clip, 60 s 1080p
+footage bench that takes a warm rebuild from **7.5 s to 2.0 s** (the extraction alone was 5.4 s of
+it), and the output is byte-identical. The build logs `media: extraction skipped (every
 frame already cached)` when it happens. Any miss — an edited spec, a deleted cache file,
 `KINO_NO_FRAME_CACHE=1` — extracts as usual.
 

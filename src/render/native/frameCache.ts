@@ -145,7 +145,7 @@ const frameFile = (n: number) => `f${String(n).padStart(6, "0")}.cap`;
  * Exists so a caller can find out that a render is going to be served entirely from cache *before*
  * doing the work that feeds the renderer. Media extraction is the expensive example: it decodes
  * footage into JPEG frames for the page to composite, which is pure waste when no frame will be
- * composited at all. Measured on the 12-clip shotstack-parity spec, a rebuild whose frames were
+ * composited at all. Measured on a 12-clip, 60s 1080p footage bench, a rebuild whose frames were
  * 1800/1800 cached still spent 5.45s of a 7.5s build extracting footage nothing would read.
  *
  * Checks the manifest AND that each file is present, because `get` treats a missing file as a miss

@@ -485,7 +485,7 @@ async function prepareDenseMedia(
   const media: Record<string, MediaEntryNode> = {};
   // Extraction is decode-bound; a small parallel pool keeps it off the critical path.
   //
-  // 3 is not a placeholder — raising it measurably HURTS. On the 12-clip shotstack-parity spec
+  // 3 is not a placeholder — raising it measurably HURTS. On a 12-clip, 60s 1080p footage bench
   // (M4, 10 cores) the media lap went 5.4s -> 5.9s -> 6.4s at pools of 3, 6 and 12: ffmpeg is
   // already internally threaded, so more processes just contend. The work itself is the floor,
   // roughly half h264 decode and half JPEG encode (~1.9ms and ~1.7ms per 1080p frame measured
@@ -656,8 +656,8 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     const cacheDirFor = (fmt: FormatId) => join(outDir, ".frame-cache", formatFileTag(fmt));
 
     // Extraction exists to feed the compositor, so it is dead work when every frame is already
-    // cached — the common case in the iterate loop, and worth 5.45s of a 7.5s rebuild on the
-    // 12-clip shotstack-parity spec. The keys do not depend on extraction output, so this is
+    // cached — the common case in the iterate loop, and worth 5.45s of a 7.5s rebuild on a
+    // 12-clip footage bench. The keys do not depend on extraction output, so this is
     // answerable up front. `resolveElectronCapture()` is the parent's PREDICTION: only the worker
     // can load the native addon, so an `auto` that predicts `shared` may still degrade to `direct`
     // in there. The mismatch is handled after boot rather than guessed at — see `lateMedia` below.
