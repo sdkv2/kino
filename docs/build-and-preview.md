@@ -96,15 +96,32 @@ WebGL2 on any backend, so run under `xvfb-run` on a headless box. `kino doctor` 
 Example: `KINO_ELECTRON_ARGS="--use-angle=swiftshader-webgl --enable-unsafe-swiftshader" kino build specs/foo.json --mock`
 pins SwiftShader, the bit-stable path to use when output must match byte-for-byte across machines.
 
-## Rendering a queue: shard across processes, don't just raise concurrency
+## Sharding across Electron hosts
 
-Raising `KINO_CONCURRENCY` stops helping well before the machine runs out. All of a build's workers
-share **one Chromium GPU process**, and their GL command streams and WebCodecs readbacks serialise
-through it, so a single build plateaus around **180–210 fps** — measured inside that same band on an
-M4, an RTX 3060 Ti and an RTX 4090. A 4090 does not render one video faster than a 3060 Ti; the
-limit is not the GPU.
+All of a build's workers share **one Chromium GPU process**, and their GL command streams and
+WebCodecs readbacks serialise through it, so a single host plateaus around **180–210 fps** —
+measured inside that same band on an M4, an RTX 3060 Ti and an RTX 4090. A 4090 does not render one
+video faster than a 3060 Ti; the limit is not the GPU. Raising `KINO_CONCURRENCY` alone cannot get
+past it.
 
-Running several builds at once sidesteps it, because each gets its own GPU process:
+**A long render now spreads its workers over several Electron hosts automatically**, each with its
+own GPU process. Measured on a 23-core RTX 3060 box (1301 frames): 1 host / 4 workers renders 29
+fps, 3 hosts / 12 workers renders 60 — **2.0× on the render phase, 1.5× on total wall clock**, with
+identical output (same frame count and duration; aligned PSNR 45.9 dB vs 32.3 dB one frame off).
+
+It only engages where it pays. Below **600 frames** a render stays single-host, because each extra
+host costs ~0.7 s of Electron boot that a short render never earns back, and hosts are further
+limited to one per ~300 frames and one per ~7 cores. A 10-core laptop therefore behaves exactly as
+before. `KINO_ELECTRON_HOSTS=N` forces the count either way; the render logs `workers: N across M
+electron hosts` whenever M > 1.
+
+| Env | Effect |
+|---|---|
+| `KINO_ELECTRON_HOSTS=N` | Force the Electron host count. Default is derived from cores and frame count. |
+
+### Many specs at once
+
+For a *queue* of specs the same trick applies at the process level, and needs no engine support:
 
 | box | one build | sharded | gain |
 |---|---|---|---|
@@ -129,9 +146,10 @@ the 4090 (99% at 8 builds) — both better places to stop than an architectural 
 knee it degrades gently (4 builds measured 238 fps vs 3 builds' 246), so erring one shard high is
 cheap.
 
-Two caveats. This raises **throughput for a batch, not the speed of any one video** — a single
-build still runs through a single instance. And `c=4` per build beats fewer-bigger builds:
-concurrency inside a build is what contends, while separate builds mostly don't.
+Two notes. `c=4` per build beats fewer-bigger builds — concurrency *inside* a build is what
+contends, while separate builds mostly don't. And the two levels compose safely rather than
+multiplying: a build given 4 workers uses one host, so `--shards 3 --concurrency 4` is 3 Electron
+hosts in total, not 9.
 
 ## Variants & batch
 

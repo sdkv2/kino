@@ -2,7 +2,6 @@
 // its index (the page re-renders synchronously per seek; videos are pre-extracted stills; audio is
 // mixed node-side), so the output is deterministic run-to-run. Public API mirrors render.ts.
 import { spawn } from "node:child_process";
-import { cpus } from "node:os";
 import { copyFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { releaseScratch, scratchDir } from "../../scratch.js";
@@ -24,6 +23,7 @@ import { acquireElectronWorker, releaseElectronWorkers } from "./electron/slots.
 import { loadGpuCapture, resolveElectronCapture, useSharedTextureCapture, type CaptureKind } from "./electron/gpuCapture.js";
 import { compDims, DRAFT_SHORT_EDGE, FORMAT_DIMS, formatFileTag, maxOutputDim, scaledDims, type FormatId } from "../formats.js";
 import { capWorkers, bytesPerWorker } from "./workerCap.js";
+import { usableCores } from "./sandbox.js";
 
 export function compositorEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
   return true;
@@ -177,18 +177,71 @@ export function resolveCaptureSource(env: NodeJS.ProcessEnv = process.env): Capt
 // at 19.8 ms of a 31.7 ms seek (62%), while the 3-plate FO raster is fully hidden behind it
 // (prefetch-wait is 1.28 ms). Every worker contends for the one GPU, so added workers multiply the
 // dominant cost; too few (c=2) stop hiding the ~14 ms/plate raster. Raising this ceiling needs LESS
-// GPU work per frame, not more workers.
+// GPU work per frame, not more workers *in this host* — the other way out is more hosts, since the
+// contended resource is one Chromium GPU process rather than the GPU. See electronHosts below.
 const MAX_WORKERS_ELECTRON = 4;
+
+/** Slots per host. The ceiling above is per-GPU-process, so this stays 4 however many hosts run. */
+const SLOTS_PER_HOST = MAX_WORKERS_ELECTRON;
+/** Beyond this, added hosts stopped paying: 8×4 measured 578 fps on a 4090 and 4 more workers
+ *  (16 total windows) went backwards. Also a sanity bound on process count for huge machines. */
+const MAX_HOSTS = 8;
+/** Frames below which a render stays single-host. Each extra host costs ~2-5s of Electron boot,
+ *  which a short render never earns back — 354 frames render in ~3s at sharded speed, so paying
+ *  3s of boot to save 2.6s is a loss. */
+const MIN_FRAMES_TO_SHARD = 600;
+/** Frames per host, so a host is never spawned for a sliver of work it cannot amortise its boot
+ *  against (~300 frames is ~2s of rendering). */
+const MIN_FRAMES_PER_HOST = 300;
+
+/**
+ * How many Electron processes to spread this render's workers over.
+ *
+ * The per-host ceiling documented on MAX_WORKERS_ELECTRON is a property of the single Chromium GPU
+ * process each Electron app owns, not of the GPU: measured 170-210 fps per host on an M4, an RTX
+ * 3060 Ti and an RTX 4090 alike — three GPUs spanning ~10x in power. That comment predicted the
+ * ceiling would hold "until that shape changes"; running several hosts changes it, because each
+ * one brings its own GPU process.
+ *
+ * Measured end-to-end on this code path (RTX 3060, 23-core container, glass-refraction-demos,
+ * 1301 frames, 2 reps alternating): 1 host/4 workers renders 28.2-30.3 fps, 3 hosts/12 workers
+ * renders 56.3-63.2 — **2.04x**, or 1.53x on total wall clock (65.5s -> 42.7s). The extra hosts
+ * cost ~700ms of added boot, which is why short renders stay single-host. Output is equivalent,
+ * not merely fast: same frame count and duration, aligned PSNR 45.9dB against 32.3dB at a
+ * one-frame offset, i.e. frames land in the right order.
+ *
+ * ~1.75 cores per worker, i.e. ~7 per 4-slot host, is fitted to those two optima rather than
+ * guessed: 23 cores -> 3 hosts and 61 cores -> 8 both fall out of it exactly.
+ *
+ * Cores come from `usableCores()`, which reads the cgroup CPU quota. Neither `cpus().length` NOR
+ * `availableParallelism()` is safe here: both report the affinity mask, and a container limited to
+ * 23 cores on a 192-core host answers 192 to both (measured on vast.ai). Sizing hosts off that
+ * would spawn 8 of them — 32 windows on 23 cores.
+ */
+export function electronHosts(
+  totalFrames: number,
+  env: NodeJS.ProcessEnv = process.env,
+  cores: number = usableCores(),
+): number {
+  const override = Number(env.KINO_ELECTRON_HOSTS);
+  if (Number.isFinite(override) && override >= 1) return Math.round(override);
+  if (totalFrames < MIN_FRAMES_TO_SHARD) return 1;
+  const byCores = Math.floor(cores / (SLOTS_PER_HOST * 1.75));
+  const byFrames = Math.floor(totalFrames / MIN_FRAMES_PER_HOST);
+  return Math.max(1, Math.min(byCores, byFrames, MAX_HOSTS));
+}
+
 export function concurrency(
   totalFrames: number,
   env: NodeJS.ProcessEnv = process.env,
-  cores: number = cpus().length,
+  cores: number = usableCores(),
   platform: NodeJS.Platform = process.platform,
 ): number {
   const cap = Math.max(1, totalFrames);
   const override = Number(env.KINO_CONCURRENCY);
   if (Number.isFinite(override) && override >= 1) return Math.min(Math.round(override), cap);
-  return Math.min(MAX_WORKERS_ELECTRON, Math.max(1, cores - 1), cap);
+  const perHost = Math.min(SLOTS_PER_HOST, Math.max(1, cores - 1));
+  return Math.min(perHost * electronHosts(totalFrames, env, cores), cap);
 }
 
 // The render server and its config are process-wide singletons the pages re-read via kinoLoad();
@@ -506,8 +559,9 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
   const lap = (m: string) => {
     if (process.env.KINO_NATIVE_DEBUG) console.error(`[native timing] ${m} +${Date.now() - t0}ms`);
   };
-  // One Electron host, N offscreen windows — the GPU process is shared, so worker count is bound
-  // by GPU memory rather than by cores.
+  // One or more Electron hosts, each with N offscreen windows. Within a host the GPU process is
+  // shared, so per-host worker count is bound by GPU memory rather than cores; across hosts the
+  // bound is cores, since each host brings its own GPU process (see electronHosts).
   const total = durationInFrames(props);
   // Linux: capWorkers may lower n from probed VRAM and KINO_NVENC_SESSIONS (see workerCap.ts).
   // An explicit KINO_CONCURRENCY above that cap is a hard error — raise KINO_VRAM_PER_WORKER
@@ -532,6 +586,12 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
       n = capped.workers;
     }
   }
+  // Spread the (possibly VRAM-capped) worker count over hosts, but never more hosts than it takes
+  // to give each SLOTS_PER_HOST windows: a host with fewer slots than that pays full boot cost for
+  // a fraction of the work. This is also what keeps an explicit KINO_CONCURRENCY honest — asking
+  // for 4 workers gets 1 host, not 4 workers thinly spread over 3 — and stops scripts/shard-render
+  // (which pins KINO_CONCURRENCY=4 per build) from multiplying hosts by builds.
+  const hostCount = Math.max(1, Math.min(electronHosts(total), Math.ceil(n / SLOTS_PER_HOST)));
   const slots = Array.from({ length: n }, (_, i) => i);
   const isDraft = draft ?? preset === "veryfast";
   // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
@@ -590,7 +650,9 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
 
         const handles: WorkerHandle[] = await Promise.all(
           slots.map(async (i) => {
-            const h = await acquireElectronWorker(i, server.url, canvas.width, canvas.height, props.fps);
+            const h = await acquireElectronWorker(i, server.url, canvas.width, canvas.height, props.fps, {
+              hosts: hostCount,
+            });
             electronKind ??= h.captureKind;
             return {
               seekAndCapture: async (frame: number) => {
@@ -607,6 +669,11 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           }),
         );
         {
+          // Worth a line of its own: sharding changes the process tree the user will see in Activity
+          // Monitor / top, and it is the first thing to check when throughput looks wrong.
+          if (hostCount > 1) {
+            log.step(`workers: ${n} across ${hostCount} electron hosts (${Math.ceil(n / hostCount)}/host)`);
+          }
           const elCap = electronKind ?? resolveElectronCapture();
           // NVENC on both win32 (DXGI/D3D11) and linux (CUDA); VideoToolbox is macOS only.
           const hw = process.platform === "darwin" ? "VideoToolbox" : "NVENC";

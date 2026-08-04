@@ -304,9 +304,17 @@ class ElectronHostProc {
 
 const liveHosts = new Set<ChildProcessWithoutNullStreams>();
 let killHookInstalled = false;
-let host: ElectronHostProc | null = null;
-/** Booted slots → the capture backend that slot reported, so a reload keeps answering with it. */
-const slotted = new Map<number, CaptureKind>();
+/**
+ * The live hosts, indexed by host number. More than one exists when a render is sharded across
+ * processes: every Electron app gets its own Chromium GPU process, and that process — not the GPU —
+ * is what a single host saturates at ~180-210 fps. See electronHosts() in engine.ts.
+ */
+const hosts: Array<ElectronHostProc | undefined> = [];
+/** Booted slots → the capture backend that slot reported, so a reload keeps answering with it.
+ *  Keyed by host AND slot: slot 0 exists once per host, and conflating them would "reload" a slot
+ *  on a host that never booted it. */
+const slotted = new Map<string, CaptureKind>();
+const slotKey = (hostIdx: number, slot: number): string => `${hostIdx}:${slot}`;
 
 function installKillHook(): void {
   if (killHookInstalled) return;
@@ -320,7 +328,7 @@ function installKillHook(): void {
       }
     }
     liveHosts.clear();
-    host = null;
+    hosts.length = 0;
     slotted.clear();
   });
 }
@@ -329,13 +337,27 @@ function installKillHook(): void {
  *  host rather than a worker that emits the wrong byte format. */
 let hostMode: ElectronCaptureMode | undefined;
 
-function getHost(captureMode?: ElectronCaptureMode): ElectronHostProc {
+function getHost(hostIdx: number, captureMode?: ElectronCaptureMode): ElectronHostProc {
   installKillHook();
-  if (!host) {
-    host = new ElectronHostProc(captureMode);
+  let h = hosts[hostIdx];
+  if (!h) {
+    h = new ElectronHostProc(captureMode);
+    hosts[hostIdx] = h;
     hostMode = captureMode;
   }
-  return host;
+  return h;
+}
+
+/**
+ * Which host and slot a global worker index maps to.
+ *
+ * Round-robin rather than blocked, so an early return from `Promise.all` over a partial worker
+ * list still spreads across every host instead of loading the first one. With 8 workers over 2
+ * hosts: workers 0,2,4,6 are host 0's slots 0-3, workers 1,3,5,7 are host 1's.
+ */
+export function placeWorker(index: number, hostCount: number): { hostIdx: number; slot: number } {
+  const n = Math.max(1, hostCount);
+  return { hostIdx: index % n, slot: Math.floor(index / n) };
 }
 
 /** The capture backend the worker actually resolved. The parent cannot compute it: only the worker
@@ -346,25 +368,31 @@ export interface ElectronWorkerHandle extends WorkerHandle {
   captureKind: CaptureKind;
 }
 
+/**
+ * @param index global worker index across the whole render, not a slot number. With `opts.hosts`
+ *   above 1 it is spread over that many Electron processes — see placeWorker.
+ */
 export async function acquireElectronWorker(
-  slot: number,
+  index: number,
   url: string,
   width: number,
   height: number,
   fps: number,
-  opts: { captureMode?: ElectronCaptureMode } = {},
+  opts: { captureMode?: ElectronCaptureMode; hosts?: number } = {},
 ): Promise<ElectronWorkerHandle> {
   // Renders are serialized by withRenderLock, so a mode change only ever crosses a stills/video
-  // boundary. Drop the live host rather than hand back a worker whose capture contract differs
+  // boundary. Drop the live hosts rather than hand back a worker whose capture contract differs
   // from what the caller asked for.
-  if (host && hostMode !== opts.captureMode) await releaseElectronWorkers();
-  const h = getHost(opts.captureMode);
-  let kind = slotted.get(slot);
+  if (hosts.some(Boolean) && hostMode !== opts.captureMode) await releaseElectronWorkers();
+  const { hostIdx, slot } = placeWorker(index, opts.hosts ?? 1);
+  const h = getHost(hostIdx, opts.captureMode);
+  const key = slotKey(hostIdx, slot);
+  let kind = slotted.get(key);
   if (kind) {
     await h.reload(slot);
   } else {
     kind = await h.boot(slot, url, width, height, fps);
-    slotted.set(slot, kind);
+    slotted.set(key, kind);
   }
   return {
     captureKind: kind,
@@ -375,12 +403,13 @@ export async function acquireElectronWorker(
 }
 
 export async function releaseElectronWorkers(): Promise<void> {
-  if (host) {
-    await host.close();
-    host = null;
-  }
+  // Snapshot and clear first: close() awaits a child exit, and a caller that re-acquires during
+  // that window must not find a host that is on its way out.
+  const live = hosts.filter((h): h is ElectronHostProc => h != null);
+  hosts.length = 0;
   hostMode = undefined;
   slotted.clear();
+  await Promise.all(live.map((h) => h.close()));
 }
 
 async function dumpElectronProfile(
