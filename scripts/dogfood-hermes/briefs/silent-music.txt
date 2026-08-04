@@ -1,0 +1,12 @@
+You're working inside the `kino` repo — a spec-driven vertical video ad generator with a CLI command called `kino`.
+
+Task: create a new brand called `ember` (a home candle / fragrance subscription brand) and build a real ~12 second vertical (9:16) product teaser for it with NO voiceover and NO spoken dialogue — just motion graphics/visuals cut to a music bed. This should be a real, finished, playable video, not a mock or a plan.
+
+Use the `kino` CLI. Explore its own docs/help/skills to figure out how to build a silent, music-only ad correctly — don't guess blindly if the tool is trying to tell you how. Pay attention to whether your timing actually holds up in a real (non-draft) render.
+
+When you are done, or if you get stuck for good and give up, write a file at `./dogfood-report.md` in your working directory with these four sections:
+
+1. **Commands run** — every command you ran, in order, and why.
+2. **Friction log** — every point you got confused, blocked, or had to guess/work around something. For each: the exact command you ran, the exact error/output you got, and what you did about it. No vague "this was unclear" — quote the actual text that confused you.
+3. **Top 5, ranked** — the five things that made this harder than it should have been, worst first.
+4. **Result** — did you produce a final playable mp4? Where is it? If you didn't finish, say exactly where you stopped and why.
