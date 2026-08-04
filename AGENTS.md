@@ -2,7 +2,12 @@
 
 ## Video production
 
-Work from the **`kino/` package root** (the git repo / npm package — has `brands/`, `projects/`, `skills/`).
+Work from the **`kino/` package root** (the git repo / npm package — has `skills/`, `assets-lib/`, `src/`).
+`brands/` and `projects/` live outside the repo now, at `KINO_WORKSPACE_ROOT`
+(`/Users/aiden/Developer/Kino/kino-workspace` — set in the shell profile, so `kino` commands
+run from inside the repo resolve there transparently; `kino doctor` confirms). Moved
+2026-08-04 so real brand/project content can't leak into fresh git worktrees (agent
+isolation, code review sandboxes, the hermes/DeepSeek dogfood harness) as an answer key.
 Empty sibling folders are not the install.
 
 ### Skills (single source of truth)

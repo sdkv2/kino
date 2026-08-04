@@ -40,6 +40,9 @@ kino-meta.mp4
 demos/
 .worktrees/
 
+# hermes/deepseek pipeline-dogfooding harness output (scripts/dogfood-hermes/)
+dogfood-runs/
+
 # Superpowers specs & plans
 .superpowers/
 superpowers/

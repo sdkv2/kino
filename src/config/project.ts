@@ -45,11 +45,15 @@ export function resolveWorkspace(
   cwd: string = process.cwd(),
   opts: { create?: boolean } = {},
 ): Workspace {
+  // An explicit external workspace (brands/projects living outside any repo checkout) always
+  // wins over the cwd walk-up — set once in the shell profile, not a project-local .env (loadEnv
+  // itself needs a resolved workspaceRoot first, so a .env value here would be circular).
+  const envRoot = process.env.KINO_WORKSPACE_ROOT?.trim();
   // Walk up; first dir with projects/ or brands/ wins. Nearer projects/ also keeps nested
   // demos/ from latching onto a parent brands/.
-  let workspaceRoot: string | null = null;
+  let workspaceRoot: string | null = envRoot ? resolve(envRoot) : null;
   let dir = cwd;
-  for (;;) {
+  while (!workspaceRoot) {
     if (existsSync(join(dir, "projects")) || existsSync(join(dir, "brands"))) {
       workspaceRoot = dir;
       break;
