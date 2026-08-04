@@ -2,7 +2,28 @@
 import { ensureCaptureStream, readStreamFrame, resetCaptureStream } from "./captureStream.js";
 
 export const H264_CODEC = "avc1.640028";
+/** Bits per second for a 1080-class canvas. Larger canvases scale up — see h264Bitrate. */
 export const H264_BITRATE = 50_000_000;
+/** The canvas H264_BITRATE was chosen for: 1080-class, i.e. 1920×1080 (== 1080×1920 rotated). */
+const H264_BITRATE_BASE_PIXELS = 1920 * 1080;
+
+/**
+ * Bitrate for a canvas, scaled by pixel count.
+ *
+ * A flat 50 Mbps starves the `*-4k` formats: they carry 4× the pixels on the same budget, so a
+ * 4K render came out at **0.156 bits/px against a 1080 render's 0.765** — and the 4K FILE was
+ * smaller (45MB vs 55MB) despite four times the pixels. That is not a size win, it is the encoder
+ * hitting the cap: capture is all-intra and ffmpeg remuxes it with `-c:v copy`, so the captured
+ * bitstream IS the deliverable and there is no later pass to recover the detail.
+ *
+ * Scales UP only. Every 1080-class format (and every draft, which renders onto a smaller canvas)
+ * has at most this many pixels, so the clamp keeps them at exactly 50 Mbps — this changes 4K
+ * output and nothing else. 9:16-4k and 16:9-4k land on 200 Mbps, 3:4-4k on 150.
+ */
+export function h264Bitrate(width: number, height: number): number {
+  const scale = Math.max(1, (width * height) / H264_BITRATE_BASE_PIXELS);
+  return Math.round(H264_BITRATE * scale);
+}
 
 /**
  * VideoEncoder latency mode — a measured speed/quality/size trade, NOT a free knob.
@@ -47,7 +68,7 @@ function h264Config(width: number, height: number, fps: number, accel: Accel): V
     codec: H264_CODEC,
     width,
     height,
-    bitrate: H264_BITRATE,
+    bitrate: h264Bitrate(width, height),
     framerate: fps,
     latencyMode: H264_LATENCY_MODE,
     avc: { format: "annexb" },
@@ -115,6 +136,9 @@ function h264Worker(): Worker {
   const src = `
 const CODEC = ${JSON.stringify(H264_CODEC)};
 const BITRATE = ${H264_BITRATE};
+const BASE_PX = ${H264_BITRATE_BASE_PIXELS};
+// Same scaling as h264Bitrate(): scale UP only, so 1080-class stays at BITRATE.
+const bitrateFor = (w, h) => Math.round(BITRATE * Math.max(1, (w * h) / BASE_PX));
 const LATENCY = ${JSON.stringify(H264_LATENCY_MODE)};
 
 let encoder = null;
@@ -133,7 +157,7 @@ function ensureEncoder(width, height, framerate, onChunk) {
   encFps = framerate;
   encoder = new VideoEncoder({ output: onChunk, error: (err) => { throw err; } });
   encoder.configure({
-    codec: CODEC, width, height, bitrate: BITRATE, framerate,
+    codec: CODEC, width, height, bitrate: bitrateFor(width, height), framerate,
     latencyMode: LATENCY, avc: { format: "annexb" },
   });
   return encoder;

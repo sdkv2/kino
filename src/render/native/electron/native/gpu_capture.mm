@@ -148,7 +148,18 @@ static OSStatus EnsureSession(EncoderState& enc, int width, int height, int fps)
   CFNumberRef n1 = CFNumberCreate(nullptr, kCFNumberSInt32Type, &one);
   int32_t fpsVal = enc.fps;
   CFNumberRef fpsNum = CFNumberCreate(nullptr, kCFNumberSInt32Type, &fpsVal);
-  int32_t bitrate = 50'000'000;
+  // 50 Mbps is chosen for a 1080-class canvas; scale by pixel count so a *-4k session is not
+  // encoded at a quarter of the per-pixel quality of its 1080 twin. Measured before this scaled:
+  // 0.156 bits/px at 4K against 0.765 at 1080, with the 4K file SMALLER (45MB vs 55MB) despite
+  // four times the pixels — the encoder was simply hitting the cap. Capture is all-intra and
+  // ffmpeg remuxes with `-c:v copy`, so this bitstream is the deliverable and nothing recovers the
+  // detail later. Mirrors h264Bitrate() in page/captureH264.ts.
+  //
+  // Scales UP only: every 1080-class format and every draft is at or below the base, so the clamp
+  // leaves them at exactly 50 Mbps. 200 Mbps at 4K still fits comfortably in int32.
+  const int64_t kBasePixels = 1920LL * 1080LL;
+  const int64_t px = static_cast<int64_t>(width) * static_cast<int64_t>(height);
+  int32_t bitrate = static_cast<int32_t>((50'000'000LL * (px > kBasePixels ? px : kBasePixels)) / kBasePixels);
   CFNumberRef br = CFNumberCreate(nullptr, kCFNumberSInt32Type, &bitrate);
 
   VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
