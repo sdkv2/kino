@@ -1,9 +1,9 @@
 // Full-frame post FX. One object on the spec, applied over the finished composite.
 //
 // The order is FIXED, not authored: bloom must see graded colour, lens must distort the
-// bloomed image, and grain must land last — anything after it would smear or warp the grain,
-// which is exactly what makes digital grain look fake.
-export const postChainOrder = ["grade", "bloom", "lens", "film"] as const;
+// bloomed image, grain must land last, and the output dither must land last of all — anything
+// after it would smear or warp the dither, which is exactly what makes digital grain look fake.
+export const postChainOrder = ["grade", "bloom", "lens", "film", "dither"] as const;
 export type PostStage = (typeof postChainOrder)[number];
 
 export interface PostFx {
@@ -28,6 +28,11 @@ export interface PostFx {
   /** `grain` scales the grain amount (1 = default); `grainHold` is how many frames a grain
    *  field persists — raise it for slower, calmer grain, drop it to 1 for per-frame movement. */
   film?: { intensity?: number; grain?: number; grainHold?: number; grainSize?: number };
+  /** Ordered (Bayer-8) output dither. Breaks the 8-bit plateaus in near-black gradients —
+   *  measured 30–48px runs on a #000 → #0a0a10 ramp. `strength` 0..1 (default 0.5) is the
+   *  dither's peak offset in LSBs; deterministic (pixel-position keyed), so identical frames
+   *  stay identical. Absent = off, so no existing spec's pixels move. */
+  dither?: { strength?: number };
 }
 
 // threshold of 0.45 cuts at roughly sRGB 0.70.
@@ -50,6 +55,7 @@ const RANGES: Record<PostStage, Record<string, Range>> = {
   bloom: { threshold: { min: 0, max: 1 }, intensity: { min: 0, max: 4 }, radius: { min: 0, max: 128 }, halation: { min: 0, max: 1 } },
   lens: { distortion: { min: -1, max: 1 }, chroma: { min: 0, max: 0.05 } },
   film: { intensity: { min: 0, max: 1 }, grain: { min: 0, max: 4 }, grainHold: { min: 1, max: 8 }, grainSize: { min: 1, max: 8 } },
+  dither: { strength: { min: 0, max: 1 } },
 };
 
 export function validatePostFx(p: unknown): string[] {

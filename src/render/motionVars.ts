@@ -10,6 +10,8 @@ export interface MotionVarDynamics {
   pulse: number;
   params: Record<string, BgParamValue>;
   fps?: number;
+  /** Per-frame audio envelope (0..1, final mix RMS) at the COMPOSITION frame. */ 
+  audio?: number;
   /** Resolved params at t − 1/fps — used for camera velocity. Omit on frame 0. */
   prevParams?: Record<string, BgParamValue>;
   /** Resolved params at t + 1/fps — opening-frame velocity lookahead. Omit on last frame. */
@@ -138,6 +140,9 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
     // 0 at beat edges, 1 mid-beat — seam-safe wash/breath (sin(progress·π)).
     "--kino-edge": curves.edge.toFixed(4),
     "--pulse": dyn.pulse.toFixed(4),
+    // Final-mix loudness at this composition frame (0..1). 0 when the build has no audio, so an
+    // authored `calc(var(--kino-audio) * ...)` degrades to silence rather than an invalid var().
+    "--kino-audio": (dyn.audio ?? 0).toFixed(4),
     // Palette roles, plus the legacy literal-name aliases every pre-rename motion page uses.
     "--kino-bg": t.bg,
     "--kino-fg": t.fg,
@@ -195,7 +200,7 @@ export function buildMotionVars(t: Theme, dyn: MotionVarDynamics): Record<string
  */
 export function motionFrameState(
   data: Pick<MotionGraphicProps, "params" | "keyframes" | "words"> & Partial<Pick<MotionGraphicProps, "triggers">>,
-  ctx: { local: number; fps: number; durationFrames: number; theme: Theme; width: number; height: number; captionBottom?: number },
+  ctx: { local: number; fps: number; durationFrames: number; theme: Theme; width: number; height: number; captionBottom?: number; audio?: number[]; audioFrom?: number },
 ): { env: MotionEnv; vars: Record<string, string> } {
   const { local, fps, durationFrames, theme } = ctx;
   const tt = fps > 0 ? local / fps : 0;
@@ -208,11 +213,20 @@ export function motionFrameState(
   const progress = durationFrames > 0 ? Math.min(1, Math.max(0, local / durationFrames)) : 0;
   const curves = progressCurves(progress);
   const { camVel, camBlur } = cameraBlurVars(resolved, prevResolved, nextResolved, fps, hasCam);
+  // The envelope is keyed by COMPOSITION frame (the mix spans the whole timeline); a beat sits at
+  // audioFrom + local. Missing/absent → 0, which is also what a still/dump (no audio built) sees.
+  const audioAt = (() => {
+    const envArr = ctx.audio;
+    if (!envArr?.length || ctx.audioFrom == null) return 0;
+    const f = Math.min(envArr.length - 1, Math.max(0, ctx.audioFrom + local));
+    return envArr[f] ?? 0;
+  })();
   const vars = buildMotionVars(theme, {
     frame: local,
     t: tt,
     progress,
     pulse,
+    audio: audioAt,
     params: resolved,
     fps,
     prevParams: prevResolved,
@@ -236,6 +250,7 @@ export function motionFrameState(
     spring: curves.spring,
     edge: curves.edge,
     pulse,
+    audio: audioAt,
     params: resolved,
     camVel,
     camBlur,

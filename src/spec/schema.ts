@@ -228,6 +228,12 @@ const sfxFields = {
   // Varispeed: pitch and length move together (asetrate), like pitching a sampler. Right for
   // short transients, wrong for anything with a tune in it.
   rate: z.number().gt(0).max(4).default(1),
+  // Head/tail fades ON THE EVENT, in seconds of the played event (so they scale with `rate`
+  // and land on what the audience hears). A click has no attack; a coin drop tails off — both
+  // are cuts the mixer can't smooth. Fade-in covers the event's first fadeInSec, fade-out its
+  // last fadeOutSec, so a fade never bleeds into whatever plays next.
+  fadeInSec: z.number().min(0).default(0),
+  fadeOutSec: z.number().min(0).default(0),
 };
 const SfxEvent = z
   .object({

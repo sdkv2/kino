@@ -44,7 +44,7 @@ import type { MediaMap } from "../src/render/native/page/media.js";
 const theme = {
   font: "Arial", night: "#0b1020", mint: "#80e2b4", green: "#0c8d64",
   gold: "#d99a20", white: "#fff", captionFontSize: 74, captionStroke: 9, film: 0,
-};
+} as unknown as import("../src/render/props.js").Theme;
 const bg = { kind: "glow" as const, image: null, customCode: null, shaderCode: null, params: {}, keyframes: [], triggers: [] };
 const DIMS = { width: 1080, height: 1920 };
 const noMedia: MediaMap = {};
@@ -75,11 +75,10 @@ describe("declared layers in the registry", () => {
   });
 
   it("registers each source kind", () => {
-    // "video" needs a pre-extracted MediaEntry keyed under the layer's own id — buildRegistry only
-    // CONSUMES the media map (mirroring how it consumes media["seg{i}"]); nothing yet PRODUCES an
-    // entry for a declared video layer (planMediaJobs/videoFrames.ts don't walk props.layers). So
-    // this fixture supplies one directly, exactly like a real extraction pass would, to exercise
-    // the real createFramesSource path instead of asserting something no pipeline stage can supply.
+    // A declared "video" layer binds `media[d.id]` → createFramesSource; planMediaJobs now walks
+    // props.layers and produces exactly that entry (keyed by the layer's id). This fixture
+    // supplies it directly to exercise the real createFramesSource path, mirroring how the
+    // extraction pass would feed it.
     const media: MediaMap = { d: { dir: "d", byFrame: { 0: "d/000.png" }, maxFrame: 0 } };
     const reg = buildRegistry(props([
       { id: "a", z: 310, source: { kind: "image", src: "a.png", url: "a.png" } },
@@ -160,5 +159,43 @@ describe("declared layers in the registry", () => {
     // Order follows buildRegistry's own body: the backdrop is built before the declared-layer loop.
     expect(shaderSourceOpts[0]).toEqual({ publishBackdrop: undefined });
     expect(shaderSourceOpts[1]).toEqual({ publishBackdrop: false });
+  });
+
+  it("registers a frames source for a segment's file mask under lmask<beat>", () => {
+    const media: MediaMap = {
+      lmask0: { dir: "lmask0", byFrame: { 0: "x000001.png" }, maxFrame: 0, sdfByFrame: { 0: "s000001.png" } },
+    };
+    const p: KinoProps = {
+      ...props([]),
+      segments: [{
+        kind: "scene", caption: "hi", startSec: 0, endSec: 3,
+        mask: { source: { kind: "file", src: "m.png", channel: "a" } },
+      } as unknown as KinoProps["segments"][number]],
+    };
+    const reg = buildRegistry(p, DIMS, DIMS, media, 1);
+    const src = reg.get("lmask0");
+    expect(src).toBeDefined();
+    // The mask source carries the SDF accessors the renderer's file-mask branch reads.
+    expect(typeof (src as { sdfTexture?: unknown }).sdfTexture).toBe("function");
+    expect((src as { sdfMax?: unknown }).sdfMax).toBe(0); // no frame prepared yet
+  });
+
+  it("registers a frames source for a declared layer's file mask under lmask-<id>", () => {
+    const media: MediaMap = {
+      "lmask-cutout": { dir: "lmask-cutout", byFrame: { 0: "x000001.png" }, maxFrame: 0 },
+    };
+    const reg = buildRegistry(
+      props([{ id: "cutout", z: 450, source: { kind: "image", src: "a.png", url: "a.png" }, mask: { source: { kind: "file", src: "m.png", channel: "r" } } }]),
+      DIMS, DIMS, media, 1,
+    );
+    expect(reg.has("lmask-cutout")).toBe(true);
+  });
+
+  it("registers nothing for a file mask whose media entry is absent", () => {
+    const reg = buildRegistry(
+      props([{ id: "cutout", z: 450, source: { kind: "image", src: "a.png", url: "a.png" }, mask: { source: { kind: "file", src: "m.png", channel: "r" } } }]),
+      DIMS, DIMS, noMedia, 1,
+    );
+    expect(reg.has("lmask-cutout")).toBe(false);
   });
 });

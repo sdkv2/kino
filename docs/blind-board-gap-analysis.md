@@ -236,72 +236,56 @@ audio can reach the renderer without reordering the pipeline.
 
 ### Tier 1 — one schema field + one filter string or a few shader lines
 
-6. **`sfx` pan.** The sfx chain is a single interpolated string (`audioMix.ts:60`); add `pan=stereo|…`.
-   Unblocks Kettle 37.
-7. **`sfx` rate/pitch.** Same line — `asetrate`/`atempo`. Unblocks Relay 12's pitch-randomized
+6. ~~**`sfx` pan.**~~ ✅ done — `pan` field on both sfx surfaces (`src/spec/schema.ts:227`), constant-power gains unity at centre (`audioFilters.ts panGains`). Unblocks Kettle 37.
+7. ~~**`sfx` rate/pitch.**~~ ✅ done — `rate` on both surfaces, `asetrate`/`aresample` varispeed (schema.ts:230, audioFilters.ts). Unblocks Relay 12's pitch-randomized
    60-event burst.
-8. **`sfx` fade in/out.** Same line — `afade`.
-9. **Grade temperature + tint.** `grade.ts` is a 25-line shader with three uniforms; add two.
-   Half of Relay 29.
-10. **Grade lift/gamma/gain (or a shadow/highlight split).** Same shader, a few more lines.
-    Vesper 12's filmic toe.
-11. **Per-channel bloom radius** for halation (red bleeding furthest). Bloom pass already exists.
-    Vesper 15.
-12. **Spec-level shared constants.** A `data` block merged into every motion host as vars /
-    `env.data`. Closes Relay 36's cross-surface consistency problem. Props already carry per-beat
-    params; this is the same wiring one level up.
+8. ~~**`sfx` fade in/out.**~~ ✅ done — `fadeInSec`/`fadeOutSec` on both sfx surfaces (schema.ts:227, props), `afade` in + `areverse,afade,areverse` for the tail (audioFilters.ts sfxFilterChain), verified against real ffmpeg (tests/audio-mix.test.ts).
+9. ~~**Grade temperature + tint.**~~ ✅ done — white-balance stage ahead of the tone curve, channel gains normalised on Rec.601 luma so a ramp moves colour only (`effects/grade.ts whiteBalanceGain`). Half of Relay 29.
+10. ~~**Grade lift/gamma/gain.**~~ ✅ done — `lift`/`gamma`/`gain` stage with a true toe/floor (`uLggOn` branch, grade.ts). Vesper 12's filmic toe.
+11. ~~**Per-channel bloom radius**~~ ✅ done — `halation` param widens red's sigma within the same tap loop (bloom.ts). Vesper 15.
+12. **Spec-level shared constants.** No `data` block at spec level yet — `env.data` doesn't exist. Closes Relay 36's cross-surface consistency problem.
 13. ~~**Lint on `backface-visibility`.**~~ ✅ done — `lintBackfaceVisibility`, both tiers, comments
     excluded so a commented-out line doesn't fail the build. Not `preserve-3d`: that works.
-14. **Extra palette roles.** Injection is mechanical; the design question (which roles a spoof-UI
-    design system needs) is the actual work. Relay 35.
+14. **Extra palette roles.** Palette is still five semantic roles (bg/fg/accent/accent2/deep) plus legacy aliases and `--kino-font` — no dim-fg/border/merged-state roles. Relay 35.
 
 ### Tier 2 — small new plumbing, pipeline already cooperates
 
-15. **Music volume automation.** Add a `keyframes` track to `MusicVolumeOpts` and evaluate it inside
-    `musicVolumeAt`. ~20 lines. **Single best ratio on this page** — it alone unblocks Relay 40's
-    named arc, Kettle 17's silence gates, and most of Vesper 33.
-16. **Multiple music beds / stems.** `music` becomes an array; `shapeMusicBed` runs per bed and each
-    adds a `mixLabel`. The mix graph is already N-input. Unblocks Vesper 32's subtractive edit.
-17. **`atWord` on `sfx[]`.** The resolver exists for motion keyframes; the only real work is deciding
-    the schema shape, since a top-level sfx has no implicit beat (`{ segment, atWord }`). Kills a
-    whole `retune` pass on every spec with placed effects.
-18. **VO gain.** Vesper 34 / Relay 42 both want the voice mixed *under* the bed; `duck` only moves
-    the bed.
-19. **Output dither.** Encode is `-pix_fmt yuv420p` at `-crf 18` with no dither stage; measured
-    30–48px plateaus in near-black. Either an ordered-dither pass in the final compositor stage or an
-    encode-side flag.
-20. **Audio envelope var** (`--kino-audio` / `env.audio`). `kino audio-markers` already computes
-    RMS/onsets/kick-grid, and `shapeMusicBed` already decodes the bed to PCM before frames render.
-    The work is computing a per-frame envelope there and threading it into props beside `--pulse`.
-    Unblocks Kettle 23 and 24.
+15. ~~**Music volume automation.**~~ ✅ done — `MusicKeyframe` track on the bed (`schema.ts:261`), evaluated inside `musicVolumeAt` via `musicBedLevelAt` (`render/audio.ts`), ducking applied on top so a keyframe to 0 is a hard gate. Unblocks Relay 40's named arc, Kettle 17's silence gates, and most of Vesper 33.
+16. ~~**Multiple music beds / stems.**~~ ✅ done — `music` accepts `Music | Music[]` (schema.ts), `shapeMusicBed` runs per bed, each adds a `mixLabel`, one `amix` (audioMix.ts). Unblocks Vesper 32's subtractive edit.
+17. ~~**`atWord` on `sfx[]`.**~~ ✅ done — `SegmentSfxEvent` carries `atWord` + `offset`, resolved by the same word-anchor resolver (schema.ts:243, motionVars.ts resolveWordAnchors). Kills a whole `retune` pass on every spec with placed effects.
+18. ~~**VO gain.**~~ ✅ done — spec-level `voVolume` (schema.ts), applied in `voFilterChain` (audioFilters.ts). Vesper 34 / Relay 42.
+19. ~~**Output dither.**~~ ✅ done — opt-in `postFx.dither` stage (postSpec.ts): ordered Bayer-8 in gamma space, deterministic (pixel-position keyed — self-determinism safe), `strength` 0..1 default 0.5. Off when absent so no existing spec's pixels move. Verified: real build A/B shows the plateau broken (180–540 deviating px/row vs 0) and a GPU-scope probe counts strictly more distinct levels on a #000→#0a0a10 ramp (tests/compositor-dither*.test.ts).
+20. ~~**Audio envelope var** (`--kino-audio` / `env.audio`).~~ ✅ done — `buildAudioTrack` returns a per-frame RMS envelope of the FINAL mix (`frameRmsEnvelope`, audioMix.ts), the engine threads it onto the render props (frame-cache key untouched), and motion graphics read `env.audio` / `--kino-audio` (motionVars.ts). Verified: a disc scaled `calc(0.8 + var(--kino-audio) * 4)` grew 31.5px→39.5px between silent and loud builds. Unblocks Kettle 23 and 24.
 
 ### Tier 3 — real work, well-scoped
 
-21. **Per-beat film grain.** The `film` adjustment layer is base-group and spans the whole
-    composition by construction — `fromSec`/`segment`/`opacity` are all rejected alongside `adjust`.
-    Windowing it means touching that emission path. Vesper 14.
-22. **Grain size / response parameters.** Currently a single intensity scalar with no controllable
-    structure.
+21. **Per-beat film grain.** The `film` finish is now a z-ordered adjustment layer at `Z.film` (layers.ts:526) — a real improvement over the old base-group pass — but `ADJUST_INCOMPATIBLE_FIELDS` still rejects `fromSec`/`toSec`/`segment`/`opacity` on adjustment layers (layerSpec.ts:94), so the film layer still spans the whole composition. Windowing it remains open. Vesper 14.
+22. ~~**Grain size / response parameters.**~~ ✅ done — `grainSize` (lattice clump), `grain` (amplitude), `grainHold` (boil rate) on the film pass (effects/film.ts:104–105).
 23. **Content-responsive veiling glare.** Needs a luminance measure of the composite feeding the
     lens stage. Vesper 16.
-24. **Declared video layers → real footage.** `planMediaJobs` walks segments and avatar windows but
-    never `spec.layers`; the build error says so explicitly. Fixing it unlocks declared video layers
-    generally **and** is the prerequisite for split-screen / PiP.
-25. **`mask.source.kind: "file"`.** `planMaskJobs` already extracts the frames; nothing ever binds
-    them into a texture, so validation rejects the kind outright. A binding gap, not a missing feature.
+24. ~~**Declared video layers → real footage.**~~ ✅ done — `planMediaJobs` now walks `props.layers`
+    (keyed by layer id, window = fromSec/toSec or the bound segment), build.ts stages and resolves
+    footage layers, and the registry binds `media[d.id]` → `createFramesSource`. Verified: a real
+    build composited a full-bleed footage layer + a PiP inset (different clips) in the same frame.
+25. ~~**`mask.source.kind: "file"`.**~~ ✅ done — full binding: `planMaskJobs` covers segments AND
+    declared layers (`lmask<beat>` / `lmask-<id>`), a new `createMaskFramesSource` provider serves
+    coverage + SDF frames, the registry registers them, Stage prepares them, and the renderer's mask
+    branch binds coverage + distance field. The two validators no longer reject the kind. Verified:
+    a real build clipped a beat through a white-box mask.mp4 (smptebars inside the box, backdrop
+    outside).
 26. **Hue-selective grade qualifier.** The other half of Relay 29 — protecting the CI greens and reds
     through a temperature ramp needs a qualifier, not just more global axes.
 
 ### Tier 4 — architecture
 
-27. **Per-element motion blur inside a motion graphic.** `motionBlur` derives from measured *layer*
-    travel; an element moving inside the raster gets nothing. Needs either sub-frame rasterization
-    (N× raster cost per frame) or a velocity buffer out of the DOM. Kettle 26/27.
-28. **Two live clips in one frame** (rectangular split-screen / PiP). Depends on #24, then needs a
-    compositing model for concurrent footage layers — beats are sequential today.
-29. **`captionAnimation` in the native raster.** Already documented as a known architecture gap: the
+27. ~~**Per-element motion blur inside a motion graphic.**~~ ✅ done — via the velocity-buffer route: `data-kino-vel` / `.kino-smear` opt an element in, the engine measures its box at N−1 and N+1 (seek-independent, cache-safe) and writes `--kino-vel[-x/-y/-dx/-dy/-angle]` for a CSS `blur()` smear (`motionVelocity.ts`, `velocityProbe.ts`). Kettle 26/27.
+28. ~~**Two live clips in one frame** (rectangular split-screen / PiP).~~ ✅ done — fell out of #24:
+    two declared video layers with different z/rects get independent /vframes jobs, independent
+    registry sources, and simultaneous LayerDraws (tests/two-live-clips*.test.ts pin all three).
+    A real build showed a full-bleed clip + a PiP inset compositing in the same frame.
+29. **`captionAnimation` in the native raster.** Still a known architecture gap: the
     keyed word-raster only ever captures the settled pose, so entrance springs need per-frame dynamic
-    cadence or an animated quad.
+    cadence or an animated quad (layers.ts:428–430 notes entrance motion rides the quad instead).
 30. **A real simulation pathway.** Not "make Tier-2 stateful" — determinism is correct and worth
     keeping. The honest version is an offline bake step: run a solver once, emit a frame-indexed data
     file, replay it deterministically. Tier 0 item #4 is the cheap 80% of this.
