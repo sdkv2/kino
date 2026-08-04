@@ -12,7 +12,7 @@ import { FFMPEG_PATH } from "../../media/binPaths.js";
 import type { KinoProps } from "../props.js";
 import { buildAudioTrack } from "./audioMix.js";
 import { angleBackend } from "./angle.js";
-import { frameSignatures, openFrameCache } from "./frameCache.js";
+import { frameCacheCovers, frameSignatures, openFrameCache } from "./frameCache.js";
 import { getPageBundle, getPageBundleHash } from "./pageBundle.js";
 import { ensureRenderServer, takeCaptureBuffer, clearCaptureBuffers } from "./server.js";
 import type { CaptureCodec } from "./captureCodec.js";
@@ -465,6 +465,14 @@ interface PreparedMedia {
   media: Record<string, MediaEntryNode>;
 }
 
+/** The shape prepareDenseMedia returns, with nothing extracted. Used when every frame is already
+ *  cached: the page still needs a framesDir to resolve against, it just never asks for a frame. */
+function emptyMedia(scratch: string): PreparedMedia {
+  const framesDir = join(scratch, "vframes");
+  mkdirSync(framesDir, { recursive: true });
+  return { framesDir, media: {} };
+}
+
 async function prepareDenseMedia(
   props: KinoProps,
   publicDir: string,
@@ -476,6 +484,18 @@ async function prepareDenseMedia(
   const jobs = [...planMediaJobs(props, props.fps), ...planMaskJobs(props, props.fps)];
   const media: Record<string, MediaEntryNode> = {};
   // Extraction is decode-bound; a small parallel pool keeps it off the critical path.
+  //
+  // 3 is not a placeholder — raising it measurably HURTS. On the 12-clip shotstack-parity spec
+  // (M4, 10 cores) the media lap went 5.4s -> 5.9s -> 6.4s at pools of 3, 6 and 12: ffmpeg is
+  // already internally threaded, so more processes just contend. The work itself is the floor,
+  // roughly half h264 decode and half JPEG encode (~1.9ms and ~1.7ms per 1080p frame measured
+  // separately) — 12 clips fully parallel, one ffmpeg each, still takes 4.0s against this path's
+  // 5.3s. Neither `-hwaccel videotoolbox` (0.34s vs 0.23s on a 64-frame chunk — setup dominates)
+  // nor dropping the select filter (identical timings) moves it either.
+  //
+  // The levers that would actually pay are structural, not tuning: overlap extraction with the
+  // render instead of gating on it, and skip it entirely when the frame cache already has every
+  // frame it would feed.
   const pool = 3;
   let i = 0;
   await Promise.all(
@@ -586,12 +606,21 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
       n = capped.workers;
     }
   }
-  // Spread the (possibly VRAM-capped) worker count over hosts, but never more hosts than it takes
-  // to give each SLOTS_PER_HOST windows: a host with fewer slots than that pays full boot cost for
-  // a fraction of the work. This is also what keeps an explicit KINO_CONCURRENCY honest — asking
-  // for 4 workers gets 1 host, not 4 workers thinly spread over 3 — and stops scripts/shard-render
-  // (which pins KINO_CONCURRENCY=4 per build) from multiplying hosts by builds.
-  const hostCount = Math.max(1, Math.min(electronHosts(total), Math.ceil(n / SLOTS_PER_HOST)));
+  // Spread the (possibly VRAM-capped) worker count over hosts. An AUTO-derived count is clamped to
+  // ceil(n / SLOTS_PER_HOST), because a host with fewer slots than that pays a full Electron boot
+  // for a fraction of the work: it keeps an explicit KINO_CONCURRENCY=4 on one host rather than
+  // thinly spread over three, and stops scripts/shard-render (which pins KINO_CONCURRENCY=4 per
+  // build) from multiplying hosts by builds.
+  //
+  // An explicit KINO_ELECTRON_HOSTS is NOT clamped that way — asking for 2 hosts and 2 workers is a
+  // deliberate one-window-per-host request (the cleanest way to isolate per-host GPU-process
+  // contention from worker count), and silently collapsing it to one host would make the knob lie.
+  // Only the "more hosts than workers" bound survives, since a host with no window does nothing.
+  const explicitHosts = Number(process.env.KINO_ELECTRON_HOSTS);
+  const hostCount =
+    Number.isFinite(explicitHosts) && explicitHosts >= 1
+      ? Math.max(1, Math.min(Math.round(explicitHosts), n))
+      : Math.max(1, Math.min(electronHosts(total), Math.ceil(n / SLOTS_PER_HOST)));
   const slots = Array.from({ length: n }, (_, i) => i);
   const isDraft = draft ?? preset === "veryfast";
   // Mock (veryfast) → SS=1 (~4× cheaper shader/glass fill) unless KINO_SHADER_SSAA overrides.
@@ -610,10 +639,37 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
     // Footage only ever has to serve the largest surface it lands on — which is the draft canvas
     // on a draft, so previews stop extracting (and decoding) 4K frames to paint 720p ones.
     const maxOut = Math.max(...formats.map((f) => Math.max(outDimsOf(f).width, outDimsOf(f).height)));
-    const [{ framesDir, media }, audio] = await Promise.all([
-      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOut, ss)),
+
+    // One definition of the cache key, used both to decide whether extraction is needed at all and
+    // to open the cache below. Two copies would drift, and a drifted key silently extracts every
+    // time (harmless) or skips extraction for a cache that will miss (not harmless).
+    const sharedCapture = useSharedTextureCapture();
+    const codecForCache: CaptureCodec = sharedCapture ? "h264" : "jpeg";
+    const pageJsHash = await getPageBundleHash();
+    const sigsFor = (fmt: FormatId, kind: CaptureKind | undefined): string[] => {
+      const c = outDimsOf(fmt);
+      return frameSignatures({
+        props, publicDir, pageJsHash, width: c.width, height: c.height, total, fps: props.fps,
+        shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin, captureCodec: codecForCache, captureKind: kind,
+      });
+    };
+    const cacheDirFor = (fmt: FormatId) => join(outDir, ".frame-cache", formatFileTag(fmt));
+
+    // Extraction exists to feed the compositor, so it is dead work when every frame is already
+    // cached — the common case in the iterate loop, and worth 5.45s of a 7.5s rebuild on the
+    // 12-clip shotstack-parity spec. The keys do not depend on extraction output, so this is
+    // answerable up front. `resolveElectronCapture()` is the parent's PREDICTION: only the worker
+    // can load the native addon, so an `auto` that predicts `shared` may still degrade to `direct`
+    // in there. The mismatch is handled after boot rather than guessed at — see `lateMedia` below.
+    const predictedKind = resolveElectronCapture();
+    const skipExtraction = formats.every((f) => frameCacheCovers(cacheDirFor(f), sigsFor(f, predictedKind)));
+    const extractMedia = (): Promise<PreparedMedia> =>
+      prepareDenseMedia(props, publicDir, scratch, extractMaxDim(maxOut, ss));
+    let [{ framesDir, media }, audio] = await Promise.all([
+      skipExtraction ? emptyMedia(scratch) : extractMedia(),
       buildAudioTrack(props, publicDir, endSec, scratch),
     ]);
+    if (skipExtraction) log.step("media: extraction skipped (every frame already cached)");
     lap("media+audio");
 
     const outputs: string[] = [];
@@ -688,21 +744,32 @@ async function renderVideoLocked({ props, publicDir, formats, outDir, title, pre
           );
         }
         lap(`pages-boot ${fmt}`);
-        const sigs = frameSignatures({
-          props,
-          publicDir,
-          pageJsHash: await getPageBundleHash(),
-          width: canvas.width,
-          height: canvas.height,
-          total,
-          fps: props.fps,
-          shaderSS: ss,
-          shaderFXAA: fx,
-          motionFoMin: foMin,
-          captureCodec,
-          captureKind: electronKind ?? undefined,
-        });
-        const cache = openFrameCache(join(outDir, ".frame-cache", formatFileTag(fmt)), sigs);
+
+        // Coverage above was checked against the PREDICTED backend. If the worker resolved a
+        // different one, the keys this render will use are not the keys proved cached, so the
+        // cache is about to miss on footage we deliberately did not extract — and a miss with an
+        // empty media map renders a real frame with the footage silently absent. Extract now and
+        // re-point the page at it. Rare (it needs `auto` to degrade in the worker), but it is a
+        // wrong-pixels bug rather than a slow one, so it is handled rather than assumed away.
+        if (skipExtraction && electronKind && electronKind !== predictedKind) {
+          log.step(`media: capture resolved to ${electronKind}, not ${predictedKind} — extracting after all`);
+          ({ framesDir, media } = await extractMedia());
+          await pointServerAt({
+            props, publicDir, framesDir, media, width, height, outWidth: canvas.width, outHeight: canvas.height,
+            total, shaderSS: ss, shaderFXAA: fx, motionFoMin: foMin,
+            captureCodec: electronShared ? "h264" : "jpeg",
+            captureSource: requestedSource,
+          });
+          // Re-acquiring a booted slot reloads its page, which is what makes it re-read the config.
+          await Promise.all(
+            slots.map((i) =>
+              acquireElectronWorker(i, server.url, canvas.width, canvas.height, props.fps, { hosts: hostCount }),
+            ),
+          );
+        }
+
+        const sigs = sigsFor(fmt, electronKind ?? undefined);
+        const cache = openFrameCache(cacheDirFor(fmt), sigs);
         const tmpOut = join(scratch, `video-${formatFileTag(fmt)}.mp4`);
         const enc = startEncoder({ fps: props.fps, out: tmpOut, audio, preset, captureCodec });
         try {

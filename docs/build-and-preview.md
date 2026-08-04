@@ -70,6 +70,15 @@ Paid, slow outputs are content-cached under `.kino-cache/` and keyed by a hash o
 
 So the second build after a small edit is fast and cheap — only the changed beats re-hit an API.
 
+Rendered frames are cached too, under `out/<title>/.frame-cache/`, keyed on everything that changes
+a pixel (composition, canvas size, page bundle, supersample, capture backend). When a rebuild finds
+**every** frame already there, the footage extraction that would have fed the compositor is skipped
+entirely — it exists to produce frames nobody is going to composite. On the 12-clip
+`shotstack-bench` spec that takes a warm rebuild from **7.5 s to 2.0 s** (the extraction alone was
+5.4 s of it), and the output is byte-identical. The build logs `media: extraction skipped (every
+frame already cached)` when it happens. Any miss — an edited spec, a deleted cache file,
+`KINO_NO_FRAME_CACHE=1` — extracts as usual.
+
 ## Render speed (shader / glass)
 
 Heavy WebGL backgrounds (raymarch) + `kino-lens` are the slow path. Every frame is composited on a single WebGL stage (layers are textures; motion HTML is rasterized per frame). Env levers:
