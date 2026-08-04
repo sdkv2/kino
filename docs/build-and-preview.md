@@ -96,6 +96,43 @@ WebGL2 on any backend, so run under `xvfb-run` on a headless box. `kino doctor` 
 Example: `KINO_ELECTRON_ARGS="--use-angle=swiftshader-webgl --enable-unsafe-swiftshader" kino build specs/foo.json --mock`
 pins SwiftShader, the bit-stable path to use when output must match byte-for-byte across machines.
 
+## Rendering a queue: shard across processes, don't just raise concurrency
+
+Raising `KINO_CONCURRENCY` stops helping well before the machine runs out. All of a build's workers
+share **one Chromium GPU process**, and their GL command streams and WebCodecs readbacks serialise
+through it, so a single build plateaus around **180–210 fps** — measured inside that same band on an
+M4, an RTX 3060 Ti and an RTX 4090. A 4090 does not render one video faster than a 3060 Ti; the
+limit is not the GPU.
+
+Running several builds at once sidesteps it, because each gets its own GPU process:
+
+| box | one build | sharded | gain |
+|---|---|---|---|
+| RTX 3060 Ti, 23 vCPU | 170–175 fps (c=8) | **246 fps** (3 × c=4) | +41% |
+| RTX 4090, 61 vCPU | ~190 fps (c=8) | **578 fps** (8 × c=4) | ~3× |
+
+```bash
+node scripts/shard-render.mjs projects/*/specs/*.json
+```
+
+It picks the shard count from the machine (~7 cores per `c=4` build) and prints per-build and
+aggregate fps. `--shards N` and `--concurrency C` override; `--dry-run` shows the plan. It reports
+two rates, because they answer different questions: **render** (per-build render-phase fps, summed)
+is what the table above measures and what shows the sharding win, while **end-to-end** is total
+frames ÷ wall and includes media extraction, page boot and audio — on short specs those fixed costs
+dominate and it lands far lower. When benchmarking, add `KINO_NO_FRAME_CACHE=1`; a re-run otherwise
+serves frames from `.frame-cache` and reports four-digit "fps" that measure disk (the script says so
+when it happens).
+
+What you hit instead is a real resource: CPU on the 3060 Ti (23.3 of 23 cores at 3 builds), GPU on
+the 4090 (99% at 8 builds) — both better places to stop than an architectural ceiling. Past the
+knee it degrades gently (4 builds measured 238 fps vs 3 builds' 246), so erring one shard high is
+cheap.
+
+Two caveats. This raises **throughput for a batch, not the speed of any one video** — a single
+build still runs through a single instance. And `c=4` per build beats fewer-bigger builds:
+concurrency inside a build is what contends, while separate builds mostly don't.
+
 ## Variants & batch
 
 Render many cuts in one shot with [`batch`](cli-reference.md#batch). The **variants** form patches one base spec N ways and builds each tagged:
