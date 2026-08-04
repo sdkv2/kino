@@ -28,8 +28,33 @@
 //   --draft           passed through to kino build
 //   --dry-run         print the plan and exit
 import { spawn } from "node:child_process";
-import { availableParallelism, cpus } from "node:os";
-import { existsSync } from "node:fs";
+import { availableParallelism } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+
+/** Cores this process may actually use. `availableParallelism()` alone is wrong on rented boxes:
+ *  it reports the CPU affinity mask, which a CPU-quota'd container does not restrict. Measured on
+ *  a vast.ai container limited to 23 cores (cgroup v1, quota 2304000/100000) on a 192-core host,
+ *  it answers 192 — which would shard 8x too wide. Mirrors usableCores() in
+ *  src/render/native/sandbox.ts; duplicated because this script runs straight from source, before
+ *  any build. */
+function usableCores() {
+  const parallelism = availableParallelism();
+  for (const [quotaPath, periodPath] of [
+    ["/sys/fs/cgroup/cpu.max", null], // v2: "<quota|max> <period>" in one file
+    ["/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "/sys/fs/cgroup/cpu/cpu.cfs_period_us"], // v1
+  ]) {
+    try {
+      const raw = readFileSync(quotaPath, "utf8").trim();
+      const [q, p] = periodPath ? [raw, readFileSync(periodPath, "utf8").trim()] : raw.split(/\s+/);
+      if (q === "max") return parallelism;
+      const n = Number(q) / Number(p);
+      if (Number.isFinite(n) && n > 0) return Math.max(1, Math.min(parallelism, Math.floor(n)));
+    } catch {
+      // not this cgroup version; try the next
+    }
+  }
+  return parallelism;
+}
 
 const args = process.argv.slice(2);
 const VALUE_FLAGS = new Set(["shards", "concurrency", "format"]);
@@ -60,9 +85,7 @@ const concurrency = Number(flag("concurrency", 4));
 // ~1.75 cores per worker, i.e. ~7 per c=4 build. Fitted to the two measured optima rather than
 // guessed: 23 cores -> 3 builds (measured best; 4 was slower) and 61 cores -> 8 builds (measured
 // best) both fall out of this exactly. Cap at the spec count, since extra shards would just idle.
-// availableParallelism respects the cgroup quota on rented boxes; cpus() reports the host's cores
-// and would over-shard a container badly (a 23-vCPU container on a 192-core host reads as 192).
-const cores = availableParallelism?.() ?? cpus().length;
+const cores = usableCores();
 const autoShards = Math.max(1, Math.floor(cores / Math.max(1, concurrency * 1.75)));
 const shards = Math.min(specs.length, Number(flag("shards", autoShards)));
 

@@ -139,6 +139,35 @@ const frameFile = (n: number) => `f${String(n).padStart(6, "0")}.cap`;
  * Open the on-disk cache for one format. `sigs` are this build's per-frame signatures; a stored
  * frame is served only when its recorded signature matches. Disable with KINO_NO_FRAME_CACHE=1.
  */
+/**
+ * Whether every frame in `sigs` is already stored, without reading a single frame's bytes.
+ *
+ * Exists so a caller can find out that a render is going to be served entirely from cache *before*
+ * doing the work that feeds the renderer. Media extraction is the expensive example: it decodes
+ * footage into JPEG frames for the page to composite, which is pure waste when no frame will be
+ * composited at all. Measured on a 12-clip, 60s 1080p footage bench, a rebuild whose frames were
+ * 1800/1800 cached still spent 5.45s of a 7.5s build extracting footage nothing would read.
+ *
+ * Checks the manifest AND that each file is present, because `get` treats a missing file as a miss
+ * — reporting "covered" for a half-deleted cache would strand the render with no media.
+ */
+export function frameCacheCovers(dir: string, sigs: string[], env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.KINO_NO_FRAME_CACHE) return false;
+  if (!sigs.length) return false;
+  let stored: Manifest;
+  try {
+    stored = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Manifest;
+  } catch {
+    return false; // no manifest / unreadable → cold cache
+  }
+  if (stored.version !== VERSION) return false;
+  for (let n = 0; n < sigs.length; n++) {
+    if (stored.sigs[n] !== sigs[n]) return false;
+    if (!existsSync(join(dir, frameFile(n)))) return false;
+  }
+  return true;
+}
+
 export function openFrameCache(dir: string, sigs: string[]): FrameCache {
   if (process.env.KINO_NO_FRAME_CACHE) {
     return { get: async () => null, put: async () => {}, commit: () => {}, hits: 0 };

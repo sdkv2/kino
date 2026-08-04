@@ -6,6 +6,7 @@
 // render-host state consumed by doctor.ts and the electron capture path), so they live here rather
 // than fragmenting into a module per probe.
 import { existsSync, readFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 
 /** Probe inputs for sandbox detection — injected so the decision stays pure and testable. */
 export interface SandboxProbe {
@@ -75,4 +76,54 @@ export function nvidiaDrmModeset(
   if (v === "Y") return "enabled";
   if (v === "N") return "disabled";
   return "unknown";
+}
+
+/** cgroup v2, then v1. `max`/`-1` mean unlimited, which is not the same as "unreadable". */
+const CGROUP_V2_CPU_MAX = "/sys/fs/cgroup/cpu.max";
+const CGROUP_V1_QUOTA = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us";
+const CGROUP_V1_PERIOD = "/sys/fs/cgroup/cpu/cpu.cfs_period_us";
+
+/** CPU cores this cgroup is allowed, or null when unlimited/unreadable (not a container, macOS,
+ *  Windows, or a cgroup with no quota set). */
+export function cgroupCpuLimit(
+  readFile: (path: string) => string = (p) => readFileSync(p, "utf8"),
+): number | null {
+  try {
+    const [quota, period] = readFile(CGROUP_V2_CPU_MAX).trim().split(/\s+/);
+    if (quota && quota !== "max") {
+      const n = Number(quota) / Number(period);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    // "max <period>" is an explicit "no limit" — don't fall through to v1 paths that won't exist.
+    if (quota === "max") return null;
+  } catch {
+    // not cgroup v2; try v1 below
+  }
+  try {
+    const quota = Number(readFile(CGROUP_V1_QUOTA).trim());
+    const period = Number(readFile(CGROUP_V1_PERIOD).trim());
+    if (quota > 0 && period > 0) return quota / period;
+  } catch {
+    // no cgroup cpu controller
+  }
+  return null;
+}
+
+/**
+ * Cores this process can actually use, honouring a container's CPU quota.
+ *
+ * `availableParallelism()` is NOT enough, and the failure is silent and large. It reports the CPU
+ * affinity mask, which a CPU-quota'd container does not restrict: measured on a vast.ai container
+ * limited to 23 cores (cgroup v1 quota 2304000/100000) on a 192-core host, both
+ * `availableParallelism()` and `cpus().length` answer **192**. Anything sizing a worker or process
+ * pool off that over-commits by 8x. Rented GPU boxes are exactly this shape, and they are where
+ * heavy renders run.
+ */
+export function usableCores(
+  readFile: (path: string) => string = (p) => readFileSync(p, "utf8"),
+  parallelism: number = availableParallelism(),
+): number {
+  const limit = cgroupCpuLimit(readFile);
+  if (limit == null) return Math.max(1, parallelism);
+  return Math.max(1, Math.min(parallelism, Math.floor(limit)));
 }
