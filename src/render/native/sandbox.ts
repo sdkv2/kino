@@ -50,12 +50,16 @@ const NVIDIA_DRM_MODESET_PATH = "/sys/module/nvidia_drm/parameters/modeset";
 export type ModesetStatus = "enabled" | "disabled" | "unknown";
 
 /** Whether NVIDIA's `nvidia_drm` kernel module has `modeset=1`. This is a **host kernel module
- *  parameter** — it cannot be set from inside a container. Chromium's `GbmSupportX11` gets its DRM
- *  fd via DRI3, and NVIDIA's X driver offers no DRI3 without this flag; proven by elimination across
- *  Xvfb, headless Wayland, and a real Xorg+NVIDIA session (GL bound the real RTX 3060 and GBM still
- *  failed). Modeset=1 is
- *  NECESSARY but NOT SUFFICIENT: kino has no Linux shared-texture capture implementation at all yet,
- *  so this probe only ever answers "is the prerequisite present", never "does zero-copy work". */
+ *  parameter** — a container cannot set it, though a rented container may well inherit it from a
+ *  host that did. It gates DRI3, which gates Chromium creating a GBM device; proven by elimination
+ *  across Xvfb, headless Wayland, and a real Xorg+NVIDIA session (GL bound the real RTX 3060 and
+ *  GBM still failed).
+ *
+ *  NECESSARY, NOT SUFFICIENT, and currently not even close to sufficient: on a modeset=Y host
+ *  Chromium does deliver OSR shared textures, but every one of them is an empty buffer it never
+ *  writes (measured on drivers 575/580/595 — see the `shared` branch of resolveElectronCapture).
+ *  So this probe answers "is the prerequisite present", never "does zero-copy work" — and today
+ *  the honest answer to the second question is no, for reasons this flag cannot fix. */
 export function nvidiaDrmModeset(
   platform: NodeJS.Platform = process.platform,
   readFile: (path: string) => string = (p) => readFileSync(p, "utf8"),

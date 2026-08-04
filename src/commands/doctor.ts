@@ -49,10 +49,11 @@ export function describeDisplayCheck(
  *
  *  Two things this row must get right:
  *  - `enabled` is a prerequisite, not a feature check — kino has no Linux shared-texture capture
- *    implemented at all yet, so this must never read as "and zero-copy capture works now".
- *  - `disabled` is NOT a warning. Linux `auto` already resolves to `direct`, which is faster than
- *    the NVENC `readback` path today (69.9 vs 34.4 fps measured) — nothing is broken, so this is
- *    informational only.
+ *    implemented, and on a modeset=Y host Chromium's delivered textures measured empty anyway, so
+ *    this must never read as "and zero-copy capture works now".
+ *  - `disabled` is NOT a warning. Linux `auto` already resolves to `direct`, which beats the NVENC
+ *    `readback` path by 3.7-4.2x (85.3 vs 23.0 fps at c=8, measured on an RTX 3060 with the
+ *    shipping PBO transport) — nothing is broken, so this is informational only.
  *
  *  Returns null when there's no NVIDIA driver at all (the sysfs file is absent): that is not a fact
  *  worth a row, and reporting it as "disabled" would misreport hardware that never had the option. */
