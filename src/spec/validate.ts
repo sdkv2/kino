@@ -80,14 +80,23 @@ export function assertAssetsExist(spec: Spec, project: Project): void {
   }
 }
 
-// Motion graphics: every referenced file must resolve (library bare id or project asset) and pass
-// the determinism/safety lint. Runs before VO generation so a bad graphic fails the build cheaply.
-export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: string): string }): void {
-  const refs: { source: string; where: string; surface: MotionSurface }[] = [];
+export interface MotionRef {
+  source: string;
+  where: string;
+  surface: MotionSurface;
+  /** Whether this ref goes through the determinism/safety lint. Background textures are rasterized
+   *  DOM too — so they matter to anything reading font usage — but they are not linted here. */
+  lint: boolean;
+}
+
+/** Every motion source a spec rasterizes, in one place. Shared so a consumer that has to see ALL
+ *  of them (the font-cut scan in `build`) cannot drift out of sync with the one that lints them. */
+export function collectMotionRefs(spec: Spec): MotionRef[] {
+  const refs: MotionRef[] = [];
   spec.segments.forEach((seg, i) => {
-    if (seg.kind === "motion") refs.push({ source: seg.source, where: `segment[${i}]`, surface: "beat" });
+    if (seg.kind === "motion") refs.push({ source: seg.source, where: `segment[${i}]`, surface: "beat", lint: true });
     const ov = (seg as { motionOverlay?: { source?: string } }).motionOverlay;
-    if (ov?.source) refs.push({ source: ov.source, where: `segment[${i}].motionOverlay`, surface: "beat" });
+    if (ov?.source) refs.push({ source: ov.source, where: `segment[${i}].motionOverlay`, surface: "beat", lint: true });
     // regionShader texture channels take the same motion sources (a .html rasterized into uTexN),
     // so they get the same resolve + lint here rather than only at build time. Image channels are
     // plain assets and are checked where every other beat asset is.
@@ -95,11 +104,25 @@ export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: strin
       // `texture` surface: a rasterized channel advances its own @keyframes via the re-raster param,
       // so it must not be held to the per-element `.kino-anim` scrub rule a beat is held to.
       if (!/\.(png|jpe?g|webp)$/i.test(source)) {
-        refs.push({ source, where: `segment[${i}].regionShader.textures[${j}]`, surface: "texture" });
+        refs.push({ source, where: `segment[${i}].regionShader.textures[${j}]`, surface: "texture", lint: true });
       }
     });
   });
-  for (const { source, where, surface } of refs) {
+  // Shader background texture channels: an `.html` here is sanitized + rasterized with the brand
+  // fonts and palette applied, exactly like a beat, so its type is real font usage.
+  (spec.backgroundTextures ?? []).forEach((t, i) => {
+    const source = typeof t === "string" ? t : t.source;
+    if (!/\.(png|jpe?g|webp)$/i.test(source)) {
+      refs.push({ source, where: `backgroundTextures[${i}]`, surface: "texture", lint: false });
+    }
+  });
+  return refs;
+}
+
+// Motion graphics: every referenced file must resolve (library bare id or project asset) and pass
+// the determinism/safety lint. Runs before VO generation so a bad graphic fails the build cheaply.
+export function assertMotionGraphics(spec: Spec, project: { assetPath(rel: string): string }): void {
+  for (const { source, where, surface } of collectMotionRefs(spec).filter((r) => r.lint)) {
     let abs: string;
     let fileName: string;
     let display: string;

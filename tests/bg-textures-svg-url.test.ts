@@ -71,6 +71,34 @@ describe("htmlTemplateFromXhtml encoded prefix/suffix", () => {
     }
   });
 
+  // The font block is URI-encoded once per theme and reused across every template built in the
+  // process, because buildTemplate* runs per raster and the payload is ~475KB of identical base64.
+  // These cover the two ways that cache could hand back the wrong bytes.
+  it("reuses the cached font encode across templates without corrupting them", () => {
+    const fonts = `@font-face{font-family:'A';src:url(data:font/ttf;base64,${"QUJD".repeat(512)})}`;
+    const a = htmlTemplateFromXhtml("<p>first</p>", theme, 320, 180, 2, fonts, "");
+    // different dimensions + markup, same theme and fonts → must still round-trip
+    const b = htmlTemplateFromXhtml("<p>second</p>", theme, 640, 360, 1, fonts, "");
+    for (const tpl of [a, b]) {
+      for (const css of cssCases) {
+        expect(decodeSvgUrl(tpl.makeSvgUrl(css))).toBe(tpl.makeSvg(css));
+      }
+    }
+    expect(a.makeSvgUrl("")).not.toBe(b.makeSvgUrl(""));
+  });
+
+  it("does not serve one font block's encode for another", () => {
+    const one = `@font-face{font-family:'A';src:url(data:font/ttf;base64,${"QUJD".repeat(300)})}`;
+    // same length, different bytes — the fingerprint has to separate these, not just the length
+    const two = one.replace(/'A'/, "'B'");
+    expect(two.length).toBe(one.length);
+    const a = htmlTemplateFromXhtml("<p>x</p>", theme, 320, 180, 2, one, "");
+    const b = htmlTemplateFromXhtml("<p>x</p>", theme, 320, 180, 2, two, "");
+    expect(decodeSvgUrl(a.makeSvgUrl(""))).toBe(a.makeSvg(""));
+    expect(decodeSvgUrl(b.makeSvgUrl(""))).toBe(b.makeSvg(""));
+    expect(a.makeSvgUrl("")).not.toBe(b.makeSvgUrl(""));
+  });
+
   it("caches encoded halves — second plate reuses prefix/suffix encode", () => {
     const xhtml = "<p>" + "x".repeat(4096) + "</p>";
     const tpl = makeTpl(xhtml);

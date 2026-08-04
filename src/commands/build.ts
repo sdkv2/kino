@@ -13,7 +13,7 @@ import { loadBrand, DEFAULT_BRAND, type Brand } from "../config/brand.js";
 import { resolvePalette, type Palette } from "../config/palettes.js";
 import { readableInk } from "../render/contrast.js";
 import { loadSpec, parseSpec, musicBeds, type Spec } from "../spec/schema.js";
-import { validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
+import { collectMotionRefs, validateSpec, resolveProvider, resolveVoice, resolveVoiceLook, resolveVoiceModel, resolveFilm } from "../spec/validate.js";
 import { needsSourceImage, type Provider } from "../avatar/provider.js";
 import { Cache } from "../media/cache.js";
 import { contentHash } from "../media/hash.js";
@@ -23,6 +23,8 @@ import { planAvatarWindows } from "../avatar/plan.js";
 import { presenterBeats, resolvePresenterPin } from "../avatar/source.js";
 import { resolveBackgroundKind, resolveBackgroundColors, resolveBackgroundIntensity } from "../render/background.js";
 import { resolveFontCuts } from "../fonts/registry.js";
+import { scanFontWeights, mergeFontWeightUsage, narrowFontCuts } from "../fonts/usedWeights.js";
+import { collectCharset, charsetKey } from "../fonts/charset.js";
 import { resolveTransitionSource } from "../media/transitionLib.js";
 import { ensureFont, resolveFont } from "../fonts/manager.js";
 import { resolveCaptionBackplate } from "../render/elements.js";
@@ -41,6 +43,7 @@ import { readManifest } from "../segment/manifest.js";
 import { resolveCaptionLook, resolveTexts } from "../render/textStyles.js";
 import { pickShot, pickTransition, type Shot, type Transition } from "../render/motion.js";
 import { resolveMotionGraphic, sanitizeMotionHtml, type MotionGraphicRefInput } from "../render/motiongraphic.js";
+import { resolveMotionSource } from "../media/motionLib.js";
 import { beatRelativeWords, resolveWordAnchors } from "../render/motionVars.js";
 import { runMotionQa } from "../render/motionQa.js";
 import { checkLoopSeam } from "../media/loopSeam.js";
@@ -589,8 +592,31 @@ export async function prepare(
   let themeFont = fontName;
   let fontUrl: string | null = null;
   const fontFaces: { weight: number; url: string }[] = [];
+  // Read every motion source ONCE — the weight scan and the glyph charset both need them.
+  const motionSources = collectMotionRefs(spec).map((ref) => {
+    try {
+      return readFileSync(resolveMotionSource(ref.source, project).abs, "utf8");
+    } catch {
+      return null; // assertMotionGraphics reports an unresolvable source properly
+    }
+  });
+  // Glyph subsetting: Google Fonts serves a face cut down to `text=` server-side, which is why this
+  // needs no subsetting dependency. It roughly halves each staged cut (Inter 900: 66.3KB → 32.3KB
+  // for a 98-char set), and since every cut is inlined into every frame's raster that lands
+  // directly on decode time.
+  //
+  // Disabled outright if any motion source could not be read: a character outside the subset falls
+  // back down the font stack and renders in the wrong face, so a charset built from partial
+  // sources is worse than no subsetting at all. KINO_NO_FONT_SUBSET=1 is the manual escape hatch
+  // for a piece that renders characters nothing can see statically.
+  const subsetOff = process.env.KINO_NO_FONT_SUBSET === "1" || motionSources.some((s) => s === null);
+  const charset = subsetOff
+    ? undefined
+    : collectCharset([JSON.stringify(spec), JSON.stringify(brand), ...(motionSources as string[])]);
+  const cutOpts = charset ? { charset, charKey: charsetKey(charset) } : {};
+
   if (font) {
-    const ttf = await ensureFont(font.family, font.weight);
+    const ttf = await ensureFont(font.family, font.weight, cutOpts);
     if (ttf) {
       copyFileSync(ttf, join(publicDir, "font.ttf"));
       fontUrl = "font.ttf";
@@ -598,9 +624,29 @@ export async function prepare(
       // Opt-in extra cuts, spec overriding brand. The caption weight is always in the set, so a page
       // that asks for it still resolves; a cut that fails to download is skipped rather than failing
       // the build. `exact` so a missing cut is reported, not silently staged as the regular face.
-      const wanted = resolveFontCuts(font.weight, spec.fontWeights, brand.fontWeights);
+      const declared = resolveFontCuts(font.weight, spec.fontWeights, brand.fontWeights);
+      // Every staged cut is base64-inlined into EVERY frame's raster, so a declared-but-unused
+      // weight is a per-frame tax the author has no way to see (~66KB of TTF becomes ~88KB of
+      // base64 on all 2000-odd frames of a 73s piece). Narrow the set to what the motion sources
+      // actually reference. A source that sets a weight this cannot read statically makes the whole
+      // set unprovable and nothing is dropped — a used cut going missing is a silent visual
+      // regression, which is far worse than the bytes.
+      const usage = mergeFontWeightUsage(
+        motionSources.map((src) =>
+          // Unreadable source → cannot prove the set, so nothing is dropped.
+          src === null ? { weights: new Set<number>(), dynamic: true } : scanFontWeights(src),
+        ),
+      );
+      const { keep: wanted, dropped } = narrowFontCuts(declared, font.weight, usage);
+      if (dropped.length) {
+        log.warn(
+          `fontWeights ${dropped.join(", ")} declared but no motion source references them — dropped. ` +
+            `Every staged cut is inlined into each frame's raster, so an unused one costs render ` +
+            `time on every frame. Remove them from fontWeights to silence this.`,
+        );
+      }
       for (const w of wanted) {
-        const cut = w === font.weight ? ttf : await ensureFont(font.family, w, { exact: true });
+        const cut = w === font.weight ? ttf : await ensureFont(font.family, w, { exact: true, ...cutOpts });
         if (!cut) {
           log.warn(`Font "${font.family}" weight ${w} unavailable — that cut will fall back`);
           continue;
@@ -619,7 +665,7 @@ export async function prepare(
   // second render-page typeface (themeLabelFont/labelFontUrl below) so motion beats can reach it via
   // --kino-label-font without re-resolving the brand's font choice.
   const labelDef = await resolveFont(brand.labelFont ?? fontName);
-  const labelFont = labelDef ? await ensureFont(labelDef.family, labelDef.weight) : null;
+  const labelFont = labelDef ? await ensureFont(labelDef.family, labelDef.weight, cutOpts) : null;
   let themeLabelFont: string | undefined;
   let labelFontUrl: string | null = null;
   if (labelDef) {
