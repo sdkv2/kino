@@ -75,7 +75,9 @@ export async function photos(
 
   const n = Number(opts.get);
   if (!Number.isInteger(n) || n < 1 || n > results.length) {
-    throw new Error(`--get must be 1..${results.length} (from the search results)`);
+    throw new Error(
+      `--get takes exactly ONE result number, not a list (got "${opts.get}") — 1..${results.length} (from the search results)`,
+    );
   }
   const p = results[n - 1];
   const url = pickPhotoUrl(p, orientation);

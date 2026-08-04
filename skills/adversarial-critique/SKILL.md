@@ -80,7 +80,8 @@ Task:
       continues; or steps light ahead of / behind the spoken nouns (should gate on env.words)
    🟠 Copy/VO mismatch — on-screen chip/label nouns ≠ spoken words (e.g. "compose" vs "motion")
    🟠 Bad positioning — caption pinned to top edge; CTA left as a tiny lower-third subtitle on empty
-      mesh (should be centered end card with `cta: true`); elements stacked in the same band.
+      mesh (should be a centered end card — a presenter-less `scene` beat gets this automatically);
+      elements stacked in the same band.
       **Platform safe zones (`still --platform`) are a guide, not a mandate** — flag only when
       *important* content (hook, CTA, hero caption, kicker, primary claim) sits where feed chrome
       would obscure it. Non-critical chrome (tab bars, nav icons, decorative dock, secondary labels)
@@ -122,7 +123,7 @@ If truly clean: `OK — no major layout issues.`
 | 🔴 | Frozen motion on `--around` sheet (typed UI / Lottie / counter / camera identical across tiles) |
 | 🟠 | Under-animated motion (opacity-only / early freeze / no stagger / no idle life / no VO punch) |
 | 🟠 | Dead tail / steps not word-synced; on-screen nouns ≠ VO nouns |
-| 🟠 | CTA as tiny lower-third on empty mesh (should be centered end card with `cta: true`) |
+| 🟠 | CTA as tiny lower-third on empty mesh (should be a centered end card) |
 | 🟠 | Caption glued to top edge; stacked bands; **important** content hidden by feed chrome (see platform guide below) |
 | 🟠 | Unreadable over bright footage / no backplate |
 | 🟠 | Motion/Lottie beat only reviewed at a single midpoint (no `--around` sheet) |
@@ -140,6 +141,7 @@ is allowed in the shaded bands — do not flag 🟠 solely because chrome overla
 
 ## After findings
 
-Parent maps each line → spec edit (`caption` length, `texts` position/size, `cta: true`,
-`captionKeyframes` only when dodging a bright subject, `captionStyle.background`, drop competing
-overlays). Motion/typed fixes → re-run `kino still --around` on that beat, then storyboard + this skill.
+Parent maps each line → spec edit (`caption` length, `texts` position/size, presenter-less `scene`
+for a centered end card, `captionKeyframes` only when dodging a bright subject, `captionStyle.background`,
+drop competing overlays). Motion/typed fixes → re-run `kino still --around` on that beat, then storyboard
++ this skill.

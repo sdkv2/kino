@@ -201,7 +201,7 @@ mismatched pairs (`compose` on screen / "motion" spoken) read as bugs, not style
 - Name the action + the immediate next step.
 - Soft brands: recommend (`Seriously — just try the free run`) still beats vague.
 - Urgency only with a real reason (trial length, limited seats) — never fake scarcity.
-- Put brand name + URL on the CTA beat (`cta: true`), not in the hook.
+- Put brand name + URL on the CTA beat (the end card), not in the hook.
 
 ## When revising "sounds AI" feedback
 

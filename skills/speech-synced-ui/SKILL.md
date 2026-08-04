@@ -219,8 +219,9 @@ Consecutive `kind:"motion"` beats **auto-dissolve** (~15 frames / 0.5s at 30fps)
 3. First motion beat does **not** fade in (loop seam / cold open stays opaque).
 4. Last motion beat is **not** extended past VO end.
 
-You do **not** set `"transition"` on motion (schema rejects it — that field is app-only).
-Handoff is automatic when the next segment is also `motion`.
+Handoff is automatic when the next segment is also `motion` — you don't need to set `"transition"` for
+it. The field IS valid on motion beats (defaults to `"dissolve"`, this handoff); only set it explicitly
+when you want to override the default, e.g. `"cut"` for a hard abut with no crossfade.
 
 **⚠ Clear the hero before the beat ends, or the two graphics overlap.** Because the outgoing beat is
 held **opaque at `--progress: 1`** while the incoming fades in over it, any hero still at full opacity at

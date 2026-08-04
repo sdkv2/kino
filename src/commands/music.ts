@@ -114,7 +114,9 @@ export async function music(
   }
 
   if (!Number.isInteger(getNum) || getNum < 1 || getNum > hits.length) {
-    throw new Error(`--get must be 1..${hits.length} (from the search results)`);
+    throw new Error(
+      `--get takes exactly ONE result number, not a list (got "${getRaw}") — 1..${hits.length} (from the search results)`,
+    );
   }
   if (!opts.project) throw new Error("--get <n> requires --project <name>");
   const hit = hits[getNum - 1];
