@@ -106,6 +106,33 @@ jobs:
           }
       # prepare script runs tsc + page bundle during npm ci, so dist/ is built here
       - run: npm ci --allow-git=all
+      # Which capture path will this runner actually exercise? CI does not run build:native, so it
+      # depends entirely on a committed prebuild for this triple. Without one, loadGpuCapture()
+      # finds nothing and the suite quietly tests `direct` instead of `shared`/`readback` — green
+      # either way, which is the failure mode this step exists to make visible.
+      #
+      # Missing prebuild is a warning (not every triple is populated yet). Present-but-unloadable is
+      # a hard failure: that is the wrong-platform binary bug, and it must never ship again.
+      - name: report which capture backend CI will get
+        shell: bash
+        run: |
+          set -uo pipefail
+          triple="$(node -p 'process.platform + "-" + process.arch')"
+          f="prebuilds/${triple}/gpu_capture.node"
+          if [ ! -f "$f" ]; then
+            echo "::warning::no prebuild for ${triple} — native encode is OFF, capture tests fall back to 'direct'. Run the 'prebuilds' workflow and commit prebuilds/${triple}/."
+            exit 0
+          fi
+          node -e "
+            const p = require('path').resolve(process.argv[1]);
+            try {
+              const m = require(p);
+              console.log('prebuild ok for ' + process.platform + '-' + process.arch + ' | available():', m.available());
+            } catch (e) {
+              console.error('::error::prebuilds/' + process.platform + '-' + process.arch + '/gpu_capture.node exists but will not load: ' + String(e.message).split('\n')[0]);
+              process.exit(1);
+            }
+          " "$f"
       # One render worker per render call, not cpus-1. vitest runs test files in parallel and each
       # render call otherwise claims its own pool of workers — on a 4-core runner that is a dozen
       # offscreen windows at once, every one of them rasterising WebGL in software (SwiftShader,

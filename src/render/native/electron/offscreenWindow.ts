@@ -559,9 +559,13 @@ export class OffscreenRenderWindow {
     if (result.fatal) throw new Error(`native render page reported a fatal fault on frame ${frame}:\n${result.fatal}`);
     const pixels = this.lastPixels;
     if (!pixels) throw new Error(`readback produced no pixels on frame ${frame}`);
+    // Split the round trip. `seek-readback` alone lumps the seek, the pixel transport and the
+    // 8.3MB IPC push into one number, which is not enough to tell a GPU stall from a transfer cost
+    // — and guessing wrong sends you optimising the wrong half. `rb:read` is whichever transport is
+    // active (PBO by default, or the old sync readPixels under KINO_RB_SYNC=1 — see readbackJs.ts);
+    // `rb:push` is the IPC hop. This supersedes the two-leg rb:readPixels/rb:ipcPush split from
+    // 5c91c41, whose ~26ms/~10ms baseline was measured against the pre-PBO sync transport.
     this.capProf.add("seek-readback", performance.now() - tAll);
-    // Leg split: which of seek / pixel transport / IPC actually costs. `rb:read` is the transport
-    // (PBO, or the old sync readPixels under KINO_RB_SYNC=1); `rb:push` the 8.3MB hop to the worker.
     if (result.msSeek != null) {
       this.capProf.add("rb:seek", result.msSeek);
       this.capProf.add("rb:read", result.msRead ?? 0);

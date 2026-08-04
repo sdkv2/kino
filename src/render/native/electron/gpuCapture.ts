@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, openSync, readSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nvidiaDrmModeset, type ModesetStatus } from "../sandbox.js";
@@ -59,11 +59,21 @@ export interface GpuCaptureNative {
 let cached: GpuCaptureNative | null | undefined;
 let resolvedPath: string | null | undefined;
 
+/** `linux-x64`, `darwin-arm64`, `win32-x64` … the prebuild key. Not ABI-qualified on purpose: the
+ *  addon is pure N-API, so one binary per platform+arch serves every Node/Electron version. */
+const PREBUILD_TRIPLE = `${process.platform}-${process.arch}`;
+
 function nodePath(): string | null {
   if (resolvedPath !== undefined) return resolvedPath;
   let dir = here;
   for (let i = 0; i < 8; i++) {
     const candidates = [
+      // Per-platform prebuilds first. A triple that does not match this machine is simply not
+      // found, which is the whole point — unlike the single build/Release artifact below, which is
+      // present on every platform but only loadable on the one that produced it.
+      join(dir, `prebuilds/${PREBUILD_TRIPLE}/gpu_capture.node`),
+      join(dir, `native/prebuilds/${PREBUILD_TRIPLE}/gpu_capture.node`),
+      // Local build output — what `npm run build:native` leaves behind for the current machine.
       join(dir, "native/build/Release/gpu_capture.node"),
       join(dir, "src/render/native/electron/native/build/Release/gpu_capture.node"),
     ];
@@ -105,23 +115,59 @@ export function nativeEncodeAvailable(
 /** Load IOSurface→VT (mac) / DXGI→NVENC (win) / CUDA→NVENC (linux) addon inside the Electron
  *  worker only. Null when the artifact is absent, is a foreign build, or reports no usable
  *  encoder — all three are the same answer to the caller: no native encode here. */
+/** Object-file format of a built addon, from its magic bytes. Used only to explain a load failure:
+ *  a `.node` built on another OS is the single most likely reason this fails, and "cannot open
+ *  shared object file" does not say so. */
+export function addonPlatform(path: string): string | null {
+  try {
+    const fd = openSync(path, "r");
+    const head = Buffer.alloc(4);
+    readSync(fd, head, 0, 4, 0);
+    closeSync(fd);
+    const be = head.readUInt32BE(0);
+    const le = head.readUInt32LE(0);
+    if (be === 0x7f454c46) return "linux"; // \x7fELF
+    if (be === 0xfeedface || be === 0xfeedfacf || le === 0xfeedface || le === 0xfeedfacf) return "darwin";
+    if (be === 0xcafebabe || le === 0xcafebabe) return "darwin"; // universal binary
+    if (head[0] === 0x4d && head[1] === 0x5a) return "win32"; // MZ
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Warn once when the addon exists but will not load. Silence here is expensive: `reconcileCapture`
+ *  then degrades `auto` to `direct`, so the render succeeds at a fraction of the speed with no
+ *  indication why. The committed artifact is built for whatever machine last ran `build:native`,
+ *  so every other platform hits this. */
+function warnAddonUnusable(path: string, reason: string): void {
+  const built = addonPlatform(path);
+  const mismatch = built && built !== process.platform ? ` It is a ${built} build, but this is ${process.platform}.` : "";
+  process.stderr.write(
+    `! gpu_capture.node present but unusable — hardware encode is OFF, falling back to a slower capture path.${mismatch}\n` +
+      `  ${reason}\n  Fix: npm run build:native\n`,
+  );
+}
+
 export function loadGpuCapture(): GpuCaptureNative | null {
   if (cached !== undefined) return cached;
   if (!nativeEncodeAvailable()) {
     cached = null;
     return null;
   }
+  const path = nodePath();
+  if (!path) {
+    cached = null;
+    return null;
+  }
   try {
-    const path = nodePath();
-    if (!path) {
-      cached = null;
-      return null;
-    }
     const require = createRequire(import.meta.url);
     const mod = require(path) as GpuCaptureNative;
     cached = mod.available() ? mod : null;
+    // available() === false is legitimate on a box with no GPU/driver — do not cry wolf there.
     return cached;
-  } catch {
+  } catch (err) {
+    warnAddonUnusable(path, err instanceof Error ? err.message.split("\n")[0]! : String(err));
     cached = null;
     return null;
   }
