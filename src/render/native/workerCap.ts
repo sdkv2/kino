@@ -17,12 +17,26 @@ export type GpuLimits = {
  *  failure occurs at any reachable concurrency — the card runs out of NVENC sessions (8) first,
  *  so the highest c that renders is 8 and vramTotal/8 = 976MB is the derived per-worker budget.
  *
- *  1GB is that derived figure rounded up: ~2x the measured marginal cost, which leaves headroom
- *  for sources larger than the 1080p asset measured here, while no longer capping an 8GB card
- *  below the electron default of 4 workers (it fits 7).
+ *  900MB, not the 1GB this previously rounded to. That rounding was the difference between a
+ *  cap of 8 and a cap of 7 on the very card the figure was calibrated on: the card reports
+ *  ~7510MB *free* rather than its nominal 8192MB, and 7510/1024 floors to 7. The calibration
+ *  above concluded "the highest c that renders is 8" while the constant it produced forbade it.
+ *
+ *  Measured cost of that off-by-one on a second RTX 3060 Ti (8GB, driver 595.58.03, Ubuntu 22.04,
+ *  shader spec at 1080x1920, KINO_ELECTRON_CAPTURE=direct): c=7 renders at 160.9 fps and c=8 at
+ *  208.2 fps, so the cap was giving up 29% at its own optimum. Throughput falls off past the
+ *  knee (c=12 -> 186.3, c=16 -> 110.6), and c=8 is bit-identical to c=2 (PSNR inf), so 8 is a
+ *  real optimum rather than an artefact. NVENC was unreachable on that driver, which is why the
+ *  session ceiling did not bind first the way it did during the original calibration — on the
+ *  `direct` path there are no NVENC sessions to run out of, and VRAM is the only cap left.
+ *
+ *  Still conservative: 8 workers at SS=2 need ~420 + 8*463 = 4.1GB of the 7.5GB free, so 900MB
+ *  remains ~1.8x the measured marginal. It also does not change the cap on a 4GB card (3 either
+ *  way). Chosen from the arithmetic rather than the round number: the interval that yields
+ *  exactly 8 here is (835, 939] MB.
  *
  *  Override in MB with KINO_VRAM_PER_WORKER when calibrating on other hardware. */
-const DEFAULT_BYTES_PER_WORKER = 1024 ** 3;
+const DEFAULT_BYTES_PER_WORKER = 900 * 1024 * 1024;
 
 export function bytesPerWorker(env: NodeJS.ProcessEnv = process.env): number {
   const mb = Number(env.KINO_VRAM_PER_WORKER);
