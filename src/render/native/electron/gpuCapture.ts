@@ -200,23 +200,37 @@ export function resolveElectronCapture(
 
   if (mode === "shared") {
     if (linux) {
-      // The real constraint chain (measured on real hardware, not inferred): Chromium's
-      // GbmSupportX11 gets its DRM fd via DRI3; NVIDIA's X driver offers no DRI3 without
-      // nvidia-drm.modeset=1, a host kernel module parameter no container can set. And even with
-      // modeset=1, kino has no Linux shared-texture capture implementation yet — modeset is
-      // necessary, not sufficient, so this must never read as "enable it and shared works".
+      // Two things here are settled by measurement, and the second one is why implementing this
+      // would currently be wasted work.
+      //
+      // 1. The prerequisites ARE obtainable, contrary to an earlier reading of this code. With
+      //    nvidia-drm.modeset=Y on the host (rented containers do sometimes have it), a real Xorg
+      //    on the NVIDIA X driver, and `--enable-features=Vulkan`, Electron OSR delivers a texture
+      //    on every paint: a single-plane BGRA dma-buf, modifier 0 (linear), which NVIDIA's own
+      //    Vulkan will import as a renderable color attachment, and which imports into CUDA via
+      //    EGL in ~0.6ms with a ~0.03ms/frame device copy. None of that is the blocker.
+      // 2. The delivered buffer is never written. Every byte reads zero — verified through three
+      //    independent views of the same fd (CPU mmap, CUDA, GLES) on drivers 575, 580 and 595,
+      //    with Chromium logging nothing at all. A CUDA write to that same mapping IS visible
+      //    through mmap, so the aliasing is real and the tooling is sound; Chromium's composited
+      //    frame simply never lands in the buffer it handed us. Consistent with its own note in
+      //    renderable_gpu_memory_buffer_video_frame_pool.cc: NVIDIA's GBM cannot allocate
+      //    LINEAR|RENDERING, so the copy that would fill this buffer has nowhere to go.
+      //
+      // So this is upstream-blocked (electron#49247), not merely unimplemented. Anyone reviving it
+      // should content-verify a delivered texture FIRST — a non-null `details.texture` proves
+      // nothing — and treat "works on distro X" reports as delivery-only until pixels are checked.
       const modesetNote =
         modeset === "disabled"
-          ? " On this host, nvidia-drm.modeset is currently disabled (N), so that prerequisite isn't even met yet."
+          ? " On this host, nvidia-drm.modeset is currently disabled (N), which is one of the prerequisites."
           : "";
       throw new Error(
-        "KINO_ELECTRON_CAPTURE=shared has no Linux shared-texture implementation yet. Even where it " +
-          "existed, it would require Chromium to create a GBM device, which needs DRI3, which NVIDIA's " +
-          "X driver only exposes when nvidia-drm.modeset=1 (a host kernel module parameter — not " +
-          "settable from inside a container)." +
+        "KINO_ELECTRON_CAPTURE=shared has no Linux shared-texture implementation, and implementing " +
+          "one would not help today: Chromium delivers an OSR shared texture on NVIDIA whose buffer " +
+          "it never writes (measured silently empty on drivers 575/580/595 — electron#49247)." +
           modesetNote +
-          " Use KINO_ELECTRON_CAPTURE=readback for hardware NVENC on Linux today, or leave it on auto " +
-          "for the faster `direct` path.",
+          " Use KINO_ELECTRON_CAPTURE=readback to reach NVENC on Linux, or leave it on auto for the " +
+          "much faster `direct` path.",
       );
     }
     if (!gpu) {
@@ -238,33 +252,27 @@ export function resolveElectronCapture(
 
   // auto
   if (!gpu) return "direct";
-  // Linux: `auto` yields `direct`, not `readback`, as of the RTX 3060 Ti benchmark below.
-  // NVENC `readback` measured 2.0x SLOWER than software `direct` at every concurrency tested:
-  //   c=1: readback 18.4fps vs direct 23.3fps
-  //   c=4: readback 34.0fps vs direct 68.6fps
-  //   c=8: readback 34.4fps vs direct 69.9fps
-  // Concurrency widens the gap (direct 3.00x c1->c8, readback only 1.87x) — the encoder isn't the
-  // bottleneck (NVENC encode is 16.16ms/frame and fully hidden by pipelining); the cost is
-  // seek-readback at 95.33ms/frame, ~72ms of which is gl.readPixels plus an 8.3MB IPC push per
-  // frame. That round trip out of VRAM and back is structural to the readback design, not a tuning
-  // problem. This is interim, not a repudiation of the NVENC work: the zero-copy path (phase 2)
-  // removes the round trip, but needs a host with nvidia-drm.modeset=1 and a GPU-backed display
-  // path, unavailable in a stock container. Until phase 2 lands, `direct` is simply faster — and
-  // it is now safe, since the Linux `direct` defect that once justified avoiding it is fixed (18/18
-  // clean runs). Explicit `KINO_ELECTRON_CAPTURE=readback` still works (see the `mode === "readback"`
-  // branch above) for anyone benchmarking NVENC. If you're reading this because `direct` is beating
-  // a hardware encoder and that looks wrong: it isn't, re-run the benchmark before "fixing" it back.
-  //
-  // STALE AS OF THE PBO TRANSPORT (see electron/readbackJs.ts): every readback number above was
-  // measured against a synchronous `readPixels`, which is no longer what readback does. That
-  // transport measured 34.6ms/frame on an M4; the PBO one measures 23.5ms and lifted the same
-  // spec from 86.1 to 99.6 fps (+16%). The Linux `seek-readback` cost those numbers rest on was
-  // 95.33ms/frame, ~72ms of it the very call that got replaced — so the 2.0× gap above is no
-  // longer a measurement of anything that ships, and the direct-vs-readback question on NVIDIA is
-  // genuinely open again. It has NOT been re-measured on Linux, so the default stays `direct`:
-  // flipping it on the strength of a macOS result would be exactly the mistake this comment
-  // already warns about. Re-run the sweep on real NVIDIA hardware first — `KINO_RB_SYNC=1`
-  // restores the old transport in-place, so both sides are one env var apart on the same build.
+  // Linux: `auto` yields `direct`, not `readback`. Re-measured on an RTX 3060 (KVM VM, driver
+  // 580.82.09, NVENC confirmed live on that box by a distro `ffmpeg -c:v h264_nvenc` smoke) with
+  // the PBO transport that actually ships — so unlike the original sync-readPixels sweep, these
+  // numbers describe the code in this repo. Software `direct` wins at every concurrency, and by a
+  // wider margin than before:
+  //   c=2: readback 11.6fps vs direct 29.6fps
+  //   c=4: readback 16.8fps vs direct 69.8fps
+  //   c=6: readback 20.9fps vs direct 84.4fps
+  //   c=8: readback 23.0fps vs direct 85.3fps
+  // The PBO transport is worth ~0 on NVIDIA: `KINO_RB_SYNC=1` measured 18.6fps at c=4 against the
+  // PBO path's 16.8, so the 34.6→23.5ms transport win it bought on an M4 does not transfer here.
+  // The offload is real but does not help — readback peaks at 3.7 cores of CPU against direct's
+  // 11, i.e. the encode genuinely moves onto the ASIC and the GPU→CPU transport starves the
+  // pipeline anyway. That round trip out of VRAM and back is structural to the readback design,
+  // not a tuning problem, and the zero-copy path that would have removed it is upstream-blocked:
+  // Chromium hands Electron OSR a shared texture on NVIDIA whose buffer it never writes, silently,
+  // on drivers 575/580/595 alike (electron#49247). Explicit `KINO_ELECTRON_CAPTURE=readback` still
+  // works (see the `mode === "readback"` branch above) for anyone benchmarking NVENC. If you're
+  // reading this because `direct` is beating a hardware encoder and that looks wrong: it isn't —
+  // both halves of that comparison have now been measured on real NVIDIA hardware with the
+  // shipping transport, so re-run the sweep before "fixing" it back.
   if (linux) return "direct";
   return "shared";
 }

@@ -25,15 +25,17 @@ describe("linux capture mode", () => {
   });
 
   // not just say "unsupported".
-  // It must also never imply modeset=1 alone makes shared capture work: the Linux implementation
-  // does not exist yet regardless of modeset.
-  it("explains the DRI3/modeset chain and that Linux shared capture isn't implemented, regardless of modeset", () => {
+  // It must also never imply that satisfying the prerequisites makes shared capture work. They are
+  // satisfiable — a modeset=Y host does deliver OSR textures — but Chromium never writes the
+  // buffer it delivers, so the message has to name the upstream break, not a missing local
+  // implementation, or the next reader wastes a week writing capture code against empty frames.
+  it("names the upstream break, not just a missing implementation, even when modeset is enabled", () => {
     expect(() =>
       resolveElectronCapture({ KINO_ELECTRON_CAPTURE: "shared" }, "linux", true, "enabled"),
-    ).toThrow(/DRI3/);
+    ).toThrow(/never writes|empty/i);
     expect(() =>
       resolveElectronCapture({ KINO_ELECTRON_CAPTURE: "shared" }, "linux", true, "enabled"),
-    ).toThrow(/nvidia-drm\.modeset/);
+    ).toThrow(/electron#49247/);
     expect(() =>
       resolveElectronCapture({ KINO_ELECTRON_CAPTURE: "shared" }, "linux", true, "enabled"),
     ).toThrow(/not implemented|does not implement|no Linux shared-texture/i);
