@@ -4,6 +4,41 @@ import { ensureCaptureStream, readStreamFrame, resetCaptureStream } from "./capt
 export const H264_CODEC = "avc1.640028";
 export const H264_BITRATE = 50_000_000;
 
+/**
+ * VideoEncoder latency mode — a measured speed/quality/size trade, NOT a free knob.
+ *
+ * Scope: this file is the **WebCodecs** capture path (`KINO_ELECTRON_CAPTURE=direct`, and the
+ * Linux default). It is NOT what macOS runs by default — there `auto` resolves to `shared`, which
+ * encodes through the native IOSurface→VideoToolbox addon and never reaches this code.
+ *
+ * On the WebCodecs path encode is the dominant per-frame cost. Profiled on an M4 with capture
+ * forced to `direct` (1 host, 4 workers, shotstack-parity, KINO_PROFILE=1): WebCodecs cost
+ * **37.25 ms/frame — 71% of the whole per-frame capture** — against 14.5 ms of actual page render,
+ * with IPC at 0.29 ms and ffmpeg backpressure at 3.13 ms. So the capture funnel is not the
+ * constraint on that path; the encoder is.
+ *
+ * Switching to `"realtime"` was measured on the same spec:
+ *
+ * | mode       | wall    | output   | PSNR vs quality |
+ * |------------|---------|----------|-----------------|
+ * | "quality"  | 33.25s  | 1.19 GB  | reference       |
+ * | "realtime" | 20.05s  | 564 MB   | 42.9-43.3 dB    |
+ *
+ * 40% faster and half the bits — but 43 dB is **below** this repo's 45.9 dB equivalence bar, and
+ * below the 47.6-59.9 dB run-to-run noise floor measured on the same spec, so it is a real
+ * fidelity drop rather than encoder noise. It stays on "quality" because the captured bitstream IS
+ * the deliverable: ffmpeg remuxes with `-c:v copy`, so nothing re-encodes it later and there is no
+ * second chance to recover detail.
+ *
+ * Worth revisiting if the deliverable is known to be re-encoded downstream (social platforms all
+ * do), where 43 dB at 75 Mbps all-intra would survive the round trip and the 40% is free.
+ *
+ * For scale, the same spec through the macOS default (shared/IOSurface→VideoToolbox) runs 17.24s
+ * and writes 376 MB — faster and smaller than either WebCodecs mode. Where the native addon is
+ * available, using it beats tuning this encoder.
+ */
+export const H264_LATENCY_MODE: LatencyMode = "quality";
+
 /** Acceleration hint, or undefined to let Chromium pick. See resolveH264Accel. */
 type Accel = "prefer-hardware" | undefined;
 
@@ -14,7 +49,7 @@ function h264Config(width: number, height: number, fps: number, accel: Accel): V
     height,
     bitrate: H264_BITRATE,
     framerate: fps,
-    latencyMode: "quality",
+    latencyMode: H264_LATENCY_MODE,
     avc: { format: "annexb" },
   };
   if (accel) cfg.hardwareAcceleration = accel;
@@ -80,6 +115,7 @@ function h264Worker(): Worker {
   const src = `
 const CODEC = ${JSON.stringify(H264_CODEC)};
 const BITRATE = ${H264_BITRATE};
+const LATENCY = ${JSON.stringify(H264_LATENCY_MODE)};
 
 let encoder = null;
 let encW = 0;
@@ -98,7 +134,7 @@ function ensureEncoder(width, height, framerate, onChunk) {
   encoder = new VideoEncoder({ output: onChunk, error: (err) => { throw err; } });
   encoder.configure({
     codec: CODEC, width, height, bitrate: BITRATE, framerate,
-    latencyMode: "quality", avc: { format: "annexb" },
+    latencyMode: LATENCY, avc: { format: "annexb" },
   });
   return encoder;
 }

@@ -102,6 +102,12 @@ class ElectronHostProc {
     // Fresh profile per spawn, not per host: a respawn is usually recovery from a crash, and the
     // profile is a prime suspect for having caused it. scratchDir tracks it for sweep and already
     // retries ENOTEMPTY/EBUSY from a closing Chrome flushing its profile.
+    //
+    // Reusing a warm profile across runs was tried and REVERTED: it populated fine (4.2MB) but
+    // moved boot 0.52s -> 0.53s. Serving the bundle with an ETag so pages revalidate instead of
+    // re-parsing was tried too — 0.56-0.60s, also nothing. Per-slot boot is Chromium window + GL
+    // context init (~100ms/slot: 0.52s/4 slots on an M4, 6.00s/64 slots on a 4090), and none of
+    // that is cacheable. Reuse the WINDOWS, not the profile.
     const userDataDir = scratchDir("kino-electron-profile-");
     this.child = spawn(electronBinaryPath(), [...electronSpawnArgs(process.env, process.platform, {}, userDataDir), workerJs], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -366,6 +372,34 @@ export function placeWorker(index: number, hostCount: number): { hostIdx: number
  *  otherwise describe a backend that did not paint these frames. */
 export interface ElectronWorkerHandle extends WorkerHandle {
   captureKind: CaptureKind;
+}
+
+/**
+ * Start the host subprocesses without loading a page.
+ *
+ * `acquireElectronWorker` does two separable things: construct the host (which spawns Electron —
+ * Chromium plus its GPU process, the expensive part) and `boot(slot, url)` (which loads the page).
+ * Only the second needs the render server's URL, and that URL is not available until media
+ * extraction has produced `framesDir`/`media`. So the default ordering pays a full Electron
+ * startup *after* extraction finishes, with both on the critical path.
+ *
+ * Calling this before extraction overlaps the two. Nothing else is required: `send()` awaits
+ * `ready`, so a `boot()` that arrives before the child is up simply waits, and one that arrives
+ * after finds it warm.
+ *
+ * Measured on a 4090 / 61-core box, shotstack-parity: pages-boot was 2.5s at 3 hosts and 3.5s at
+ * 8, entirely serial behind a 5.6s media lap — and it is what made worker counts above 32 lose
+ * (boot grew to 12.2s at c=64 while the frames phase stayed flat).
+ *
+ * Synchronous on purpose: constructing the host is what starts the process, so there is nothing
+ * useful to await here. A missing display throws from the constructor, which now surfaces before
+ * extraction rather than after it — the same error, sooner.
+ */
+export function prewarmElectronHosts(hostCount: number, captureMode?: ElectronCaptureMode): void {
+  // A live pool in a different capture mode would be dropped by acquireElectronWorker anyway;
+  // spawning into it would just be work to throw away.
+  if (hosts.some(Boolean) && hostMode !== captureMode) return;
+  for (let i = 0; i < Math.max(1, hostCount); i++) getHost(i, captureMode);
 }
 
 /**
