@@ -47,3 +47,63 @@ describe("film as an adjustment layer", () => {
     expect(film.adjust![0].params).toMatchObject({ intensity: 0.4, grain: 2 });
   });
 });
+
+// An adjustment layer used to span the whole composition by construction, which is why per-beat
+// grain was inexpressible: `film` is one chain over everything, and the only knob was a single
+// intensity for the entire piece. It resolves the same window every other declared layer does now.
+describe("windowed adjustment layers", () => {
+  const beats: KinoSegment[] = [
+    { kind: "scene", caption: "one", startSec: 0, endSec: 2 },
+    { kind: "scene", caption: "two", startSec: 2, endSec: 4 },
+  ];
+  const grain = (over: Record<string, unknown>) => ({
+    id: "beat-grain",
+    z: 701,
+    adjust: [{ kind: "film" as const, params: { intensity: 1, grain: 1.8, vignette: 0 } }],
+    ...over,
+  });
+  const at = (frame: number, over: Record<string, unknown>) =>
+    layersAt(mk(beats, { layers: [grain(over)] } as Partial<KinoProps>), frame, DIMS)
+      .find((l) => l.id === "beat-grain");
+
+  it("still spans everything when nothing narrows it", () => {
+    expect(at(0, {})).toBeDefined();
+    expect(at(110, {})).toBeDefined();
+  });
+
+  it("appears only inside fromSec/toSec", () => {
+    expect(at(20, { fromSec: 0.5, toSec: 1.5 })).toBeDefined();
+    expect(at(3, { fromSec: 0.5, toSec: 1.5 })).toBeUndefined();
+    expect(at(60, { fromSec: 0.5, toSec: 1.5 })).toBeUndefined();
+  });
+
+  it("borrows a beat's window when bound to one", () => {
+    expect(at(30, { segment: 0 })).toBeDefined();
+    expect(at(75, { segment: 0 })).toBeUndefined();
+    expect(at(75, { segment: 1 })).toBeDefined();
+  });
+
+  it("stays out of the beat's group — an adjustment cannot crossfade with one", () => {
+    expect(at(30, { segment: 0 })!.group).toBeUndefined();
+  });
+
+  it("runs its effect keyframes on the layer's own clock, not the timeline's", () => {
+    // Bound to beat 1 (starts at 2s), ramping intensity over its first second. At the beat's own
+    // half-second mark the ramp is halfway — which is only true if `at` counts from the beat.
+    const ramp = {
+      id: "beat-grain",
+      z: 701,
+      segment: 1,
+      adjust: [
+        {
+          kind: "film" as const,
+          params: { intensity: 0, grain: 1.8, vignette: 0 },
+          keyframes: [{ at: 0, params: { intensity: 0 } }, { at: 1, params: { intensity: 1 } }],
+        },
+      ],
+    };
+    const props = mk(beats, { layers: [ramp] } as Partial<KinoProps>);
+    const at15 = layersAt(props, 75, DIMS).find((l) => l.id === "beat-grain")!;
+    expect(at15.adjust![0].params.intensity).toBeCloseTo(0.5, 2);
+  });
+});

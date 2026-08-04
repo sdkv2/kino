@@ -58,6 +58,7 @@ function dumpOne(
     theme: props.theme,
     width: dims.width,
     height: dims.height,
+    specData: props.data,
   });
   const base: MotionDump = { segment, frame, localFrame, tier: tierOf(data), slot, html: data.html, vars };
   if (!data.proc || data.lottie) return base;

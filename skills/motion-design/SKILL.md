@@ -71,6 +71,30 @@ triggers. Do not hand-roll `(1-p)*(1-p)` when `env.out` / `--kino-out` already e
 `Math.random`). A real chart is `env.lib.shape.line().curve(...)` over data, not 40 lines of
 hand-built `<div>` bars.
 
+**Physics is precomputed, not impossible.** `render(env)` keeps nothing between frames, so an
+integrator cannot live in it — but it does not have to. Point the beat's `sim` block at a solver
+(`"sim": { "source": "motion/coins.sim.js" }`) and it runs ONCE at build time, stateful and
+iterative, emitting one row per frame; the proc reads `env.sim.at` and stays pure. Rigid-body
+bounces, fracture, particle settling, spring clustering with real mass — all reachable. `sim.random()`
+is seeded so the bake reproduces; `Math.random` in a solver is rejected for that reason. Check one
+with `kino bake <solver>` before rendering — a solver's output is numbers, and "every row is
+identical" is the common failure. Closed-form damped springs from `env.t` are still the right answer
+when each element just needs its own mass.
+
+**Don't hand-roll a relaxation loop** — `sim.lib.force` is d3-force, bundled (a solver has no
+`require`, so `sim.lib` is the only way a library reaches it). Tiles re-clustering, labels pushing
+apart, a graph finding its shape: `.stop()` once, then one `.tick()` per frame, and return the node
+positions. It converges rather than collides — no restitution or rotation — so a pile of bouncing
+coins is still a hand-written integrator, which `sim.dt` keeps short. `kino bake` prints the full
+contract.
+
+**Colours a fabricated UI needs**: past the five brand roles there are six more —
+`--kino-surface` (a panel raised off the page), `--kino-line` (borders, rules), `--kino-muted`
+(secondary ink), and `--kino-ok` / `--kino-warn` / `--kino-danger` (the semantic triad). All derived
+from the brand unless it names them, so reach for these instead of hard-coding a hex; a hard-coded
+grey is a surface that stops following the palette. Figures quoted on more than one beat belong in
+`spec.data`, read as `var(--<key>)` / `env.data.<key>`, so they cannot drift between surfaces.
+
 ### Real-time clocks (`--t`, not `--progress`)
 
 **`--progress`** spans `0 → 1` over the **whole beat** — right for entrances, camera, and ambient
@@ -255,6 +279,23 @@ explains speech or settle, and a first frame that could only be this product.
 5. Real VO → `build --tts` (caches it) → `inspect --real` → `retune` → `frames <mp4> --around <t>`.
 6. Loop ads: still at 0 vs settle end; trust PSNR/seam, not raw AE.
 7. Only claim “improved hierarchy / motion / color” when the sheet or mp4 shows it.
+
+**Run this loop more than once.** A still sheet costs ~1.7s (see `video-production`), so the budget
+is not the constraint — the instinct to stop after the first render is. If you have looked at one
+sheet, you have not iterated; you have checked. Expect several passes on anything that ships.
+
+**A passing check is not a good frame.** The most common way this loop fails is building a
+*correctness* measure — did it animate, did the physics settle, are the elements on screen — and
+then trusting it past its remit. Those questions all answer yes on a frame that is flat, unlit,
+badly composed and dead in the last third. When you write a harness to verify a beat, it measures
+what you told it to; it has nothing to say about whether the shot is any good, and only your eye on
+the sheet does. Ask both questions separately, and ask the second one out loud:
+
+> Composition — is anything anchored, or did elements land where the code happened to put them?
+> Material — is there light direction, contact shadow, depth, edge? Or flat fills on a flat plane?
+> Staging — does the geometry the code knows about (walls, guides, bounds) appear in the frame at
+> all? A viewer who cannot see what an element is reacting to reads the motion as arbitrary.
+> Timing — does anything happen in the last third, or did it all arrive at once and stop?
 
 Scope: if the user asks to fix one caret, do not restyle the whole window. If they ask for a visual
 pass on the beat, run the full checklist above.

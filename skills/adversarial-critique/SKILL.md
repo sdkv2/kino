@@ -17,6 +17,11 @@ Companion to `video-production`. That skill authors + builds.
 - After a storyboard you intend to keep (mandatory before calling it done)
 - After a real build when captions/overlays depend on VO timing
 - On user request: "critique", "adversary", "layout review", "check overlap"
+- **After any render a person will look at, including one produced by engine or tooling work** — a
+  demo for a new effect, an example beat, a library spike. The trigger is the ARTIFACT, not the
+  task: a rendered frame is authoring output no matter what it was made to prove, and the author who
+  just spent an hour on the mechanism is the worst possible judge of how the frame looks. (This is
+  about frames only — the subagent reviews pixels, never engine or perf code.)
 
 Do **not** self-review the contact sheet alone.
 

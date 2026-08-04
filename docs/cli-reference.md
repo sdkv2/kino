@@ -334,7 +334,7 @@ kino backgrounds
 ```
 
 ### `colors`
-List the stock colour schemes (`midnight`, `noir`, `paper`) with truecolor swatches, the five palette roles and what each paints, and the ways a spec sets one. A build with no scheme (on the spec or a brand) still renders, on `midnight`, but validate warns about it. See [Spec reference → Colour scheme](spec-reference.md#colour-scheme).
+List the stock colour schemes (`midnight`, `noir`, `paper`) with truecolor swatches, the five palette roles and what each paints, the six [UI roles](spec-reference.md#ui-roles) each preset derives for fabricating a product surface, and the ways a spec sets one. A build with no scheme (on the spec or a brand) still renders, on `midnight`, but validate warns about it. See [Spec reference → Colour scheme](spec-reference.md#colour-scheme).
 
 ```
 kino colors
@@ -353,6 +353,24 @@ Show how to author motion-graphic HTML files + the CSS-variable contract. See [M
 ```
 kino motion
 ```
+
+### `bake <solver>`
+Run a [simulation solver](spec-reference.md#simulation) once and report what it produced — row shape, how many rows are actually distinct, and the first and last. It also prints the full `sim` context an author codes against, including the bundled [solver stdlib](spec-reference.md#the-solver-stdlib) (`sim.lib.force` — d3-force), since a solver has no `require` and a stdlib nobody announces is a stdlib nobody uses. A build runs the solver itself, so this is not a pipeline step; it is how you see the bake before a render does, which matters because a solver's output is numbers rather than pixels. "The coins land in a pile" and "the coins all land at y=0 on frame 3" produce very different videos and identical builds.
+
+```
+kino bake motion/coins.sim.js --frames 60
+kino bake motion/coins.sim.js --params '{"gravity":2200}' --seed 7 --out /tmp/coins.json
+```
+
+| Flag | Meaning |
+|---|---|
+| `--frames <n>` | Frames to solve (default: 3 seconds' worth). In a real build this defaults to the beat's own length. |
+| `--fps <n>` | Rate the solver integrates on (default 30). |
+| `--seed <n>` | PRNG seed for `sim.random()`. Restate it to reproduce a bake exactly. |
+| `--format <id>` | Composition the solver sizes against (default `9:16`). |
+| `--params <json>` | The author params the solver reads, as JSON. |
+| `--out <file>` | Also write the rows to a JSON file. |
+| `--as json` | Print the whole bake instead of the summary. |
 
 ---
 

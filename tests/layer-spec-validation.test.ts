@@ -114,10 +114,10 @@ describe("validateLayers", () => {
     expect(errs).toEqual([]);
   });
 
-  // Carried from Task 6's review: `layersAt`'s adjustment branch (§11b) pushes only
-  // id/z/source:null/adjust and `continue`s before any other DeclaredLayer field is read, so a
-  // schema-valid layer combining `adjust` with one of these would validate clean and then be
-  // silently ignored at render time. One test per field the emission branch drops.
+  // Carried from Task 6's review: `layersAt`'s adjustment branch (§11b) `continue`s before most
+  // DeclaredLayer fields are read, so a schema-valid layer combining `adjust` with one of them
+  // would validate clean and then be silently ignored at render time. One test per field the
+  // emission branch drops — and, since the branch gained a window, one per field it now honours.
   describe("rejects fields the adjustment branch silently ignores", () => {
     const grade = { id: "grade", z: 650, adjust: [{ kind: "grade" as const, params: { contrast: 1.2 } }] };
 
@@ -125,16 +125,16 @@ describe("validateLayers", () => {
       expect(validateLayers([grade], 1)).toEqual([]);
     });
 
-    it("rejects fromSec", () => {
-      expect(validateLayers([{ ...grade, fromSec: 1 }], 1).join()).toMatch(/adjust cannot be combined with fromSec/);
+    it("accepts fromSec/toSec — an adjustment can be windowed", () => {
+      expect(validateLayers([{ ...grade, fromSec: 1, toSec: 2 }], 1)).toEqual([]);
     });
 
-    it("rejects toSec", () => {
-      expect(validateLayers([{ ...grade, toSec: 2 }], 1).join()).toMatch(/adjust cannot be combined with toSec/);
+    it("accepts segment — the window can be a beat's, which is what per-beat grain needs", () => {
+      expect(validateLayers([{ ...grade, segment: 0 }], 1)).toEqual([]);
     });
 
-    it("rejects segment", () => {
-      expect(validateLayers([{ ...grade, segment: 0 }], 1).join()).toMatch(/adjust cannot be combined with segment/);
+    it("still enforces fromSec < toSec on a windowed adjustment", () => {
+      expect(validateLayers([{ ...grade, fromSec: 3, toSec: 1 }], 1).join()).toMatch(/fromSec must be < toSec/);
     });
 
     it("rejects hold", () => {
@@ -177,7 +177,7 @@ describe("validateLayers", () => {
     });
 
     it("reports one error per offending field when several are combined", () => {
-      const errs = validateLayers([{ ...grade, fromSec: 1, segment: 0 }], 1);
+      const errs = validateLayers([{ ...grade, opacity: 0.5, blend: "screen" as const }], 1);
       expect(errs.filter((e) => /adjust cannot be combined with/.test(e))).toHaveLength(2);
     });
   });

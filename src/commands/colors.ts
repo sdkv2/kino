@@ -1,4 +1,4 @@
-import { PALETTE_PRESETS, PALETTE_ROLES, type Palette, type PalettePreset } from "../config/palettes.js";
+import { derivePalette, PALETTE_PRESETS, PALETTE_ROLES, UI_ROLES, type Palette, type PalettePreset } from "../config/palettes.js";
 import { isLightSurface, readableInk } from "../render/contrast.js";
 
 // What each role does on screen, printed alongside the presets so an author picking hexes knows
@@ -9,6 +9,18 @@ const ROLE_NOTES: Record<string, string> = {
   accent: "primary accent — highlights, kicker chips, background tint",
   accent2: "secondary/bright accent — reserved emphasis",
   deep: "deep fill / active-word highlight",
+};
+
+// The six a fabricated product UI needs past the caption-sized five. Printed separately because
+// they behave differently: each is DERIVED unless declared, and none of them is replaced by naming
+// a preset.
+const UI_ROLE_NOTES: Record<string, string> = {
+  surface: "a panel raised off the page — cards, sidebars, terminal chrome",
+  line: "borders, dividers, table rules",
+  muted: "secondary ink — labels, timestamps, inactive rows",
+  ok: "semantic: pass / success",
+  warn: "semantic: caution",
+  danger: "semantic: failure",
 };
 
 /** A truecolor swatch: the hex painted on itself, in ink derived the same way a kicker chip is. */
@@ -30,17 +42,26 @@ export async function colors(): Promise<void> {
   for (const role of PALETTE_ROLES) w(`    ${role.padEnd(9)} ${ROLE_NOTES[role]}\n`);
   w("    (the pre-rename names night/white/mint/gold/green still work as aliases)\n\n");
 
+  w("  UI roles — for motion graphics that fabricate a product surface. Derived from the five\n");
+  w("  above unless you set them, and never replaced by naming a preset:\n");
+  for (const role of UI_ROLES) w(`    ${role.padEnd(9)} ${UI_ROLE_NOTES[role]}\n`);
+  w("\n");
+
   w("  Presets:\n");
   for (const [name, palette] of Object.entries(PALETTE_PRESETS) as [PalettePreset, Palette][]) {
+    const full = derivePalette(palette);
     w(`    ${name}${isLightSurface(palette.bg) ? '   (light — pair with "film": 0)' : ""}\n      `);
     for (const role of PALETTE_ROLES) w(`${swatch(palette[role], palette)} `);
-    w(`\n      ${PALETTE_ROLES.map((r) => `${r}:${palette[r]}`).join("  ")}\n\n`);
+    w(`\n      ${PALETTE_ROLES.map((r) => `${r}:${palette[r]}`).join("  ")}\n      `);
+    for (const role of UI_ROLES) w(`${swatch(full[role], palette)} `);
+    w(`\n      ${UI_ROLES.map((r) => `${r}:${full[r]}`).join("  ")}   (derived)\n\n`);
   }
 
   w("  In a spec:\n");
   w('    "colors": "noir"                                   // a preset, all five roles\n');
   w('    "colors": { "bg": "#0a0a0c", "accent": "#e6b34a" } // roles (unset ones keep the brand/house value)\n');
-  w('    "colors": { "preset": "noir", "accent": "#ff0055" }// a preset, one role deviating\n\n');
+  w('    "colors": { "preset": "noir", "accent": "#ff0055" }// a preset, one role deviating\n');
+  w('    "colors": { "line": "#2a2f3a", "ok": "#3fb950" }   // UI roles, over whatever the palette is\n\n');
   w("  A brand.md `colors:` block does the same for every spec in a project — reach for one when\n");
   w("  you also want shared tone/voice guidelines, fonts, disclosures, or voice aliases.\n");
 }

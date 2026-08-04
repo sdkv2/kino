@@ -10,6 +10,7 @@ import type { CameraSpec } from "./cameraSpec.js";
 // layers.js, and RESERVED_Z runs `Object.values(Z)` at module top level — see layerSpec.ts's own
 // header comment. `import type` is erased at compile time, so it cannot participate in that cycle.
 import type { DeclaredLayer } from "./layerSpec.js";
+import type { SimData, SimEnv } from "./sim.js";
 import type { BlendMode } from "./native/page/compositor/graph.js";
 
 export interface Theme {
@@ -25,6 +26,14 @@ export interface Theme {
   deep: string; // deep fill / active-word colour [was: green]
   accent2: string; // secondary/bright accent     [was: gold]
   fg: string; // text ink                         [was: white]
+  // The UI roles (config/palettes.ts). Derived from the five above unless a brand or spec names
+  // them, so a theme built by hand in a test can leave them out and the render still paints.
+  surface?: string; // a panel raised off the page
+  line?: string; // borders, dividers, table rules
+  muted?: string; // secondary ink
+  ok?: string; // semantic: pass / success
+  warn?: string; // semantic: caution
+  danger?: string; // semantic: failure
   brandName?: string; // brand name token; rendered in `deep` wherever it appears in word captions
   captionFontSize: number;
   captionStroke: number;
@@ -189,6 +198,9 @@ export interface MotionGraphicProps {
   words?: WordTiming[]; // beat-relative spoken-word spans, for typed-in-sync graphics (env.words + --kino-words-shown)
   /** Lens material GLSL keyed by `data-lens` id (default `liquid-glass`). Filled at resolve/hydrate. */
   lensShaders?: Record<string, string>;
+  /** Baked solver output, one row per beat-local frame — see render/sim.ts. Resolved at build time
+   *  (run once, cached by solver hash) and replayed deterministically here. */
+  sim?: SimData;
 }
 
 // One deterministic simplex-noise field per dimensionality. Same seed → same field, always.
@@ -230,12 +242,18 @@ export interface MotionEnv {
   /** RMS loudness of the FINAL mixed audio at this frame (0..1); 0 when the build has no audio. */
   audio: number;
   params: Record<string, BgParamValue>; // resolved spec params at this frame
+  /** Spec-level shared constants (`spec.data`) — the same object on every beat, so a figure quoted
+   *  across several surfaces is stated once. `{}` when the spec declares none. Also reaches CSS as
+   *  `--<key>`, beneath `params`. */
+  data: Record<string, BgParamValue>;
   /** |cam[t] − cam[t−1]| × fps when the spec defines `cam`; else 0. */
   camVel: number;
   /** px-ready blur strength for `.kino-camera` (0 when settled or no `cam` param). */
   camBlur: number;
   palette: {
     bg: string; fg: string; accent: string; accent2: string; deep: string;
+    // The UI roles — surfaces, ink hierarchy and the semantic triad a fabricated product UI needs.
+    surface: string; line: string; muted: string; ok: string; warn: string; danger: string;
     // Legacy literal-name aliases (pre-rename Tier-2 pages) — same values as the roles.
     mint: string; green: string; night: string; white: string; gold: string;
     font: string;
@@ -246,6 +264,10 @@ export interface MotionEnv {
   durationFrames: number; // total frames in the beat; last frame index = durationFrames - 1
   duration: number; // beat length in seconds
   lib: ProcLib; // bundled chart/noise/color stdlib — see ProcLib
+  /** Baked simulation for this beat: `sim.at` is THIS frame's row, `sim.rows` the whole solve.
+   *  Always present — an empty sim when the graphic declares no solver, so reading it never
+   *  throws. See render/sim.ts for why the state is offline. */
+  sim: SimEnv;
 }
 
 // A staged sound-effect event (staticFile-relative src, absolute timeline seconds).
@@ -301,6 +323,9 @@ export interface KinoProps {
    *  frame-cache key is computed) — it never reaches frameCache.ts, exactly like music/sfx. */
   audio?: number[];
   segments: KinoSegment[];
+  /** Spec-level shared constants, merged into EVERY motion host as `--<key>` and `env.data`.
+   *  Omitted when the spec declares none, so an existing project's frame-cache key is unchanged. */
+  data?: Record<string, BgParamValue>;
   /** Author-declared layers, sorted into the built-in stack by z. See render/layerSpec.ts. */
   layers?: DeclaredLayer[];
   /** Full-frame post stage: grade → bloom → lens → film (compositor only). */

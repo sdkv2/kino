@@ -6,6 +6,7 @@ import { gradePass } from "./grade.js";
 import { glowPass } from "./glow.js";
 import { bloomPass, bloomCompositePass } from "./bloom.js";
 import { lensPass } from "./lens.js";
+import { veilPass } from "./veil.js";
 import { filmPass } from "./film.js";
 import { ditherPass } from "./dither.js";
 import { motionBlurPass } from "./motionBlur.js";
@@ -16,13 +17,14 @@ registerPass(glowPass);
 registerPass(bloomPass);
 registerPass(bloomCompositePass);
 registerPass(lensPass);
+registerPass(veilPass);
 registerPass(filmPass);
 registerPass(ditherPass);
 registerPass(motionBlurPass);
 
 export { registerPass, runChain, getPass };
 export type { EffectPass };
-export { blurPass, gradePass, glowPass, bloomPass, bloomCompositePass, lensPass, filmPass, ditherPass, motionBlurPass };
+export { blurPass, gradePass, glowPass, bloomPass, bloomCompositePass, lensPass, veilPass, filmPass, ditherPass, motionBlurPass };
 export { probeDitherDistinctLevels } from "./dither.js";
 
 /** Test hook. Renders a half-white / half-transparent source with a soft-edged coloured band,
@@ -134,11 +136,14 @@ export function probeGrain(
   return { spread, adjacentDiff, samples: v };
 }
 
-/** Test hook: white source through the film pass — centre, corner, grain spread on a flat patch. */
+/** Test hook: white source through the film pass — centre, corner, grain spread on a flat patch.
+ *  `extra` layers additional film params over the two positional ones, so the halves of the finish
+ *  (`grain`, `vignette`) can be probed independently. */
 export function probeFilm(
   canvas: HTMLCanvasElement,
   night: string,
   intensity: number,
+  extra: Record<string, number> = {},
 ): { centre: number; corner: number; grainSpread: number } {
   const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true })!;
   const pool = new TargetPool();
@@ -147,7 +152,7 @@ export function probeFilm(
   gl.viewport(0, 0, src.w, src.h);
   gl.clearColor(1, 1, 1, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  const out = runChain(gl, pool, src, [{ pass: getPass("film")!, params: { intensity, night } }], 42);
+  const out = runChain(gl, pool, src, [{ pass: getPass("film")!, params: { ...extra, intensity, night } }], 42);
   const read = (x: number, y: number): number => {
     const px = new Uint8Array(4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, out.fbo);
@@ -171,6 +176,6 @@ export function probeFilm(
   return { centre, corner, grainSpread };
 }
 
-// The full-post-chain probe lives in post.ts (it needs runPost), but is re-exported here so it
-// reaches the same KinoFx global the effect probes use — and so importing it registers the passes.
-export { probePostChain } from "../post.js";
+// The full-post-chain probes live in post.ts (they need runPost), but are re-exported here so they
+// reach the same KinoFx global the effect probes use — and so importing them registers the passes.
+export { probePostChain, probeVeil } from "../post.js";

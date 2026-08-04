@@ -13,6 +13,44 @@ export interface ResolvedPass {
   params: Record<string, number | string | WebGLTexture>;
 }
 
+/**
+ * Reduce `src` to a single texel holding the frame's mean colour, by repeated 2:1 blits.
+ *
+ * This is what makes `veil` content-responsive, and it is a blit pyramid rather than one big
+ * downscale because a single blit is a BILINEAR sample, not a box average — mapping 1920 rows onto
+ * 64 would read four texels out of every nine hundred and miss exactly the small bright element
+ * the stage exists to react to. Halving is the case where bilinear IS the box average (the
+ * destination texel centre lands on the corner of four sources, weights 0.25 each), so a chain of
+ * halvings averages every pixel exactly once. ~11 steps for a 1080-class frame, and only the first
+ * reads a full frame — together about 1.3 passes' worth of fill.
+ *
+ * The averaging happens in whatever space the driver's sRGB blit conversion lands in, which is not
+ * worth pinning down: the driver only has to RESPOND to scene brightness monotonically, and both
+ * candidate spaces do. Caller releases the returned target.
+ */
+function reduceToMean(gl: WebGL2RenderingContext, pool: TargetPool, src: RenderTarget): RenderTarget {
+  let cur = src;
+  let owned: RenderTarget | null = null;
+  while (cur.w > 1 || cur.h > 1) {
+    const w = Math.max(1, cur.w >> 1);
+    const h = Math.max(1, cur.h >> 1);
+    const dst = pool.acquire(gl, w, h);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, cur.fbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, dst.fbo);
+    gl.blitFramebuffer(0, 0, cur.w, cur.h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    // Released only AFTER the next size is acquired, so the pool can never hand the same target
+    // back as this step's destination.
+    if (owned) pool.release(owned);
+    owned = dst;
+    cur = dst;
+  }
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+  // A 1x1 source needs no reduction and must still hand back something the caller can release
+  // without freeing the composite — copy it.
+  return owned ?? copyTarget(gl, pool, src);
+}
+
 function copyTarget(gl: WebGL2RenderingContext, pool: TargetPool, src: RenderTarget): RenderTarget {
   const dst = pool.acquire(gl, src.w, src.h);
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src.fbo);
@@ -101,6 +139,10 @@ export function resolvePostChain(post: PostFx | undefined, theme: Theme): Resolv
  *  in the same slice so the add-back still sees the pre-bloom copy. */
 const isBloom = (name: string) => name === "bloom" || name === "bloomComposite";
 
+/** `veil` needs a measurement of everything composited so far, which only this level can take —
+ *  a pass sees one texel at a time. */
+const isVeil = (name: string) => name === "veil";
+
 /** Run the resolved post chain over the composite. Caller owns `composite` when the chain is empty. */
 export function runPost(
   gl: WebGL2RenderingContext,
@@ -128,9 +170,27 @@ export function runPost(
       if (owned) pool.release(owned);
       owned = out === read ? null : out;
       read = out;
+    } else if (isVeil(chain[i].pass.name)) {
+      // Measured from `read` — everything composited BENEATH this stage, which is the light that
+      // would have entered the lens. Its own slice for the same reason bloom has one: the pass
+      // cannot take the measurement itself, so the level that owns the targets takes it first.
+      const e = chain[i++];
+      const mean = reduceToMean(gl, pool, read);
+      const veilSlice: ResolvedPass[] = [{ pass: e.pass, params: { ...e.params, _driveTex: mean.tex } }];
+      const out = runChain(
+        gl,
+        pool,
+        read,
+        veilSlice as Array<{ pass: EffectPass; params: Record<string, number | string> }>,
+        frame,
+      );
+      pool.release(mean);
+      if (owned) pool.release(owned);
+      owned = out === read ? null : out;
+      read = out;
     } else {
       const slice: ResolvedPass[] = [];
-      while (i < chain.length && !isBloom(chain[i].pass.name)) slice.push(chain[i++]);
+      while (i < chain.length && !isBloom(chain[i].pass.name) && !isVeil(chain[i].pass.name)) slice.push(chain[i++]);
       const out = runChain(gl, pool, read, slice as Array<{ pass: EffectPass; params: Record<string, number | string> }>, frame);
       if (owned) pool.release(owned);
       owned = out === read ? null : out;
@@ -158,6 +218,75 @@ export function runPost(
  * lifetimes, the uOriginal binding); the pixel guarantee belongs to the real-render assertion in
  * tests/postfx-integration.test.ts.
  */
+/**
+ * Test hook: the tail chain over a black frame carrying one centred disc of a given size, reading
+ * a corner the disc never touches plus the disc itself.
+ *
+ * Separate from probePostChain because the thing under test is different in kind. That probe asks
+ * "does light appear where the source was black" with a fixed fixture; this one asks whether the
+ * SAME parameters produce a different result on a dimmer frame, which needs the fixture's light
+ * level to be the variable. It also runs against the real TargetPool for a reason: `reduceToMean`
+ * acquires a pyramid of sizes and releases each step as it goes, and a pool with no free list
+ * would not exercise the aliasing that ordering exists to prevent.
+ *
+ * Returns [cornerR, cornerG, cornerB, discR] in 0..255.
+ */
+export function probeVeil(
+  canvas: HTMLCanvasElement,
+  postFx: PostFx,
+  discFrac: number,
+  discColour = "#ffffff",
+): number[] {
+  const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true })!;
+  const pool = new TargetPool();
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const c2d = document.createElement("canvas");
+  c2d.width = w;
+  c2d.height = h;
+  const ctx = c2d.getContext("2d")!;
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, w, h);
+  if (discFrac > 0) {
+    ctx.fillStyle = discColour;
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, (w / 2) * discFrac, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.SRGB8_ALPHA8, gl.RGBA, gl.UNSIGNED_BYTE, c2d);
+
+  // The composite must be a pooled target with a real fbo: reduceToMean blits FROM it.
+  const composite = pool.acquire(gl, w, h);
+  const blitSrc = gl.createFramebuffer()!;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, blitSrc);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, blitSrc);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, composite.fbo);
+  gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+
+  const theme = { bg: "#000000" } as unknown as Theme;
+  const out = runPost(gl, pool, composite, resolveTailPostChain(postFx, theme, 1), 0);
+
+  const at = (x: number, y: number): Uint8Array => {
+    const px = new Uint8Array(4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fbo);
+    gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return px;
+  };
+  const corner = at(2, 2);
+  return [corner[0], corner[1], corner[2], at(Math.floor(w / 2), Math.floor(h / 2))[0]];
+}
+
 export function probePostChain(canvas: HTMLCanvasElement, postFx: PostFx, offsets: number[], churn = 0): number[] {
   const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true })!;
   const pool = new TargetPool();

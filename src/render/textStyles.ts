@@ -80,9 +80,7 @@ export function lineBoxStyle(style: CaptionStyle, t: TextTheme, backplateBg?: st
 
 // s = entrance spring 0→1 (caller owns the spring config); frame = frames since this element's
 // entrance began (negative = not yet — words mode passes revealFrame); index = word index for
-// stagger phase. Callers use these presets only for NON-native animations (e.g. texts[] overlays);
-// native caption surfaces keep their legacy quad-level entrance — the word-keyed caption raster
-// has no per-frame state for an entrance spring to ride (see textMarkup.ts).
+// stagger phase.
 export interface AnimInput {
   s: number;
   frame: number;
@@ -121,6 +119,116 @@ export function animatePreset(anim: CaptionAnimation, a: AnimInput): AnimOut {
 export function composeFilters(...fs: Array<string | undefined>): string | undefined {
   const list = fs.filter((f): f is string => !!f && f !== "none");
   return list.length ? list.join(" ") : undefined;
+}
+
+// --- captionAnimation in the native raster ---------------------------------------------------
+//
+// THE ARCHITECTURE, and why it is neither of the two obvious options.
+//
+// The caption raster is keyed by the active word, so it re-renders when the word changes and never
+// between — which is why an entrance spring had nowhere to ride, and why every animation preset
+// painted as its settled pose. The two candidate fixes each fail on their own:
+//
+//   an animated QUAD  — layers.ts already tweens the caption quad, and a whole-line pop is
+//                       expressible there for free. But in words mode each word enters at its own
+//                       VO time, and one quad transform cannot stagger. `wave` and `typewriter`
+//                       are per-element by definition. So the quad can never carry the presets.
+//   a DYNAMIC cadence — re-raster every frame, and everything works. But it also re-rasters for
+//                       every frame a caption is merely SITTING there, which is most of them, and
+//                       the raster is the expensive layer (fonts inlined, foreignObject decode).
+//
+// What actually splits cleanly is the TEMPLATE from the PIXELS. The markup — which word is
+// highlighted, which ink each word takes — still changes only on word boundaries, so the expensive
+// font-inlined template stays keyed exactly as it is today. The animation is injected as a bundle
+// of CSS custom properties computed per frame, so the same template rasters to a different pose.
+// And because the markup reads them through `var(--ka0-t, none)` fallbacks, a frame with NO vars
+// paints the settled pose — so once every entrance has landed the caller stops emitting them, the
+// cache key collapses back to the plain template key, and the rest of the beat is served from the
+// keyed raster it always was.
+//
+// Net: per-frame work for exactly the frames that are moving. `wave` is the honest exception — a
+// continuous bob never settles, and an author asking for one is asking for per-frame rasters.
+
+/** Entrance length. ~8 frames at 30fps: long enough to read as a spring, short enough that the
+ *  per-frame rasters it costs are a rounding error on a beat. */
+export const CAPTION_ENTRANCE_SEC = 0.28;
+/** Per-word stagger for the presets whose identity IS the stagger, when there are no VO word times
+ *  to stagger against (a phrase caption). */
+export const CAPTION_STAGGER_SEC = 0.06;
+/** Presets that read as a cascade rather than one move, so a phrase caption staggers them. */
+const STAGGERED = new Set<CaptionAnimation>(["typewriter", "wave"]);
+/** Presets that never settle — the motion is the preset, not an entrance into it. */
+const CONTINUOUS = new Set<CaptionAnimation>(["wave"]);
+
+/**
+ * When each animated word's entrance begins, in absolute seconds.
+ *
+ * Words mode rides the VO: a word enters when it is spoken, which is the entire reason captions are
+ * word-keyed in the first place. `reveal: "all"` lays the whole line out at once by contract, so
+ * there is nothing per-word to ride and every word shares the beat's start.
+ */
+export function captionAnimStarts(opts: {
+  anim: CaptionAnimation;
+  count: number;
+  beatStartSec: number;
+  wordStartsSec?: number[];
+  perWord: boolean;
+}): number[] {
+  const { anim, count, beatStartSec, wordStartsSec, perWord } = opts;
+  if (perWord && wordStartsSec?.length) {
+    return Array.from({ length: count }, (_, i) => wordStartsSec[i] ?? beatStartSec);
+  }
+  const step = STAGGERED.has(anim) ? CAPTION_STAGGER_SEC : 0;
+  return Array.from({ length: count }, (_, i) => beatStartSec + i * step);
+}
+
+/** True once no word's pose can change again, so the raster can go back to being keyed. */
+export function captionAnimSettled(anim: CaptionAnimation, starts: number[], tAbs: number): boolean {
+  if (CONTINUOUS.has(anim)) return false;
+  if (!starts.length) return true;
+  return tAbs >= Math.max(...starts) + CAPTION_ENTRANCE_SEC;
+}
+
+/** Elastic-out, the same shape bgparams' `spring` curve has. Duplicated rather than imported
+ *  because textStyles.ts is the one text module props.ts imports FROM, and a value import back
+ *  into bgparams would close a cycle. */
+function springAt(p: number): number {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  return 1 + Math.pow(2, -10 * p) * Math.sin(((p * 10 - 0.75) * (2 * Math.PI)) / 3);
+}
+
+/**
+ * The per-frame custom properties a caption raster reads: `--ka{i}-t/-o/-f` per word.
+ *
+ * Every number comes out of `animatePreset`, the same library the DOM composition used, so the two
+ * surfaces cannot drift into two different definitions of "pop". Returns "" when nothing is moving
+ * — that empty string is load-bearing, since it is what lets the caller fall back to the settled
+ * raster instead of minting a new one.
+ */
+export function captionAnimVars(opts: {
+  anim: CaptionAnimation;
+  starts: number[];
+  tAbs: number;
+  fps: number;
+}): string {
+  const { anim, starts, tAbs, fps } = opts;
+  if (captionAnimSettled(anim, starts, tAbs)) return "";
+  const out: string[] = [];
+  starts.forEach((start, i) => {
+    const elapsed = tAbs - start;
+    const a = animatePreset(anim, {
+      s: springAt(elapsed / CAPTION_ENTRANCE_SEC),
+      frame: Math.round(elapsed * fps),
+      index: i,
+    });
+    out.push(`--ka${i}-t:${a.transform}`);
+    out.push(`--ka${i}-o:${a.opacity}`);
+    // Omitted rather than written as `none`: the markup reads it as `var(--ka0-f,)`, and an empty
+    // value is a valid (absent) filter while `none` beside another filter function is not.
+    if (a.filter) out.push(`--ka${i}-f:${a.filter}`);
+  });
+  return out.join(";");
 }
 
 // Layered caption look: segment ?? spec ?? brand ?? defaults. animation stays undefined when no

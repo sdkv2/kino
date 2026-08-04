@@ -31,6 +31,16 @@ const SpecColors = z.union([
       accent: Hex.optional(),
       accent2: Hex.optional(),
       deep: Hex.optional(),
+      // The UI roles (config/palettes.ts): surfaces, ink hierarchy and the semantic triad a
+      // fabricated product UI needs past the five caption-sized ones. All derived when unset, and
+      // NOT replaced by naming a preset — they are a statement about how a spoof interface is
+      // drawn, not about the piece's colour.
+      surface: Hex.optional(),
+      line: Hex.optional(),
+      muted: Hex.optional(),
+      ok: Hex.optional(),
+      warn: Hex.optional(),
+      danger: Hex.optional(),
       night: Hex.optional(),
       white: Hex.optional(),
       mint: Hex.optional(),
@@ -214,6 +224,23 @@ const motionFields = {
   keyframes: z.array(MotionKeyframe).optional(),
   triggers: z.array(MotionTrigger).optional(),
   loop: z.boolean().optional(), // Tier-3 Lottie playback; inert for html/proc graphics
+  // An offline solver for this graphic — physics, or anything else that needs state between frames.
+  // It runs ONCE at build time and emits one row per frame; the graphic replays those rows through
+  // `env.sim`. Tier 2 stays pure, which is what lets frames render out of order and across hosts.
+  // See src/render/sim.ts.
+  sim: z
+    .object({
+      // A .js under the project's assets/, evaluated with a `sim` context. Returns an array of rows
+      // or a (frame) => row step function.
+      source: z.string().min(1),
+      // Frames to solve. Defaults to the beat's own length, so a bake follows real TTS instead of
+      // running out partway through a beat that got longer.
+      frames: z.number().int().positive().optional(),
+      // PRNG seed. Restate it to reproduce a bake exactly; change it to draw a different one.
+      seed: z.number().int().optional(),
+    })
+    .strict()
+    .optional(),
 };
 const MotionGraphicRef = z.object(motionFields);
 
@@ -611,6 +638,12 @@ const SpecObject = z
     // guidance + a post-build first/last-frame seam check (warn only). Not the same as segment
     // `loop` (Lottie playback).
     seamlessLoop: z.boolean().optional(),
+    // Shared constants, readable by every motion graphic in the spec as `var(--<key>)` and
+    // `env.data.<key>`. For the figures a piece quotes on more than one surface — a latency, a
+    // percentage, a build number — so they are stated once instead of retyped per beat and drifting
+    // silently. A beat's own `params` override a key of the same name. Names are validated (see
+    // validateSpecData): `--kino-*` and the runtime's own clock variables are reserved.
+    data: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
     postFx: z.unknown().optional(),
     // Kept permissive here so the shared CLI validator reports layer errors in the author's
     // vocabulary rather than Zod's. See src/render/layerSpec.ts.

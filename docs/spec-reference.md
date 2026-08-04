@@ -10,8 +10,10 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 - [Captions](#captions)
 - [Text overlays](#text-overlays)
 - [Masks and effects](#masks-and-effects) — [timed effects](#timed-effects) · [blur focal region](#blur-focal-region) · [tween channels](#tween-channels)
-- [Layers](#layers) — [source kinds](#source-kinds) · [z scale](#z-scale) · [adjustment layers](#adjustment-layers)
-- [Post FX](#post-fx) — [grade axes](#grade-axes) · [halation](#halation) · [film grain](#film-grain)
+- [Shared constants](#shared-constants)
+- [Layers](#layers) — [source kinds](#source-kinds) · [z scale](#z-scale) · [adjustment layers](#adjustment-layers) · [windowing one](#windowing-an-adjustment-layer)
+- [Post FX](#post-fx) — [grade axes](#grade-axes) · [keying a grade](#keying-a-grade-to-a-range-of-colours) · [veiling glare](#veiling-glare) · [halation](#halation) · [film grain](#film-grain)
+- [Simulation](#simulation)
 - [Keyframes & triggers](#keyframes--triggers)
 - [Backgrounds](#backgrounds)
 - [Sound effects & music](#sound-effects--music)
@@ -41,7 +43,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `backgroundKeyframes` | [BgKeyframe](#keyframes--triggers)[] | — | Tween background params over time. |
 | `backgroundTriggers` | [BgTrigger](#keyframes--triggers)[] | — | One-shot background actions (e.g. `pulse`). |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset; overrides `brand.captionStyle.style`. Default `stroke`. See [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Resolves for `texts[]` overlays; native caption surfaces keep quad-level legacy entrance (see [Captions](#captions)). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset; overrides `brand.captionStyle.animation`. Painted into the caption raster per frame while the entrance is in flight — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal: `word` (default, one word at a time) or `all` (whole line laid out, active-word highlight tracks VO). See [Captions](#captions). |
 | `captionMode` | `phrase\|words` | — | Caption mode; overrides `brand.captionMode`. See [Captions](#captions). |
 | `sfx` | [SfxEvent](#sound-effects--music)[] | — | Free-placed sound effects. See [Sound effects & music](#sound-effects--music). |
@@ -49,6 +51,7 @@ The schema is enforced by [`src/spec/schema.ts`](../src/spec/schema.ts) (zod) �
 | `voVolume` | number 0–1 | — | Gain on the whole VO track. Default `1` (untouched). Lower it when the read sits too far in front of a loud bed; it does **not** change ducking, which keys off VO *timing*, not level. |
 | `seamlessLoop` | boolean | — | Loop-ad contract: last beat must be `kind:"motion"`; validate warns if `film` unset/`>0` or first/last motion sources aren't a ready-state pair; post-build compares first/last frame RGB (warn only). Prefer `"film": 0`. Not the same as segment `loop` (Lottie playback). |
 | `motionBlur` | boolean | — | Automatic camera motion blur, default `true`: kino appends a derived `motionBlur` effect to a beat whose layer actually travels. Set `false` to disable the derivation (a hand-authored [`motionBlur`](#masks-and-effects) effect is still honoured). |
+| `data` | `{ [key]: string \| number }` | — | Shared constants readable by every motion graphic as `var(--<key>)` and `env.data.<key>`. See [Shared constants](#shared-constants). |
 | `postFx` | [PostFx](#post-fx) | — | Full-frame post stage over the finished composite (compositor only). See [Post FX](#post-fx). |
 | `layers` | [DeclaredLayer](#layers)[] | — | Author-declared layers, slotted into the built-in stack by z. See [Layers](#layers). |
 
@@ -100,6 +103,50 @@ The literal names are the palette's pre-role vocabulary. They still work in both
 
 Palette colours reach motion graphics as `--kino-bg` / `--kino-fg` / `--kino-accent` / `--kino-accent2` / `--kino-deep` (plus the legacy `--kino-night`-style aliases), and drive caption ink, kicker chips, and the default background gradient (`[accent, deep, accent2]`).
 
+### UI roles
+
+Five roles are the right five for painting words over a background, which is what they were designed
+for. They run out the moment a motion graphic fabricates a **product surface** — a spoof UI is not a
+caption, it is a hierarchy of surfaces, a hierarchy of ink, and a grammar of states. Past five an
+author hard-codes hexes into the HTML, and at that point the brand has stopped driving the look.
+
+Six more roles cover it. Every one is **derived** from the five above unless you name it, so nothing
+existing has to change:
+
+| Role | Job | Derived as |
+|---|---|---|
+| `surface` | A panel raised off the page — cards, sidebars, terminal chrome | `bg` 7% toward `fg` |
+| `line` | Borders, dividers, table rules | `bg` 18% toward `fg` |
+| `muted` | Secondary ink — labels, timestamps, inactive rows, units | `fg` 38% toward `bg` |
+| `ok` | Semantic: pass / success | `#22c55e`, darkened if the page is light |
+| `warn` | Semantic: caution | `#f59e0b`, darkened if the page is light |
+| `danger` | Semantic: failure | `#ef4444`, darkened if the page is light |
+
+They reach a graphic as `--kino-surface` / `--kino-line` / `--kino-muted` / `--kino-ok` /
+`--kino-warn` / `--kino-danger`, and as `env.palette.line` (etc.) in a Tier-2 proc.
+
+```jsonc
+"colors": { "preset": "noir", "line": "#2a2f3a", "ok": "#3fb950" }
+```
+
+Four notes on the design:
+
+1. **The semantic triad is not derived from the brand.** A state colour that shifts with the accent
+   stops meaning "this build failed". They are the hues a viewer already reads as pass / caution /
+   fail; a brand that wants its own says so.
+2. **They adapt to the page, not to the brand.** On a light scheme the stock amber lands at about
+   1.8:1 — visibly there and unreadable — so each is darkened until it clears 3:1 against `bg`. The
+   hue, which carries the meaning, does not move. On every dark palette this is a no-op.
+3. **The surface/line/muted rules invert without a branch.** On a dark base a panel is lighter and
+   secondary ink is dimmer; on `paper` a panel is a shade *darker* than the page, which is what
+   light design systems actually draw, and secondary ink is greyer.
+4. **A preset does not replace them.** A preset is a statement about the piece's colour; a brand's
+   border convention is a statement about how its fabricated UI is drawn. A spec naming `noir`
+   keeps them.
+
+Past these eleven — a fourth state colour, a "merged" purple, per-surface elevation — is a design
+system's own vocabulary, and [`spec.data`](#shared-constants) is the right shape for it.
+
 > **Light schemes:** pair `paper` (or any light `bg`) with `"film": 0`. The cinematic finish darkens frame edges, which reads as a dirty border on a light base — validate warns if you don't.
 
 ## Segments
@@ -137,7 +184,7 @@ The default beat: voiceover and captions over a [background](#backgrounds), opti
 | `captionKeyframes` | BgKeyframe[] | — | Tween the caption — see [Tween channels](#tween-channels). |
 | `motionOverlay` | [MotionRef](#motion-segment) | — | Layer a motion graphic over this beat. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment. In words mode each word enters when it is spoken — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 | `sfx` | `{ src, at \| atWord, offset?, volume?, pan?, rate? }[]` | — | Sound effects placed on **this beat**: `at` is seconds from segment start, `atWord` anchors to a spoken word. Both ride real TTS with no retune, unlike a top-level [`sfx[].at`](#sound-effects--music). |
@@ -168,7 +215,7 @@ Footage, a screenshot, or any other video source cut in full-frame, with an opti
 | `zoomKeyframes` | BgKeyframe[] | — | Camera push/pan on the whole footage+chrome group (canvas zoom for inset device footage); beat-relative track like `captionKeyframes` — `at` is seconds from this segment's start, so it rides the beat when VO timing shifts (see [Tween channels](#tween-channels)). |
 | `motionOverlay` | [MotionRef](#motion-segment) | — | Layer a motion graphic over this beat. |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment. In words mode each word enters when it is spoken — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 | `sfx` | `{ src, at \| atWord, offset?, volume?, pan?, rate? }[]` | — | Sound effects placed on **this beat**: `at` is seconds from segment start, `atWord` anchors to a spoken word. Both ride real TTS with no retune, unlike a top-level [`sfx[].at`](#sound-effects--music). |
@@ -194,17 +241,18 @@ A full-screen custom motion graphic (HTML/CSS you author), driven by kino-set CS
 | `params` | `Record<string, number\|string>` | — | Base CSS-variable values (read as `--<key>`). Also an **implicit t=0 keyframe**: a lone keyframe tweens from the base value instead of holding. |
 | `keyframes` | MotionKeyframe[] | — | Tween params over the beat. Each entry sets exactly one of `at` (beat-relative seconds) or **`atWord`** (a spoken word — first case/punctuation-insensitive occurrence — or a word index), resolved against the build's VO timings so anchors ride real TTS with no retune. |
 | `triggers` | MotionTrigger[] | — | One-shot `pulse` envelopes (`--pulse`). Same `at` / `atWord` anchoring as keyframes. |
+| `sim` | `{ source, frames?, seed? }` | — | An offline solver for this graphic — physics, or anything else needing state between frames. Runs once at build time; the graphic replays its rows through `env.sim`. See [Simulation](#simulation). |
 | `captionMode` | `phrase\|words` | — | See [Captions](#captions). |
 | `emphasis` | string[] | — | Emphasised words (`words` mode). |
 | `captionKeyframes` | BgKeyframe[] | — | Tween the caption — see [Tween channels](#tween-channels). |
 | `captionStyle` | `stroke\|highlight\|gradient\|minimal` | — | Caption look preset for this segment; see [Captions](#captions). |
-| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment; native caption raster keeps quad-level legacy entrance — see [Captions](#captions). |
+| `captionAnimation` | `pop\|rise\|typewriter\|wave\|blur-in\|none` | — | Caption entrance preset for this segment. In words mode each word enters when it is spoken — see [Captions](#captions). |
 | `captionReveal` | `word\|all` | — | Words-mode reveal for this segment; see [Captions](#captions). |
 | `texts` | `{ text, at, dur?, position?, size?, style?, animation? }[]` | — | Standalone text overlays; `at` is seconds from segment start. See [Text overlays](#text-overlays). |
 | `sfx` | `{ src, at \| atWord, offset?, volume?, pan?, rate? }[]` | — | Sound effects placed on **this beat**: `at` is seconds from segment start, `atWord` anchors to a spoken word. Both ride real TTS with no retune, unlike a top-level [`sfx[].at`](#sound-effects--music). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode for this beat's motion-graphic layer against what's beneath it. Default `normal`. |
 
-> **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS. `atWord` anchoring works in all motion slots (full-screen beats and overlays); other keyframe tracks (`backgroundKeyframes`, `zoomKeyframes`, `captionKeyframes`, …) remain seconds-only and keep their one-keyframe-holds idiom.
+> **MotionRef** (used by `motionOverlay` and the `motion` segment's own motion fields) = `{ source, params?, keyframes?, triggers?, loop?, sim? }`. The `loop` field applies to Tier-3 Lottie (`.json`) sources; it is inert for Tier-1 HTML and Tier-2 procedural JS. `atWord` anchoring works in all motion slots (full-screen beats and overlays); other keyframe tracks (`backgroundKeyframes`, `zoomKeyframes`, `captionKeyframes`, …) remain seconds-only and keep their one-keyframe-holds idiom.
 
 ## Masks and effects
 
@@ -392,6 +440,41 @@ layer composites against whatever is beneath it; declared layers share the same 
 beat has no content layer of its own (background + optional presenter only), so `blend` there
 validates but has no visible effect.
 
+## Shared constants
+
+`spec.data` is a flat block of figures every motion graphic in the spec can read — as
+`var(--<key>)` in CSS and `env.data.<key>` in a Tier-2 proc.
+
+```jsonc
+"data": {
+  "flaky": "19/412",
+  "flakyPct": "4.6%",
+  "p50": "50ms",
+  "p95": "68ms",
+  "runs": 300
+}
+```
+
+It exists for one failure: a figure quoted on more than one surface has to AGREE on all of them,
+and per-beat `params` put a copy of it in every beat's file where nothing checks them against each
+other. Eight fabricated screens quoting a latency is eight chances to retype it, and one
+contradiction makes a fabricated product look like it does not work.
+
+- **A beat's own `params` win** over a key of the same name, so a beat can deviate locally. Both
+  land in the same `--<key>` namespace on purpose: a graphic reading `var(--p95)` should not have to
+  know whether the number is shared or local — that is the author's decision to move, not the
+  page's to track.
+- **Names are validated.** `--kino-*` is reserved wholesale (palette, curves, caption band, word
+  counters), as are the runtime's own clock variables (`frame`, `t`, `progress`, `progress-num`,
+  `progress-den`, `pulse`, `cam-vel`, `cam-blur`) — a constant called `progress` would overwrite the
+  frame clock in every graphic at once, and the symptom would surface in a beat that never mentioned
+  it. Keys must start with a letter and use letters, digits, `-` or `_`.
+- **Values are strings or finite numbers.** They are interpolated verbatim, so `"68ms"` is a CSS
+  length and `300` is a number.
+- **Motion hosts only.** A `regionShader` HTML texture channel gets its region's own params, not
+  this block — `var(--p95)` there resolves to nothing, and an unresolved `var()` takes the whole
+  declaration with it.
+
 ## Layers
 
 `spec.layers[]` declares extra layers that slot into the built-in stack — backdrop, beats,
@@ -425,8 +508,8 @@ ranges, mask support — are checked right after, by `validateLayers`.
 | `source` | [source kind](#source-kinds) | one of `source`/`adjust` | The layer's pixels. Mutually exclusive with `adjust` — a layer either draws something or grades what's beneath it, never both. |
 | `adjust` | effect[] | one of `source`/`adjust` | No pixels of its own; runs this effect chain over everything composited beneath it. See [Adjustment layers](#adjustment-layers). |
 | `blend` | `normal\|screen\|multiply\|add` | — | Compositing mode against what's beneath it. Default `normal`. Rejected together with `adjust`. |
-| `fromSec` / `toSec` | number | — | Visible window on the main timeline. Omit `toSec` to run to the end of the composition. Rejected with `adjust`; superseded by `segment` when both are set. |
-| `segment` | int | — | Bind the window to a beat's `startSec`/`endSec` instead of authoring `fromSec`/`toSec` by hand, and pull the layer into that beat's crossfade group. |
+| `fromSec` / `toSec` | number | — | Visible window on the main timeline. Omit `toSec` to run to the end of the composition. Superseded by `segment` when both are set. Works on an adjustment layer too — see [Windowing an adjustment layer](#windowing-an-adjustment-layer). |
+| `segment` | int | — | Bind the window to a beat's `startSec`/`endSec` instead of authoring `fromSec`/`toSec` by hand, and pull the layer into that beat's crossfade group (an adjustment layer takes the window but never the group). |
 | `hold` | boolean | — | Keep the layer out of the beat's crossfade group while still using its window — steady through a transition the beats beneath it are dissolving through. Requires `segment`. |
 | `rect` | `{x,y,w,h}` | — | Placement, % of frame. Default full-bleed. |
 | `opacity` | number 0–1 | — | Default `1`. |
@@ -434,8 +517,9 @@ ranges, mask support — are checked right after, by `validateLayers`.
 | `effects` | effect[] | — | Same effect chain as segments, run before compositing — see [Masks and effects](#masks-and-effects). |
 | `keyframes` | BgKeyframe[] | — | Tweens the layer's own transform — see [Tween channels](#tween-channels) for the full list. `at` is relative to the layer's own start (its `fromSec`, or its bound segment's `startSec`), not absolute like `backgroundKeyframes`. |
 
-Exactly one of `source`/`adjust` is required. Every field below `adjust` in the table above is
-rejected on an adjustment layer — see [Adjustment layers](#adjustment-layers) for why.
+Exactly one of `source`/`adjust` is required. On an adjustment layer every field below `adjust`
+is rejected EXCEPT the three window fields (`fromSec` / `toSec` / `segment`) — see
+[Adjustment layers](#adjustment-layers) for why.
 
 ### Source kinds
 
@@ -503,11 +587,10 @@ mark declared there paints exactly where the retired built-in used to.
 ### Adjustment layers
 
 A layer with `adjust` and no `source` has no pixels of its own — it runs an effect chain over
-everything composited beneath it, like a full-frame grade rather than a texture. It is always
-base-group and spans the whole composition, so `fromSec`/`toSec`/`segment`/`hold`/`rect`/`opacity`/
-`mask`/`effects`/`keyframes`/`blend` are all rejected alongside it: the emission path that draws an
-adjustment layer never reads any of them, so accepting them would validate clean and then silently
-do nothing.
+everything composited beneath it, like a full-frame grade rather than a texture. It applies to the
+whole frame it sits over, so `hold`/`rect`/`opacity`/`mask`/`effects`/`keyframes`/`blend` are all
+rejected alongside it: the emission path that draws an adjustment layer never reads any of them, so
+accepting them would validate clean and then silently do nothing.
 
 ```json
 { "id": "warmth", "z": 650, "adjust": [{ "kind": "grade", "params": { "temperature": 0.2, "saturation": 0.95 } }] }
@@ -523,19 +606,52 @@ it with `"film": 0`; nothing else may declare `z: Z.film`.
 Everything below `Z.film` is grained; everything at or above stays clean. A declared adjustment
 layer placed above `Z.film` grades the clean type instead of the footage — usually not the intent.
 
+#### Windowing an adjustment layer
+
+`fromSec` / `toSec` / `segment` DO work on an adjustment layer: the window is the whole composition
+only when nothing narrows it. That is what makes a finish authorable per beat — grain alive under
+the opening and gone by the ident is two `film` adjustments bound to two beats, not one chain for
+the whole piece.
+
+```jsonc
+"film": 0,                       // drop the automatic finish; these two replace it
+"layers": [
+  // The vignette belongs to the lens, so it belongs to the whole piece.
+  { "id": "vig", "z": 699, "adjust": [{ "kind": "film", "params": { "intensity": 1, "grain": 0 } }] },
+  // The grain belongs to the stock, and this beat's stock is coarse and alive.
+  { "id": "grain-open", "z": 701, "segment": 0,
+    "adjust": [{ "kind": "film", "params": { "intensity": 1, "vignette": 0, "grain": 1.8, "grainSize": 2.4 } }] },
+  // The ident is clean.
+  { "id": "grain-ident", "z": 701, "segment": 4,
+    "adjust": [{ "kind": "film", "params": { "intensity": 1, "vignette": 0, "grain": 0.15 } }] }
+]
+```
+
+Three things make that work:
+
+1. **`grain` and `vignette` scale the two halves independently**, so windowing the grain does not
+   pump the vignette at every beat boundary. See
+   [Separating grain from vignette](#separating-grain-from-vignette).
+2. **A windowed adjustment stays out of its beat's crossfade group** even when bound with
+   `segment`. An adjustment applies to everything beneath it, which is not a thing that can
+   crossfade with one beat — which is also why `hold` stays rejected.
+3. **Effect keyframes run on the layer's own clock**, so `at: 0` is the window's start. Ramp the
+   intensity in over the first few tenths rather than switching it on, or the boundary pops.
+
 ## Post FX
 
 `postFx` applies a fixed full-frame chain **after** every beat is composited.
 Stages always run in this order — it is not authorable:
 
-`grade` → `bloom` → `lens` → `film`
+`grade` → `bloom` → `lens` → `veil` → `film`
 
 | Stage | Params | Range | Meaning |
 |---|---|---|---|
-| `grade` | `temperature`, `tint`, `lift`, `gamma`, `gain`, `brightness`, `contrast`, `saturation` | see [Grade axes](#grade-axes) | Full-frame colour grade. |
+| `grade` | `temperature`, `tint`, `lift`, `gamma`, `gain`, `brightness`, `contrast`, `saturation`, plus the `key*` [qualifier](#keying-a-grade-to-a-range-of-colours) | see [Grade axes](#grade-axes) | Full-frame colour grade. |
 | `bloom` | `threshold`, `intensity`, `radius`, `halation` | `threshold` `0..1` (default `0.45`), `intensity` `0..4` (default `0.4`), `radius` `0..128` px (default `24`), `halation` `0..1` (default `0`) | Separable bright-pass bloom. |
 | `lens` | `distortion`, `chroma` | `distortion` `-1..1`, `chroma` `0..0.05` | Barrel/pincushion distortion plus chromatic aberration. |
-| `film` | `intensity`, `grain`, `grainHold`, `grainSize` | `intensity` `0..1`, `grain` `0..4` (default `1`), `grainHold` `1..8` (default `2`), `grainSize` `1..8` (default `1`) | Vignette + grain over the whole frame. |
+| `veil` | `amount`, `threshold` | `amount` `0..1` (default `0.05`), `threshold` `0..1` (default `0`) | [Veiling glare](#veiling-glare) — a black-lifting wash whose strength is measured from the frame. |
+| `film` | `intensity`, `grain`, `grainHold`, `grainSize`, `vignette` | `intensity` `0..1`, `grain` `0..4` (default `1`), `grainHold` `1..8` (default `2`), `grainSize` `1..8` (default `1`), `vignette` `0..4` (default `1`) | Vignette + grain over the whole frame. |
 
 Omit a stage and it does not run — **except `film`**: when `postFx.film` is absent, intensity
 falls back to top-level `film` / `theme.film` (default `1`), so existing specs keep their
@@ -549,6 +665,7 @@ cinematic finish without authoring `postFx`.
     "grade": { "temperature": 0.25, "lift": 0.01, "contrast": 1.1, "saturation": 0.92 },
     "bloom": { "threshold": 0.75, "intensity": 0.35, "radius": 24, "halation": 0.6 },
     "lens": { "distortion": 0.04, "chroma": 0.003 },
+    "veil": { "amount": 0.04 },
     "film": { "grain": 1.4, "grainHold": 1 }
   },
   "segments": [{ "text": "Ship it.", "caption": "Ship it." }]
@@ -592,6 +709,85 @@ Four things worth knowing before reaching for these:
    luma, so a temperature ramp holds its brightness and needs no compensating `brightness`
    keyframe.
 
+### Keying a grade to a range of colours
+
+Every axis above is global — it moves the whole frame. The `key*` params are the qualifier that
+says *where* the move lands, which is what makes a grade usable over a fabricated UI: ramping a
+composited interface from 7200K to 5000K while the syntax greens and the status reds hold their
+meaning is one grade with a key, not eight hand-masked layers.
+
+| Param | Range | Default | What it does |
+|---|---|---|---|
+| `keyHue` | `0..360` | `0` | Centre of hue band A, in degrees (0 red, 120 green, 240 blue). |
+| `keyRange` | `0..180` | `0` | Half-width of band A. **`0` switches the band off**, which is why an unkeyed grade is global. |
+| `keyHue2` / `keyRange2` | same | `0` | Hue band B, unioned with A. |
+| `keySat` | `0..1` | `0` | Minimum HSV saturation to qualify. `0` = no saturation gate. |
+| `keySoft` | `0..1` | `0.35` | Feather, as a fraction of each window's width. |
+| `keyInvert` | `0..1` | `0` | `1` grades everything the key does **not** select — the protect switch. |
+
+```json
+"postFx": {
+  "grade": {
+    "temperature": -0.6,
+    "keyHue": 145, "keyRange": 40,
+    "keyHue2": 5, "keyRange2": 30,
+    "keyInvert": 1
+  }
+}
+```
+
+That cools the whole frame *except* the greens and the reds.
+
+Five things worth knowing:
+
+1. **Two hue bands, because the protect case needs two at once.** Green for a passing build and red
+   for a failing one sit at opposite ends of the wheel. Stacking two keyed grades does not
+   substitute: with `keyInvert` each pass grades everything the other protects, so the neutrals take
+   the move twice and each protected hue takes it once — precisely backwards.
+2. **`keySat` alone is often the whole answer.** Reserved colours in a design system are saturated
+   and the chrome around them is not, so `{ "keySat": 0.45, "keyInvert": 1 }` protects the entire
+   grammar without naming a single hue.
+3. **The key reads the pixel you saw** — sampled before the grade (otherwise a temperature ramp
+   walks hues out of their own band mid-ramp and the protection dissolves exactly where it is
+   needed) and in encoded sRGB, so "green is 145°" means what a colour picker says it means.
+4. **A hue band never claims a neutral.** Hue is undefined at zero chroma, and the standard formula
+   reports it as `0` — so without a floor, a band aimed at the reds would silently protect every
+   grey in the frame.
+5. **Never fully hard.** `keySoft` is floored just above `0`: a hard-edged key posterises a gradient
+   into flat plates of graded and ungraded colour, which is the single most recognisable "a
+   secondary was applied here" artefact.
+
+### Veiling glare
+
+`postFx.veil` is the flat wash of light that scatters inside a real lens barrel and lands on the
+whole frame, lifting the blacks. What separates it from a preset is that its strength is **measured
+from the frame, every frame** — the compositor reduces the composite to a single pixel and the pass
+reads it. Glare that appears when a highlight enters shot and recedes when it leaves is how an
+audience believes there is a lens in front of the scene; constant glare is a look.
+
+- `amount` is the lift at full flux (a white frame). Real lenses veil at roughly 0.5–2% of total
+  flux and an old uncoated one at ~5%, so `0.02`–`0.05` is the believable range. It goes to `1`
+  because a stage that already measures the frame is the cheapest way to get a dissolve-to-light on
+  a bright beat.
+- `threshold` is an ambient level below which the frame counts as too dark to scatter at all.
+- The wash takes the **colour of the light that caused it**, normalised to unit luma — so a warm
+  frame glares warm and `amount` stays an exposure rather than doubling as a colour control.
+
+It is additive, so it lifts blacks far more than highlights: adding 0.02 to a black is the whole
+image, and to a highlight it is invisible. That is the effect, not a limitation of it.
+
+`veil` is also a legal [adjustment-layer](#adjustment-layers) kind, and that is the interesting
+form — an adjustment measures *everything composited beneath it*, so glare that reads the footage
+but not the captions over it is only expressible that way.
+
+### Separating grain from vignette
+
+`film.intensity` is the master, and `grain` and `vignette` scale one half each (`0` switches that
+half off). They exist separately because they belong to different things: a vignette is a property
+of the lens and belongs to the whole piece, while grain is a property of the stock and is exactly
+what an author wants heavier under one beat than another. See
+[per-beat grain](#windowing-an-adjustment-layer) for the pattern.
+
 ### Halation
 
 `bloom.halation` gives the bloom a per-channel radius: red bleeds furthest, green less, blue
@@ -614,7 +810,8 @@ falloff instead of being clipped at the achromatic radius. Measured on an isolat
 
 ### Film grain
 
-`film.intensity` scales the whole finish (vignette + grain). The three grain params shape the
+`film.intensity` scales the whole finish, and `grain` / `vignette` scale one half each — see
+[Separating grain from vignette](#separating-grain-from-vignette). The three grain params shape the
 grain itself:
 
 - **`grain`** (`0..4`, default `1`) is the amount. The default is calibrated against a real 35mm
@@ -640,8 +837,9 @@ Three things authors trip on:
 1. **Order is fixed** — you cannot put grain before bloom or lens; the chain is baked in.
 2. **`film` defaults from `theme.film`** — omit `postFx.film` and the post stage still applies
    vignette/grain at the same intensity as the legacy CSS film finish.
-3. **Whole-video, not per beat** — one `postFx` object grades the entire output. Per-beat grading
-   still belongs on segment `effects`, which is also the only place a grade can be keyframed.
+3. **`postFx` is whole-video** — one object grades the entire output, and it has no keyframe track.
+   Per-beat grading belongs on segment `effects` (the only place a grade can be keyframed), and
+   per-beat *grain* belongs on a windowed [adjustment layer](#windowing-an-adjustment-layer).
 
 ### Enums
 
@@ -874,7 +1072,24 @@ An optional **backplate** (translucent panel behind lower-third captions for leg
 
 In `words` mode the reveal timing (when each word appears) always stays VO-driven — the animation preset only shapes each word's entrance motion, never its timing.
 
-> **Native raster scope:** the compositor rasterizes caption **look** (`captionStyle`, `captionReveal`, backplate) into a word-keyed bitmap (`cadence: "keyed"` — one repaint per active word, not per frame). `captionAnimation` does **not** paint into that bitmap: an entrance spring needs per-frame state, but a keyed raster only ever captures the settled pose (~1s in). Caption surfaces therefore keep their legacy quad-level entrance (`captionKeyframes`, native pop). Honoring `captionAnimation` in the raster would require per-frame dynamic cadence or animating the quad — a separate architecture change. The preset still resolves for `texts[]` overlays (which raster per frame) and documents the motion vocabulary.
+> **How the entrance is drawn.** The compositor rasterizes caption **look** (`captionStyle`,
+> `captionReveal`, backplate) into a word-keyed bitmap — one repaint per active word, not per frame.
+> `captionAnimation` rides inside that raster without giving up the keying: the template stays keyed
+> by the active word, and the entrance arrives as per-frame CSS custom properties the markup reads
+> through fallbacks equal to the settled pose. So the moving frames re-raster and the still ones do
+> not, and once every entrance has landed the caption is served from the same keyed bitmap it always
+> was. `wave` is the exception, and honestly so: a continuous bob never settles, so it rasters every
+> frame for as long as it runs.
+>
+> Two consequences worth knowing. **In words mode the entrance rides the VO** — each word enters
+> when it is spoken, which is what a word-keyed caption is for; `captionReveal: "all"` lays the line
+> out at once by contract, so every word shares one entrance instead. **A phrase caption is split
+> into words** so `typewriter` and `wave` have something to stagger across; the whole-line presets
+> (`pop`, `rise`, `blur-in`) still move as one line.
+>
+> The quad keeps carrying what a whole-line transform can carry — `captionKeyframes` and the legacy
+> pop — which is why a caption with no `captionAnimation` renders exactly as it did before this
+> existed, at exactly the same cost.
 
 **Caption reveal** (`captionReveal`, `words` mode only) — layered `segment ?? spec ?? brand.captionStyle.reveal`, default `word`:
 
@@ -900,6 +1115,190 @@ Per-segment `texts: [{ text, at, dur?, position?, size?, style?, animation? }]` 
 | `animation` | [CaptionAnimation](#captions) | — | Defaults to the segment's resolved caption animation, falling back to `pop`. |
 
 Overlays are clamped to their segment (an overlay never outlives its beat) and dropped if `at` falls at/after the segment ends.
+
+## Simulation
+
+Tier 2 is a pure `(env) => string` evaluated fresh every frame, with `Math.random` / `Date.now` /
+timers lint-rejected. That is not a limitation to be worked around — it is what lets a render be
+resumed on any frame, in any order, across eight sharded hosts. A graphic whose frame N depends on
+having drawn frame N-1 cannot do any of that.
+
+So the state moves **offline**. A solver runs once — stateful, iterative, as imperative as physics
+wants to be — and emits one row per frame. The graphic then does what it has always done: index a
+frame-indexed array.
+
+```jsonc
+{
+  "kind": "motion",
+  "source": "motion/coins.js",
+  "dur": 2,
+  "sim": { "source": "motion/coins.sim.js" }
+}
+```
+
+A solver is a `.js` file evaluated with a `sim` context. It returns either an array of rows (a batch
+or closed-form solve) or a `(frame) => row` step function (an integrator, which wants to keep its
+state in the closure):
+
+```js
+// motion/coins.sim.js — a bounce with restitution and roll-to-rest.
+const coins = Array.from({ length: 12 }, () => ({
+  x: sim.random() * sim.width, y: -sim.random() * 400, vy: 0, vx: (sim.random() - 0.5) * 120,
+}));
+const floor = sim.height * 0.78;
+return (frame) => {
+  for (const c of coins) {
+    c.vy += 2200 * sim.dt;
+    c.y += c.vy * sim.dt;
+    c.x += c.vx * sim.dt;
+    if (c.y > floor) { c.y = floor; c.vy *= -0.42; c.vx *= 0.7;
+      if (Math.abs(c.vy) < 24) { c.vy = 0; c.vx = 0; } }
+  }
+  return coins.map((c) => [Math.round(c.x), Math.round(c.y)]);
+};
+```
+
+The graphic stays pure:
+
+```js
+// motion/coins.js — Tier 2, no state of its own.
+const dots = (env.sim.at || [])
+  .map(([x, y]) => `<div style="position:absolute;left:${x}px;top:${y}px;..."></div>`).join("");
+return `<div style="position:absolute;inset:0">${dots}</div>`;
+```
+
+**The `sim` context**
+
+| Field | Meaning |
+|---|---|
+| `sim.frames` / `sim.fps` | Frames to produce, and the rate they play at. |
+| `sim.dt` | Seconds per frame — the integration step, pre-divided so nobody derives it wrong. |
+| `sim.width` / `sim.height` | Composition pixels. |
+| `sim.params` | The graphic's own `params`, so a solver and its graphic share one number. |
+| `sim.random()` | Seeded, reproducible uniform `[0,1)`. |
+| `sim.lib` | Bundled solver libraries — see [the solver stdlib](#the-solver-stdlib) below. |
+
+**What the graphic sees**
+
+| Field | Meaning |
+|---|---|
+| `env.sim.at` | THIS frame's row, already indexed — no beat arithmetic in the graphic. `null` with no solver. |
+| `env.sim.rows` | Every row, for trails and lookahead. |
+| `env.sim.fps` | The rate the rows were solved at. |
+
+Five things worth knowing:
+
+1. **`frames` defaults to the beat's own length.** A bake authored under mock VO still covers the
+   beat under `--tts`, instead of running out partway through and freezing. Set it explicitly only
+   when the count is the point (a loop that must close on exactly N frames).
+2. **`Math.random` is linted out of a solver; `sim.random()` is not.** A bake that cannot be
+   reproduced from its seed is a video that cannot be re-rendered. The seed is recorded with the
+   rows, and `sim.seed` on the spec picks a different draw.
+3. **State between steps is allowed** — that is the entire point. It is the ambient
+   nondeterminism (wall clock, timers, unseeded randomness) that is not.
+4. **A solver that produces too few rows fails the build**, because the alternative is a graphic
+   that freezes partway through a beat with no error. Overshooting is fine and is trimmed.
+5. **The last row is held past the end.** An outgoing motion beat is frozen on its last authored
+   frame through a handoff, and a simulation that blinked off under the transition would be worse
+   than one that settles.
+
+`kino bake <solver>` runs a solver on its own and reports what it produced — row shape, how many of
+the rows are actually distinct, first and last. Worth doing before a render, because a solver's
+output is numbers: "the coins land in a pile" and "the coins all land at y=0 on frame 3" produce
+very different videos and identical builds.
+
+### The solver stdlib
+
+A solver body runs through `new Function("sim", src)`, so it has **no `require` and no `import`** —
+and projects carry no `node_modules` of their own, so there is nothing to import even if it did. A
+library therefore either arrives on `sim.lib` or it does not arrive. Same arrangement as Tier 2's
+[`env.lib`](motion-graphics.md#procedural-graphics-tier-2), for the same reason.
+
+### `sim.lib.force` — things that converge
+
+**`sim.lib.force`** is [d3-force](https://d3js.org/d3-force) — an iterative *layout* solver.
+`simulation.tick()` is already this pathway's step contract, so it needs no adapter:
+
+```js
+// 24 tiles re-clustering into three columns by group.
+const nodes = Array.from({ length: 24 }, (_, i) => ({
+  i, group: i % 3, x: sim.random() * sim.width, y: sim.random() * sim.height,
+}));
+const cols = [sim.width * 0.25, sim.width * 0.5, sim.width * 0.75];
+const s = sim.lib.force.forceSimulation(nodes)
+  .force("charge", sim.lib.force.forceManyBody().strength(-40))
+  .force("collide", sim.lib.force.forceCollide(46))
+  .force("x", sim.lib.force.forceX((d) => cols[d.group]).strength(0.12))
+  .force("y", sim.lib.force.forceY(sim.height * 0.5).strength(0.08))
+  .stop();                       // never .restart() — that hands control to a timer
+
+return (frame) => { s.tick(); return nodes.map((n) => [Math.round(n.x), Math.round(n.y), n.group]); };
+```
+
+Three things to know:
+
+1. **`.stop()` then one `.tick()` per frame.** `forceSimulation` starts itself on a timer, and this
+   pathway has no timer — `.stop()` takes the clock back so `tick()` advances it exactly one frame's
+   worth. Forgetting it is untidy rather than broken: the solve is synchronous, so nothing can fire
+   between your ticks, and each row is a fresh array. The abandoned simulation just runs itself to
+   convergence in the background afterwards, burning CPU the build has no use for.
+2. **It converges; it does not collide.** No restitution, no rotation, no stacking. It covers nodes
+   settling into a cluster, labels pushing apart, a graph finding its shape. For a pile of bouncing
+   coins reach for `sim.lib.matter` below.
+3. **It is reproducible on its own terms** — d3-force threads its own seeded PRNG rather than
+   touching `Math.random`, which is part of why it was the first library bundled.
+
+### `sim.lib.matter` — things that collide
+
+**`sim.lib.matter`** is [matter-js](https://brm.io/matter-js/) — 2D **rigid body**, and the
+complement to `force` rather than a bigger version of it. Forces *converge*; bodies *collide*.
+Contact, friction, restitution, and the two things nothing else here offers: **rotation** and
+**resting stacks**.
+
+```js
+const M = sim.lib.matter;
+const engine = M.Engine.create();
+const coins = Array.from({ length: 18 }, () =>
+  M.Bodies.circle(sim.width * (0.32 + 0.36 * sim.random()), -46 - sim.random() * 620, 46,
+    { restitution: 0.38, friction: 0.45 }));
+
+const floorY = sim.height * 0.72;
+M.Composite.add(engine.world, [...coins,
+  M.Bodies.rectangle(sim.width / 2, floorY + 140, 760, 240, { isStatic: true }),
+  M.Bodies.rectangle(sim.width / 2 - 259, floorY - 1100, 120, 2400, { isStatic: true }),
+  M.Bodies.rectangle(sim.width / 2 + 259, floorY - 1100, 120, 2400, { isStatic: true })]);
+
+return (frame) => {
+  sim.lib.matterStep(engine, sim.dt);
+  return coins.map((b) => [Math.round(b.position.x), Math.round(b.position.y),
+                           Math.round(b.angle * 180 / Math.PI)]);
+};
+```
+
+**Read `b.angle` — it is the point.** A converging solver has no answer for where a coin came to
+rest facing, and that tilt is what makes a heap read as physics rather than as layout.
+
+**Step it with `matterStep`, not `Engine.update`.** matter-js wants ~1/60s steps; a 30fps frame is
+twice that, and handing the solver a whole frame degrades exactly what you came for — stacks jitter
+and fast bodies tunnel. `matterStep(engine, sim.dt)` sub-steps to the right size for the
+composition's fps. Pass a third argument to override the count.
+
+Static geometry has three failure modes, and none of them errors. All three turned up while building
+a rigid-body beat for [`examples/motion-sim`](../examples/motion-sim/), and each was found by
+measuring the solve rather than by looking at a render — which is the point of `kino bake`:
+
+| Mistake | What you see |
+|---|---|
+| No static floor | Every body falls forever. Rows full of numbers, empty render. |
+| Thin walls | Fast bodies tunnel straight through. matter-js has no continuous collision detection. |
+| Wall tops inside the drop zone | Bodies land *on* the walls, off screen, and every "has it settled" check says yes. |
+
+Make static bodies generous — they cost nothing to simulate — and keep the drop height modest.
+
+> **On `Math.random`:** the runner redirects it to the seeded stream for the duration of a solve, so
+> a library reaching for the global internally cannot make a bake unreproducible. The lint still
+> rejects `Math.random` in *your* solver — it can only read your source, not a dependency's, so the
+> rule is there to keep a solver visibly seeded rather than accidentally so.
 
 ## Keyframes & triggers
 
@@ -1067,6 +1466,8 @@ Brands are **optional**. A spec that sets [`colors`](#colour-scheme) needs no br
 The brand config lives at `brands/<name>/brand.md`: a YAML **frontmatter** block (between `---` fences) followed by a free-form **guidelines body**. The frontmatter supplies palette, typography, disclosures, and avatar/voice defaults (validated by [`src/config/brand.ts`](../src/config/brand.ts)); the body is prose for the driving agent. The frontmatter is merged over `DEFAULT_BRAND`, so every field is optional — anything omitted uses kino's defaults. The guidelines body carries no schema and is surfaced to the agent via `kino brand <name>`.
 
 > A `brand.md` with **no** `colors` block does not count as a declared [colour scheme](#colour-scheme) — specs under it fall back to kino's `midnight` palette (with a validate warning) unless they set their own `colors`.
+
+> The `colors` block also accepts the six [UI roles](#ui-roles) (`surface`, `line`, `muted`, `ok`, `warn`, `danger`). Setting them on a brand is how a project states its fabricated-UI conventions once; unlike the five core roles they survive a spec naming a preset, and they do not count toward "declared a colour scheme" on their own.
 
 ```md
 ---

@@ -14,6 +14,7 @@ import { KINO_VERSION } from "../version.js";
 import { validateSegmentFx } from "../render/maskSpec.js";
 import { validatePostFx } from "../render/postSpec.js";
 import { validateLayers } from "../render/layerSpec.js";
+import { validateSpecData } from "../render/motionVars.js";
 import { PALETTE_PRESET_NAMES, PALETTE_ROLES } from "../config/palettes.js";
 import { isLightSurface } from "../render/contrast.js";
 
@@ -292,6 +293,8 @@ export function validateSpec(spec: Spec, brand: Brand, project: Project): void {
   if (layerErrors.length) throw new Error(layerErrors.join("\n"));
   const postErrors = validatePostFx((spec as { postFx?: unknown }).postFx);
   if (postErrors.length) throw new Error(postErrors.join("\n"));
+  const dataErrors = validateSpecData((spec as { data?: unknown }).data);
+  if (dataErrors.length) throw new Error(dataErrors.join("\n"));
   assertBeatLengths(spec);
   assertAssetsExist(spec, project);
   assertMotionGraphics(spec, project);

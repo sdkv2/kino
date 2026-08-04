@@ -24,13 +24,14 @@ const GRAIN_HOLD = 2;
 
 export const filmPass: EffectPass = {
   name: "film",
-  uniformNames: ["uIntensity", "uLight", "uGrain", "uGrainScale", "uGrainHold"],
+  uniformNames: ["uIntensity", "uLight", "uGrain", "uGrainScale", "uGrainHold", "uVignette"],
   frag: `
 uniform float uIntensity;
 uniform float uLight;
 uniform float uGrain;
 uniform float uGrainScale;
 uniform float uGrainHold;
+uniform float uVignette;
 
 float kinoGrain(vec2 p, float f) {
   return fract(sin(dot(p + f * 17.0, vec2(127.1, 311.7))) * 43758.5453123);
@@ -62,14 +63,16 @@ void main() {
   // pass works in gamma space and converts back on the way out.
   c = kinoToSRGB(c);
 
-  vec2 d = (uv - vec2(0.5, 0.45));
-  vec2 radii = uLight > 0.5 ? vec2(0.88, 0.76) : vec2(0.92, 0.80);
-  float r = length(d / radii) * 2.0;
-  float start = uLight > 0.5 ? 0.55 : 0.46;
-  float t = smoothstep(start, 1.0, r);
-  vec3 tint = uLight > 0.5 ? vec3(28.0, 20.0, 12.0) / 255.0 : vec3(0.0);
-  float a = (uLight > 0.5 ? 0.18 : 0.46) * uIntensity * t;
-  c = mix(c, tint, a);
+  if (uVignette > 0.0) {
+    vec2 d = (uv - vec2(0.5, 0.45));
+    vec2 radii = uLight > 0.5 ? vec2(0.88, 0.76) : vec2(0.92, 0.80);
+    float r = length(d / radii) * 2.0;
+    float start = uLight > 0.5 ? 0.55 : 0.46;
+    float t = smoothstep(start, 1.0, r);
+    vec3 tint = uLight > 0.5 ? vec3(28.0, 20.0, 12.0) / 255.0 : vec3(0.0);
+    float a = (uLight > 0.5 ? 0.18 : 0.46) * uIntensity * uVignette * t;
+    c = mix(c, tint, a);
+  }
 
   // Grain is a function of exposure: densest through the midtones, thinning toward the toe and
   // the shoulder. Constant-amplitude noise across the whole tonal range is the other half of why
@@ -103,5 +106,11 @@ void main() {
     gl.uniform1f(loc.uGrain, (light ? 0.05 : 0.09) * intensity * GRAIN_GAIN * numParam(params, "grain", 1, 0, 4));
     gl.uniform1f(loc.uGrainScale, numParam(params, "grainSize", GRAIN_SIZE, 1, 8) * ss);
     gl.uniform1f(loc.uGrainHold, numParam(params, "grainHold", GRAIN_HOLD, 1, 8));
+    // The vignette's own scale, mirroring `grain`. Both exist so the two halves of the finish can
+    // be SEPARATED, which is what per-beat grain needs: an edge vignette is a property of the lens
+    // and belongs to the whole piece, while grain is a property of the stock and is exactly the
+    // thing an author wants heavier under one beat than another. Windowing the coupled pair
+    // instead would pump the vignette on every beat boundary.
+    gl.uniform1f(loc.uVignette, numParam(params, "vignette", 1, 0, 4));
   },
 };

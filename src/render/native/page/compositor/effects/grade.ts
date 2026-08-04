@@ -1,6 +1,7 @@
-// White balance → lift/gamma/gain → brightness/contrast/saturation. NONE of these are linear in
-// alpha, so the pass un-premultiplies first and re-premultiplies after — skipping that gives every
-// soft edge a dark rim, which is the bug tests/compositor-effects.test.ts's edge assertion catches.
+// White balance → lift/gamma/gain → brightness/contrast/saturation, optionally KEYED to a range of
+// colours. NONE of these are linear in alpha, so the pass un-premultiplies first and re-premultiplies
+// after — skipping that gives every soft edge a dark rim, which is the bug
+// tests/compositor-effects.test.ts's edge assertion catches.
 //
 // The stage ORDER is the order a colourist works in, and it is not authorable. White balance is a
 // CAPTURE-side correction — a statement about what colour the light was — so it has to happen
@@ -12,6 +13,20 @@
 // its defaults. That is what the uWhiteBalanceOn / uLggOn branches are for — not an optimisation.
 // `pow(c, 1.0)` and `c * 1.0` are near-neutral, not neutral, and a grade runs over every pixel of
 // every frame, so "near" would show up as a moved golden hash on specs that never asked for it.
+//
+// THE KEY (`key*` params) is a qualifier in the colourist sense: a per-pixel 0..1 weight, derived
+// from the SOURCE colour, that says how much of this grade lands. `keyInvert: 1` grades the
+// complement, which is the protect case — "ramp the whole UI from 7200K to 5000K but hold the
+// syntax greens and the status reds". Every axis above stays global; the key decides where it
+// applies, and the pass mixes back toward the ungraded pixel by `1 - weight`.
+//
+// Two hue bands, not one, because the demand that produced this needs two AT ONCE (green for
+// passing builds, red for failing ones) and they sit at opposite ends of the wheel. Stacking two
+// keyed grades cannot substitute: with `keyInvert` each pass grades everything the OTHER pass
+// protects, so the neutrals take the move twice and the two protected hues take it once each —
+// precisely backwards. `keySat` is the third axis and often the only one needed: reserved colours
+// in a design system are saturated and the chrome around them is not, so a single saturation floor
+// protects the whole grammar without naming a hue.
 import { numParam, type EffectPass } from "./pass.js";
 
 /** Channel gain at `temperature` ±1. 0.25 puts full warm at roughly a 1.25/0.75 red/blue split —
@@ -19,6 +34,10 @@ import { numParam, type EffectPass } from "./pass.js";
 const WB_TEMP = 0.25;
 /** Channel gain at `tint` ±1, on green. */
 const WB_TINT = 0.2;
+
+/** HSV saturation below which a pixel has no usable hue, so no hue band may claim it. Set just
+ *  above the chroma a dithered near-neutral carries, and well below any deliberate tint. */
+const HUE_CHROMA_FLOOR = 0.06;
 
 /**
  * Per-channel gains for a temperature/tint white balance.
@@ -45,12 +64,27 @@ export function whiteBalanceGain(temperature: number, tint: number): [number, nu
   return [r / luma, g / luma, b / luma];
 }
 
+/**
+ * Is any qualifier axis actually asking for something?
+ *
+ * A qualifier that selects nothing must not run at all: `keyInvert` alone would otherwise read as
+ * "grade the complement of the empty set", which is the whole frame — the same pixels an unkeyed
+ * grade touches, for the cost of a hue conversion per pixel. Exported so the branch can be asserted
+ * without a GL context, and so the shader's `uKeyOn` and the docs agree on one definition.
+ */
+export function keyIsActive(p: { hueRange: number; hueRange2: number; sat: number }): boolean {
+  return p.hueRange > 0 || p.hueRange2 > 0 || p.sat > 0;
+}
+
 export const gradePass: EffectPass = {
   name: "grade",
   uniformNames: [
     "uWhiteBalanceOn", "uWhiteBalance",
     "uLggOn", "uLift", "uInvGamma", "uGain",
     "uBrightness", "uContrast", "uSaturation",
+    // The two hue bands ride ONE vec2 each (x = band A, y = band B) — a `uKeyHue2` here would
+    // resolve to null and its uniform call would be a silent no-op.
+    "uKeyOn", "uKeyHue", "uKeyRange", "uKeySat", "uKeySoft", "uKeyInvert",
   ],
   frag: `
 uniform float uWhiteBalanceOn;
@@ -62,6 +96,37 @@ uniform float uGain;
 uniform float uBrightness;
 uniform float uContrast;
 uniform float uSaturation;
+uniform float uKeyOn;
+uniform vec2 uKeyHue;    // x = band A centre (deg), y = band B centre
+uniform vec2 uKeyRange;  // x = band A half-width (deg), y = band B half-width; 0 = band off
+uniform float uKeySat;
+uniform float uKeySoft;
+uniform float uKeyInvert;
+
+// Hue in degrees and HSV saturation. HSV rather than HSL on purpose: a spoof-UI's status green
+// (#0c8d64) is DARK and saturated, and HSL saturation would rank it alongside a pale tint, so a
+// "protect the saturated semantics" key would leak straight onto it.
+vec2 kinoHueSat(vec3 c) {
+  float hi = max(c.r, max(c.g, c.b));
+  float lo = min(c.r, min(c.g, c.b));
+  float chroma = hi - lo;
+  if (chroma <= 0.0 || hi <= 0.0) return vec2(0.0, 0.0);
+  float h;
+  if (hi == c.r) h = mod((c.g - c.b) / chroma, 6.0);
+  else if (hi == c.g) h = (c.b - c.r) / chroma + 2.0;
+  else h = (c.r - c.g) / chroma + 4.0;
+  return vec2(h * 60.0, chroma / hi);
+}
+
+// 1 well inside the band, falling to 0 exactly AT \`range\` — so the stated half-width is where the
+// selection ends, not where its falloff begins. Wrapping is the point: a band centred on red has to
+// reach across 0/360 or every warm grade would tear at the seam.
+float kinoKeyBand(float hue, float centre, float range, float soft) {
+  if (range <= 0.0) return 0.0;
+  float d = abs(mod(hue - centre + 540.0, 360.0) - 180.0);
+  return 1.0 - smoothstep(range * (1.0 - soft), range, d);
+}
+
 void main() {
   vec4 src = kinoUnpremul(texture(uSrc, gl_FragCoord.xy / uRes));
   vec3 c = src.rgb;
@@ -78,6 +143,30 @@ void main() {
   c = (c - 0.5) * uContrast + 0.5;
   float l = dot(c, vec3(0.299, 0.587, 0.114));
   c = mix(vec3(l), c, uSaturation);
+
+  if (uKeyOn > 0.5) {
+    // The key reads the pixel the author SAW, so it has to sample before the grade (a temperature
+    // ramp would otherwise walk hues out of their own band mid-ramp and the protection would
+    // dissolve exactly where it is needed) and in sRGB (the targets decoded to linear on sample;
+    // "green is 140 degrees" is a statement about encoded values, and linear saturation of a dark
+    // chip reads far higher than the eye or the picker says).
+    vec2 hs = kinoHueSat(kinoToSRGB(clamp(src.rgb, 0.0, 1.0)));
+    float bands = max(
+      kinoKeyBand(hs.x, uKeyHue.x, uKeyRange.x, uKeySoft),
+      kinoKeyBand(hs.x, uKeyHue.y, uKeyRange.y, uKeySoft));
+    // Hue is UNDEFINED at zero chroma, and kinoHueSat reports 0 there — the red end of the wheel.
+    // Without this floor a band centred on red would claim every grey in the frame, so protecting
+    // the status reds would silently protect the entire UI chrome and the ramp would do nothing.
+    bands *= smoothstep(0.0, ${HUE_CHROMA_FLOOR.toFixed(3)}, hs.y);
+    // No band declared = every hue qualifies, so \`keySat\` alone is a pure saturation key rather
+    // than a key that selects nothing.
+    if (uKeyRange.x <= 0.0 && uKeyRange.y <= 0.0) bands = 1.0;
+    float satGate = uKeySat > 0.0 ? smoothstep(uKeySat * (1.0 - uKeySoft), uKeySat, hs.y) : 1.0;
+    float sel = bands * satGate;
+    float w = uKeyInvert > 0.5 ? 1.0 - sel : sel;
+    c = mix(src.rgb, c, w);
+  }
+
   kino_frag = kinoPremul(vec4(clamp(c, 0.0, 1.0), src.a));
 }`,
   uniforms(gl, loc, params) {
@@ -100,5 +189,18 @@ void main() {
     gl.uniform1f(loc.uBrightness, numParam(params, "brightness", 1, 0, 8));
     gl.uniform1f(loc.uContrast, numParam(params, "contrast", 1, 0, 8));
     gl.uniform1f(loc.uSaturation, numParam(params, "saturation", 1, 0, 8));
+
+    const hueRange = numParam(params, "keyRange", 0, 0, 180);
+    const hueRange2 = numParam(params, "keyRange2", 0, 0, 180);
+    const keySat = numParam(params, "keySat", 0, 0, 1);
+    gl.uniform1f(loc.uKeyOn, keyIsActive({ hueRange, hueRange2, sat: keySat }) ? 1 : 0);
+    gl.uniform2f(loc.uKeyHue, numParam(params, "keyHue", 0, 0, 360), numParam(params, "keyHue2", 0, 0, 360));
+    gl.uniform2f(loc.uKeyRange, hueRange, hueRange2);
+    gl.uniform1f(loc.uKeySat, keySat);
+    // Never 0: a hard-edged key posterises a gradient into flat plates of graded and ungraded
+    // colour, which is the single most recognisable "a secondary was applied here" artefact. The
+    // floor is small enough that 0 still reads as "as tight as this gets".
+    gl.uniform1f(loc.uKeySoft, Math.max(0.02, numParam(params, "keySoft", 0.35, 0, 1)));
+    gl.uniform1f(loc.uKeyInvert, numParam(params, "keyInvert", 0, 0, 1) >= 0.5 ? 1 : 0);
   },
 };

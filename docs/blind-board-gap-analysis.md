@@ -67,8 +67,8 @@ JSON.
 `EFFECT_KINDS` is `["blur", "glow", "grade", "motionBlur"]`.
 
 - **Relay 29** — a night→morning colour-*temperature* ramp (7200K → 5000K) across a composited UI,
-  *with the syntax greens and status reds protected*. No temperature/tint axis; no hue-selective
-  qualifier. The beat is a 1.8s six-hour ellipsis carried entirely by the grade, and it can't be built.
+  *with the syntax greens and status reds protected*. **FIXED** — `temperature`/`tint` are grade axes
+  and the `key*` qualifier protects two hue bands at once (backlog #26).
 - **Vesper 12** — a filmic transform with a controlled toe holding separation in the bottom 5%.
   70% of that film sits below 10 IRE. `contrast` pivots around 0.5 and clamps; there is no toe,
   no lift/gamma/gain, no curve, no LUT.
@@ -79,14 +79,15 @@ animate is a per-segment `effects: [{ kind: "grade", keyframes: [...] }]`.
 ## 4. Film grain is one scalar for the whole video
 
 **Vesper 14** wants grain coarse and alive in beat 1 and near-zero at the ident, with per-beat
-intensity *and size*. `film` is a single `0..1`; the `film` adjustment layer is base-group and spans
-the whole composition by construction (`fromSec`/`segment`/`opacity` are all rejected alongside
-`adjust`). So per-beat grain isn't expressible, and grain *size/response* isn't a parameter at all.
+intensity *and size*. **FIXED** — `grainSize`/`grainHold` are parameters, and an adjustment layer
+takes a window (`fromSec`/`toSec`/`segment`), with `film.vignette` separating the two halves of the
+finish so windowing the grain does not pump the vignette (backlog #21).
 
-Adjacent, same beat: **Vesper 15** wants wavelength-aware halation (red bleeding furthest);
-`postFx.bloom` is achromatic. **Vesper 16** wants veiling glare that lifts blacks only while a bright
+Adjacent, same beat: **Vesper 15** wants wavelength-aware halation (red bleeding furthest) —
+**FIXED**, `bloom.halation`. **Vesper 16** wants veiling glare that lifts blacks only while a bright
 element is on screen — "glare that responds to content is how the audience believes there is a lens;
-constant glare is a preset."
+constant glare is a preset." **FIXED** — `postFx.veil` measures the composite every frame
+(backlog #23).
 
 ## 5. No state between frames, so no simulation of any kind
 
@@ -98,11 +99,11 @@ restitution and roll-to-rest, zero-G reversal, magnetic funnelling, fluid steam,
 crumple with self-collision) and Relay 11 (60 tiles re-clustering under spring physics with mass and
 damping) all need integrated state.
 
-The sanctioned substitutes do exist — closed-form damped springs from `env.progress`,
-`env.lib.noise2D/3D/4D` for stateless organic motion, and a **baked** sim array embedded in the
-`.js` file and indexed by frame. Relay 11 is fully reachable that way. None of that is written down
-anywhere, so an agent hits the lint and concludes "physics is impossible" rather than "physics is
-precomputed." This is a docs/recipe gap sitting on top of a real engine boundary.
+**FIXED, and the boundary stayed where it was.** A `sim` block on a motion beat points at a solver
+that runs once at build time — stateful, iterative — and emits one row per frame; the graphic reads
+`env.sim.at` and remains a pure `(env) => string`. Every demand above is reachable that way. The
+other substitutes are documented too: closed-form damped springs from `env.progress` and
+`env.lib.noise2D/3D/4D` for stateless organic motion (backlog #30).
 
 ## 6. Near-black gradients band — measured
 
@@ -121,15 +122,18 @@ still. Reproduce: `projects/dogtest/specs/dark-probe.json`.
 **Relay 36** requires `19/412`, `4.6%`, `50ms`, `61–74ms`, `68ms`, `300 runs`, `#4192`, `#4207` to
 agree across eight surfaces — "engineers pause films like this; one contradiction and the product
 looks like it doesn't work." Each motion file is standalone and `params` are per-beat, so those
-figures get retyped in five files and drift silently. A spec-level constants block readable by every
-motion graphic would close it.
+figures got retyped in five files and drifted silently. **FIXED** — `spec.data` is read by every
+motion host as `var(--<key>)` and `env.data` (backlog #12).
 
 ## 8. The five-role palette is caption-sized, not UI-sized
 
-Motion graphics receive exactly `--kino-bg/-fg/-accent/-accent2/-deep`. **Relay 35** enforces
+Motion graphics received exactly `--kino-bg/-fg/-accent/-accent2/-deep`. **Relay 35** enforces
 reserved-colour grammar across eight fabricated surfaces: green and red for build state only, amber
 for Relay's own voice, plus dim-fg, borders, and a purple merged state — eight or nine semantic
 roles. Past five you hard-code hexes into the HTML and the brand stops driving the look.
+**FIXED** — six derived UI roles (`surface`, `line`, `muted`, `ok`, `warn`, `danger`) cover the
+surface hierarchy, the ink hierarchy and the semantic grammar; a piece's own extra vocabulary (the
+purple merged state) is `spec.data` (backlog #14).
 
 ## 9. Two moving clips can't be on screen at once
 
@@ -243,10 +247,21 @@ audio can reach the renderer without reordering the pipeline.
 9. ~~**Grade temperature + tint.**~~ ✅ done — white-balance stage ahead of the tone curve, channel gains normalised on Rec.601 luma so a ramp moves colour only (`effects/grade.ts whiteBalanceGain`). Half of Relay 29.
 10. ~~**Grade lift/gamma/gain.**~~ ✅ done — `lift`/`gamma`/`gain` stage with a true toe/floor (`uLggOn` branch, grade.ts). Vesper 12's filmic toe.
 11. ~~**Per-channel bloom radius**~~ ✅ done — `halation` param widens red's sigma within the same tap loop (bloom.ts). Vesper 15.
-12. **Spec-level shared constants.** No `data` block at spec level yet — `env.data` doesn't exist. Closes Relay 36's cross-surface consistency problem.
+12. ~~**Spec-level shared constants.**~~ ✅ done — `spec.data`, emitted as `--<key>` beneath the
+    beat's own params and as `env.data`. Reserved names (`--kino-*`, the runtime clock variables)
+    are rejected at validate, since a constant called `progress` would overwrite the frame clock in
+    every graphic at once. Boundary: motion hosts only — a regionShader HTML texture channel keeps
+    its region's params.
 13. ~~**Lint on `backface-visibility`.**~~ ✅ done — `lintBackfaceVisibility`, both tiers, comments
     excluded so a commented-out line doesn't fail the build. Not `preserve-3d`: that works.
-14. **Extra palette roles.** Palette is still five semantic roles (bg/fg/accent/accent2/deep) plus legacy aliases and `--kino-font` — no dim-fg/border/merged-state roles. Relay 35.
+14. ~~**Extra palette roles.**~~ ✅ done — six UI roles (`surface`, `line`, `muted`, `ok`, `warn`,
+    `danger`), which is the answer to the design question: a spoof UI needs a surface hierarchy, an
+    ink hierarchy, and a semantic grammar, and nothing past those is general. All six DERIVE from
+    the five core roles, so no existing brand/preset/spec changes; the semantic triad is
+    deliberately brand-independent (a state colour that moves with the accent stops meaning "this
+    build failed") and is darkened automatically on a light page, where the stock amber lands at
+    1.8:1. They do not participate in "a preset replaces all five" — a border convention outlives a
+    preset switch.
 
 ### Tier 2 — small new plumbing, pipeline already cooperates
 
@@ -259,10 +274,20 @@ audio can reach the renderer without reordering the pipeline.
 
 ### Tier 3 — real work, well-scoped
 
-21. **Per-beat film grain.** The `film` finish is now a z-ordered adjustment layer at `Z.film` (layers.ts:526) — a real improvement over the old base-group pass — but `ADJUST_INCOMPATIBLE_FIELDS` still rejects `fromSec`/`toSec`/`segment`/`opacity` on adjustment layers (layerSpec.ts:94), so the film layer still spans the whole composition. Windowing it remains open. Vesper 14.
-22. ~~**Grain size / response parameters.**~~ ✅ done — `grainSize` (lattice clump), `grain` (amplitude), `grainHold` (boil rate) on the film pass (effects/film.ts:104–105).
-23. **Content-responsive veiling glare.** Needs a luminance measure of the composite feeding the
-    lens stage. Vesper 16.
+21. ~~**Per-beat film grain.**~~ ✅ done — an adjustment layer now resolves the same window every
+    other declared layer does (`fromSec`/`toSec`/`segment`), and `film` gained a `vignette` scale so
+    the two halves of the finish separate. That pairing is the actual fix: windowing them coupled
+    would pump the vignette at every beat boundary. A bound adjustment still stays out of the beat's
+    crossfade GROUP — it applies to everything beneath it, which cannot crossfade with one beat —
+    which is why `hold` remains rejected.
+22. ~~**Grain size / response parameters.**~~ ✅ done — `grainSize` (lattice clump), `grain` (amplitude), `grainHold` (boil rate) on the film pass (effects/film.ts).
+23. ~~**Content-responsive veiling glare.**~~ ✅ done — a `veil` post stage between `lens` and
+    `film`. The measurement is a blit pyramid reducing the composite to one texel (halving is the
+    case where a bilinear blit IS a box average, so every pixel is counted exactly once, for about
+    1.3 passes' worth of fill). Flat, additive, scene-tinted — the physical model, which is also the
+    one that lifts blacks without touching the highlight that caused it. Also legal as an
+    adjustment-layer kind, which is the interesting form: glare that reads the footage but not the
+    captions over it.
 24. ~~**Declared video layers → real footage.**~~ ✅ done — `planMediaJobs` now walks `props.layers`
     (keyed by layer id, window = fromSec/toSec or the bound segment), build.ts stages and resolves
     footage layers, and the registry binds `media[d.id]` → `createFramesSource`. Verified: a real
@@ -273,8 +298,12 @@ audio can reach the renderer without reordering the pipeline.
     branch binds coverage + distance field. The two validators no longer reject the kind. Verified:
     a real build clipped a beat through a white-box mask.mp4 (smptebars inside the box, backdrop
     outside).
-26. **Hue-selective grade qualifier.** The other half of Relay 29 — protecting the CI greens and reds
-    through a temperature ramp needs a qualifier, not just more global axes.
+26. ~~**Hue-selective grade qualifier.**~~ ✅ done — `key*` on the grade pass: two hue bands, a
+    saturation floor, a feather and an invert. Two bands rather than one because the protect case
+    needs green AND red at once and stacking two keyed grades gets it exactly backwards (the
+    neutrals take the move twice). `keySat` alone is often the whole answer — reserved colours are
+    saturated and chrome is not. The key samples the source pixel in sRGB, and a hue band is gated
+    on chroma so it cannot claim the greys.
 
 ### Tier 4 — architecture
 
@@ -283,9 +312,19 @@ audio can reach the renderer without reordering the pipeline.
     two declared video layers with different z/rects get independent /vframes jobs, independent
     registry sources, and simultaneous LayerDraws (tests/two-live-clips*.test.ts pin all three).
     A real build showed a full-bleed clip + a PiP inset compositing in the same frame.
-29. **`captionAnimation` in the native raster.** Still a known architecture gap: the
-    keyed word-raster only ever captures the settled pose, so entrance springs need per-frame dynamic
-    cadence or an animated quad (layers.ts:428–430 notes entrance motion rides the quad instead).
-30. **A real simulation pathway.** Not "make Tier-2 stateful" — determinism is correct and worth
-    keeping. The honest version is an offline bake step: run a solver once, emit a frame-indexed data
-    file, replay it deterministically. Tier 0 item #4 is the cheap 80% of this.
+29. ~~**`captionAnimation` in the native raster.**~~ ✅ done, and the answer was neither of the two
+    options. An animated quad cannot stagger (words enter at their own VO times; `wave` and
+    `typewriter` are per-element by definition), and a dynamic cadence re-rasters the frames where
+    the caption is merely sitting there, which is most of them. What splits cleanly is the TEMPLATE
+    from the PIXELS: the template stays word-keyed, and the entrance arrives as per-frame CSS custom
+    properties read through fallbacks equal to the settled pose — so the var-less raster IS the
+    settled caption and the cache key collapses back to the template's once the entrances land.
+    Per-frame work for exactly the frames that move. `wave` is the honest exception.
+30. ~~**A real simulation pathway.**~~ ✅ done — a `sim` block on a motion beat points at a solver
+    that runs ONCE at build time (stateful, iterative) and emits one row per frame; the graphic reads
+    `env.sim.at` and stays a pure `(env) => string`. Determinism is kept where it earns its keep: the
+    solver gets a seeded `sim.random()` and is linted for ambient nondeterminism, so a bake
+    reproduces from its seed. `frames` defaults to the beat's real length, so a bake authored under
+    mock VO survives `--tts`. `kino bake` runs one and reports the rows. A bundled solver stdlib
+    (`sim.lib`) carries d3-force for motion that converges and matter-js for motion that collides —
+    a solver has no `require` and projects carry no node_modules, so bundling is the only route.

@@ -3,6 +3,75 @@
 All notable changes to kino are documented here. This project uses semantic-ish
 versioning; the authoritative version is the `version` field in `package.json`.
 
+## [Unreleased] — Seven gaps from the blind-board analysis
+
+Seven backlog items from `docs/blind-board-gap-analysis.md`, each closing a demand three blind
+beat-boards independently made of the engine.
+
+- **Hue-selective grade qualifier** (#26). The grade pass gained a `key*` qualifier: two hue bands,
+  a saturation floor, a feather and an invert. `keyInvert: 1` grades the complement, which is the
+  protect case — ramp a composited UI from 7200K to 5000K while the syntax greens and status reds
+  hold. Two bands rather than one because that case needs both at once and stacking two keyed grades
+  gets it exactly backwards. `keySat` alone protects a whole design system's reserved colours without
+  naming a hue. The key samples the source pixel in sRGB, and a hue band is chroma-gated so it cannot
+  claim the greys.
+- **Content-responsive veiling glare** (#23). New `veil` post stage between `lens` and `film`, whose
+  strength is *measured from the frame* — the compositor reduces the composite to one texel with a
+  blit pyramid and the pass reads it. Glare that appears when a highlight enters shot and recedes
+  when it leaves, rather than a constant black lift. Also legal as an adjustment-layer kind, which is
+  how you get glare that reads the footage but not the captions over it.
+- **Per-beat film grain** (#21). An adjustment layer now resolves the same window every other
+  declared layer does (`fromSec` / `toSec` / `segment`), and `film` gained a `vignette` scale so the
+  two halves of the finish separate — windowing them coupled would pump the vignette at every beat
+  boundary. A bound adjustment still stays out of the beat's crossfade *group*, so `hold` remains
+  rejected.
+- **`captionAnimation` in the native raster** (#29), superseding the 3.1.2 note below that scoped it
+  out. Neither of the two obvious fixes was right: an animated quad cannot stagger words entering at
+  their own VO times, and a dynamic cadence re-rasters the frames where the caption is merely sitting
+  there. What splits cleanly is the *template* from the *pixels* — the template stays word-keyed, and
+  the entrance arrives as per-frame CSS custom properties read through fallbacks equal to the settled
+  pose, so a var-less raster IS the settled caption and the cache key collapses back once every
+  entrance lands. Per-frame work for exactly the frames that move; `wave` is the honest exception.
+- **Spec-level shared constants** (#12). `spec.data` is read by every motion host as `var(--<key>)`
+  and `env.data`, so a figure quoted on eight fabricated surfaces is stated once instead of retyped
+  per beat. A beat's own `params` override a key of the same name; `--kino-*` and the runtime's clock
+  variables are reserved at validate.
+- **UI palette roles** (#14). Six more roles — `surface`, `line`, `muted`, `ok`, `warn`, `danger` —
+  covering the surface hierarchy, the ink hierarchy and the semantic grammar a fabricated product UI
+  needs past the five caption-sized ones. All six *derive* from the existing five, so nothing existing
+  changes; the semantic triad is deliberately brand-independent and is darkened automatically on a
+  light page, where the stock amber otherwise lands at 1.8:1. They survive a spec naming a preset.
+- **A real simulation pathway** (#30). A `sim` block on a motion beat points at a solver that runs
+  ONCE at build time — stateful, iterative — emitting one row per frame; the graphic reads
+  `env.sim.at` and stays a pure `(env) => string`, so frames still render out of order and across
+  sharded hosts. The solver gets a seeded `sim.random()` and is linted for ambient nondeterminism, so
+  a bake reproduces from its seed. `frames` defaults to the beat's real length, so a bake authored
+  under mock VO survives `--tts`. New `kino bake <solver>` runs one and reports the rows.
+- **A solver stdlib** (`sim.lib`). A solver body has no `require` and projects carry no
+  `node_modules`, so a library either arrives on the context or not at all — same arrangement as
+  Tier 2's `env.lib`, and `sim.lib.force` is d3-force, whose `simulation.tick()` is already the step
+  contract. Covers the motion that *converges* (tiles re-clustering, labels pushing apart, a graph
+  finding its shape); rigid-body contact is still a hand-written integrator. `Math.random` is now
+  redirected to the seeded stream for the duration of a solve, so a library's internals cannot
+  silently make a bake unreproducible — the lint can only read the solver's own source. `sim.ts`
+  split into a page-side replay half and a build-side runner half so none of this reaches
+  `page.bundle.js`.
+- **Rigid body in the solver stdlib** (`sim.lib.matter`). matter-js, the complement to `force`
+  rather than a bigger version of it: forces converge, bodies collide. It brings the two things
+  nothing else in the pathway offers — rotation, and stacks that rest on each other — which is what
+  the blind boards' coin-pile and fracture demands actually needed. Stepped via `sim.lib.matterStep`,
+  which sub-steps to matter's preferred ~1/60s rather than handing it a whole 30fps frame (the
+  difference between a settled pile and a jittering one, and not a thing each solver author should
+  have to know). matter-js keeps its PRNG in a module-level `Common._seed`, so the runner resets it
+  per solve — without that, "same seed, same rows" held for a spec with one simulated beat and
+  quietly stopped holding for a spec with two.
+- **`examples/motion-sim`** — two beats, two solvers: nodes converging under d3-force, and a
+  hand-written **3D** solve flying twelve panels through depth onto a wall (damped springs per axis
+  plus angular springs for the tumble), projected with CSS `perspective` and depth-sorted. The 3D
+  beat is deliberately not a stdlib beat: both bundled libraries are 2D, and a solver is arbitrary
+  stateful JS, so a third component costs one more line per vector. Both replayed by pure
+  `(env) => string` graphics.
+
 ## [3.1.2] — Caption look presets in encodes, voice-search skills
 - **Fixed: stylised captions in encoded builds** ignored `captionStyle`, `captionReveal`, emphasis,
   and the lower-third backplate — the native raster now paints the resolved look presets (style,

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { CAPTION_STYLES, CAPTION_ANIMATIONS, CAPTION_REVEALS, type CaptionStyle, type CaptionAnimation } from "../render/textStyles.js";
-import { PALETTE_PRESETS, declaresColors, normalizeColors, type Palette } from "./palettes.js";
+import { PALETTE_PRESETS, declaresColors, normalizeColors, normalizeUiColors, type Palette, type UiRole } from "./palettes.js";
 
 const Provider = z.enum(["none", "heygen", "hedra", "replicate"]);
 const Background = z.enum(["glow", "image", "mesh", "aurora", "particles", "grid", "solid", "custom"]);
@@ -31,6 +31,15 @@ export const BrandFrontmatterSchema = z
         accent: z.string().optional(), // primary accent
         accent2: z.string().optional(), // secondary/bright accent
         deep: z.string().optional(), // deep fill / active-word highlight
+        // The UI roles (config/palettes.ts). Every one is derived from the five above when unset,
+        // so declaring them is how a brand states its own fabricated-UI conventions rather than a
+        // requirement. They are NOT part of any preset: a spec naming `noir` keeps them.
+        surface: z.string().optional(), // a panel raised off the page
+        line: z.string().optional(), // borders, dividers, rules
+        muted: z.string().optional(), // secondary ink
+        ok: z.string().optional(), // semantic: pass
+        warn: z.string().optional(), // semantic: caution
+        danger: z.string().optional(), // semantic: failure
         // Legacy literal-color names (the original house theme's hues) — accepted forever,
         // mapped onto the roles by normalizeColors; a role key wins over its alias.
         night: z.string().optional(),
@@ -89,6 +98,11 @@ export type BrandFrontmatter = z.infer<typeof BrandFrontmatterSchema>;
 export interface Brand {
   name: string;
   colors: Palette;
+  /** The brand's UI-role overrides (config/palettes.ts). Separate from `colors` because every
+   *  consumer of that field wants exactly five hexes, and because these do NOT participate in the
+   *  "a preset replaces all five" rule — a spec naming a preset keeps its brand's border and state
+   *  conventions. Empty when the brand states none, which is the common case. */
+  uiColors: Partial<Record<UiRole, string>>;
   /**
    * Whether a brand.md actually declared `colors`, as opposed to inheriting the house palette by
    * omission. Provenance, not a colour — it sits here rather than inside `colors` because every
@@ -139,6 +153,7 @@ export interface Brand {
 export const DEFAULT_BRAND: Brand = {
   name: "",
   colors: { ...PALETTE_PRESETS.midnight },
+  uiColors: {},
   colorsDeclared: false,
   font: 'Helvetica, "Helvetica Neue", Arial, sans-serif',
   captionStyle: { fontSize: 74, strokeWidth: 9 },
@@ -179,6 +194,7 @@ function mergeBrand(base: Brand, fmRaw: BrandFrontmatter): Brand {
     ...base,
     ...fm,
     colors: { ...base.colors, ...normalizeColors(fm.colors ?? {}) },
+    uiColors: { ...base.uiColors, ...normalizeUiColors(fm.colors ?? {}) },
     // Sticky: a brand that declares colours keeps that provenance even where it leaves roles unset.
     colorsDeclared: base.colorsDeclared || declaresColors(fm.colors),
     captionStyle: { ...base.captionStyle, ...(fm.captionStyle ?? {}) },

@@ -224,8 +224,11 @@ Faceless (`none`) needs only ffmpeg + ELEVENLABS_API_KEY.
   per-word sine bob) · `blur-in` (blur→0 + fade) · `none` (static). Unset = the surface's native entrance
   (`pop`; `rise` for hero text) — word-reveal *timing* in `words` mode always stays VO-driven,
   the preset only shapes each word's entrance motion. **Native raster:** look + reveal paint into the
-  word-keyed caption bitmap; `captionAnimation` does not — entrance motion rides the quad
-  (`captionKeyframes`, legacy pop). The preset still resolves for `texts[]` overlays.
+  word-keyed caption bitmap, and so does the entrance — the template stays word-keyed while the
+  entrance arrives as per-frame CSS vars, so only the moving frames re-raster and a settled caption
+  costs exactly what it always did. `wave` is the exception: a continuous bob never settles, so it
+  rasters every frame it runs. A phrase caption is split into words so `typewriter`/`wave` have
+  something to stagger. The quad still carries `captionKeyframes` and the legacy pop.
 - **Caption reveal** (`captionReveal`, `words` mode only; layered `segment ?? spec ?? brand.captionStyle.reveal`,
   default `word`): `word` reveals each word at its VO time (per-word pop); `all` lays the whole caption out
   and fades it in together, the active word still highlighting as the VO reaches it. Reach for `all` (or

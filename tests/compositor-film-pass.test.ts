@@ -4,14 +4,18 @@ import { glProbe, closeGlHost } from "./helpers/glHost.js";
 
 afterAll(closeGlHost);
 
-async function probeFilm(night: string, intensity: number): Promise<{ centre: number; corner: number; grainSpread: number }> {
-  return glProbe<[string, number], { centre: number; corner: number; grainSpread: number }>({
+async function probeFilm(
+  night: string,
+  intensity: number,
+  extra: Record<string, number> = {},
+): Promise<{ centre: number; corner: number; grainSpread: number }> {
+  return glProbe<[string, number, Record<string, number>], { centre: number; corner: number; grainSpread: number }>({
     entry: "src/render/native/page/compositor/effects/index.ts",
     globalName: "KinoFx",
     html: `<!doctype html><body><canvas id="c" width="128" height="128"></canvas></body>`,
-    fn: (night, intensity) =>
-      (window as any).KinoFx.probeFilm(document.getElementById("c") as HTMLCanvasElement, night, intensity),
-    args: [night, intensity],
+    fn: (night, intensity, extra) =>
+      (window as any).KinoFx.probeFilm(document.getElementById("c") as HTMLCanvasElement, night, intensity, extra),
+    args: [night, intensity, extra],
   });
 }
 
@@ -136,5 +140,42 @@ describe("grain moves slowly by default and is dialable", () => {
     const base = await probeGrainAt({}, 3);
     const heavy = await probeGrainAt({ grain: 2.5 }, 3);
     expect(heavy.spread).toBeGreaterThan(base.spread * 2);
+  }, 240000);
+});
+
+// The two halves of the finish are separable, and they have to be: a vignette is a property of the
+// lens and belongs to the whole piece, while grain is a property of the stock and is exactly what
+// an author wants heavier under one beat than another. Windowing them as one coupled stage would
+// pump the vignette at every beat boundary.
+//
+// The two probes measure different halves on purpose: probeFilm's source is WHITE, where the
+// density curve puts no grain at all, so its "grainSpread" near the corner is really the vignette's
+// gradient; probeGrain samples a flat midtone along the centre row, where the vignette contributes
+// nothing and only grain moves the numbers.
+describe("vignette and grain are independently scalable", () => {
+  it("vignette 0 flattens the frame — no edge falloff left", async () => {
+    const flat = await probeFilm("#0b1020", 1, { vignette: 0 });
+    expect(flat.corner).toBe(flat.centre);
+    expect(flat.grainSpread).toBe(0);
+  }, 240000);
+
+  it("vignette 0 leaves the grain untouched", async () => {
+    const base = await probeGrainAt({}, 3);
+    const flat = await probeGrainAt({ vignette: 0 }, 3);
+    expect(flat.samples).toEqual(base.samples);
+  }, 240000);
+
+  it("grain 0 removes the grain and keeps the vignette", async () => {
+    const clean = await probeGrainAt({ grain: 0 }, 3);
+    expect(clean.spread).toBe(0);
+    const vig = await probeFilm("#0b1020", 1, { grain: 0 });
+    expect(vig.corner).toBeLessThan(vig.centre);
+  }, 240000);
+
+  it("vignette scales the falloff between those ends", async () => {
+    const full = await probeFilm("#0b1020", 1);
+    const half = await probeFilm("#0b1020", 1, { vignette: 0.5 });
+    expect(half.corner).toBeGreaterThan(full.corner);
+    expect(half.corner).toBeLessThan(half.centre);
   }, 240000);
 });
