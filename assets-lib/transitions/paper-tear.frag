@@ -68,6 +68,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float shadK  = u_shadow > 0.0 ? clamp(u_shadow, 0.0, 2.0) : 1.0;
   float ang = radians(u_angle > 0.0 ? u_angle : 8.0);
 
+  vec3 paperCore = kinoPick(u_paper, uBrandFg);
+
   // Square metric; tear axis and its normal.
   float ar = uRes.x / uRes.y;
   vec2 p = vec2(uv.x * ar, uv.y);
@@ -121,7 +123,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float curl = (1.0 - smoothstep(0.0, curlW, eDist)) * lift;
 
     vec3 c = s.rgb * (1.0 - 0.38 * curl);
-    c = mix(c, KINO_PAPER_CORE * (0.75 + 0.35 * strand), clamp(fringe, 0.0, 1.0));
+    c = mix(c, paperCore * (0.75 + 0.35 * strand), clamp(fringe, 0.0, 1.0));
     col3[i] = c;
   }
 

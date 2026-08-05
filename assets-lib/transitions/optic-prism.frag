@@ -193,7 +193,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   // lens element passing through the beam. Mostly white, only tinted, or it turns into an oil slick
   // and buries both beats; pulse^3 confines it to the few frames either side of the midpoint.
   float veil = pulse * pulse * pulse;
-  col += mix(vec3(1.0), spec, 0.55) * (ridge * ridge * ridge) * 0.10 * flareK * veil;
+  vec3 flashCol = kinoPick(u_flash, uBrandAccent);
+  col += mix(flashCol, spec, 0.55) * (ridge * ridge * ridge) * 0.10 * flareK * veil;
 
   fragColor = vec4(col, alpha);
 }

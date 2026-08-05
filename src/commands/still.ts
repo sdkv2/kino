@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { prepare } from "./build.js";
 import { renderStills, type FrameMeasure } from "../render/render.js";
 import { runMotionQa, qaReportPath } from "../render/motionQa.js";
@@ -90,13 +90,11 @@ export async function still(specPath: string, opts: StillOpts): Promise<void> {
   const format = r.formats[0];
   const frames = picks.map((p) => ({ frame: p.frame, name: slug(p.label) || "frame" }));
   const outDir = join(r.project.outDir(r.spec.title), "stills");
-  // Always cold-render: wipe prior PNGs so agents and QA never read a stale still by path. Say so —
-  // silently deleting the previous run's frames is how a per-beat loop of single --segment calls
-  // ends up with only the last beat on disk. (`--segment 0,1,2` renders them all in one run.)
-  if (existsSync(outDir)) {
-    const stale = readdirSync(outDir).filter((f) => f.endsWith(".png")).length;
-    if (stale) log.info(`clearing ${stale} still${stale === 1 ? "" : "s"} from the previous run (each run is a cold render) → ${outDir}`);
-    rmSync(outDir, { recursive: true, force: true });
+  // Clean only what this run will write, preserving existing storyboards and other stills in outDir.
+  mkdirSync(outDir, { recursive: true });
+  for (const f of frames) {
+    const target = join(outDir, `${f.name}.png`);
+    if (existsSync(target)) rmSync(target, { force: true });
   }
   const measurements: FrameMeasure[] = [];
   const outs = await renderStills({ props: r.props, publicDir: r.publicDir, format, frames, outDir, measureSink: opts.measure ? measurements : undefined, quality: parseQuality(opts.quality) });
