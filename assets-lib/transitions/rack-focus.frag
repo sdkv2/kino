@@ -100,7 +100,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec4 col = mix(from, to, m);
 
   // Subtle exposure lift through the middle of the rack — the veil of an open aperture.
-  col.rgb = mix(col.rgb, vec3(1.0), liftK * pulse);
+  vec3 liftCol = kinoPick(u_liftColor, uBrandAccent);
+  col.rgb = mix(col.rgb, liftCol, liftK * pulse);
 
   fragColor = col;
 }

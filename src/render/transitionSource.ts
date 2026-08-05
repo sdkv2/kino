@@ -64,6 +64,12 @@ float kinoCamCurve(float t) {
   return smoothstep(0.0, max(1.0 - uCamHold, 0.05), t);
 }
 
+float kinoCamHash(vec2 p) {
+  vec3 q = fract(vec3(p.xyx) * 0.1031);
+  q += dot(q, q.yzx + 33.33);
+  return fract((q.x + q.y) * q.z);
+}
+
 // Directional smear along the camera's own travel, derived from how far this pixel ACTUALLY moves
 // right now rather than from t. That distinction is the whole point of the plateau: during the hold
 // the frame is stationary, so the velocity is zero and the smear disappears with it. Blurring a
@@ -76,9 +82,11 @@ vec4 kinoCamSample(sampler2D tex, vec2 uv, vec3 cam, float t) {
   float amt = uCamBlur * length(vel) * smoothstep(0.0, 0.03, t) * 0.25;
   if (amt <= 0.0001) return texture(tex, base);
   vec2 dir = vel / max(length(vel), 1e-5);
+  float j = kinoCamHash(uv * uRes) - 0.5;
   vec4 acc = vec4(0.0);
   for (int i = 0; i < 5; i++) {
-    acc += texture(tex, clamp(base + dir * ((float(i) / 4.0 - 0.5) * amt), 0.0, 1.0));
+    float tapPos = (float(i) + j) / 4.0 - 0.5;
+    acc += texture(tex, clamp(base + dir * (tapPos * amt), 0.0, 1.0));
   }
   return acc / 5.0;
 }

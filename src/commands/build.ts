@@ -496,7 +496,15 @@ export async function prepare(
   const beatSfx: ReturnType<typeof stageSfx>[] = [];
   const beds = musicBeds(spec);
   // Every bed ducks under the same VO spans; each keeps its own level, curve and offset.
-  const duckSpans = vo.timings.map((t) => ({ from: t.startSec, to: t.endSec }));
+  // Skip ducking for segments/specs with no VO so music bed level doesn't dip unnecessarily.
+  const duckSpans = vo.timings
+    .filter((t, i) => {
+      const seg = spec.segments[i];
+      const hasWords = Boolean(vo.words[i] && vo.words[i].length > 0);
+      const hasTextOrFile = Boolean(seg?.text?.trim() || seg?.voFile);
+      return hasWords || hasTextOrFile;
+    })
+    .map((t) => ({ from: t.startSec, to: t.endSec }));
   let music: KinoProps["music"] = null;
   if (beds.length) {
     const label = (i: number) => (beds.length > 1 ? `music[${i}]` : "music");

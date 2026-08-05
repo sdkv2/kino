@@ -224,6 +224,11 @@ describe("brand palette in custom transitions", () => {
       ["organic-inkbleed", "uBrandAccent"],
       ["film-scorch", "uBrandAccent2"],
       ["geo-facade", "uBrandAccent"],
+      ["crt-collapse", "uBrandAccent"],
+      ["paper-tear", "uBrandFg"],
+      ["glide-parallax", "uBrandAccent"],
+      ["optic-prism", "uBrandAccent"],
+      ["rack-focus", "uBrandAccent"],
     ] as const;
     for (const [id, role] of shipped) {
       const code = readFileSync(resolveTransitionSource(id, project), "utf8").replace(/\/\/.*$/gm, "");

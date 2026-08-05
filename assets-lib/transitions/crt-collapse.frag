@@ -46,6 +46,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float wob   = u_wobble > 0.0 ? u_wobble : 0.8;
   float snap  = u_snap   > 0.0 ? clamp(u_snap, 0.5, 0.95) : 0.68;
 
+  vec3 phosphor = kinoPick(u_phosphor, uBrandAccent);
+
   // Which side of the midpoint we are on, and how collapsed that side is (0 = full frame, 1 = dot).
   bool fromSide = uP < 0.5;
   float c = clamp(fromSide ? uP * 2.0 : (1.0 - uP) * 2.0, 0.0, 1.0);
@@ -92,7 +94,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float gain = min(1.0 + 2.2 * sq3, 6.0);
   pic *= gain;
   float overload = clamp(1.9 * sq3 - 0.35, 0.0, 0.92);
-  pic = mix(pic, KINO_PHOSPHOR * max(max(pic.r, pic.g), max(pic.b, 1.2)), overload);
+  pic = mix(pic, phosphor * max(max(pic.r, pic.g), max(pic.b, 1.2)), overload);
 
   // Scanlines surface as the tube destabilises, and fade with the band.
   float sl = 1.0 - 0.34 * min(wob, 1.0) * c * (0.5 + 0.5 * sin(uv.y * lines * 6.2831853));
@@ -104,12 +106,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   // with (1 - Sy), so neither exists while the raster is whole.
   float fall = dy / (0.5 * Sy + 0.02) + dx / (0.5 * Sx + 0.35);
   float halo = exp(-fall * fall * 2.0) * (1.0 - band);
-  col += KINO_PHOSPHOR * halo * (1.0 - Sy) * (1.0 - Sy) * (0.6 + 1.2 * (1.0 - Sx)) * glowK;
+  col += phosphor * halo * (1.0 - Sy) * (1.0 - Sy) * (0.6 + 1.2 * (1.0 - Sx)) * glowK;
 
   // Phosphor persistence right at the handoff: a cooling star centred where the dot died.
   float mid = 1.0 - smoothstep(0.0, 0.16, abs(uP - 0.5));
   float star = exp(-(dy * dy * 90.0 + dx * dx * 30.0) * 60.0);
-  col += KINO_PHOSPHOR * star * mid * mid * 1.6 * glowK;
+  col += phosphor * star * mid * mid * 1.6 * glowK;
 
   // Inside the whole raster at c=0 this is exactly the beat's own alpha; everywhere the tube has
   // gone dark it is opaque black.

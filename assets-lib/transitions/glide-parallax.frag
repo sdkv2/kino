@@ -73,10 +73,11 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float m = smoothstep(e - soft, e + soft, sx);
   vec4 col = mix(from, to, m);
 
-  // The light seam: a soft, faintly cool band riding the travel edge.
+  // The light seam: a soft band riding the travel edge.
   float gN = (sx - e) / (soft * 1.1);
   float glow = exp(-gN * gN) * glowK * pulse;
-  col.rgb += glow * vec3(0.90, 0.97, 1.0) * 0.40;
+  vec3 seamCol = kinoPick(u_seam, uBrandAccent);
+  col.rgb += glow * seamCol * 0.40;
 
   fragColor = col;
 }
