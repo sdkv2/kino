@@ -417,6 +417,7 @@ kino pexels "city commute at night" --get 2 --project x  # download match 2 → 
 | `--get <n>` | download result *n* from the search |
 | `--count <n>` | results to list (default 8) |
 | `--landscape` | search landscape instead of portrait |
+| `--hq` | pick the largest file Pexels serves instead of the comp-covering one — for `*-4k` masters, where a 1080-class pull would be upscaled 2× |
 | `--name <rel>` | path under `assets/` (default `pexels/<id>.mp4`); `--out` is a deprecated alias |
 | `--project <name>` | project whose `assets/` receives the download (required for `--get`) |
 

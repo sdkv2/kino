@@ -5,6 +5,7 @@ import {
   parseVideos,
   parsePhotos,
   pickFile,
+  videoTarget,
   pickPhotoUrl,
   pickPhotoThumb,
   type PexelsVideo,
@@ -99,6 +100,19 @@ describe("pickFile", () => {
   });
   it("returns null when there is no mp4 at all", () => {
     expect(pickFile(video([file(1080, 1920, "application/x-mpegURL")]))).toBeNull();
+  });
+  it("covers BOTH dimensions — a 1280x720 landscape file does not satisfy a 16:9 comp", () => {
+    const v = video([file(1280, 720), file(1920, 1080), file(3840, 2160)]);
+    expect(pickFile(v, videoTarget("landscape"))?.height).toBe(1080);
+  });
+  it("landscape fallback takes the largest by area when nothing covers 1920x1080", () => {
+    const v = video([file(1280, 720), file(1366, 720)]);
+    expect(pickFile(v, videoTarget("landscape"))?.width).toBe(1366);
+  });
+  it("hq target takes the largest file served", () => {
+    const v = video([file(1280, 720), file(3840, 2160), file(1920, 1080)]);
+    expect(pickFile(v, videoTarget("landscape", true))?.width).toBe(3840);
+    expect(pickFile(v, videoTarget("portrait", true))?.width).toBe(3840);
   });
 });
 

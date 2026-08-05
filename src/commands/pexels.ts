@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { resolveProject, resolveWorkspace } from "../config/project.js";
 import { loadEnv, requireKey } from "../config/env.js";
-import { searchVideos, pickFile } from "../media/pexels.js";
+import { searchVideos, pickFile, videoTarget } from "../media/pexels.js";
 import { download } from "../media/net.js";
 import { log } from "../log.js";
 
@@ -42,11 +42,12 @@ function noteAttribution(projectRoot: string, entry: string): void {
 
 export async function pexels(
   query: string,
-  opts: { get?: string; count?: string; landscape?: boolean; out?: string; project?: string },
+  opts: { get?: string; count?: string; landscape?: boolean; hq?: boolean; out?: string; project?: string },
 ): Promise<void> {
   loadEnv(resolveWorkspace().workspaceRoot);
   const apiKey = requireKey("PEXELS_API_KEY");
   const orientation = opts.landscape ? "landscape" : "portrait";
+  const target = videoTarget(orientation, opts.hq ?? false);
   const perPage = opts.count ? Number(opts.count) : 8;
   const videos = await searchVideos(query, { apiKey, orientation, perPage });
   if (videos.length === 0) {
@@ -58,7 +59,7 @@ export async function pexels(
     process.stdout.write(`Pexels videos for "${query}" (${orientation}):\n\n`);
     const thumbs = await Promise.all(videos.map((v) => cacheThumb(v.id, v.image)));
     videos.forEach((v, i) => {
-      const f = pickFile(v);
+      const f = pickFile(v, target);
       const size = f ? `${f.width}x${f.height}` : "no mp4";
       process.stdout.write(
         `  ${String(i + 1).padStart(2)}. #${v.id}  ${String(v.duration).padStart(3)}s  ${size.padEnd(10)} by ${v.user.name}\n` +
@@ -80,7 +81,7 @@ export async function pexels(
     );
   }
   const v = videos[n - 1];
-  const file = pickFile(v);
+  const file = pickFile(v, target);
   if (!file) throw new Error(`Pexels video #${v.id} has no downloadable mp4`);
   const project = resolveProject({ project: opts.project });
   const rel = opts.out ?? join("pexels", `${v.id}.mp4`);

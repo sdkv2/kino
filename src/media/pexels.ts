@@ -93,13 +93,28 @@ export async function searchPhotos(
   return parsePhotos(await res.json());
 }
 
-// The composition renders app cut-ins at width 1080 — pick the smallest mp4 that still covers it
-// (no wasted download), else the largest one available.
-export function pickFile(v: PexelsVideo, targetWidth = 1080): PexelsVideoFile | null {
-  const mp4s = v.video_files.filter((f) => f.file_type === "video/mp4" && f.width > 0);
+/** Composition-class target dims for a search orientation (the 1080-class canvas the clip
+ *  must cover). `hq` ignores the budget and takes the largest file Pexels serves — for
+ *  4k masters, where a comp-covering 1080-class pull would be upscaled 2×. */
+export function videoTarget(orientation: Orientation, hq = false): { width: number; height: number } {
+  if (hq) return { width: Infinity, height: Infinity };
+  return orientation === "landscape" ? { width: 1920, height: 1080 } : { width: 1080, height: 1920 };
+}
+
+// Pick the smallest mp4 that covers the target in BOTH dimensions (no wasted download), else
+// the largest available by area. Width alone is not coverage: a 1280x720 landscape file covers
+// "width 1080" while being 720p on the axis a 16:9 comp actually needs.
+export function pickFile(
+  v: PexelsVideo,
+  target: { width: number; height: number } = { width: 1080, height: 1920 },
+): PexelsVideoFile | null {
+  const mp4s = v.video_files.filter((f) => f.file_type === "video/mp4" && f.width > 0 && f.height > 0);
   if (mp4s.length === 0) return null;
-  const covering = mp4s.filter((f) => f.width >= targetWidth).sort((a, b) => a.width - b.width);
-  return covering[0] ?? mp4s.sort((a, b) => b.width - a.width)[0];
+  const area = (f: PexelsVideoFile) => f.width * f.height;
+  const covering = mp4s
+    .filter((f) => f.width >= target.width && f.height >= target.height)
+    .sort((a, b) => area(a) - area(b));
+  return covering[0] ?? mp4s.sort((a, b) => area(b) - area(a))[0];
 }
 
 /** Download URL for a still — the full-resolution `original`. The photo search is already
@@ -117,8 +132,12 @@ export function pickPhotoThumb(p: PexelsPhoto): string {
   return p.src.tiny || p.src.small || p.src.medium || p.src.large;
 }
 
-export async function downloadVideo(v: PexelsVideo, out: string): Promise<void> {
-  const file = pickFile(v);
+export async function downloadVideo(
+  v: PexelsVideo,
+  out: string,
+  opts: { orientation?: Orientation; hq?: boolean } = {},
+): Promise<void> {
+  const file = pickFile(v, videoTarget(opts.orientation ?? "portrait", opts.hq ?? false));
   if (!file) throw new Error(`Pexels video ${v.id} has no downloadable mp4`);
   await download(file.link, out);
 }
