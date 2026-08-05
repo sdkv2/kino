@@ -173,6 +173,7 @@ program
   .addOption(getOpt())
   .addOption(resultCountOpt())
   .addOption(landscapeOpt())
+  .option("--hq", "pick the largest file Pexels serves instead of the comp-covering one (4k masters)")
   .addOption(assetNameOpt("pexels/<id>.mp4"))
   .addOption(projectTargetOpt())
   .addOption(outAliasOpt())
