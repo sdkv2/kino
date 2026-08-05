@@ -8,7 +8,12 @@
 # transcript is exported to disk, alongside the agent's own self-reported friction log.
 #
 # Usage:
-#   scripts/dogfood-hermes/run-batch.sh [run-id] [max-parallel]
+#   scripts/dogfood-hermes/run-batch.sh [run-id] [max-parallel] [brief-file...]
+#
+# With no brief-file args, runs every briefs/*.txt. Pass explicit paths to run a subset
+# (e.g. only newly-added briefs, without re-running ones already covered):
+#   scripts/dogfood-hermes/run-batch.sh 20260805-batch2 2 \
+#     scripts/dogfood-hermes/briefs/beat-sync.txt scripts/dogfood-hermes/briefs/footage-trailer.txt
 #
 # Env overrides:
 #   DOGFOOD_MODEL      deepseek-v4-flash (default) | deepseek-v4-pro
@@ -24,6 +29,7 @@ KINO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BRIEFS_DIR="$KINO_ROOT/scripts/dogfood-hermes/briefs"
 RUN_ID="${1:-$(date +%Y%m%d-%H%M%S)}"
 MAX_PARALLEL="${2:-2}"
+shift $(( $# < 2 ? $# : 2 )) || true
 RUN_DIR="$KINO_ROOT/dogfood-runs/$RUN_ID"
 WORKTREE_ROOT="$KINO_ROOT/.worktrees/dogfood-hermes/$RUN_ID"
 
@@ -82,10 +88,14 @@ run_one() {
   echo "[$slug] launching hermes ($MODEL, reasoning=$REASONING)..."
   set +e
   # KINO_WORKSPACE_ROOT (set in the shell profile for normal day-to-day kino use) must NOT
-  # reach this subprocess — it points at the real brands/projects library, and inheriting
-  # it here would silently defeat the whole point of not linking those dirs into the
-  # worktree above.
-  ( cd "$wt" && unset KINO_WORKSPACE_ROOT && hermes chat \
+  # reach this session — it points at the real brands/projects library, and inheriting it
+  # would silently defeat the whole point of not linking those dirs into the worktree
+  # above. `unset` alone only covers this top-level process: hermes re-sources ~/.zshrc for
+  # EVERY terminal command it runs (including background shell calls, confirmed leaking
+  # KINO_WORKSPACE_ROOT back in during round 2), and .zshrc's export is unconditional
+  # unless KINO_DOGFOOD_ISOLATE is set — so export it for the whole session, not just unset
+  # once here.
+  ( cd "$wt" && unset KINO_WORKSPACE_ROOT && export KINO_DOGFOOD_ISOLATE=1 && hermes chat \
       -q "$brief" \
       -m "$MODEL" \
       --provider deepseek \
@@ -127,7 +137,11 @@ echo "Model: $MODEL  Reasoning: $REASONING  Max turns: $MAX_TURNS  Parallel: $MA
 echo "Output: $RUN_DIR"
 echo
 
-find "$BRIEFS_DIR" -name '*.txt' | xargs -P "$MAX_PARALLEL" -I{} bash -c 'run_one "$@"' _ {}
+if [ "$#" -gt 0 ]; then
+  printf '%s\n' "$@"
+else
+  find "$BRIEFS_DIR" -name '*.txt'
+fi | xargs -P "$MAX_PARALLEL" -I{} bash -c 'run_one "$@"' _ {}
 
 echo
 echo "=== Batch complete: $RUN_DIR ==="

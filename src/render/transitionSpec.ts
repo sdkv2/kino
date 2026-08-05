@@ -51,7 +51,12 @@ export function groupSpans(props: KinoProps): GroupSpan[] {
     if (s.kind === "video") {
       const next = props.segments[i + 1];
       const chained = next?.kind === "video";
-      const seqDur = chained ? f(next.startSec) - from + CHAIN_HOLD_FRAMES : f(s.endSec) - from;
+      // Chaining always extends this beat's span up to the next one's start (no gap between
+      // consecutive video beats) — but the crossfade PADDING beyond that point is a separate,
+      // transition-gated decision, same as motion's motionXfadeFrames: `transition: "cut"` on
+      // the incoming beat means zero overlap (a real hard cut), not always-on soft crossfade.
+      const holdFrames = chained && next.transition !== "cut" ? CHAIN_HOLD_FRAMES : 0;
+      const seqDur = chained ? f(next.startSec) - from + holdFrames : f(s.endSec) - from;
       return { id: `beat${i}`, from, to: from + seqDur };
     }
     if (s.kind === "motion" && s.motion) {

@@ -274,27 +274,7 @@ set a corner `radius`; every shape may set `rotate` in degrees.
 }
 ```
 
-**File** — an image or video mask under `/public`; `channel` is `r`, `g`, `b`, `a`, or `luma`.
-
-**`kind: "file"` does not work on a segment (or declared-layer) mask today.** `planMaskJobs`
-(`src/render/native/videoFrames.ts`) extracts the node-generated SDF/coverage frames for it, but
-nothing in `registry.ts` or `renderer.ts` ever turns those frames into a bound texture —
-`compositeLayerInnerWithBackdrop`'s mask branch only fills a real `MaskBinding.mask` for a
-`layer`-kind source; every other kind, "file" included, gets `binding: { mask: null, sdf: null,
-sdfMax: 0 }`. Sampling a null texture reads `(0,0,0,1)`, so every channel — including the `luma`
-default — gives coverage `0` and the masked beat's layers render invisible. Validation rejects it
-loudly instead:
-
-```
-beat 0: mask.source.kind "file" is not supported on a segment mask yet — the compositor has no
-binding for it (renderer.ts's applyMask always gets a null texture for a "file" source, so
-uSourceKind=1 samples nothing and every layer of this beat would render invisible); use
-mask.source.kind "shape" or "layer" instead
-```
-
-Use `kind: "shape"` (analytic, no texture needed) or `kind: "layer"` (another layer's own render)
-instead. A declared layer's `mask` (see [Layers](#layers)) shares this exact gap — it resolves
-through the same renderer code path — and is rejected the same way, naming the layer id.
+**File** — an image or video mask under `/public`; `channel` is `r`, `g`, `b`, `a`, or `luma`. Extracted per-frame node-side by `planMaskJobs` with signed distance field (`s%06d.png`) generation for exact-distance feathering in the compositor shader. Supported on both segment beats and declared layers (`lmask<beat>` / `lmask-<layerId>`).
 
 **Layer** — another compositor layer's alpha or luma. For example, `seg0` targets segment 0's
 main layer.
@@ -539,22 +519,7 @@ sanitized `html`).
 `params`/`keyframes`/`triggers` on `source` only matter for `shader`/`motion`/`lottie` — `image` and
 `video` read `url` and ignore the rest.
 
-**`kind: "video"` does not work for real footage today.** Validation accepts a `.mp4`/`.mov` `src`
-(the shape check can't tell a working source from a broken one), but the build rejects it loudly:
-`planMediaJobs` (`src/render/native/videoFrames.ts`) decides which clips get per-frame extraction
-by walking `props.segments` and `props.avatarWindows` — it never walks `props.layers` — so a
-declared video layer has no frames to draw. `resolveDeclaredLayers` (`src/commands/build.ts`)
-throws rather than staging a file nothing will ever read:
-
-```
-layer "bg": source.src "clip.mp4": a declared "video" layer needs per-frame extraction, which is
-not wired up yet (videoFrames.ts's planMediaJobs walks segments/avatarWindows, not spec.layers) —
-use a still image (.png/.jpg/.jpeg/.webp) for a declared "video" layer for now
-```
-
-Point it at a still frame instead. `kind: "image"` and `kind: "video"` resolve identically for a
-still, so prefer `image` for one. Real per-frame video in a declared layer needs a job planner that
-walks `spec.layers`, which does not exist yet.
+**`kind: "video"` is supported for declared layers.** `planMediaJobs` (`src/render/native/videoFrames.ts`) walks `props.layers` and plans per-frame extraction for declared video layers (keyed by layer id), binding them as frame sources (`media[d.id]`) in `registry.ts`.
 
 ### Z scale
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { transitionProgress, transitionKindForWindow } from "../src/render/transitionSpec.js";
+import { transitionProgress, transitionKindForWindow, groupSpans } from "../src/render/transitionSpec.js";
 import type { KinoProps } from "../src/render/props.js";
 
 describe("transitionProgress", () => {
@@ -70,5 +70,36 @@ describe("transitionKindForWindow", () => {
     ]);
     // second video still picks from the punchy still rotation (index 1 → "fly-up")
     expect(transitionKindForWindow(p, win)).toBe("fly-up");
+  });
+});
+
+describe("groupSpans (video beat chaining)", () => {
+  const props = (segs: unknown[]) => ({ fps: 30, segments: segs }) as unknown as KinoProps;
+
+  // The bug this guards: consecutive video beats always got a 12-frame crossfade overlap,
+  // full stop — `next.transition` was never consulted, so `transition: "cut"` on the incoming
+  // beat silently did nothing for video→video pairs (it correctly zeroes the overlap for
+  // motion→motion via motionXfadeFrames; video beats had no equivalent gate). Confirmed by a
+  // kino dogfood session building a beat-cut music video with hard cuts as the whole premise.
+  it("still crossfades consecutive video beats by default (no transition override)", () => {
+    const p = props([
+      { kind: "video", source: "a.mp4", startSec: 0, endSec: 2 },
+      { kind: "video", source: "b.mp4", startSec: 2, endSec: 4 },
+    ]);
+    const spans = groupSpans(p);
+    // beat0 (from 0, ends at 2s=60f) extends 12 frames past beat1's start (60) → overlap.
+    expect(spans[0].to).toBe(60 + 12);
+    expect(spans[1].from).toBe(60);
+    expect(spans[0].to).toBeGreaterThan(spans[1].from); // real overlap window
+  });
+
+  it("produces a real hard cut (zero overlap) when the incoming video beat sets transition: cut", () => {
+    const p = props([
+      { kind: "video", source: "a.mp4", startSec: 0, endSec: 2 },
+      { kind: "video", source: "b.mp4", startSec: 2, endSec: 4, transition: "cut" },
+    ]);
+    const spans = groupSpans(p);
+    expect(spans[0].to).toBe(spans[1].from); // no overlap at all
+    expect(transitionProgress({ groups: spans, frame: spans[1].from })).toBeNull(); // reads as a hard cut
   });
 });

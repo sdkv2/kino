@@ -53,7 +53,7 @@ function printBundledHelp(): void {
 
 export async function music(
   idOrQuery: string | undefined,
-  opts: { get?: string | boolean; project?: string; count?: string },
+  opts: { get?: string | boolean; project?: string; count?: string; name?: string },
 ): Promise<void> {
   loadEnv(resolveWorkspace().workspaceRoot);
   const onDisk = listMusicIds();
@@ -123,7 +123,7 @@ export async function music(
   if (!previewUrl(hit)) throw new Error(`Freesound #${hit.id} has no mp3 preview`);
 
   const project = resolveProject({ project: opts.project });
-  const rel = join("music", `freesound-${hit.id}.mp3`);
+  const rel = opts.name ?? join("music", `freesound-${hit.id}.mp3`);
   const dest = project.assetPath(rel);
   mkdirSync(dirname(dest), { recursive: true });
   if (!existsSync(dest)) {

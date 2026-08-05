@@ -194,6 +194,7 @@ program
   .description("List the bundled music beds, or search Freesound for CC0 tracks")
   .addOption(new Option("--get [n]", "copy a bundled bed, or download Freesound result n"))
   .addOption(resultCountOpt())
+  .addOption(assetNameOpt("music/freesound-<id>.mp3"))
   .addOption(projectTargetOpt())
   .action(async (q, o) => (await import("./commands/music.js")).music(q, o));
 

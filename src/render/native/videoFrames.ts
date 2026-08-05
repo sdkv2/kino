@@ -355,7 +355,7 @@ async function planIndices(
   // puts ~25k px/frame of a packed multi-object mask over the 0.05 gate. PNG is also SMALLER than
   // JPEG for binary masks (0.33MB vs 1.12MB per 24 frames @1080x1920), so exactness costs no disk
   // here. Footage keeps JPEG q2: visually lossless, and far cheaper on real photographic frames.
-  const isMask = job.key.startsWith("rsmask");
+  const isMask = job.key.startsWith("rsmask") || job.key.startsWith("lmask");
   const ext = isMask ? "png" : "jpg";
   const quality = isMask ? [] : ["-q:v", "2"];
 
