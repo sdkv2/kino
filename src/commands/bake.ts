@@ -39,6 +39,24 @@ function describe(rows: unknown[]): string[] {
   if (distinct === 1) {
     out.push("  WARNING     every frame is identical — the solver is not being stepped");
   }
+
+  // Detect settled body inter-penetration for [x, y, angle] body arrays in the final frame
+  const last = rows[rows.length - 1];
+  if (Array.isArray(last) && last.length > 1 && Array.isArray(last[0]) && last[0].length >= 2) {
+    let overlaps = 0;
+    const items = last as Array<[number, number, number?]>;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const dx = Math.abs(items[i][0] - items[j][0]);
+        const dy = Math.abs(items[i][1] - items[j][1]);
+        // Typical pill dimensions ~176x84 — flag tight center overlap (< 100x45)
+        if (dx < 100 && dy < 45) overlaps++;
+      }
+    }
+    if (overlaps > 0) {
+      out.push(`  HINT        ${overlaps} settled body pair(s) overlap — use chamfer, low rest speed (<0.2), and restCount > 10`);
+    }
+  }
   return out;
 }
 
@@ -115,20 +133,29 @@ export function solverContract(): string {
     "",
     "    const M = sim.lib.matter;",
     "    const engine = M.Engine.create();",
-    "    const coins = Array.from({ length: 12 }, (_, i) =>",
-    "      M.Bodies.circle(sim.random() * sim.width, -100 * sim.random(), 44,",
-    "                      { restitution: 0.4, friction: 0.35 }));",
+    "    engine.positionIterations = 10; // prevent inter-penetration on dense piles",
+    "    engine.velocityIterations = 10;",
+    "    const tiles = Array.from({ length: 12 }, (_, i) =>",
+    "      M.Bodies.rectangle(sim.random() * sim.width, -100 * sim.random(), 176, 84,",
+    "                         { chamfer: { radius: 10 }, restitution: 0.15, friction: 0.35 }));",
     "    const floor = M.Bodies.rectangle(sim.width / 2, sim.height * 0.8, sim.width, 40,",
     "                                     { isStatic: true });   // WITHOUT THIS THEY FALL FOREVER",
-    "    M.Composite.add(engine.world, [...coins, floor]);",
+    "    M.Composite.add(engine.world, [...tiles, floor]);",
+    "    const restCount = tiles.map(() => 0), prev = tiles.map(() => null);",
     "    return (frame) => {",
     "      sim.lib.matterStep(engine, sim.dt);",
-    "      return coins.map((b) => [Math.round(b.position.x), Math.round(b.position.y),",
-    "                               Math.round(b.angle * 57.2958)]);",
+    "      return tiles.map((b, i) => {",
+    "        const speed = Math.hypot(b.velocity.x, b.velocity.y);",
+    "        if (speed < 0.2 && Math.abs(b.angularVelocity) < 0.005) restCount[i]++; else restCount[i] = 0;",
+    "        if (prev[i] && restCount[i] > 10) return prev[i];",
+    "        return (prev[i] = [Math.round(b.position.x), Math.round(b.position.y), Math.round(b.angle * 57.2958)]);",
+    "      });",
     "    };",
     "",
     "  The static floor is the classic silent failure: forget it and every body falls off-screen",
-    "  with no error at all. Read back b.position and b.angle — the angle is the whole point.",
+    "  with no error at all. Match DOM border-radius with `chamfer: { radius: R }` so collision",
+    "  geometry aligns with the rendered shape, and require sustained low velocity (restCount > 10",
+    "  at speed < 0.2) before locking outputs.",
     "",
     "Return an array of rows, or a (frame) => row step function. `frames` defaults to the beat's",
     "own length, so a bake follows real TTS — set it only when the count is the point (a loop that",
