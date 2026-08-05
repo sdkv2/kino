@@ -12,6 +12,7 @@
 #import <VideoToolbox/VideoToolbox.h>
 #import <Accelerate/Accelerate.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -162,13 +163,24 @@ static OSStatus EnsureSession(EncoderState& enc, int width, int height, int fps)
   int32_t bitrate = static_cast<int32_t>((50'000'000LL * (px > kBasePixels ? px : kBasePixels)) / kBasePixels);
   CFNumberRef br = CFNumberCreate(nullptr, kCFNumberSInt32Type, &bitrate);
 
-  VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+  // Speed knobs default OFF: this all-intra bitstream is remuxed with `-c:v copy`, so it IS the
+  // deliverable, and VT's fast RD path visibly flattens fine grain in dark gradients (banding on
+  // near-black footage — found on the unveil trailer's fog beat) with no downstream recovery.
+  // Mirrors the "quality" latencyMode decision documented in page/captureH264.ts. Set
+  // KINO_CAPTURE_FAST=1 to restore realtime RC + speed-over-quality for throughput farms whose
+  // output is re-encoded before anyone sees it.
+  const char* fastEnv = std::getenv("KINO_CAPTURE_FAST");
+  const bool fastMode = fastEnv && fastEnv[0] && std::strcmp(fastEnv, "0") != 0;
+  VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_RealTime,
+                       fastMode ? kCFBooleanTrue : kCFBooleanFalse);
   VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel);
   VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_MaxKeyFrameInterval, n1);
   VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
   VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_AverageBitRate, br);
   VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_ExpectedFrameRate, fpsNum);
-  VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, kCFBooleanTrue);
+  if (fastMode) {
+    VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, kCFBooleanTrue);
+  }
   int32_t zero = 0;
   CFNumberRef n0 = CFNumberCreate(nullptr, kCFNumberSInt32Type, &zero);
   VTSessionSetProperty(enc.session, kVTCompressionPropertyKey_MaxFrameDelayCount, n0);

@@ -354,10 +354,15 @@ async function planIndices(
   // pick its analytic branch, and JPEG's DCT quantization alone — even from a bit-exact mask.mp4 —
   // puts ~25k px/frame of a packed multi-object mask over the 0.05 gate. PNG is also SMALLER than
   // JPEG for binary masks (0.33MB vs 1.12MB per 24 frames @1080x1920), so exactness costs no disk
-  // here. Footage keeps JPEG q2: visually lossless, and far cheaper on real photographic frames.
+  // here. Footage stays JPEG but at q1 with 4:4:4 chroma: the old q2/4:2:0 default added ~60%
+  // block-edge energy over the decoded source and blotched near-monochrome gradients (blue fog —
+  // chroma carries the ramp and JPEG quantizes subsampled chroma hardest). Measured on that
+  // pathological clip: q1+444 is +1.1 dB (all of it chroma) for 0.16→0.24s and 2.7→4.3MB per
+  // 100 frames — noise next to the page's texture-upload cost. PNG would erase the last ~2.8
+  // block-energy points but at 5.5× disk and 3.6× extraction wall; not worth it as a default.
   const isMask = job.key.startsWith("rsmask") || job.key.startsWith("lmask");
   const ext = isMask ? "png" : "jpg";
-  const quality = isMask ? [] : ["-q:v", "2"];
+  const quality = isMask ? [] : ["-q:v", "1", "-pix_fmt", "yuvj444p"];
 
   // The manifest is computed HERE, before a single frame is decoded, so callers may publish it to
   // the render server while write() is still running. `-start_number` makes the numbering
