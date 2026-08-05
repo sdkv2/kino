@@ -288,7 +288,14 @@ export function startEncoder(opts: {
   const videoIn = encoderInputArgs(opts.captureCodec, opts.fps);
   const videoOut =
     opts.captureCodec === "h264"
-      ? ["-c:v", "copy"]
+      ? [
+          "-c:v", "copy",
+          // VideoToolbox writes no VUI colour info, so a remuxed master reads color_range/
+          // colorspace "unknown" and players guess at shadow handling (visible on dark films:
+          // crushed or double-corrected blacks, worse apparent banding). Stamp what the capture
+          // actually is — bt709 limited, the same normalization the jpeg branch encodes to.
+          "-bsf:v", "h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1:video_full_range_flag=0",
+        ]
       : [
           "-c:v", "libx264", "-preset", opts.preset, "-crf", "18",
           "-vf", "scale=out_color_matrix=bt709:out_range=tv",
