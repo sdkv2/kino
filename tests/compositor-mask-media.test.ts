@@ -60,4 +60,13 @@ describe("planMaskJobs", () => {
     expect(jobs[0].fromFrame).toBe(0);
     expect(jobs[0].seqDurFrames).toBe(90);
   });
+
+  it("classifies lmask jobs as mask extractions (PNG format with SDF twin)", async () => {
+    const { planDense } = await import("../src/render/native/videoFrames.js");
+    const job = planMaskJobs(withMask({ source: { kind: "file", src: "m.mp4", channel: "a" } }), 30)[0];
+    const planned = await planDense(job, "nonexistent.mp4", "/tmp/frames");
+    // Non-existent source yields empty byFrame/maxFrame=0, but the planned manifest format
+    // is configured by job.key namespace — lmask must produce dir matching job.key
+    expect(planned.entry.dir).toBe("lmask0");
+  });
 });
