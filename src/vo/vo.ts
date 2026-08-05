@@ -10,6 +10,7 @@ import type { SegmentTiming, VOResult } from "../types.js";
 import type { WordTiming } from "../render/props.js";
 import type { Cache } from "../media/cache.js";
 import { contentHash, fileHash } from "../media/hash.js";
+import { log } from "../log.js";
 import { offsetWords } from "../render/captions.js";
 import { extractAudio, genSilence, probeDuration, stitchAudio, trailingArtifactCut, trimAudio } from "../media/ffmpeg.js";
 import { ttsWithTimestamps, ttsMockWithTimestamps, DEFAULT_SETTINGS, DEFAULT_VOICE_MODEL, modelSupportsContext } from "./elevenlabs.js";
@@ -124,6 +125,11 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
   const dir = scratchDir("kino-vo-");
   try {
     const clips: string[] = [];
+    // Content identity per clip, for the stitched-track cache key. Cache-owned clips are
+    // content-addressed so their PATH is their identity; a voFile is a project path whose bytes
+    // can change in place, so its identity is a hash of its CONTENT — keying the track on the
+    // raw path served a stale stitch forever after the file was edited.
+    const clipIds: string[] = [];
     const clipWords: WordTiming[][] = []; // clip-relative, offset to the timeline after timings are known
     const useCtx = modelSupportsContext(resolvedModel);
     for (const [i, seg] of spec.segments.entries()) {
@@ -140,6 +146,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
           silent = cache.put(key, "mp3", tmp);
         }
         clips.push(silent);
+        clipIds.push(silent);
         clipWords.push([]);
         continue;
       }
@@ -149,6 +156,7 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
       if (seg.voFile) {
         const abs = resolveAsset ? resolveAsset(seg.voFile) : seg.voFile;
         clips.push(abs);
+        clipIds.push(`voFile:${fileHash(abs)}`);
         if (mock) {
           clipWords.push(seg.text ? mockWordsForDuration(seg.text, await probeDuration(abs)) : []);
         } else if (cacheOnly) {
@@ -217,12 +225,27 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
             ? await ttsMockWithTimestamps(seg.text!, tmp, seg.dur)
             : await ttsWithTimestamps(apiKey!, voiceId, seg.text!, tmp, DEFAULT_SETTINGS, resolvedModel, { previousText: prev, nextText: next }),
         );
+        // Pathological-generation tripwire: ElevenLabs occasionally returns a drawled, low-pitched
+        // read of a short standalone line (heavy commas/ellipses invite it). Normal narration runs
+        // ~2.3–3.2 words/s; flag the clip rather than let a bad take ship silently — the fix is a
+        // re-roll (delete the cached clip) or plainer punctuation, not post-processing.
+        if (!mock && words.length >= 5) {
+          const span = words[words.length - 1].end - words[0].start;
+          const wps = words.length / Math.max(0.001, span);
+          if (wps < 1.6) {
+            log.warn(
+              `segment[${i}]: TTS read is unusually slow (${wps.toFixed(1)} words/s over ${span.toFixed(1)}s) — ` +
+                `likely a pathological generation; re-roll it (evict this clip from .kino-cache) or simplify the punctuation`,
+            );
+          }
+        }
         clip = cache.put(key, "mp3", tmp);
         const tmpJson = join(dir, `seg${i}.json`);
         writeFileSync(tmpJson, JSON.stringify(words));
         wordsFile = cache.put(key, "json", tmpJson);
       }
       clips.push(clip);
+      clipIds.push(clip);
       clipWords.push(JSON.parse(readFileSync(wordsFile, "utf8")) as WordTiming[]);
     }
     // Trim each clip to its true speech end so beats don't end on an ElevenLabs trailing burst (see
@@ -244,7 +267,10 @@ export async function buildVO({ spec, voiceId, cache, apiKey, vo, model, needCli
     const words = clipWords.map((w, i) => offsetWords(w, timings[i].startSec));
     // stitch marker: bump when seam handling (declick fade / trailing-artifact trim) changes so old
     // clicky tracks re-stitch. Hashes the raw clips (deterministic trim) so the key stays stable.
-    const trackKey = contentHash({ clips, GAP, stitch: "fade8-trim1" });
+    // Marker bump (fade8-trim1 → -m44): stitchAudio now pins every clip to mono/44100 before the
+    // concat, so tracks stitched from a stereo/off-rate voFile under the old code are corrupt
+    // (2× length, an octave down) and must not keep serving.
+    const trackKey = contentHash({ clips: clipIds, GAP, stitch: "fade8-trim1-m44" });
     let track = cache.get(trackKey, "mp3");
     if (!track) {
       const tmp = join(dir, "track.mp3");

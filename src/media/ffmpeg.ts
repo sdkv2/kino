@@ -84,11 +84,15 @@ export async function stitchAudio(clips: string[], gapSec: number, out: string):
     // Declick every seam: ElevenLabs clips can end (or start) mid-waveform, so butting a pure-silence
     // gap against a non-zero sample is an audible click at the end of each beat. An 8 ms in/out fade
     // ramps each clip edge to zero; areverse fades the tail without needing the clip's duration.
+    // aformat pins every faded clip to the pipeline format (44100/mono): the concat demuxer below
+    // keeps the FIRST input's stream params, so a stereo or off-rate clip (an imported voFile —
+    // ElevenLabs clips are already mono/44100) would otherwise be misread frame-for-frame — a
+    // stereo wav plays at 2× length, an octave down.
     const faded: string[] = [];
     for (const [i, c] of clips.entries()) {
       const f = join(dir, `f${i}.wav`);
       await execa(FFMPEG_PATH, ["-y", "-loglevel", "error", "-i", c,
-        "-af", "afade=t=in:d=0.008,areverse,afade=t=in:d=0.008,areverse", f]);
+        "-af", "afade=t=in:d=0.008,areverse,afade=t=in:d=0.008,areverse,aformat=sample_rates=44100:channel_layouts=mono", f]);
       faded.push(f);
     }
     const lines: string[] = [];
