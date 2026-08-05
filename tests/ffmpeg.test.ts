@@ -45,6 +45,21 @@ describe("ffmpeg helpers", () => {
     await stitchAudio([a, b], 0.5, out);
     expect(await probeDuration(out)).toBeCloseTo(3.5, 1);
   }, FFMPEG_TIMEOUT);
+  it("stitches a stereo 48k voFile at its true length (regression: stereo read as mono = 2x)", async () => {
+    // The concat demuxer keeps the first input's stream params; before stitchAudio pinned every
+    // faded clip to mono/44100, a stereo or off-rate imported voFile was misread frame-for-frame
+    // and played at 2x its length, an octave down.
+    const dir = mkdtempSync(join(tmpdir(), "kino-ff3-"));
+    const mono = join(dir, "mono.mp3");
+    const stereo = join(dir, "stereo.wav");
+    const out = join(dir, "out.mp3");
+    await genSilence(1.0, mono);
+    await execa(FFMPEG_PATH, ["-y", "-loglevel", "error",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+      "-af", "aformat=sample_rates=48000:channel_layouts=stereo", stereo]);
+    await stitchAudio([mono, stereo], 0.5, out);
+    expect(await probeDuration(out)).toBeCloseTo(3.5, 1);
+  }, FFMPEG_TIMEOUT);
 
   it("extracts a mono wav from a video with audio", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kino-xa-"));
