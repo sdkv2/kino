@@ -26,18 +26,18 @@ timeline drags — so revisions diff, review, and version like code.
 
 <table>
 <tr>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta-hq.webp" width="240" alt="kino writing its own advert.json spec, live"></a></td>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-clip.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent-mg3.webp" width="240" alt="The Descent — motion graphics from a long-form kino build"></a></td>
-<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara-hq.webp" width="240" alt="Lunara — quiet mood piece"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/cut-different.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/cut-different-hq.webp" width="240" alt="cut different — eight custom-shader transitions, one kino spec, zero editing"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/render-sprint.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/render-sprint-hq.webp" width="240" alt="The Render Sprint — a changelog reel where every beat is a real commit and its measured numbers"></a></td>
+<td width="33%" align="center"><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/finish-pass.mp4" title="Watch with sound"><img src="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/finish-pass-hq.webp" width="240" alt="The Finish Pass — nine feature beats, each one demoing itself live"></a></td>
 </tr>
 <tr>
-<td align="center"><b>The self-demo</b><br><sub>kino types its own <code>advert.json</code> and builds the ad you're watching</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/kino-meta.mp4">▶ watch with sound</a></td>
-<td align="center"><b>The Descent</b><br><sub>real footage into the motion-graphics finale of a 66s build</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/the-descent.mp4">▶ watch full video with sound</a></td>
-<td align="center"><b>Lunara</b><br><sub>stock b-roll and a quiet voiceover</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/lunara.mp4">▶ watch with sound</a></td>
+<td align="center"><b>cut different.</b><br><sub>eight custom shader transitions, one spec, zero editing</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/cut-different.mp4">▶ watch with sound</a></td>
+<td align="center"><b>The Render Sprint</b><br><sub>a changelog reel — every beat is a real commit and its measured numbers</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/render-sprint.mp4">▶ watch with sound</a></td>
+<td align="center"><b>The Finish Pass</b><br><sub>nine shipped features, each beat demos itself live on its own footage</sub><br><a href="https://pub-758bb8a866af4279b91def404a206e72.r2.dev/finish-pass.mp4">▶ watch with sound</a></td>
 </tr>
 </table>
 
-<sub>Fictional sample brands. Each is a real, deterministic <code>kino build</code> from a JSON spec, with ElevenLabs voiceover. Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
+<sub>kino's own house reels — each a real, deterministic <code>kino build</code> from a JSON spec, scored with a composed music bed (no voiceover). Previews are silent trimmed clips; click any preview (or the ▶ links) to play the full MP4 <b>with sound</b> in your browser.</sub>
 
 ## Pipeline at a glance
 ```
