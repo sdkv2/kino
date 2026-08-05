@@ -45,15 +45,12 @@ export function resolveWorkspace(
   cwd: string = process.cwd(),
   opts: { create?: boolean } = {},
 ): Workspace {
-  // An explicit external workspace (brands/projects living outside any repo checkout) always
-  // wins over the cwd walk-up — set once in the shell profile, not a project-local .env (loadEnv
-  // itself needs a resolved workspaceRoot first, so a .env value here would be circular).
-  const envRoot = process.env.KINO_WORKSPACE_ROOT?.trim();
   // Walk up; first dir with projects/ or brands/ wins. Nearer projects/ also keeps nested
-  // demos/ from latching onto a parent brands/.
-  let workspaceRoot: string | null = envRoot ? resolve(envRoot) : null;
+  // demos/ from latching onto a parent brands/ — a self-contained nested workspace (cd'd into
+  // deliberately) stays authoritative over its own content regardless of any global default.
+  let workspaceRoot: string | null = null;
   let dir = cwd;
-  while (!workspaceRoot) {
+  for (;;) {
     if (existsSync(join(dir, "projects")) || existsSync(join(dir, "brands"))) {
       workspaceRoot = dir;
       break;
@@ -61,6 +58,14 @@ export function resolveWorkspace(
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
+  }
+  // Only when nothing local was found: an explicit external workspace (brands/projects living
+  // outside any repo checkout) — set once in the shell profile, not a project-local .env
+  // (loadEnv itself needs a resolved workspaceRoot first, so a .env value here would be
+  // circular).
+  if (!workspaceRoot) {
+    const envRoot = process.env.KINO_WORKSPACE_ROOT?.trim();
+    if (envRoot) workspaceRoot = resolve(envRoot);
   }
   if (!workspaceRoot) workspaceRoot = opts.create ? cwd : null;
   if (!workspaceRoot) {

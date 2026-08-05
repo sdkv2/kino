@@ -53,7 +53,7 @@ const ELEMENTS: ElementDef[] = [
     extras: [
       {
         label: "sources",
-        text: `${LAYER_SOURCE_KINDS.join(", ")}  (video only resolves a still image today — a real .mp4/.mov is not wired up yet)  — set source.kind + source.src`,
+        text: `${LAYER_SOURCE_KINDS.join(", ")} — set source.kind + source.src`,
       },
       {
         label: "z",

@@ -45,7 +45,7 @@ uniform sampler2D uMask;     // file/layer mask coverage (unused when uSourceKin
 uniform sampler2D uMaskSdf;  // distance field for the mask, when one exists
 uniform float uMaskSdfMax;   // 0 = no field this frame
 uniform vec2 uRes;
-uniform int uSourceKind;     // 0 = shape, 1 = file/layer texture
+uniform int uSourceKind;     // 0 = shape, 1 = file texture, 2 = layer texture
 uniform int uChannel;        // 0..3 = rgba, 4 = luma
 uniform float uFeather;
 uniform float uExpand;
@@ -76,15 +76,24 @@ void main() {
   float coverage;
   if (uSourceKind == 0) {
     // Analytic: distance is exact, so feather is a true px band.
-    float d = kinoShapeDist(gl_FragCoord.xy, uShapeKind, uShapeCenter, uShapeHalf, uShapeRadius, uShapeRot) - uExpand;
+    // gl_FragCoord.y is bottom-origin in WebGL; convert to top-origin composition px.
+    vec2 fragPos = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+    float d = kinoShapeDist(fragPos, uShapeKind, uShapeCenter, uShapeHalf, uShapeRadius, uShapeRot) - uExpand;
     coverage = uFeather > 0.0 ? 1.0 - smoothstep(-uFeather * 0.5, uFeather * 0.5, d)
                               : 1.0 - step(0.0, d);
-  } else if (uMaskSdfMax > 0.0) {
-    // A real distance field: decode, then feather in px exactly as the shape branch does.
-    float d = (texture(uMaskSdf, uv).r * 2.0 - 1.0) * uMaskSdfMax - uExpand;
-    coverage = uFeather > 0.0 ? 1.0 - smoothstep(-uFeather * 0.5, uFeather * 0.5, d)
-                              : 1.0 - step(0.0, d);
+  } else if (uSourceKind == 1) {
+    // File mask: uploaded texture (row 0 at top), so UV Y is flipped relative to gl_FragCoord.
+    vec2 maskUv = vec2(uv.x, 1.0 - uv.y);
+    if (uMaskSdfMax > 0.0) {
+      float d = (texture(uMaskSdf, maskUv).r * 2.0 - 1.0) * uMaskSdfMax - uExpand;
+      coverage = uFeather > 0.0 ? 1.0 - smoothstep(-uFeather * 0.5, uFeather * 0.5, d)
+                                : 1.0 - step(0.0, d);
+    } else {
+      float c = channelOf(texture(uMask, maskUv));
+      coverage = uFeather > 0.0 ? smoothstep(0.5 - uFeather / 255.0, 0.5 + uFeather / 255.0, c) : step(0.5, c);
+    }
   } else {
+    // Layer mask: rendered to an FBO target (y-up), so UV matches gl_FragCoord directly.
     vec2 maskUv = uv;
     float c = channelOf(texture(uMask, maskUv));
     coverage = uFeather > 0.0 ? smoothstep(0.5 - uFeather / 255.0, 0.5 + uFeather / 255.0, c) : step(0.5, c);
@@ -174,7 +183,8 @@ export function applyMask(
     gl.uniform1f(loc.uShapeRot, s.rotate ?? 0);
     gl.uniform1f(loc.uMaskSdfMax, 0);
   } else {
-    gl.uniform1i(loc.uSourceKind, 1);
+    const kindInt = mask.source.kind === "layer" ? 2 : 1;
+    gl.uniform1i(loc.uSourceKind, kindInt);
     gl.uniform1i(loc.uChannel, CHANNEL_INDEX[mask.source.channel] ?? 4);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, binding.mask);
